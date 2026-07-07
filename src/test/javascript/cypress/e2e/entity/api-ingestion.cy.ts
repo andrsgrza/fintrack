@@ -39,7 +39,7 @@ describe('ApiIngestion e2e test', () => {
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/api-access-tokens',
-      body: {"name":"narrowcast boohoo now","tokenPrefix":"phooey yowza","tokenHash":"lively boohoo","status":"ACTIVE","createdAt":"2026-07-06T17:53:53.973Z","updatedAt":"2026-07-06T18:21:38.595Z","lastUsedAt":"2026-07-06T20:25:21.890Z","expiresAt":"2026-07-07T12:50:01.191Z","revokedAt":"2026-07-07T11:54:17.228Z"},
+      body: {"name":"schnitzel","tokenPrefix":"narrowcast boohoo no","tokenHash":"phooey yowza","status":"REVOKED","createdAt":"2026-07-06T17:52:24.274Z","updatedAt":"2026-07-07T15:24:24.561Z","lastUsedAt":"2026-07-06T18:07:44.699Z","expiresAt":"2026-07-06T18:27:41.137Z","revokedAt":"2026-07-07T16:02:22.600Z"},
     }).then(({ body }) => {
       apiAccessToken = body;
     });

@@ -15,7 +15,7 @@ describe('FinancialSubscription e2e test', () => {
   const financialSubscriptionPageUrlPattern = new RegExp('/financial-subscription(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const financialSubscriptionSample = {"name":"correctly","status":"PAUSED","currency":"XYX","recurrenceUnit":"MONTH","intervalCount":24962,"startDate":"2026-07-07","automaticPayment":true,"createdAt":"2026-07-07T17:46:48.006Z","updatedAt":"2026-07-07T10:31:28.949Z"};
+  // const financialSubscriptionSample = {"name":"stealthily observe unabashedly","status":"CANCELLED","currency":"VIG","recurrenceUnit":"MONTH","intervalCount":10752,"startDate":"2026-07-07","automaticPayment":false,"createdAt":"2026-07-06T22:50:37.634Z","updatedAt":"2026-07-07T15:33:48.115Z"};
 
   let financialSubscription;
   // let user;
@@ -239,54 +239,54 @@ describe('FinancialSubscription e2e test', () => {
 
     // Reason: cannot create a required entity with relationship with required relationships.
     it.skip('should create an instance of FinancialSubscription', () => {
-      cy.get(`[data-cy="name"]`).type('spiteful ack unbearably');
-      cy.get(`[data-cy="name"]`).should('have.value', 'spiteful ack unbearably');
+      cy.get(`[data-cy="name"]`).type('incidentally thorough');
+      cy.get(`[data-cy="name"]`).should('have.value', 'incidentally thorough');
 
-      cy.get(`[data-cy="description"]`).type('as');
-      cy.get(`[data-cy="description"]`).should('have.value', 'as');
+      cy.get(`[data-cy="description"]`).type('ack unbearably when');
+      cy.get(`[data-cy="description"]`).should('have.value', 'ack unbearably when');
 
       cy.get(`[data-cy="status"]`).select('ACTIVE');
 
-      cy.get(`[data-cy="expectedAmount"]`).type('13285.22');
-      cy.get(`[data-cy="expectedAmount"]`).should('have.value', '13285.22');
+      cy.get(`[data-cy="expectedAmount"]`).type('900.91');
+      cy.get(`[data-cy="expectedAmount"]`).should('have.value', '900.91');
 
-      cy.get(`[data-cy="amountTolerancePercentage"]`).type('29.74');
-      cy.get(`[data-cy="amountTolerancePercentage"]`).should('have.value', '29.74');
+      cy.get(`[data-cy="amountTolerancePercentage"]`).type('40.54');
+      cy.get(`[data-cy="amountTolerancePercentage"]`).should('have.value', '40.54');
 
-      cy.get(`[data-cy="currency"]`).type('NPB');
-      cy.get(`[data-cy="currency"]`).should('have.value', 'NPB');
+      cy.get(`[data-cy="currency"]`).type('HNP');
+      cy.get(`[data-cy="currency"]`).should('have.value', 'HNP');
 
-      cy.get(`[data-cy="recurrenceUnit"]`).select('MONTH');
+      cy.get(`[data-cy="recurrenceUnit"]`).select('DAY');
 
-      cy.get(`[data-cy="intervalCount"]`).type('3420');
-      cy.get(`[data-cy="intervalCount"]`).should('have.value', '3420');
+      cy.get(`[data-cy="intervalCount"]`).type('24088');
+      cy.get(`[data-cy="intervalCount"]`).should('have.value', '24088');
 
-      cy.get(`[data-cy="startDate"]`).type('2026-07-07');
+      cy.get(`[data-cy="startDate"]`).type('2026-07-06');
       cy.get(`[data-cy="startDate"]`).blur();
-      cy.get(`[data-cy="startDate"]`).should('have.value', '2026-07-07');
+      cy.get(`[data-cy="startDate"]`).should('have.value', '2026-07-06');
 
       cy.get(`[data-cy="nextExpectedDate"]`).type('2026-07-07');
       cy.get(`[data-cy="nextExpectedDate"]`).blur();
       cy.get(`[data-cy="nextExpectedDate"]`).should('have.value', '2026-07-07');
 
-      cy.get(`[data-cy="endDate"]`).type('2026-07-06');
+      cy.get(`[data-cy="endDate"]`).type('2026-07-07');
       cy.get(`[data-cy="endDate"]`).blur();
-      cy.get(`[data-cy="endDate"]`).should('have.value', '2026-07-06');
+      cy.get(`[data-cy="endDate"]`).should('have.value', '2026-07-07');
 
       cy.get(`[data-cy="automaticPayment"]`).should('not.be.checked');
       cy.get(`[data-cy="automaticPayment"]`).click();
       cy.get(`[data-cy="automaticPayment"]`).should('be.checked');
 
-      cy.get(`[data-cy="notes"]`).type('ouch');
-      cy.get(`[data-cy="notes"]`).should('have.value', 'ouch');
+      cy.get(`[data-cy="notes"]`).type('a vacantly er');
+      cy.get(`[data-cy="notes"]`).should('have.value', 'a vacantly er');
 
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T07:19');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T15:03');
       cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T07:19');
+      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T15:03');
 
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T17:37');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T07:58');
       cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T17:37');
+      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T07:58');
 
       cy.get(`[data-cy="user"]`).select(1);
 

@@ -15,7 +15,7 @@ describe('ApiAccessToken e2e test', () => {
   const apiAccessTokenPageUrlPattern = new RegExp('/api-access-token(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const apiAccessTokenSample = {"name":"barracks","tokenPrefix":"search brr garage","tokenHash":"dampen trash","status":"REVOKED","createdAt":"2026-07-07T08:35:06.176Z","updatedAt":"2026-07-07T06:43:28.157Z"};
+  // const apiAccessTokenSample = {"name":"as once","tokenPrefix":"rosy","tokenHash":"wetly regarding","status":"EXPIRED","createdAt":"2026-07-07T02:47:56.934Z","updatedAt":"2026-07-07T16:09:46.265Z"};
 
   let apiAccessToken;
   // let user;
@@ -229,36 +229,36 @@ describe('ApiAccessToken e2e test', () => {
 
     // Reason: cannot create a required entity with relationship with required relationships.
     it.skip('should create an instance of ApiAccessToken', () => {
-      cy.get(`[data-cy="name"]`).type('camouflage');
-      cy.get(`[data-cy="name"]`).should('have.value', 'camouflage');
+      cy.get(`[data-cy="name"]`).type('provided');
+      cy.get(`[data-cy="name"]`).should('have.value', 'provided');
 
-      cy.get(`[data-cy="tokenPrefix"]`).type('hopelessly as once');
-      cy.get(`[data-cy="tokenPrefix"]`).should('have.value', 'hopelessly as once');
+      cy.get(`[data-cy="tokenPrefix"]`).type('whoa');
+      cy.get(`[data-cy="tokenPrefix"]`).should('have.value', 'whoa');
 
-      cy.get(`[data-cy="tokenHash"]`).type('rosy');
-      cy.get(`[data-cy="tokenHash"]`).should('have.value', 'rosy');
+      cy.get(`[data-cy="tokenHash"]`).type('ick');
+      cy.get(`[data-cy="tokenHash"]`).should('have.value', 'ick');
 
       cy.get(`[data-cy="status"]`).select('REVOKED');
 
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T01:58');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T15:27');
       cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T01:58');
+      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T15:27');
 
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T04:13');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T12:29');
       cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T04:13');
+      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T12:29');
 
-      cy.get(`[data-cy="lastUsedAt"]`).type('2026-07-07T05:54');
+      cy.get(`[data-cy="lastUsedAt"]`).type('2026-07-06T20:44');
       cy.get(`[data-cy="lastUsedAt"]`).blur();
-      cy.get(`[data-cy="lastUsedAt"]`).should('have.value', '2026-07-07T05:54');
+      cy.get(`[data-cy="lastUsedAt"]`).should('have.value', '2026-07-06T20:44');
 
-      cy.get(`[data-cy="expiresAt"]`).type('2026-07-07T16:34');
+      cy.get(`[data-cy="expiresAt"]`).type('2026-07-07T13:38');
       cy.get(`[data-cy="expiresAt"]`).blur();
-      cy.get(`[data-cy="expiresAt"]`).should('have.value', '2026-07-07T16:34');
+      cy.get(`[data-cy="expiresAt"]`).should('have.value', '2026-07-07T13:38');
 
-      cy.get(`[data-cy="revokedAt"]`).type('2026-07-06T19:51');
+      cy.get(`[data-cy="revokedAt"]`).type('2026-07-06T20:34');
       cy.get(`[data-cy="revokedAt"]`).blur();
-      cy.get(`[data-cy="revokedAt"]`).should('have.value', '2026-07-06T19:51');
+      cy.get(`[data-cy="revokedAt"]`).should('have.value', '2026-07-06T20:34');
 
       cy.get(`[data-cy="user"]`).select(1);
 

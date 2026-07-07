@@ -30,7 +30,7 @@ describe('ApiAccessTokenPermission e2e test', () => {
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/api-access-tokens',
-      body: {"name":"with friendly after","tokenPrefix":"off mixture vivaciou","tokenHash":"towards subtract","status":"EXPIRED","createdAt":"2026-07-07T03:26:59.060Z","updatedAt":"2026-07-07T07:21:01.410Z","lastUsedAt":"2026-07-06T21:58:44.235Z","expiresAt":"2026-07-07T16:24:21.026Z","revokedAt":"2026-07-07T01:33:13.992Z"},
+      body: {"name":"intensely boohoo","tokenPrefix":"hairy amid","tokenHash":"better unfreeze","status":"EXPIRED","createdAt":"2026-07-07T01:22:08.983Z","updatedAt":"2026-07-07T07:02:06.868Z","lastUsedAt":"2026-07-07T10:32:51.716Z","expiresAt":"2026-07-07T16:20:58.806Z","revokedAt":"2026-07-07T00:57:27.595Z"},
     }).then(({ body }) => {
       apiAccessToken = body;
     });
