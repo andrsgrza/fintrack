@@ -15,7 +15,7 @@ describe('UserDashboardPreference e2e test', () => {
   const userDashboardPreferencePageUrlPattern = new RegExp('/user-dashboard-preference(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const userDashboardPreferenceSample = {"configuration":"Li4vZmFrZS1kYXRhL2Jsb2IvaGlwc3Rlci50eHQ=","createdAt":"2026-07-07T14:26:56.674Z","updatedAt":"2026-07-07T08:46:12.549Z"};
+  // const userDashboardPreferenceSample = {"configuration":"Li4vZmFrZS1kYXRhL2Jsb2IvaGlwc3Rlci50eHQ=","createdAt":"2026-07-07T07:47:55.918Z","updatedAt":"2026-07-07T06:57:26.427Z"};
 
   let userDashboardPreference;
   // let user;
@@ -217,13 +217,13 @@ describe('UserDashboardPreference e2e test', () => {
       cy.get(`[data-cy="configuration"]`).type('../fake-data/blob/hipster.txt');
       cy.get(`[data-cy="configuration"]`).invoke('val').should('match', new RegExp('../fake-data/blob/hipster.txt'));
 
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T10:13');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T05:02');
       cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T10:13');
+      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T05:02');
 
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T07:39');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T07:06');
       cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T07:39');
+      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T07:06');
 
       cy.get(`[data-cy="user"]`).select(1);
 

@@ -15,7 +15,7 @@ describe('Category e2e test', () => {
   const categoryPageUrlPattern = new RegExp('/category(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const categorySample = {"name":"early floss","categoryType":"BOTH","active":false,"createdAt":"2026-07-06T22:23:58.056Z","updatedAt":"2026-07-06T20:47:10.466Z"};
+  // const categorySample = {"name":"confiscate trusting bandwidth","categoryType":"INCOME","active":false,"createdAt":"2026-07-07T12:44:56.963Z","updatedAt":"2026-07-06T22:23:58.056Z"};
 
   let category;
   // let user;
@@ -239,31 +239,31 @@ describe('Category e2e test', () => {
 
     // Reason: cannot create a required entity with relationship with required relationships.
     it.skip('should create an instance of Category', () => {
-      cy.get(`[data-cy="name"]`).type('governance scruple drat');
-      cy.get(`[data-cy="name"]`).should('have.value', 'governance scruple drat');
+      cy.get(`[data-cy="name"]`).type('shrill bah');
+      cy.get(`[data-cy="name"]`).should('have.value', 'shrill bah');
 
-      cy.get(`[data-cy="description"]`).type('vastly round finer');
-      cy.get(`[data-cy="description"]`).should('have.value', 'vastly round finer');
+      cy.get(`[data-cy="description"]`).type('scruple drat');
+      cy.get(`[data-cy="description"]`).should('have.value', 'scruple drat');
 
       cy.get(`[data-cy="categoryType"]`).select('BOTH');
 
-      cy.get(`[data-cy="color"]`).type('#7DFB1D');
-      cy.get(`[data-cy="color"]`).should('have.value', '#7DFB1D');
+      cy.get(`[data-cy="color"]`).type('#D01e59');
+      cy.get(`[data-cy="color"]`).should('have.value', '#D01e59');
 
-      cy.get(`[data-cy="icon"]`).type('aside');
-      cy.get(`[data-cy="icon"]`).should('have.value', 'aside');
+      cy.get(`[data-cy="icon"]`).type('round finer gee');
+      cy.get(`[data-cy="icon"]`).should('have.value', 'round finer gee');
 
       cy.get(`[data-cy="active"]`).should('not.be.checked');
       cy.get(`[data-cy="active"]`).click();
       cy.get(`[data-cy="active"]`).should('be.checked');
 
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T06:32');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T10:11');
       cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T06:32');
+      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T10:11');
 
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-06T21:42');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-06T21:01');
       cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-06T21:42');
+      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-06T21:01');
 
       cy.get(`[data-cy="user"]`).select(1);
 

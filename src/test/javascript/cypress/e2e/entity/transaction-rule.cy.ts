@@ -15,7 +15,7 @@ describe('TransactionRule e2e test', () => {
   const transactionRulePageUrlPattern = new RegExp('/transaction-rule(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const transactionRuleSample = {"name":"general whoever but","priority":6343,"conditionLogic":"ANY","active":false,"createdAt":"2026-07-07T05:13:55.036Z","updatedAt":"2026-07-07T14:56:43.521Z"};
+  // const transactionRuleSample = {"name":"since till ditch","priority":30269,"conditionLogic":"ALL","active":false,"createdAt":"2026-07-06T19:01:26.924Z","updatedAt":"2026-07-07T04:04:48.532Z"};
 
   let transactionRule;
   // let user;
@@ -234,31 +234,31 @@ describe('TransactionRule e2e test', () => {
 
     // Reason: cannot create a required entity with relationship with required relationships.
     it.skip('should create an instance of TransactionRule', () => {
-      cy.get(`[data-cy="name"]`).type('roughly');
-      cy.get(`[data-cy="name"]`).should('have.value', 'roughly');
+      cy.get(`[data-cy="name"]`).type('mindless');
+      cy.get(`[data-cy="name"]`).should('have.value', 'mindless');
 
-      cy.get(`[data-cy="description"]`).type('lady');
-      cy.get(`[data-cy="description"]`).should('have.value', 'lady');
+      cy.get(`[data-cy="description"]`).type('roughly');
+      cy.get(`[data-cy="description"]`).should('have.value', 'roughly');
 
-      cy.get(`[data-cy="priority"]`).type('19772');
-      cy.get(`[data-cy="priority"]`).should('have.value', '19772');
+      cy.get(`[data-cy="priority"]`).type('7062');
+      cy.get(`[data-cy="priority"]`).should('have.value', '7062');
 
-      cy.get(`[data-cy="conditionLogic"]`).select('ALL');
+      cy.get(`[data-cy="conditionLogic"]`).select('ANY');
 
-      cy.get(`[data-cy="resultingDescription"]`).type('before stained');
-      cy.get(`[data-cy="resultingDescription"]`).should('have.value', 'before stained');
+      cy.get(`[data-cy="resultingDescription"]`).type('dilate surge');
+      cy.get(`[data-cy="resultingDescription"]`).should('have.value', 'dilate surge');
 
       cy.get(`[data-cy="active"]`).should('not.be.checked');
       cy.get(`[data-cy="active"]`).click();
       cy.get(`[data-cy="active"]`).should('be.checked');
 
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T13:36');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T13:03');
       cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T13:36');
+      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T13:03');
 
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T07:03');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T15:47');
       cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T07:03');
+      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T15:47');
 
       cy.get(`[data-cy="user"]`).select(1);
 

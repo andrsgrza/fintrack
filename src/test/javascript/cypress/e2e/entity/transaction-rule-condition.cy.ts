@@ -30,7 +30,7 @@ describe('TransactionRuleCondition e2e test', () => {
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/transaction-rules',
-      body: {"name":"emotional annual hmph","description":"cruelly sushi around","priority":3230,"conditionLogic":"ALL","resultingDescription":"blowgun","active":false,"createdAt":"2026-07-07T10:24:32.288Z","updatedAt":"2026-07-07T01:54:51.527Z"},
+      body: {"name":"upside-down that","description":"annual","priority":27948,"conditionLogic":"ALL","resultingDescription":"shoot","active":false,"createdAt":"2026-07-06T19:19:16.579Z","updatedAt":"2026-07-07T13:07:39.039Z"},
     }).then(({ body }) => {
       transactionRule = body;
     });

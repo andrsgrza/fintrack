@@ -15,7 +15,7 @@ describe('Tag e2e test', () => {
   const tagPageUrlPattern = new RegExp('/tag(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const tagSample = {"name":"recommendation collaboration","active":true,"createdAt":"2026-07-07T02:17:36.765Z","updatedAt":"2026-07-07T14:38:31.572Z"};
+  // const tagSample = {"name":"siege","active":true,"createdAt":"2026-07-07T00:43:46.650Z","updatedAt":"2026-07-07T02:17:36.765Z"};
 
   let tag;
   // let user;
@@ -234,26 +234,26 @@ describe('Tag e2e test', () => {
 
     // Reason: cannot create a required entity with relationship with required relationships.
     it.skip('should create an instance of Tag', () => {
-      cy.get(`[data-cy="name"]`).type('gadzooks');
-      cy.get(`[data-cy="name"]`).should('have.value', 'gadzooks');
+      cy.get(`[data-cy="name"]`).type('raw how outside');
+      cy.get(`[data-cy="name"]`).should('have.value', 'raw how outside');
 
-      cy.get(`[data-cy="description"]`).type('valiantly');
-      cy.get(`[data-cy="description"]`).should('have.value', 'valiantly');
+      cy.get(`[data-cy="description"]`).type('till');
+      cy.get(`[data-cy="description"]`).should('have.value', 'till');
 
-      cy.get(`[data-cy="color"]`).type('#3d94CE');
-      cy.get(`[data-cy="color"]`).should('have.value', '#3d94CE');
+      cy.get(`[data-cy="color"]`).type('#adFC0C');
+      cy.get(`[data-cy="color"]`).should('have.value', '#adFC0C');
 
       cy.get(`[data-cy="active"]`).should('not.be.checked');
       cy.get(`[data-cy="active"]`).click();
       cy.get(`[data-cy="active"]`).should('be.checked');
 
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T15:10');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T09:01');
       cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T15:10');
+      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T09:01');
 
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T11:14');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T00:54');
       cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T11:14');
+      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T00:54');
 
       cy.get(`[data-cy="user"]`).select(1);
 

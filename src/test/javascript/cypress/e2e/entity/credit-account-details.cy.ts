@@ -30,7 +30,7 @@ describe('CreditAccountDetails e2e test', () => {
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/financial-accounts',
-      body: {"name":"homeschool","institutionName":"finally versus after","accountType":"INVESTMENT","currency":"LDW","initialBalance":27520.29,"initialBalanceDate":"2026-07-07","lastFourDigits":"3947","description":"publicize","color":"#dFFa70","icon":"galvanize","active":true,"includeInNetWorth":false,"createdAt":"2026-07-06T21:50:27.414Z","updatedAt":"2026-07-06T21:49:13.708Z"},
+      body: {"name":"always","institutionName":"bah nervously","accountType":"INVESTMENT","currency":"FIS","initialBalance":21226.55,"initialBalanceDate":"2026-07-07","lastFourDigits":"6673","description":"furthermore","color":"#71f330","icon":"sleepily meh blink","active":true,"includeInNetWorth":false,"createdAt":"2026-07-07T07:37:09.788Z","updatedAt":"2026-07-06T20:32:03.006Z"},
     }).then(({ body }) => {
       financialAccount = body;
     });
