@@ -87,7 +87,6 @@ class FinancialAccountCriteriaTest {
         financialAccountCriteria.color();
         financialAccountCriteria.icon();
         financialAccountCriteria.active();
-        financialAccountCriteria.includeInNetWorth();
         financialAccountCriteria.createdAt();
         financialAccountCriteria.updatedAt();
         financialAccountCriteria.userId();
@@ -96,7 +95,6 @@ class FinancialAccountCriteriaTest {
         financialAccountCriteria.subscriptionsId();
         financialAccountCriteria.budgetsId();
         financialAccountCriteria.transactionIngestionsId();
-        financialAccountCriteria.apiAccessTokensId();
         financialAccountCriteria.distinct();
     }
 
@@ -115,7 +113,6 @@ class FinancialAccountCriteriaTest {
                 condition.apply(criteria.getColor()) &&
                 condition.apply(criteria.getIcon()) &&
                 condition.apply(criteria.getActive()) &&
-                condition.apply(criteria.getIncludeInNetWorth()) &&
                 condition.apply(criteria.getCreatedAt()) &&
                 condition.apply(criteria.getUpdatedAt()) &&
                 condition.apply(criteria.getUserId()) &&
@@ -124,7 +121,6 @@ class FinancialAccountCriteriaTest {
                 condition.apply(criteria.getSubscriptionsId()) &&
                 condition.apply(criteria.getBudgetsId()) &&
                 condition.apply(criteria.getTransactionIngestionsId()) &&
-                condition.apply(criteria.getApiAccessTokensId()) &&
                 condition.apply(criteria.getDistinct()),
             "every filter matches"
         );
@@ -148,7 +144,6 @@ class FinancialAccountCriteriaTest {
                 condition.apply(criteria.getColor(), copy.getColor()) &&
                 condition.apply(criteria.getIcon(), copy.getIcon()) &&
                 condition.apply(criteria.getActive(), copy.getActive()) &&
-                condition.apply(criteria.getIncludeInNetWorth(), copy.getIncludeInNetWorth()) &&
                 condition.apply(criteria.getCreatedAt(), copy.getCreatedAt()) &&
                 condition.apply(criteria.getUpdatedAt(), copy.getUpdatedAt()) &&
                 condition.apply(criteria.getUserId(), copy.getUserId()) &&
@@ -157,7 +152,6 @@ class FinancialAccountCriteriaTest {
                 condition.apply(criteria.getSubscriptionsId(), copy.getSubscriptionsId()) &&
                 condition.apply(criteria.getBudgetsId(), copy.getBudgetsId()) &&
                 condition.apply(criteria.getTransactionIngestionsId(), copy.getTransactionIngestionsId()) &&
-                condition.apply(criteria.getApiAccessTokensId(), copy.getApiAccessTokensId()) &&
                 condition.apply(criteria.getDistinct(), copy.getDistinct()),
             "every filter matches"
         );

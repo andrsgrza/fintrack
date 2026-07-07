@@ -110,19 +110,6 @@ export const ApiAccessTokenDetail = () => {
             <Translate contentKey="fintrackApp.apiAccessToken.user">User</Translate>
           </dt>
           <dd>{apiAccessTokenEntity.user ? apiAccessTokenEntity.user.login : ''}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.apiAccessToken.accounts">Accounts</Translate>
-          </dt>
-          <dd>
-            {apiAccessTokenEntity.accounts
-              ? apiAccessTokenEntity.accounts.map((val, i) => (
-                  <span key={val.id}>
-                    <a>{val.name}</a>
-                    {apiAccessTokenEntity.accounts && i === apiAccessTokenEntity.accounts.length - 1 ? '' : ', '}
-                  </span>
-                ))
-              : null}
-          </dd>
         </dl>
         <Button tag={Link} to="/api-access-token" replace color="info" data-cy="entityDetailsBackButton">
           <FontAwesomeIcon icon="arrow-left" />{' '}

@@ -99,9 +99,7 @@ public class FinancialSubscription implements Serializable {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties(
-        value = {
-            "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions", "apiAccessTokens",
-        },
+        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions" },
         allowSetters = true
     )
     private FinancialAccount account;

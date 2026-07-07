@@ -83,9 +83,7 @@ public class TransactionIngestion implements Serializable {
         inverseJoinColumns = @JoinColumn(name = "accounts_id")
     )
     @JsonIgnoreProperties(
-        value = {
-            "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions", "apiAccessTokens",
-        },
+        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions" },
         allowSetters = true
     )
     private Set<FinancialAccount> accounts = new HashSet<>();

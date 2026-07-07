@@ -11,25 +11,22 @@ import org.springframework.stereotype.Repository;
 
 /**
  * Spring Data JPA repository for the ApiAccessToken entity.
- *
- * When extending this class, extend ApiAccessTokenRepositoryWithBagRelationships too.
- * For more information refer to https://github.com/jhipster/generator-jhipster/issues/17990.
  */
 @Repository
-public interface ApiAccessTokenRepository extends ApiAccessTokenRepositoryWithBagRelationships, JpaRepository<ApiAccessToken, Long> {
+public interface ApiAccessTokenRepository extends JpaRepository<ApiAccessToken, Long> {
     @Query("select apiAccessToken from ApiAccessToken apiAccessToken where apiAccessToken.user.login = ?#{authentication.name}")
     List<ApiAccessToken> findByUserIsCurrentUser();
 
     default Optional<ApiAccessToken> findOneWithEagerRelationships(Long id) {
-        return this.fetchBagRelationships(this.findOneWithToOneRelationships(id));
+        return this.findOneWithToOneRelationships(id);
     }
 
     default List<ApiAccessToken> findAllWithEagerRelationships() {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationships());
+        return this.findAllWithToOneRelationships();
     }
 
     default Page<ApiAccessToken> findAllWithEagerRelationships(Pageable pageable) {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationships(pageable));
+        return this.findAllWithToOneRelationships(pageable);
     }
 
     @Query(

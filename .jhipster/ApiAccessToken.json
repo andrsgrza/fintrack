@@ -66,14 +66,6 @@
       "relationshipWithBuiltInEntity": true
     },
     {
-      "otherEntityField": "name",
-      "otherEntityName": "financialAccount",
-      "otherEntityRelationshipName": "apiAccessTokens",
-      "relationshipName": "accounts",
-      "relationshipSide": "left",
-      "relationshipType": "many-to-many"
-    },
-    {
       "otherEntityName": "apiIngestion",
       "otherEntityRelationshipName": "apiAccessToken",
       "relationshipName": "apiIngestions",

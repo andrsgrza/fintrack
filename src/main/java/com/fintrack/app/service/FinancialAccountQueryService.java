@@ -86,7 +86,6 @@ public class FinancialAccountQueryService extends QueryService<FinancialAccount>
                 buildStringSpecification(criteria.getColor(), FinancialAccount_.color),
                 buildStringSpecification(criteria.getIcon(), FinancialAccount_.icon),
                 buildSpecification(criteria.getActive(), FinancialAccount_.active),
-                buildSpecification(criteria.getIncludeInNetWorth(), FinancialAccount_.includeInNetWorth),
                 buildRangeSpecification(criteria.getCreatedAt(), FinancialAccount_.createdAt),
                 buildRangeSpecification(criteria.getUpdatedAt(), FinancialAccount_.updatedAt),
                 buildSpecification(criteria.getUserId(), root -> root.join(FinancialAccount_.user, JoinType.LEFT).get(User_.id)),
@@ -102,9 +101,6 @@ public class FinancialAccountQueryService extends QueryService<FinancialAccount>
                 buildSpecification(criteria.getBudgetsId(), root -> root.join(FinancialAccount_.budgets, JoinType.LEFT).get(Budget_.id)),
                 buildSpecification(criteria.getTransactionIngestionsId(), root ->
                     root.join(FinancialAccount_.transactionIngestions, JoinType.LEFT).get(TransactionIngestion_.id)
-                ),
-                buildSpecification(criteria.getApiAccessTokensId(), root ->
-                    root.join(FinancialAccount_.apiAccessTokens, JoinType.LEFT).get(ApiAccessToken_.id)
                 )
             );
         }

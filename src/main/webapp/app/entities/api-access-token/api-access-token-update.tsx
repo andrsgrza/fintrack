@@ -5,11 +5,9 @@ import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhips
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
-import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
-import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
 import { ApiTokenStatus } from 'app/shared/model/enumerations/api-token-status.model';
 import { createEntity, getEntity, reset, updateEntity } from './api-access-token.reducer';
 
@@ -22,7 +20,6 @@ export const ApiAccessTokenUpdate = () => {
   const isNew = id === undefined;
 
   const users = useAppSelector(state => state.userManagement.users);
-  const financialAccounts = useAppSelector(state => state.financialAccount.entities);
   const apiAccessTokenEntity = useAppSelector(state => state.apiAccessToken.entity);
   const loading = useAppSelector(state => state.apiAccessToken.loading);
   const updating = useAppSelector(state => state.apiAccessToken.updating);
@@ -41,7 +38,6 @@ export const ApiAccessTokenUpdate = () => {
     }
 
     dispatch(getUsers({}));
-    dispatch(getFinancialAccounts({}));
   }, []);
 
   useEffect(() => {
@@ -64,7 +60,6 @@ export const ApiAccessTokenUpdate = () => {
       ...apiAccessTokenEntity,
       ...values,
       user: users.find(it => it.id.toString() === values.user?.toString()),
-      accounts: mapIdList(values.accounts),
     };
 
     if (isNew) {
@@ -92,7 +87,6 @@ export const ApiAccessTokenUpdate = () => {
           expiresAt: convertDateTimeFromServer(apiAccessTokenEntity.expiresAt),
           revokedAt: convertDateTimeFromServer(apiAccessTokenEntity.revokedAt),
           user: apiAccessTokenEntity?.user?.id,
-          accounts: apiAccessTokenEntity?.accounts?.map(e => e.id.toString()),
         };
 
   return (
@@ -232,23 +226,6 @@ export const ApiAccessTokenUpdate = () => {
               <FormText>
                 <Translate contentKey="entity.validation.required">This field is required.</Translate>
               </FormText>
-              <ValidatedField
-                label={translate('fintrackApp.apiAccessToken.accounts')}
-                id="api-access-token-accounts"
-                data-cy="accounts"
-                type="select"
-                multiple
-                name="accounts"
-              >
-                <option value="" key="0" />
-                {financialAccounts
-                  ? financialAccounts.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.name}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/api-access-token" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;

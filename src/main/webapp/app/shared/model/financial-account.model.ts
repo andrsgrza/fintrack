@@ -2,7 +2,6 @@ import dayjs from 'dayjs';
 import { IUser } from 'app/shared/model/user.model';
 import { IBudget } from 'app/shared/model/budget.model';
 import { ITransactionIngestion } from 'app/shared/model/transaction-ingestion.model';
-import { IApiAccessToken } from 'app/shared/model/api-access-token.model';
 import { AccountType } from 'app/shared/model/enumerations/account-type.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 
@@ -19,16 +18,13 @@ export interface IFinancialAccount {
   color?: string | null;
   icon?: string | null;
   active?: boolean;
-  includeInNetWorth?: boolean;
   createdAt?: dayjs.Dayjs;
   updatedAt?: dayjs.Dayjs;
   user?: IUser;
   budgets?: IBudget[] | null;
   transactionIngestions?: ITransactionIngestion[] | null;
-  apiAccessTokens?: IApiAccessToken[] | null;
 }
 
 export const defaultValue: Readonly<IFinancialAccount> = {
   active: false,
-  includeInNetWorth: false,
 };

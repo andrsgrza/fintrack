@@ -66,20 +66,6 @@ public class ApiAccessToken implements Serializable {
     @NotNull
     private User user;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "rel_api_access_token__accounts",
-        joinColumns = @JoinColumn(name = "api_access_token_id"),
-        inverseJoinColumns = @JoinColumn(name = "accounts_id")
-    )
-    @JsonIgnoreProperties(
-        value = {
-            "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions", "apiAccessTokens",
-        },
-        allowSetters = true
-    )
-    private Set<FinancialAccount> accounts = new HashSet<>();
-
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "apiAccessToken")
     @JsonIgnoreProperties(value = { "transactionIngestion", "apiAccessToken" }, allowSetters = true)
     private Set<ApiIngestion> apiIngestions = new HashSet<>();
@@ -230,29 +216,6 @@ public class ApiAccessToken implements Serializable {
 
     public ApiAccessToken user(User user) {
         this.setUser(user);
-        return this;
-    }
-
-    public Set<FinancialAccount> getAccounts() {
-        return this.accounts;
-    }
-
-    public void setAccounts(Set<FinancialAccount> financialAccounts) {
-        this.accounts = financialAccounts;
-    }
-
-    public ApiAccessToken accounts(Set<FinancialAccount> financialAccounts) {
-        this.setAccounts(financialAccounts);
-        return this;
-    }
-
-    public ApiAccessToken addAccounts(FinancialAccount financialAccount) {
-        this.accounts.add(financialAccount);
-        return this;
-    }
-
-    public ApiAccessToken removeAccounts(FinancialAccount financialAccount) {
-        this.accounts.remove(financialAccount);
         return this;
     }
 

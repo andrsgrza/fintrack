@@ -103,12 +103,6 @@ export const FinancialAccountDetail = () => {
           </dt>
           <dd>{financialAccountEntity.active ? 'true' : 'false'}</dd>
           <dt>
-            <span id="includeInNetWorth">
-              <Translate contentKey="fintrackApp.financialAccount.includeInNetWorth">Include In Net Worth</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.includeInNetWorth ? 'true' : 'false'}</dd>
-          <dt>
             <span id="createdAt">
               <Translate contentKey="fintrackApp.financialAccount.createdAt">Created At</Translate>
             </span>
@@ -156,19 +150,6 @@ export const FinancialAccountDetail = () => {
                     {financialAccountEntity.transactionIngestions && i === financialAccountEntity.transactionIngestions.length - 1
                       ? ''
                       : ', '}
-                  </span>
-                ))
-              : null}
-          </dd>
-          <dt>
-            <Translate contentKey="fintrackApp.financialAccount.apiAccessTokens">Api Access Tokens</Translate>
-          </dt>
-          <dd>
-            {financialAccountEntity.apiAccessTokens
-              ? financialAccountEntity.apiAccessTokens.map((val, i) => (
-                  <span key={val.id}>
-                    <a>{val.id}</a>
-                    {financialAccountEntity.apiAccessTokens && i === financialAccountEntity.apiAccessTokens.length - 1 ? '' : ', '}
                   </span>
                 ))
               : null}

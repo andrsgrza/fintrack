@@ -58,9 +58,6 @@ public class FinancialAccountDTO implements Serializable {
     private Boolean active;
 
     @NotNull
-    private Boolean includeInNetWorth;
-
-    @NotNull
     private Instant createdAt;
 
     @NotNull
@@ -72,8 +69,6 @@ public class FinancialAccountDTO implements Serializable {
     private Set<BudgetDTO> budgets = new HashSet<>();
 
     private Set<TransactionIngestionDTO> transactionIngestions = new HashSet<>();
-
-    private Set<ApiAccessTokenDTO> apiAccessTokens = new HashSet<>();
 
     public Long getId() {
         return id;
@@ -171,14 +166,6 @@ public class FinancialAccountDTO implements Serializable {
         this.active = active;
     }
 
-    public Boolean getIncludeInNetWorth() {
-        return includeInNetWorth;
-    }
-
-    public void setIncludeInNetWorth(Boolean includeInNetWorth) {
-        this.includeInNetWorth = includeInNetWorth;
-    }
-
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -219,14 +206,6 @@ public class FinancialAccountDTO implements Serializable {
         this.transactionIngestions = transactionIngestions;
     }
 
-    public Set<ApiAccessTokenDTO> getApiAccessTokens() {
-        return apiAccessTokens;
-    }
-
-    public void setApiAccessTokens(Set<ApiAccessTokenDTO> apiAccessTokens) {
-        this.apiAccessTokens = apiAccessTokens;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -264,13 +243,11 @@ public class FinancialAccountDTO implements Serializable {
             ", color='" + getColor() + "'" +
             ", icon='" + getIcon() + "'" +
             ", active='" + getActive() + "'" +
-            ", includeInNetWorth='" + getIncludeInNetWorth() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
             ", updatedAt='" + getUpdatedAt() + "'" +
             ", user=" + getUser() +
             ", budgets=" + getBudgets() +
             ", transactionIngestions=" + getTransactionIngestions() +
-            ", apiAccessTokens=" + getApiAccessTokens() +
             "}";
     }
 }
