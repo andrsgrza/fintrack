@@ -185,7 +185,9 @@ export const FinancialSubscription = () => {
                   </td>
                   <td>{financialSubscription.expectedAmount}</td>
                   <td>{financialSubscription.amountTolerancePercentage}</td>
-                  <td>{financialSubscription.currency}</td>
+                  <td>
+                    <Translate contentKey={`fintrackApp.CurrencyCode.${financialSubscription.currency}`} />
+                  </td>
                   <td>
                     <Translate contentKey={`fintrackApp.RecurrenceUnit.${financialSubscription.recurrenceUnit}`} />
                   </td>

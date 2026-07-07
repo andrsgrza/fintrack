@@ -69,6 +69,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "name": "FileIngestion",
   "relationships": [
     {

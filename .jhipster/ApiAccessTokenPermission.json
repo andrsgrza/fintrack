@@ -18,6 +18,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "name": "ApiAccessTokenPermission",
   "relationships": [
     {

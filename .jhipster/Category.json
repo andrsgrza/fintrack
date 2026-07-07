@@ -53,6 +53,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "jpaMetamodelFiltering": true,
   "name": "Category",
   "relationships": [

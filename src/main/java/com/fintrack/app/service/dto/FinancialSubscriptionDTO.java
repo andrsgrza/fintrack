@@ -1,5 +1,6 @@
 package com.fintrack.app.service.dto;
 
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.domain.enumeration.SubscriptionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -39,8 +40,7 @@ public class FinancialSubscriptionDTO implements Serializable {
     private BigDecimal amountTolerancePercentage;
 
     @NotNull
-    @Pattern(regexp = "^[A-Z]{3}$")
-    private String currency;
+    private CurrencyCode currency;
 
     @NotNull
     private RecurrenceUnit recurrenceUnit;
@@ -125,11 +125,11 @@ public class FinancialSubscriptionDTO implements Serializable {
         this.amountTolerancePercentage = amountTolerancePercentage;
     }
 
-    public String getCurrency() {
+    public CurrencyCode getCurrency() {
         return currency;
     }
 
-    public void setCurrency(String currency) {
+    public void setCurrency(CurrencyCode currency) {
         this.currency = currency;
     }
 

@@ -155,7 +155,9 @@ export const Budget = () => {
                   </td>
                   <td>{budget.name}</td>
                   <td>{budget.amount}</td>
-                  <td>{budget.currency}</td>
+                  <td>
+                    <Translate contentKey={`fintrackApp.CurrencyCode.${budget.currency}`} />
+                  </td>
                   <td>
                     <Translate contentKey={`fintrackApp.BudgetPeriod.${budget.period}`} />
                   </td>

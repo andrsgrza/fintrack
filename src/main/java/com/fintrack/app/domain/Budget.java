@@ -3,6 +3,7 @@ package com.fintrack.app.domain;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fintrack.app.domain.enumeration.BudgetPeriod;
 import com.fintrack.app.domain.enumeration.BudgetStatus;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TagMatchMode;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
@@ -45,9 +46,9 @@ public class Budget implements Serializable {
     private BigDecimal amount;
 
     @NotNull
-    @Pattern(regexp = "^[A-Z]{3}$")
+    @Enumerated(EnumType.STRING)
     @Column(name = "currency", nullable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @NotNull
     @Enumerated(EnumType.STRING)
@@ -160,16 +161,16 @@ public class Budget implements Serializable {
         this.amount = amount;
     }
 
-    public String getCurrency() {
+    public CurrencyCode getCurrency() {
         return this.currency;
     }
 
-    public Budget currency(String currency) {
+    public Budget currency(CurrencyCode currency) {
         this.setCurrency(currency);
         return this;
     }
 
-    public void setCurrency(String currency) {
+    public void setCurrency(CurrencyCode currency) {
         this.currency = currency;
     }
 

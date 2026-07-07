@@ -49,6 +49,12 @@ enum AccountType {
   INVESTMENT
 }
 
+enum CurrencyCode {
+  MXN,
+  USD,
+  EUR
+}
+
 enum TransactionFlow {
   IN,
   OUT
@@ -193,7 +199,7 @@ entity FinancialAccount {
   name String required minlength(1) maxlength(100)
   institutionName String maxlength(100)
   accountType AccountType required
-  currency String required pattern(/^[A-Z]{3}$/)
+  currency CurrencyCode required
   initialBalance BigDecimal required
   initialBalanceDate LocalDate required
   lastFourDigits String pattern(/^[0-9]{4}$/)
@@ -305,7 +311,7 @@ entity FinancialSubscription {
   status SubscriptionStatus required
   expectedAmount BigDecimal min(0)
   amountTolerancePercentage BigDecimal min(0) max(100)
-  currency String required pattern(/^[A-Z]{3}$/)
+  currency CurrencyCode required
   recurrenceUnit RecurrenceUnit required
   intervalCount Integer required min(1)
   startDate LocalDate required
@@ -328,7 +334,7 @@ entity FinancialSubscription {
 entity Budget {
   name String required minlength(1) maxlength(100)
   amount BigDecimal required min(0)
-  currency String required pattern(/^[A-Z]{3}$/)
+  currency CurrencyCode required
   period BudgetPeriod required
   startDate LocalDate required
   endDate LocalDate

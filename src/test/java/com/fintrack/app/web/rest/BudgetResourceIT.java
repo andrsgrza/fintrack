@@ -18,6 +18,7 @@ import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.BudgetPeriod;
 import com.fintrack.app.domain.enumeration.BudgetStatus;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TagMatchMode;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.UserRepository;
@@ -64,8 +65,8 @@ class BudgetResourceIT {
     private static final BigDecimal UPDATED_AMOUNT = new BigDecimal(1);
     private static final BigDecimal SMALLER_AMOUNT = new BigDecimal(0 - 1);
 
-    private static final String DEFAULT_CURRENCY = "QFZ";
-    private static final String UPDATED_CURRENCY = "JMY";
+    private static final CurrencyCode DEFAULT_CURRENCY = CurrencyCode.MXN;
+    private static final CurrencyCode UPDATED_CURRENCY = CurrencyCode.USD;
 
     private static final BudgetPeriod DEFAULT_PERIOD = BudgetPeriod.WEEKLY;
     private static final BudgetPeriod UPDATED_PERIOD = BudgetPeriod.MONTHLY;
@@ -404,7 +405,7 @@ class BudgetResourceIT {
             .andExpect(jsonPath("$.[*].id").value(hasItem(budget.getId().intValue())))
             .andExpect(jsonPath("$.[*].name").value(hasItem(DEFAULT_NAME)))
             .andExpect(jsonPath("$.[*].amount").value(hasItem(sameNumber(DEFAULT_AMOUNT))))
-            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY)))
+            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY.toString())))
             .andExpect(jsonPath("$.[*].period").value(hasItem(DEFAULT_PERIOD.toString())))
             .andExpect(jsonPath("$.[*].startDate").value(hasItem(DEFAULT_START_DATE.toString())))
             .andExpect(jsonPath("$.[*].endDate").value(hasItem(DEFAULT_END_DATE.toString())))
@@ -446,7 +447,7 @@ class BudgetResourceIT {
             .andExpect(jsonPath("$.id").value(budget.getId().intValue()))
             .andExpect(jsonPath("$.name").value(DEFAULT_NAME))
             .andExpect(jsonPath("$.amount").value(sameNumber(DEFAULT_AMOUNT)))
-            .andExpect(jsonPath("$.currency").value(DEFAULT_CURRENCY))
+            .andExpect(jsonPath("$.currency").value(DEFAULT_CURRENCY.toString()))
             .andExpect(jsonPath("$.period").value(DEFAULT_PERIOD.toString()))
             .andExpect(jsonPath("$.startDate").value(DEFAULT_START_DATE.toString()))
             .andExpect(jsonPath("$.endDate").value(DEFAULT_END_DATE.toString()))
@@ -620,26 +621,6 @@ class BudgetResourceIT {
 
         // Get all the budgetList where currency is not null
         defaultBudgetFiltering("currency.specified=true", "currency.specified=false");
-    }
-
-    @Test
-    @Transactional
-    void getAllBudgetsByCurrencyContainsSomething() throws Exception {
-        // Initialize the database
-        insertedBudget = budgetRepository.saveAndFlush(budget);
-
-        // Get all the budgetList where currency contains
-        defaultBudgetFiltering("currency.contains=" + DEFAULT_CURRENCY, "currency.contains=" + UPDATED_CURRENCY);
-    }
-
-    @Test
-    @Transactional
-    void getAllBudgetsByCurrencyNotContainsSomething() throws Exception {
-        // Initialize the database
-        insertedBudget = budgetRepository.saveAndFlush(budget);
-
-        // Get all the budgetList where currency does not contain
-        defaultBudgetFiltering("currency.doesNotContain=" + UPDATED_CURRENCY, "currency.doesNotContain=" + DEFAULT_CURRENCY);
     }
 
     @Test
@@ -1127,7 +1108,7 @@ class BudgetResourceIT {
             .andExpect(jsonPath("$.[*].id").value(hasItem(budget.getId().intValue())))
             .andExpect(jsonPath("$.[*].name").value(hasItem(DEFAULT_NAME)))
             .andExpect(jsonPath("$.[*].amount").value(hasItem(sameNumber(DEFAULT_AMOUNT))))
-            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY)))
+            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY.toString())))
             .andExpect(jsonPath("$.[*].period").value(hasItem(DEFAULT_PERIOD.toString())))
             .andExpect(jsonPath("$.[*].startDate").value(hasItem(DEFAULT_START_DATE.toString())))
             .andExpect(jsonPath("$.[*].endDate").value(hasItem(DEFAULT_END_DATE.toString())))
@@ -1280,7 +1261,7 @@ class BudgetResourceIT {
         Budget partialUpdatedBudget = new Budget();
         partialUpdatedBudget.setId(budget.getId());
 
-        partialUpdatedBudget.endDate(UPDATED_END_DATE).status(UPDATED_STATUS).warningPercentage(UPDATED_WARNING_PERCENTAGE);
+        partialUpdatedBudget.amount(UPDATED_AMOUNT).period(UPDATED_PERIOD).startDate(UPDATED_START_DATE);
 
         restBudgetMockMvc
             .perform(

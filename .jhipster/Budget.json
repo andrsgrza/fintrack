@@ -21,9 +21,9 @@
     },
     {
       "fieldName": "currency",
-      "fieldType": "String",
-      "fieldValidateRules": ["required", "pattern"],
-      "fieldValidateRulesPattern": "^[A-Z]{3}$"
+      "fieldType": "CurrencyCode",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "MXN,USD,EUR"
     },
     {
       "fieldName": "period",
@@ -70,6 +70,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "jpaMetamodelFiltering": true,
   "name": "Budget",
   "relationships": [

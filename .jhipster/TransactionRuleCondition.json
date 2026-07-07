@@ -42,6 +42,7 @@
       "fieldValidateRulesMin": "0"
     }
   ],
+  "incrementalChangelog": false,
   "name": "TransactionRuleCondition",
   "relationships": [
     {

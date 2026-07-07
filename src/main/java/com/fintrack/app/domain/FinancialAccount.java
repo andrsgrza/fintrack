@@ -2,6 +2,7 @@ package com.fintrack.app.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fintrack.app.domain.enumeration.AccountType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import java.io.Serializable;
@@ -45,9 +46,9 @@ public class FinancialAccount implements Serializable {
     private AccountType accountType;
 
     @NotNull
-    @Pattern(regexp = "^[A-Z]{3}$")
+    @Enumerated(EnumType.STRING)
     @Column(name = "currency", nullable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @NotNull
     @Column(name = "initial_balance", precision = 21, scale = 2, nullable = false)
@@ -186,16 +187,16 @@ public class FinancialAccount implements Serializable {
         this.accountType = accountType;
     }
 
-    public String getCurrency() {
+    public CurrencyCode getCurrency() {
         return this.currency;
     }
 
-    public FinancialAccount currency(String currency) {
+    public FinancialAccount currency(CurrencyCode currency) {
         this.setCurrency(currency);
         return this;
     }
 
-    public void setCurrency(String currency) {
+    public void setCurrency(CurrencyCode currency) {
         this.currency = currency;
     }
 

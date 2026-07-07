@@ -1,6 +1,7 @@
 package com.fintrack.app.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.domain.enumeration.SubscriptionStatus;
 import jakarta.persistence.*;
@@ -52,9 +53,9 @@ public class FinancialSubscription implements Serializable {
     private BigDecimal amountTolerancePercentage;
 
     @NotNull
-    @Pattern(regexp = "^[A-Z]{3}$")
+    @Enumerated(EnumType.STRING)
     @Column(name = "currency", nullable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @NotNull
     @Enumerated(EnumType.STRING)
@@ -224,16 +225,16 @@ public class FinancialSubscription implements Serializable {
         this.amountTolerancePercentage = amountTolerancePercentage;
     }
 
-    public String getCurrency() {
+    public CurrencyCode getCurrency() {
         return this.currency;
     }
 
-    public FinancialSubscription currency(String currency) {
+    public FinancialSubscription currency(CurrencyCode currency) {
         this.setCurrency(currency);
         return this;
     }
 
-    public void setCurrency(String currency) {
+    public void setCurrency(CurrencyCode currency) {
         this.currency = currency;
     }
 

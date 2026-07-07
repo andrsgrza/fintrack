@@ -82,7 +82,7 @@ public class FinancialSubscriptionQueryService extends QueryService<FinancialSub
                 buildSpecification(criteria.getStatus(), FinancialSubscription_.status),
                 buildRangeSpecification(criteria.getExpectedAmount(), FinancialSubscription_.expectedAmount),
                 buildRangeSpecification(criteria.getAmountTolerancePercentage(), FinancialSubscription_.amountTolerancePercentage),
-                buildStringSpecification(criteria.getCurrency(), FinancialSubscription_.currency),
+                buildSpecification(criteria.getCurrency(), FinancialSubscription_.currency),
                 buildSpecification(criteria.getRecurrenceUnit(), FinancialSubscription_.recurrenceUnit),
                 buildRangeSpecification(criteria.getIntervalCount(), FinancialSubscription_.intervalCount),
                 buildRangeSpecification(criteria.getStartDate(), FinancialSubscription_.startDate),

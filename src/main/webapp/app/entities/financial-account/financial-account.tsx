@@ -174,7 +174,9 @@ export const FinancialAccount = () => {
                   <td>
                     <Translate contentKey={`fintrackApp.AccountType.${financialAccount.accountType}`} />
                   </td>
-                  <td>{financialAccount.currency}</td>
+                  <td>
+                    <Translate contentKey={`fintrackApp.CurrencyCode.${financialAccount.currency}`} />
+                  </td>
                   <td>{financialAccount.initialBalance}</td>
                   <td>
                     {financialAccount.initialBalanceDate ? (

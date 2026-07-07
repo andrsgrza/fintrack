@@ -46,6 +46,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "jpaMetamodelFiltering": true,
   "name": "IngestionRecord",
   "pagination": "pagination",

@@ -1,6 +1,7 @@
 package com.fintrack.app.service.dto;
 
 import com.fintrack.app.domain.enumeration.AccountType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import java.io.Serializable;
@@ -33,8 +34,7 @@ public class FinancialAccountDTO implements Serializable {
     private AccountType accountType;
 
     @NotNull
-    @Pattern(regexp = "^[A-Z]{3}$")
-    private String currency;
+    private CurrencyCode currency;
 
     @NotNull
     private BigDecimal initialBalance;
@@ -107,11 +107,11 @@ public class FinancialAccountDTO implements Serializable {
         this.accountType = accountType;
     }
 
-    public String getCurrency() {
+    public CurrencyCode getCurrency() {
         return currency;
     }
 
-    public void setCurrency(String currency) {
+    public void setCurrency(CurrencyCode currency) {
         this.currency = currency;
     }
 

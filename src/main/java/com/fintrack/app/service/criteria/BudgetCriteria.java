@@ -2,6 +2,7 @@ package com.fintrack.app.service.criteria;
 
 import com.fintrack.app.domain.enumeration.BudgetPeriod;
 import com.fintrack.app.domain.enumeration.BudgetStatus;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TagMatchMode;
 import java.io.Serializable;
 import java.util.Objects;
@@ -22,6 +23,23 @@ import tech.jhipster.service.filter.*;
 @ParameterObject
 @SuppressWarnings("common-java:DuplicatedBlocks")
 public class BudgetCriteria implements Serializable, Criteria {
+
+    /**
+     * Class for filtering CurrencyCode
+     */
+    public static class CurrencyCodeFilter extends Filter<CurrencyCode> {
+
+        public CurrencyCodeFilter() {}
+
+        public CurrencyCodeFilter(CurrencyCodeFilter filter) {
+            super(filter);
+        }
+
+        @Override
+        public CurrencyCodeFilter copy() {
+            return new CurrencyCodeFilter(this);
+        }
+    }
 
     /**
      * Class for filtering BudgetPeriod
@@ -82,7 +100,7 @@ public class BudgetCriteria implements Serializable, Criteria {
 
     private BigDecimalFilter amount;
 
-    private StringFilter currency;
+    private CurrencyCodeFilter currency;
 
     private BudgetPeriodFilter period;
 
@@ -116,7 +134,7 @@ public class BudgetCriteria implements Serializable, Criteria {
         this.id = other.optionalId().map(LongFilter::copy).orElse(null);
         this.name = other.optionalName().map(StringFilter::copy).orElse(null);
         this.amount = other.optionalAmount().map(BigDecimalFilter::copy).orElse(null);
-        this.currency = other.optionalCurrency().map(StringFilter::copy).orElse(null);
+        this.currency = other.optionalCurrency().map(CurrencyCodeFilter::copy).orElse(null);
         this.period = other.optionalPeriod().map(BudgetPeriodFilter::copy).orElse(null);
         this.startDate = other.optionalStartDate().map(LocalDateFilter::copy).orElse(null);
         this.endDate = other.optionalEndDate().map(LocalDateFilter::copy).orElse(null);
@@ -194,22 +212,22 @@ public class BudgetCriteria implements Serializable, Criteria {
         this.amount = amount;
     }
 
-    public StringFilter getCurrency() {
+    public CurrencyCodeFilter getCurrency() {
         return currency;
     }
 
-    public Optional<StringFilter> optionalCurrency() {
+    public Optional<CurrencyCodeFilter> optionalCurrency() {
         return Optional.ofNullable(currency);
     }
 
-    public StringFilter currency() {
+    public CurrencyCodeFilter currency() {
         if (currency == null) {
-            setCurrency(new StringFilter());
+            setCurrency(new CurrencyCodeFilter());
         }
         return currency;
     }
 
-    public void setCurrency(StringFilter currency) {
+    public void setCurrency(CurrencyCodeFilter currency) {
         this.currency = currency;
     }
 

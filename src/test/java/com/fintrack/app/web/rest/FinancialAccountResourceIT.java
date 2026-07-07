@@ -17,6 +17,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.FinancialAccountService;
@@ -64,8 +65,8 @@ class FinancialAccountResourceIT {
     private static final AccountType DEFAULT_ACCOUNT_TYPE = AccountType.DEBIT;
     private static final AccountType UPDATED_ACCOUNT_TYPE = AccountType.CASH;
 
-    private static final String DEFAULT_CURRENCY = "EDW";
-    private static final String UPDATED_CURRENCY = "ZZJ";
+    private static final CurrencyCode DEFAULT_CURRENCY = CurrencyCode.MXN;
+    private static final CurrencyCode UPDATED_CURRENCY = CurrencyCode.USD;
 
     private static final BigDecimal DEFAULT_INITIAL_BALANCE = new BigDecimal(1);
     private static final BigDecimal UPDATED_INITIAL_BALANCE = new BigDecimal(2);
@@ -75,14 +76,14 @@ class FinancialAccountResourceIT {
     private static final LocalDate UPDATED_INITIAL_BALANCE_DATE = LocalDate.now(ZoneId.systemDefault());
     private static final LocalDate SMALLER_INITIAL_BALANCE_DATE = LocalDate.ofEpochDay(-1L);
 
-    private static final String DEFAULT_LAST_FOUR_DIGITS = "6120";
-    private static final String UPDATED_LAST_FOUR_DIGITS = "2327";
+    private static final String DEFAULT_LAST_FOUR_DIGITS = "1189";
+    private static final String UPDATED_LAST_FOUR_DIGITS = "9361";
 
     private static final String DEFAULT_DESCRIPTION = "AAAAAAAAAA";
     private static final String UPDATED_DESCRIPTION = "BBBBBBBBBB";
 
-    private static final String DEFAULT_COLOR = "#FfaE2b";
-    private static final String UPDATED_COLOR = "#81aaEe";
+    private static final String DEFAULT_COLOR = "#50484F";
+    private static final String UPDATED_COLOR = "#FfaE2b";
 
     private static final String DEFAULT_ICON = "AAAAAAAAAA";
     private static final String UPDATED_ICON = "BBBBBBBBBB";
@@ -416,7 +417,7 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.[*].name").value(hasItem(DEFAULT_NAME)))
             .andExpect(jsonPath("$.[*].institutionName").value(hasItem(DEFAULT_INSTITUTION_NAME)))
             .andExpect(jsonPath("$.[*].accountType").value(hasItem(DEFAULT_ACCOUNT_TYPE.toString())))
-            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY)))
+            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY.toString())))
             .andExpect(jsonPath("$.[*].initialBalance").value(hasItem(sameNumber(DEFAULT_INITIAL_BALANCE))))
             .andExpect(jsonPath("$.[*].initialBalanceDate").value(hasItem(DEFAULT_INITIAL_BALANCE_DATE.toString())))
             .andExpect(jsonPath("$.[*].lastFourDigits").value(hasItem(DEFAULT_LAST_FOUR_DIGITS)))
@@ -461,7 +462,7 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.name").value(DEFAULT_NAME))
             .andExpect(jsonPath("$.institutionName").value(DEFAULT_INSTITUTION_NAME))
             .andExpect(jsonPath("$.accountType").value(DEFAULT_ACCOUNT_TYPE.toString()))
-            .andExpect(jsonPath("$.currency").value(DEFAULT_CURRENCY))
+            .andExpect(jsonPath("$.currency").value(DEFAULT_CURRENCY.toString()))
             .andExpect(jsonPath("$.initialBalance").value(sameNumber(DEFAULT_INITIAL_BALANCE)))
             .andExpect(jsonPath("$.initialBalanceDate").value(DEFAULT_INITIAL_BALANCE_DATE.toString()))
             .andExpect(jsonPath("$.lastFourDigits").value(DEFAULT_LAST_FOUR_DIGITS))
@@ -662,26 +663,6 @@ class FinancialAccountResourceIT {
 
         // Get all the financialAccountList where currency is not null
         defaultFinancialAccountFiltering("currency.specified=true", "currency.specified=false");
-    }
-
-    @Test
-    @Transactional
-    void getAllFinancialAccountsByCurrencyContainsSomething() throws Exception {
-        // Initialize the database
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-
-        // Get all the financialAccountList where currency contains
-        defaultFinancialAccountFiltering("currency.contains=" + DEFAULT_CURRENCY, "currency.contains=" + UPDATED_CURRENCY);
-    }
-
-    @Test
-    @Transactional
-    void getAllFinancialAccountsByCurrencyNotContainsSomething() throws Exception {
-        // Initialize the database
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-
-        // Get all the financialAccountList where currency does not contain
-        defaultFinancialAccountFiltering("currency.doesNotContain=" + UPDATED_CURRENCY, "currency.doesNotContain=" + DEFAULT_CURRENCY);
     }
 
     @Test
@@ -1315,7 +1296,7 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.[*].name").value(hasItem(DEFAULT_NAME)))
             .andExpect(jsonPath("$.[*].institutionName").value(hasItem(DEFAULT_INSTITUTION_NAME)))
             .andExpect(jsonPath("$.[*].accountType").value(hasItem(DEFAULT_ACCOUNT_TYPE.toString())))
-            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY)))
+            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY.toString())))
             .andExpect(jsonPath("$.[*].initialBalance").value(hasItem(sameNumber(DEFAULT_INITIAL_BALANCE))))
             .andExpect(jsonPath("$.[*].initialBalanceDate").value(hasItem(DEFAULT_INITIAL_BALANCE_DATE.toString())))
             .andExpect(jsonPath("$.[*].lastFourDigits").value(hasItem(DEFAULT_LAST_FOUR_DIGITS)))
@@ -1478,10 +1459,10 @@ class FinancialAccountResourceIT {
         partialUpdatedFinancialAccount.setId(financialAccount.getId());
 
         partialUpdatedFinancialAccount
-            .initialBalance(UPDATED_INITIAL_BALANCE)
-            .description(UPDATED_DESCRIPTION)
+            .name(UPDATED_NAME)
+            .institutionName(UPDATED_INSTITUTION_NAME)
             .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT);
+            .updatedAt(UPDATED_UPDATED_AT);
 
         restFinancialAccountMockMvc
             .perform(

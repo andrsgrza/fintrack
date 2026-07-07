@@ -78,7 +78,7 @@ public class FinancialAccountQueryService extends QueryService<FinancialAccount>
                 buildStringSpecification(criteria.getName(), FinancialAccount_.name),
                 buildStringSpecification(criteria.getInstitutionName(), FinancialAccount_.institutionName),
                 buildSpecification(criteria.getAccountType(), FinancialAccount_.accountType),
-                buildStringSpecification(criteria.getCurrency(), FinancialAccount_.currency),
+                buildSpecification(criteria.getCurrency(), FinancialAccount_.currency),
                 buildRangeSpecification(criteria.getInitialBalance(), FinancialAccount_.initialBalance),
                 buildRangeSpecification(criteria.getInitialBalanceDate(), FinancialAccount_.initialBalanceDate),
                 buildStringSpecification(criteria.getLastFourDigits(), FinancialAccount_.lastFourDigits),
