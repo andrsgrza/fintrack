@@ -1,11 +1,9 @@
 package com.fintrack.app.service.mapper;
 
-import com.fintrack.app.domain.ApiAccessToken;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
-import com.fintrack.app.service.dto.ApiAccessTokenDTO;
 import com.fintrack.app.service.dto.BudgetDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
@@ -22,15 +20,12 @@ public interface FinancialAccountMapper extends EntityMapper<FinancialAccountDTO
     @Mapping(target = "user", source = "user", qualifiedByName = "userLogin")
     @Mapping(target = "budgets", source = "budgets", qualifiedByName = "budgetIdSet")
     @Mapping(target = "transactionIngestions", source = "transactionIngestions", qualifiedByName = "transactionIngestionIdSet")
-    @Mapping(target = "apiAccessTokens", source = "apiAccessTokens", qualifiedByName = "apiAccessTokenIdSet")
     FinancialAccountDTO toDto(FinancialAccount s);
 
     @Mapping(target = "budgets", ignore = true)
     @Mapping(target = "removeBudgets", ignore = true)
     @Mapping(target = "transactionIngestions", ignore = true)
     @Mapping(target = "removeTransactionIngestions", ignore = true)
-    @Mapping(target = "apiAccessTokens", ignore = true)
-    @Mapping(target = "removeApiAccessTokens", ignore = true)
     FinancialAccount toEntity(FinancialAccountDTO financialAccountDTO);
 
     @Named("userLogin")
@@ -57,15 +52,5 @@ public interface FinancialAccountMapper extends EntityMapper<FinancialAccountDTO
     @Named("transactionIngestionIdSet")
     default Set<TransactionIngestionDTO> toDtoTransactionIngestionIdSet(Set<TransactionIngestion> transactionIngestion) {
         return transactionIngestion.stream().map(this::toDtoTransactionIngestionId).collect(Collectors.toSet());
-    }
-
-    @Named("apiAccessTokenId")
-    @BeanMapping(ignoreByDefault = true)
-    @Mapping(target = "id", source = "id")
-    ApiAccessTokenDTO toDtoApiAccessTokenId(ApiAccessToken apiAccessToken);
-
-    @Named("apiAccessTokenIdSet")
-    default Set<ApiAccessTokenDTO> toDtoApiAccessTokenIdSet(Set<ApiAccessToken> apiAccessToken) {
-        return apiAccessToken.stream().map(this::toDtoApiAccessTokenId).collect(Collectors.toSet());
     }
 }

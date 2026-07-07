@@ -1,6 +1,5 @@
 package com.fintrack.app.domain;
 
-import static com.fintrack.app.domain.ApiAccessTokenTestSamples.*;
 import static com.fintrack.app.domain.BudgetTestSamples.*;
 import static com.fintrack.app.domain.CreditAccountDetailsTestSamples.*;
 import static com.fintrack.app.domain.FinancialAccountTestSamples.*;
@@ -130,27 +129,5 @@ class FinancialAccountTest {
         financialAccount.setTransactionIngestions(new HashSet<>());
         assertThat(financialAccount.getTransactionIngestions()).doesNotContain(transactionIngestionBack);
         assertThat(transactionIngestionBack.getAccounts()).doesNotContain(financialAccount);
-    }
-
-    @Test
-    void apiAccessTokensTest() {
-        FinancialAccount financialAccount = getFinancialAccountRandomSampleGenerator();
-        ApiAccessToken apiAccessTokenBack = getApiAccessTokenRandomSampleGenerator();
-
-        financialAccount.addApiAccessTokens(apiAccessTokenBack);
-        assertThat(financialAccount.getApiAccessTokens()).containsOnly(apiAccessTokenBack);
-        assertThat(apiAccessTokenBack.getAccounts()).containsOnly(financialAccount);
-
-        financialAccount.removeApiAccessTokens(apiAccessTokenBack);
-        assertThat(financialAccount.getApiAccessTokens()).doesNotContain(apiAccessTokenBack);
-        assertThat(apiAccessTokenBack.getAccounts()).doesNotContain(financialAccount);
-
-        financialAccount.apiAccessTokens(new HashSet<>(Set.of(apiAccessTokenBack)));
-        assertThat(financialAccount.getApiAccessTokens()).containsOnly(apiAccessTokenBack);
-        assertThat(apiAccessTokenBack.getAccounts()).containsOnly(financialAccount);
-
-        financialAccount.setApiAccessTokens(new HashSet<>());
-        assertThat(financialAccount.getApiAccessTokens()).doesNotContain(apiAccessTokenBack);
-        assertThat(apiAccessTokenBack.getAccounts()).doesNotContain(financialAccount);
     }
 }

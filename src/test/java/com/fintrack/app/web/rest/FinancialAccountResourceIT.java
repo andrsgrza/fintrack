@@ -11,7 +11,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
-import com.fintrack.app.domain.ApiAccessToken;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
@@ -91,9 +90,6 @@ class FinancialAccountResourceIT {
     private static final Boolean DEFAULT_ACTIVE = false;
     private static final Boolean UPDATED_ACTIVE = true;
 
-    private static final Boolean DEFAULT_INCLUDE_IN_NET_WORTH = false;
-    private static final Boolean UPDATED_INCLUDE_IN_NET_WORTH = true;
-
     private static final Instant DEFAULT_CREATED_AT = Instant.ofEpochMilli(0L);
     private static final Instant UPDATED_CREATED_AT = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
@@ -153,7 +149,6 @@ class FinancialAccountResourceIT {
             .color(DEFAULT_COLOR)
             .icon(DEFAULT_ICON)
             .active(DEFAULT_ACTIVE)
-            .includeInNetWorth(DEFAULT_INCLUDE_IN_NET_WORTH)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
         // Add required entity
@@ -183,7 +178,6 @@ class FinancialAccountResourceIT {
             .color(UPDATED_COLOR)
             .icon(UPDATED_ICON)
             .active(UPDATED_ACTIVE)
-            .includeInNetWorth(UPDATED_INCLUDE_IN_NET_WORTH)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
         // Add required entity
@@ -353,23 +347,6 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void checkIncludeInNetWorthIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        financialAccount.setIncludeInNetWorth(null);
-
-        // Create the FinancialAccount, which fails.
-        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
-
-        restFinancialAccountMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
     void checkCreatedAtIsRequired() throws Exception {
         long databaseSizeBeforeTest = getRepositoryCount();
         // set the field null
@@ -425,7 +402,6 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.[*].color").value(hasItem(DEFAULT_COLOR)))
             .andExpect(jsonPath("$.[*].icon").value(hasItem(DEFAULT_ICON)))
             .andExpect(jsonPath("$.[*].active").value(hasItem(DEFAULT_ACTIVE)))
-            .andExpect(jsonPath("$.[*].includeInNetWorth").value(hasItem(DEFAULT_INCLUDE_IN_NET_WORTH)))
             .andExpect(jsonPath("$.[*].createdAt").value(hasItem(DEFAULT_CREATED_AT.toString())))
             .andExpect(jsonPath("$.[*].updatedAt").value(hasItem(DEFAULT_UPDATED_AT.toString())));
     }
@@ -470,7 +446,6 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.color").value(DEFAULT_COLOR))
             .andExpect(jsonPath("$.icon").value(DEFAULT_ICON))
             .andExpect(jsonPath("$.active").value(DEFAULT_ACTIVE))
-            .andExpect(jsonPath("$.includeInNetWorth").value(DEFAULT_INCLUDE_IN_NET_WORTH))
             .andExpect(jsonPath("$.createdAt").value(DEFAULT_CREATED_AT.toString()))
             .andExpect(jsonPath("$.updatedAt").value(DEFAULT_UPDATED_AT.toString()));
     }
@@ -1091,42 +1066,6 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void getAllFinancialAccountsByIncludeInNetWorthIsEqualToSomething() throws Exception {
-        // Initialize the database
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-
-        // Get all the financialAccountList where includeInNetWorth equals to
-        defaultFinancialAccountFiltering(
-            "includeInNetWorth.equals=" + DEFAULT_INCLUDE_IN_NET_WORTH,
-            "includeInNetWorth.equals=" + UPDATED_INCLUDE_IN_NET_WORTH
-        );
-    }
-
-    @Test
-    @Transactional
-    void getAllFinancialAccountsByIncludeInNetWorthIsInShouldWork() throws Exception {
-        // Initialize the database
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-
-        // Get all the financialAccountList where includeInNetWorth in
-        defaultFinancialAccountFiltering(
-            "includeInNetWorth.in=" + DEFAULT_INCLUDE_IN_NET_WORTH + "," + UPDATED_INCLUDE_IN_NET_WORTH,
-            "includeInNetWorth.in=" + UPDATED_INCLUDE_IN_NET_WORTH
-        );
-    }
-
-    @Test
-    @Transactional
-    void getAllFinancialAccountsByIncludeInNetWorthIsNullOrNotNull() throws Exception {
-        // Initialize the database
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-
-        // Get all the financialAccountList where includeInNetWorth is not null
-        defaultFinancialAccountFiltering("includeInNetWorth.specified=true", "includeInNetWorth.specified=false");
-    }
-
-    @Test
-    @Transactional
     void getAllFinancialAccountsByCreatedAtIsEqualToSomething() throws Exception {
         // Initialize the database
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
@@ -1257,28 +1196,6 @@ class FinancialAccountResourceIT {
         defaultFinancialAccountShouldNotBeFound("transactionIngestionsId.equals=" + (transactionIngestionsId + 1));
     }
 
-    @Test
-    @Transactional
-    void getAllFinancialAccountsByApiAccessTokensIsEqualToSomething() throws Exception {
-        ApiAccessToken apiAccessTokens;
-        if (TestUtil.findAll(em, ApiAccessToken.class).isEmpty()) {
-            financialAccountRepository.saveAndFlush(financialAccount);
-            apiAccessTokens = ApiAccessTokenResourceIT.createEntity(em);
-        } else {
-            apiAccessTokens = TestUtil.findAll(em, ApiAccessToken.class).get(0);
-        }
-        em.persist(apiAccessTokens);
-        em.flush();
-        financialAccount.addApiAccessTokens(apiAccessTokens);
-        financialAccountRepository.saveAndFlush(financialAccount);
-        Long apiAccessTokensId = apiAccessTokens.getId();
-        // Get all the financialAccountList where apiAccessTokens equals to apiAccessTokensId
-        defaultFinancialAccountShouldBeFound("apiAccessTokensId.equals=" + apiAccessTokensId);
-
-        // Get all the financialAccountList where apiAccessTokens equals to (apiAccessTokensId + 1)
-        defaultFinancialAccountShouldNotBeFound("apiAccessTokensId.equals=" + (apiAccessTokensId + 1));
-    }
-
     private void defaultFinancialAccountFiltering(String shouldBeFound, String shouldNotBeFound) throws Exception {
         defaultFinancialAccountShouldBeFound(shouldBeFound);
         defaultFinancialAccountShouldNotBeFound(shouldNotBeFound);
@@ -1304,7 +1221,6 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.[*].color").value(hasItem(DEFAULT_COLOR)))
             .andExpect(jsonPath("$.[*].icon").value(hasItem(DEFAULT_ICON)))
             .andExpect(jsonPath("$.[*].active").value(hasItem(DEFAULT_ACTIVE)))
-            .andExpect(jsonPath("$.[*].includeInNetWorth").value(hasItem(DEFAULT_INCLUDE_IN_NET_WORTH)))
             .andExpect(jsonPath("$.[*].createdAt").value(hasItem(DEFAULT_CREATED_AT.toString())))
             .andExpect(jsonPath("$.[*].updatedAt").value(hasItem(DEFAULT_UPDATED_AT.toString())));
 
@@ -1366,7 +1282,6 @@ class FinancialAccountResourceIT {
             .color(UPDATED_COLOR)
             .icon(UPDATED_ICON)
             .active(UPDATED_ACTIVE)
-            .includeInNetWorth(UPDATED_INCLUDE_IN_NET_WORTH)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
         FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(updatedFinancialAccount);
@@ -1458,11 +1373,7 @@ class FinancialAccountResourceIT {
         FinancialAccount partialUpdatedFinancialAccount = new FinancialAccount();
         partialUpdatedFinancialAccount.setId(financialAccount.getId());
 
-        partialUpdatedFinancialAccount
-            .name(UPDATED_NAME)
-            .institutionName(UPDATED_INSTITUTION_NAME)
-            .active(UPDATED_ACTIVE)
-            .updatedAt(UPDATED_UPDATED_AT);
+        partialUpdatedFinancialAccount.name(UPDATED_NAME).institutionName(UPDATED_INSTITUTION_NAME).active(UPDATED_ACTIVE);
 
         restFinancialAccountMockMvc
             .perform(
@@ -1505,7 +1416,6 @@ class FinancialAccountResourceIT {
             .color(UPDATED_COLOR)
             .icon(UPDATED_ICON)
             .active(UPDATED_ACTIVE)
-            .includeInNetWorth(UPDATED_INCLUDE_IN_NET_WORTH)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
 

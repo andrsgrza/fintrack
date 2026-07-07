@@ -65,8 +65,6 @@ public class ApiAccessTokenAsserts {
      * @param actual the actual entity
      */
     public static void assertApiAccessTokenUpdatableRelationshipsEquals(ApiAccessToken expected, ApiAccessToken actual) {
-        assertThat(actual)
-            .as("Verify ApiAccessToken relationships")
-            .satisfies(a -> assertThat(a.getAccounts()).as("check accounts").isEqualTo(expected.getAccounts()));
+        // empty method
     }
 }

@@ -11,7 +11,6 @@ import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
 import { getEntities as getBudgets } from 'app/entities/budget/budget.reducer';
 import { getEntities as getTransactionIngestions } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
-import { getEntities as getApiAccessTokens } from 'app/entities/api-access-token/api-access-token.reducer';
 import { AccountType } from 'app/shared/model/enumerations/account-type.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { createEntity, getEntity, reset, updateEntity } from './financial-account.reducer';
@@ -27,7 +26,6 @@ export const FinancialAccountUpdate = () => {
   const users = useAppSelector(state => state.userManagement.users);
   const budgets = useAppSelector(state => state.budget.entities);
   const transactionIngestions = useAppSelector(state => state.transactionIngestion.entities);
-  const apiAccessTokens = useAppSelector(state => state.apiAccessToken.entities);
   const financialAccountEntity = useAppSelector(state => state.financialAccount.entity);
   const loading = useAppSelector(state => state.financialAccount.loading);
   const updating = useAppSelector(state => state.financialAccount.updating);
@@ -49,7 +47,6 @@ export const FinancialAccountUpdate = () => {
     dispatch(getUsers({}));
     dispatch(getBudgets({}));
     dispatch(getTransactionIngestions({}));
-    dispatch(getApiAccessTokens({}));
   }, []);
 
   useEffect(() => {
@@ -74,7 +71,6 @@ export const FinancialAccountUpdate = () => {
       user: users.find(it => it.id.toString() === values.user?.toString()),
       budgets: mapIdList(values.budgets),
       transactionIngestions: mapIdList(values.transactionIngestions),
-      apiAccessTokens: mapIdList(values.apiAccessTokens),
     };
 
     if (isNew) {
@@ -99,7 +95,6 @@ export const FinancialAccountUpdate = () => {
           user: financialAccountEntity?.user?.id,
           budgets: financialAccountEntity?.budgets?.map(e => e.id.toString()),
           transactionIngestions: financialAccountEntity?.transactionIngestions?.map(e => e.id.toString()),
-          apiAccessTokens: financialAccountEntity?.apiAccessTokens?.map(e => e.id.toString()),
         };
 
   return (
@@ -248,14 +243,6 @@ export const FinancialAccountUpdate = () => {
                 type="checkbox"
               />
               <ValidatedField
-                label={translate('fintrackApp.financialAccount.includeInNetWorth')}
-                id="financial-account-includeInNetWorth"
-                name="includeInNetWorth"
-                data-cy="includeInNetWorth"
-                check
-                type="checkbox"
-              />
-              <ValidatedField
                 label={translate('fintrackApp.financialAccount.createdAt')}
                 id="financial-account-createdAt"
                 name="createdAt"
@@ -325,23 +312,6 @@ export const FinancialAccountUpdate = () => {
                 <option value="" key="0" />
                 {transactionIngestions
                   ? transactionIngestions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.financialAccount.apiAccessTokens')}
-                id="financial-account-apiAccessTokens"
-                data-cy="apiAccessTokens"
-                type="select"
-                multiple
-                name="apiAccessTokens"
-              >
-                <option value="" key="0" />
-                {apiAccessTokens
-                  ? apiAccessTokens.map(otherEntity => (
                       <option value={otherEntity.id} key={otherEntity.id}>
                         {otherEntity.id}
                       </option>

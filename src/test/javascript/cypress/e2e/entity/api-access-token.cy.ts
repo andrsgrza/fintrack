@@ -51,11 +51,6 @@ describe('ApiAccessToken e2e test', () => {
       body: [user],
     });
 
-    cy.intercept('GET', '/api/financial-accounts', {
-      statusCode: 200,
-      body: [],
-    });
-
     cy.intercept('GET', '/api/api-ingestions', {
       statusCode: 200,
       body: [],

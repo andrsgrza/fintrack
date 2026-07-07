@@ -5,9 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * A DTO for the {@link com.fintrack.app.domain.ApiAccessToken} entity.
@@ -46,8 +44,6 @@ public class ApiAccessTokenDTO implements Serializable {
 
     @NotNull
     private UserDTO user;
-
-    private Set<FinancialAccountDTO> accounts = new HashSet<>();
 
     public Long getId() {
         return id;
@@ -137,14 +133,6 @@ public class ApiAccessTokenDTO implements Serializable {
         this.user = user;
     }
 
-    public Set<FinancialAccountDTO> getAccounts() {
-        return accounts;
-    }
-
-    public void setAccounts(Set<FinancialAccountDTO> accounts) {
-        this.accounts = accounts;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -181,7 +169,6 @@ public class ApiAccessTokenDTO implements Serializable {
             ", expiresAt='" + getExpiresAt() + "'" +
             ", revokedAt='" + getRevokedAt() + "'" +
             ", user=" + getUser() +
-            ", accounts=" + getAccounts() +
             "}";
     }
 }

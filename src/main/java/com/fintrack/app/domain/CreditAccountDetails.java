@@ -53,9 +53,7 @@ public class CreditAccountDetails implements Serializable {
     private Instant updatedAt;
 
     @JsonIgnoreProperties(
-        value = {
-            "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions", "apiAccessTokens",
-        },
+        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions" },
         allowSetters = true
     )
     @OneToOne(fetch = FetchType.LAZY, optional = false)

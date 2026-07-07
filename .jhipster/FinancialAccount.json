@@ -72,11 +72,6 @@
       "fieldValidateRules": ["required"]
     },
     {
-      "fieldName": "includeInNetWorth",
-      "fieldType": "Boolean",
-      "fieldValidateRules": ["required"]
-    },
-    {
       "fieldName": "createdAt",
       "fieldType": "Instant",
       "fieldValidateRules": ["required"]
@@ -132,13 +127,6 @@
       "otherEntityName": "transactionIngestion",
       "otherEntityRelationshipName": "accounts",
       "relationshipName": "transactionIngestions",
-      "relationshipSide": "right",
-      "relationshipType": "many-to-many"
-    },
-    {
-      "otherEntityName": "apiAccessToken",
-      "otherEntityRelationshipName": "accounts",
-      "relationshipName": "apiAccessTokens",
       "relationshipSide": "right",
       "relationshipType": "many-to-many"
     }

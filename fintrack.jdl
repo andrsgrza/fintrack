@@ -207,7 +207,6 @@ entity FinancialAccount {
   color String pattern(/^#[0-9A-Fa-f]{6}$/)
   icon String maxlength(50)
   active Boolean required
-  includeInNetWorth Boolean required
   createdAt Instant required
   updatedAt Instant required
 }
@@ -559,10 +558,6 @@ relationship ManyToOne {
 /**
  * API TOKEN RELATIONSHIPS
  */
-relationship ManyToMany {
-  ApiAccessToken{accounts(name)} to FinancialAccount{apiAccessTokens}
-}
-
 relationship ManyToOne {
   ApiAccessTokenPermission{apiAccessToken(name) required} to ApiAccessToken{permissions}
 }

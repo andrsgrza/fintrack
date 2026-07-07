@@ -65,7 +65,6 @@ public class FinancialAccountAsserts {
             .satisfies(a -> assertThat(a.getColor()).as("check color").isEqualTo(expected.getColor()))
             .satisfies(a -> assertThat(a.getIcon()).as("check icon").isEqualTo(expected.getIcon()))
             .satisfies(a -> assertThat(a.getActive()).as("check active").isEqualTo(expected.getActive()))
-            .satisfies(a -> assertThat(a.getIncludeInNetWorth()).as("check includeInNetWorth").isEqualTo(expected.getIncludeInNetWorth()))
             .satisfies(a -> assertThat(a.getCreatedAt()).as("check createdAt").isEqualTo(expected.getCreatedAt()))
             .satisfies(a -> assertThat(a.getUpdatedAt()).as("check updatedAt").isEqualTo(expected.getUpdatedAt()));
     }
@@ -82,7 +81,6 @@ public class FinancialAccountAsserts {
             .satisfies(a -> assertThat(a.getBudgets()).as("check budgets").isEqualTo(expected.getBudgets()))
             .satisfies(a ->
                 assertThat(a.getTransactionIngestions()).as("check transactionIngestions").isEqualTo(expected.getTransactionIngestions())
-            )
-            .satisfies(a -> assertThat(a.getApiAccessTokens()).as("check apiAccessTokens").isEqualTo(expected.getApiAccessTokens()));
+            );
     }
 }

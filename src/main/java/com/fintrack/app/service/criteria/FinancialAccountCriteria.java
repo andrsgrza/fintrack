@@ -82,8 +82,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
 
     private BooleanFilter active;
 
-    private BooleanFilter includeInNetWorth;
-
     private InstantFilter createdAt;
 
     private InstantFilter updatedAt;
@@ -99,8 +97,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
     private LongFilter budgetsId;
 
     private LongFilter transactionIngestionsId;
-
-    private LongFilter apiAccessTokensId;
 
     private Boolean distinct;
 
@@ -119,7 +115,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.color = other.optionalColor().map(StringFilter::copy).orElse(null);
         this.icon = other.optionalIcon().map(StringFilter::copy).orElse(null);
         this.active = other.optionalActive().map(BooleanFilter::copy).orElse(null);
-        this.includeInNetWorth = other.optionalIncludeInNetWorth().map(BooleanFilter::copy).orElse(null);
         this.createdAt = other.optionalCreatedAt().map(InstantFilter::copy).orElse(null);
         this.updatedAt = other.optionalUpdatedAt().map(InstantFilter::copy).orElse(null);
         this.userId = other.optionalUserId().map(LongFilter::copy).orElse(null);
@@ -128,7 +123,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.subscriptionsId = other.optionalSubscriptionsId().map(LongFilter::copy).orElse(null);
         this.budgetsId = other.optionalBudgetsId().map(LongFilter::copy).orElse(null);
         this.transactionIngestionsId = other.optionalTransactionIngestionsId().map(LongFilter::copy).orElse(null);
-        this.apiAccessTokensId = other.optionalApiAccessTokensId().map(LongFilter::copy).orElse(null);
         this.distinct = other.distinct;
     }
 
@@ -365,25 +359,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.active = active;
     }
 
-    public BooleanFilter getIncludeInNetWorth() {
-        return includeInNetWorth;
-    }
-
-    public Optional<BooleanFilter> optionalIncludeInNetWorth() {
-        return Optional.ofNullable(includeInNetWorth);
-    }
-
-    public BooleanFilter includeInNetWorth() {
-        if (includeInNetWorth == null) {
-            setIncludeInNetWorth(new BooleanFilter());
-        }
-        return includeInNetWorth;
-    }
-
-    public void setIncludeInNetWorth(BooleanFilter includeInNetWorth) {
-        this.includeInNetWorth = includeInNetWorth;
-    }
-
     public InstantFilter getCreatedAt() {
         return createdAt;
     }
@@ -536,25 +511,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.transactionIngestionsId = transactionIngestionsId;
     }
 
-    public LongFilter getApiAccessTokensId() {
-        return apiAccessTokensId;
-    }
-
-    public Optional<LongFilter> optionalApiAccessTokensId() {
-        return Optional.ofNullable(apiAccessTokensId);
-    }
-
-    public LongFilter apiAccessTokensId() {
-        if (apiAccessTokensId == null) {
-            setApiAccessTokensId(new LongFilter());
-        }
-        return apiAccessTokensId;
-    }
-
-    public void setApiAccessTokensId(LongFilter apiAccessTokensId) {
-        this.apiAccessTokensId = apiAccessTokensId;
-    }
-
     public Boolean getDistinct() {
         return distinct;
     }
@@ -596,7 +552,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             Objects.equals(color, that.color) &&
             Objects.equals(icon, that.icon) &&
             Objects.equals(active, that.active) &&
-            Objects.equals(includeInNetWorth, that.includeInNetWorth) &&
             Objects.equals(createdAt, that.createdAt) &&
             Objects.equals(updatedAt, that.updatedAt) &&
             Objects.equals(userId, that.userId) &&
@@ -605,7 +560,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             Objects.equals(subscriptionsId, that.subscriptionsId) &&
             Objects.equals(budgetsId, that.budgetsId) &&
             Objects.equals(transactionIngestionsId, that.transactionIngestionsId) &&
-            Objects.equals(apiAccessTokensId, that.apiAccessTokensId) &&
             Objects.equals(distinct, that.distinct)
         );
     }
@@ -625,7 +579,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             color,
             icon,
             active,
-            includeInNetWorth,
             createdAt,
             updatedAt,
             userId,
@@ -634,7 +587,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             subscriptionsId,
             budgetsId,
             transactionIngestionsId,
-            apiAccessTokensId,
             distinct
         );
     }
@@ -655,7 +607,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             optionalColor().map(f -> "color=" + f + ", ").orElse("") +
             optionalIcon().map(f -> "icon=" + f + ", ").orElse("") +
             optionalActive().map(f -> "active=" + f + ", ").orElse("") +
-            optionalIncludeInNetWorth().map(f -> "includeInNetWorth=" + f + ", ").orElse("") +
             optionalCreatedAt().map(f -> "createdAt=" + f + ", ").orElse("") +
             optionalUpdatedAt().map(f -> "updatedAt=" + f + ", ").orElse("") +
             optionalUserId().map(f -> "userId=" + f + ", ").orElse("") +
@@ -664,7 +615,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             optionalSubscriptionsId().map(f -> "subscriptionsId=" + f + ", ").orElse("") +
             optionalBudgetsId().map(f -> "budgetsId=" + f + ", ").orElse("") +
             optionalTransactionIngestionsId().map(f -> "transactionIngestionsId=" + f + ", ").orElse("") +
-            optionalApiAccessTokensId().map(f -> "apiAccessTokensId=" + f + ", ").orElse("") +
             optionalDistinct().map(f -> "distinct=" + f + ", ").orElse("") +
         "}";
     }

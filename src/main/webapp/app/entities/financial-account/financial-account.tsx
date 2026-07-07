@@ -132,10 +132,6 @@ export const FinancialAccount = () => {
                   <Translate contentKey="fintrackApp.financialAccount.active">Active</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('active')} />
                 </th>
-                <th className="hand" onClick={sort('includeInNetWorth')}>
-                  <Translate contentKey="fintrackApp.financialAccount.includeInNetWorth">Include In Net Worth</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('includeInNetWorth')} />
-                </th>
                 <th className="hand" onClick={sort('createdAt')}>
                   <Translate contentKey="fintrackApp.financialAccount.createdAt">Created At</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('createdAt')} />
@@ -152,10 +148,6 @@ export const FinancialAccount = () => {
                 </th>
                 <th>
                   <Translate contentKey="fintrackApp.financialAccount.transactionIngestions">Transaction Ingestions</Translate>{' '}
-                  <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialAccount.apiAccessTokens">Api Access Tokens</Translate>{' '}
                   <FontAwesomeIcon icon="sort" />
                 </th>
                 <th />
@@ -188,7 +180,6 @@ export const FinancialAccount = () => {
                   <td>{financialAccount.color}</td>
                   <td>{financialAccount.icon}</td>
                   <td>{financialAccount.active ? 'true' : 'false'}</td>
-                  <td>{financialAccount.includeInNetWorth ? 'true' : 'false'}</td>
                   <td>
                     {financialAccount.createdAt ? (
                       <TextFormat type="date" value={financialAccount.createdAt} format={APP_DATE_FORMAT} />
@@ -216,16 +207,6 @@ export const FinancialAccount = () => {
                           <span key={j}>
                             <Link to={`/transaction-ingestion/${val.id}`}>{val.id}</Link>
                             {j === financialAccount.transactionIngestions.length - 1 ? '' : ', '}
-                          </span>
-                        ))
-                      : null}
-                  </td>
-                  <td>
-                    {financialAccount.apiAccessTokens
-                      ? financialAccount.apiAccessTokens.map((val, j) => (
-                          <span key={j}>
-                            <Link to={`/api-access-token/${val.id}`}>{val.id}</Link>
-                            {j === financialAccount.apiAccessTokens.length - 1 ? '' : ', '}
                           </span>
                         ))
                       : null}

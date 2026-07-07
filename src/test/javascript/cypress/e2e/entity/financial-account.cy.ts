@@ -15,7 +15,7 @@ describe('FinancialAccount e2e test', () => {
   const financialAccountPageUrlPattern = new RegExp('/financial-account(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const financialAccountSample = {"name":"whereas amongst","accountType":"CREDIT_CARD","currency":"MXN","initialBalance":26265.79,"initialBalanceDate":"2026-07-07","active":false,"includeInNetWorth":true,"createdAt":"2026-07-07T04:21:07.355Z","updatedAt":"2026-07-07T00:45:43.644Z"};
+  // const financialAccountSample = {"name":"signature whoa","accountType":"CREDIT_CARD","currency":"USD","initialBalance":478.59,"initialBalanceDate":"2026-07-06","active":true,"createdAt":"2026-07-06T23:47:33.908Z","updatedAt":"2026-07-07T03:28:01.048Z"};
 
   let financialAccount;
   // let user;
@@ -72,11 +72,6 @@ describe('FinancialAccount e2e test', () => {
     });
 
     cy.intercept('GET', '/api/transaction-ingestions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/api-access-tokens', {
       statusCode: 200,
       body: [],
     });
@@ -244,50 +239,46 @@ describe('FinancialAccount e2e test', () => {
 
     // Reason: cannot create a required entity with relationship with required relationships.
     it.skip('should create an instance of FinancialAccount', () => {
-      cy.get(`[data-cy="name"]`).type('polyester jaggedly frail');
-      cy.get(`[data-cy="name"]`).should('have.value', 'polyester jaggedly frail');
+      cy.get(`[data-cy="name"]`).type('drat capsize');
+      cy.get(`[data-cy="name"]`).should('have.value', 'drat capsize');
 
-      cy.get(`[data-cy="institutionName"]`).type('afore er');
-      cy.get(`[data-cy="institutionName"]`).should('have.value', 'afore er');
+      cy.get(`[data-cy="institutionName"]`).type('frail instead');
+      cy.get(`[data-cy="institutionName"]`).should('have.value', 'frail instead');
 
       cy.get(`[data-cy="accountType"]`).select('DEBIT');
 
       cy.get(`[data-cy="currency"]`).select('USD');
 
-      cy.get(`[data-cy="initialBalance"]`).type('23970.98');
-      cy.get(`[data-cy="initialBalance"]`).should('have.value', '23970.98');
+      cy.get(`[data-cy="initialBalance"]`).type('1235.43');
+      cy.get(`[data-cy="initialBalance"]`).should('have.value', '1235.43');
 
       cy.get(`[data-cy="initialBalanceDate"]`).type('2026-07-07');
       cy.get(`[data-cy="initialBalanceDate"]`).blur();
       cy.get(`[data-cy="initialBalanceDate"]`).should('have.value', '2026-07-07');
 
-      cy.get(`[data-cy="lastFourDigits"]`).type('2348');
-      cy.get(`[data-cy="lastFourDigits"]`).should('have.value', '2348');
+      cy.get(`[data-cy="lastFourDigits"]`).type('4639');
+      cy.get(`[data-cy="lastFourDigits"]`).should('have.value', '4639');
 
-      cy.get(`[data-cy="description"]`).type('pecan');
-      cy.get(`[data-cy="description"]`).should('have.value', 'pecan');
+      cy.get(`[data-cy="description"]`).type('pish');
+      cy.get(`[data-cy="description"]`).should('have.value', 'pish');
 
-      cy.get(`[data-cy="color"]`).type('#fd2Ec2');
-      cy.get(`[data-cy="color"]`).should('have.value', '#fd2Ec2');
+      cy.get(`[data-cy="color"]`).type('#12252c');
+      cy.get(`[data-cy="color"]`).should('have.value', '#12252c');
 
-      cy.get(`[data-cy="icon"]`).type('bah oval');
-      cy.get(`[data-cy="icon"]`).should('have.value', 'bah oval');
+      cy.get(`[data-cy="icon"]`).type('whoa');
+      cy.get(`[data-cy="icon"]`).should('have.value', 'whoa');
 
       cy.get(`[data-cy="active"]`).should('not.be.checked');
       cy.get(`[data-cy="active"]`).click();
       cy.get(`[data-cy="active"]`).should('be.checked');
 
-      cy.get(`[data-cy="includeInNetWorth"]`).should('not.be.checked');
-      cy.get(`[data-cy="includeInNetWorth"]`).click();
-      cy.get(`[data-cy="includeInNetWorth"]`).should('be.checked');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-06T20:46');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T02:42');
       cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-06T20:46');
+      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T02:42');
 
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T06:50');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-06T20:15');
       cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T06:50');
+      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-06T20:15');
 
       cy.get(`[data-cy="user"]`).select(1);
 

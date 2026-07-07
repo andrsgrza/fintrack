@@ -127,9 +127,6 @@ export const ApiAccessToken = () => {
                 <th>
                   <Translate contentKey="fintrackApp.apiAccessToken.user">User</Translate> <FontAwesomeIcon icon="sort" />
                 </th>
-                <th>
-                  <Translate contentKey="fintrackApp.apiAccessToken.accounts">Accounts</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
                 <th />
               </tr>
             </thead>
@@ -165,16 +162,6 @@ export const ApiAccessToken = () => {
                     {apiAccessToken.revokedAt ? <TextFormat type="date" value={apiAccessToken.revokedAt} format={APP_DATE_FORMAT} /> : null}
                   </td>
                   <td>{apiAccessToken.user ? apiAccessToken.user.login : ''}</td>
-                  <td>
-                    {apiAccessToken.accounts
-                      ? apiAccessToken.accounts.map((val, j) => (
-                          <span key={j}>
-                            <Link to={`/financial-account/${val.id}`}>{val.name}</Link>
-                            {j === apiAccessToken.accounts.length - 1 ? '' : ', '}
-                          </span>
-                        ))
-                      : null}
-                  </td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">
                       <Button tag={Link} to={`/api-access-token/${apiAccessToken.id}`} color="info" size="sm" data-cy="entityDetailsButton">

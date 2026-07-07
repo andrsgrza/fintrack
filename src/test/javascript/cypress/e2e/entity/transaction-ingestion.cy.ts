@@ -30,7 +30,7 @@ describe('TransactionIngestion e2e test', () => {
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/financial-accounts',
-      body: {"name":"modulo","institutionName":"howl aw rival","accountType":"DEBIT","currency":"USD","initialBalance":8956.13,"initialBalanceDate":"2026-07-07","lastFourDigits":"2250","description":"blah parody duh","color":"#c7dAc4","icon":"elastic of juicy","active":true,"includeInNetWorth":true,"createdAt":"2026-07-06T21:36:19.468Z","updatedAt":"2026-07-07T14:38:35.654Z"},
+      body: {"name":"hourly mmm rapidly","institutionName":"depot uh-huh","accountType":"CREDIT_CARD","currency":"EUR","initialBalance":28283.45,"initialBalanceDate":"2026-07-06","lastFourDigits":"3766","description":"regarding boohoo","color":"#bcBBe8","icon":"inasmuch","active":true,"createdAt":"2026-07-06T23:39:39.491Z","updatedAt":"2026-07-07T07:15:20.709Z"},
     }).then(({ body }) => {
       financialAccount = body;
     });

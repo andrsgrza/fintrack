@@ -30,7 +30,7 @@ describe('CreditAccountDetails e2e test', () => {
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/financial-accounts',
-      body: {"name":"splendid successfully about","institutionName":"correctly publicity shakily","accountType":"CREDIT_CARD","currency":"EUR","initialBalance":22745.83,"initialBalanceDate":"2026-07-07","lastFourDigits":"7300","description":"blowgun yuck","color":"#C335a7","icon":"formamide regarding","active":false,"includeInNetWorth":true,"createdAt":"2026-07-07T08:14:42.162Z","updatedAt":"2026-07-07T09:43:49.969Z"},
+      body: {"name":"fund archaeology","institutionName":"unnaturally finally","accountType":"DEBIT","currency":"EUR","initialBalance":20038.36,"initialBalanceDate":"2026-07-07","lastFourDigits":"1190","description":"drat","color":"#2dcE8f","icon":"expansion good-natured","active":true,"createdAt":"2026-07-06T20:02:57.264Z","updatedAt":"2026-07-07T07:12:17.515Z"},
     }).then(({ body }) => {
       financialAccount = body;
     });

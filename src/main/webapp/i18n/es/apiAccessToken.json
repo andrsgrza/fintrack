@@ -28,7 +28,6 @@
       "expiresAt": "Expires At",
       "revokedAt": "Revoked At",
       "user": "User",
-      "accounts": "Accounts",
       "apiIngestions": "Api Ingestions",
       "permissions": "Permissions"
     }

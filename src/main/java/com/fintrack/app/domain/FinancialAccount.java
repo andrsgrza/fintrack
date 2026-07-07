@@ -79,10 +79,6 @@ public class FinancialAccount implements Serializable {
     private Boolean active;
 
     @NotNull
-    @Column(name = "include_in_net_worth", nullable = false)
-    private Boolean includeInNetWorth;
-
-    @NotNull
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -128,10 +124,6 @@ public class FinancialAccount implements Serializable {
     @ManyToMany(fetch = FetchType.LAZY, mappedBy = "accounts")
     @JsonIgnoreProperties(value = { "accounts", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
     private Set<TransactionIngestion> transactionIngestions = new HashSet<>();
-
-    @ManyToMany(fetch = FetchType.LAZY, mappedBy = "accounts")
-    @JsonIgnoreProperties(value = { "user", "accounts", "apiIngestions", "permissions" }, allowSetters = true)
-    private Set<ApiAccessToken> apiAccessTokens = new HashSet<>();
 
     // jhipster-needle-entity-add-field - JHipster will add fields here
 
@@ -289,19 +281,6 @@ public class FinancialAccount implements Serializable {
 
     public void setActive(Boolean active) {
         this.active = active;
-    }
-
-    public Boolean getIncludeInNetWorth() {
-        return this.includeInNetWorth;
-    }
-
-    public FinancialAccount includeInNetWorth(Boolean includeInNetWorth) {
-        this.setIncludeInNetWorth(includeInNetWorth);
-        return this;
-    }
-
-    public void setIncludeInNetWorth(Boolean includeInNetWorth) {
-        this.includeInNetWorth = includeInNetWorth;
     }
 
     public Instant getCreatedAt() {
@@ -486,37 +465,6 @@ public class FinancialAccount implements Serializable {
         return this;
     }
 
-    public Set<ApiAccessToken> getApiAccessTokens() {
-        return this.apiAccessTokens;
-    }
-
-    public void setApiAccessTokens(Set<ApiAccessToken> apiAccessTokens) {
-        if (this.apiAccessTokens != null) {
-            this.apiAccessTokens.forEach(i -> i.removeAccounts(this));
-        }
-        if (apiAccessTokens != null) {
-            apiAccessTokens.forEach(i -> i.addAccounts(this));
-        }
-        this.apiAccessTokens = apiAccessTokens;
-    }
-
-    public FinancialAccount apiAccessTokens(Set<ApiAccessToken> apiAccessTokens) {
-        this.setApiAccessTokens(apiAccessTokens);
-        return this;
-    }
-
-    public FinancialAccount addApiAccessTokens(ApiAccessToken apiAccessToken) {
-        this.apiAccessTokens.add(apiAccessToken);
-        apiAccessToken.getAccounts().add(this);
-        return this;
-    }
-
-    public FinancialAccount removeApiAccessTokens(ApiAccessToken apiAccessToken) {
-        this.apiAccessTokens.remove(apiAccessToken);
-        apiAccessToken.getAccounts().remove(this);
-        return this;
-    }
-
     // jhipster-needle-entity-add-getters-setters - JHipster will add getters and setters here
 
     @Override
@@ -552,7 +500,6 @@ public class FinancialAccount implements Serializable {
             ", color='" + getColor() + "'" +
             ", icon='" + getIcon() + "'" +
             ", active='" + getActive() + "'" +
-            ", includeInNetWorth='" + getIncludeInNetWorth() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
             ", updatedAt='" + getUpdatedAt() + "'" +
             "}";

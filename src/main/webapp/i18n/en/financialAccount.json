@@ -29,7 +29,6 @@
       "color": "Color",
       "icon": "Icon",
       "active": "Active",
-      "includeInNetWorth": "Include In Net Worth",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "user": "User",
@@ -37,8 +36,7 @@
       "financialTransactions": "Financial Transactions",
       "subscriptions": "Subscriptions",
       "budgets": "Budgets",
-      "transactionIngestions": "Transaction Ingestions",
-      "apiAccessTokens": "Api Access Tokens"
+      "transactionIngestions": "Transaction Ingestions"
     }
   }
 }

@@ -3,7 +3,6 @@ package com.fintrack.app.domain;
 import static com.fintrack.app.domain.ApiAccessTokenPermissionTestSamples.*;
 import static com.fintrack.app.domain.ApiAccessTokenTestSamples.*;
 import static com.fintrack.app.domain.ApiIngestionTestSamples.*;
-import static com.fintrack.app.domain.FinancialAccountTestSamples.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fintrack.app.web.rest.TestUtil;
@@ -25,24 +24,6 @@ class ApiAccessTokenTest {
 
         apiAccessToken2 = getApiAccessTokenSample2();
         assertThat(apiAccessToken1).isNotEqualTo(apiAccessToken2);
-    }
-
-    @Test
-    void accountsTest() {
-        ApiAccessToken apiAccessToken = getApiAccessTokenRandomSampleGenerator();
-        FinancialAccount financialAccountBack = getFinancialAccountRandomSampleGenerator();
-
-        apiAccessToken.addAccounts(financialAccountBack);
-        assertThat(apiAccessToken.getAccounts()).containsOnly(financialAccountBack);
-
-        apiAccessToken.removeAccounts(financialAccountBack);
-        assertThat(apiAccessToken.getAccounts()).doesNotContain(financialAccountBack);
-
-        apiAccessToken.accounts(new HashSet<>(Set.of(financialAccountBack)));
-        assertThat(apiAccessToken.getAccounts()).containsOnly(financialAccountBack);
-
-        apiAccessToken.setAccounts(new HashSet<>());
-        assertThat(apiAccessToken.getAccounts()).doesNotContain(financialAccountBack);
     }
 
     @Test
