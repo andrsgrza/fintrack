@@ -1,0 +1,12 @@
+{
+  "fintrackApp": {
+    "BudgetPeriod": {
+      "null": "",
+      "WEEKLY": "WEEKLY",
+      "MONTHLY": "MONTHLY",
+      "QUARTERLY": "QUARTERLY",
+      "YEARLY": "YEARLY",
+      "CUSTOM": "CUSTOM"
+    }
+  }
+}

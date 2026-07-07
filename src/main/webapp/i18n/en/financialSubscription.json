@@ -1,0 +1,44 @@
+{
+  "fintrackApp": {
+    "financialSubscription": {
+      "home": {
+        "title": "Financial Subscriptions",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Create a new Financial Subscription",
+        "createOrEditLabel": "Create or edit a Financial Subscription",
+        "notFound": "No Financial Subscriptions found"
+      },
+      "created": "A new Financial Subscription is created with identifier {{ param }}",
+      "updated": "A Financial Subscription is updated with identifier {{ param }}",
+      "deleted": "A Financial Subscription is deleted with identifier {{ param }}",
+      "delete": {
+        "question": "Are you sure you want to delete Financial Subscription {{ id }}?"
+      },
+      "detail": {
+        "title": "Financial Subscription"
+      },
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "status": "Status",
+      "expectedAmount": "Expected Amount",
+      "amountTolerancePercentage": "Amount Tolerance Percentage",
+      "currency": "Currency",
+      "recurrenceUnit": "Recurrence Unit",
+      "intervalCount": "Interval Count",
+      "startDate": "Start Date",
+      "nextExpectedDate": "Next Expected Date",
+      "endDate": "End Date",
+      "automaticPayment": "Automatic Payment",
+      "notes": "Notes",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "user": "User",
+      "account": "Account",
+      "category": "Category",
+      "tags": "Tags",
+      "financialTransactions": "Financial Transactions",
+      "transactionRules": "Transaction Rules"
+    }
+  }
+}

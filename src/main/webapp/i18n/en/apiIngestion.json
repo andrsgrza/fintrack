@@ -1,0 +1,33 @@
+{
+  "fintrackApp": {
+    "apiIngestion": {
+      "home": {
+        "title": "Api Ingestions",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Create a new Api Ingestion",
+        "createOrEditLabel": "Create or edit a Api Ingestion",
+        "notFound": "No Api Ingestions found"
+      },
+      "created": "A new Api Ingestion is created with identifier {{ param }}",
+      "updated": "A Api Ingestion is updated with identifier {{ param }}",
+      "deleted": "A Api Ingestion is deleted with identifier {{ param }}",
+      "delete": {
+        "question": "Are you sure you want to delete Api Ingestion {{ id }}?"
+      },
+      "detail": {
+        "title": "Api Ingestion"
+      },
+      "id": "ID",
+      "requestId": "Request Id",
+      "idempotencyKey": "Idempotency Key",
+      "sourceSystem": "Source System",
+      "apiVersion": "Api Version",
+      "endpoint": "Endpoint",
+      "clientReference": "Client Reference",
+      "receivedAt": "Received At",
+      "createdAt": "Created At",
+      "transactionIngestion": "Transaction Ingestion",
+      "apiAccessToken": "Api Access Token"
+    }
+  }
+}

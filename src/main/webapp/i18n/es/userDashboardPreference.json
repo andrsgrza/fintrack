@@ -1,0 +1,27 @@
+{
+  "fintrackApp": {
+    "userDashboardPreference": {
+      "home": {
+        "title": "User Dashboard Preferences",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo User Dashboard Preference",
+        "createOrEditLabel": "Crear o editar User Dashboard Preference",
+        "notFound": "Ningún User Dashboard Preferences encontrado"
+      },
+      "created": "Un nuevo User Dashboard Preference ha sido creado con el identificador {{ param }}",
+      "updated": "Un User Dashboard Preference ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un User Dashboard Preference ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar User Dashboard Preference {{ id }}?"
+      },
+      "detail": {
+        "title": "User Dashboard Preference"
+      },
+      "id": "ID",
+      "configuration": "Configuration",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "user": "User"
+    }
+  }
+}

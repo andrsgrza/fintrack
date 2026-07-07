@@ -1,0 +1,7 @@
+export enum IngestionRecordStatus {
+  CREATED = 'CREATED',
+
+  SKIPPED_DUPLICATE = 'SKIPPED_DUPLICATE',
+
+  REJECTED = 'REJECTED',
+}

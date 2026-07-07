@@ -1,0 +1,9 @@
+{
+  "fintrackApp": {
+    "RuleConditionLogic": {
+      "null": "",
+      "ALL": "ALL",
+      "ANY": "ANY"
+    }
+  }
+}

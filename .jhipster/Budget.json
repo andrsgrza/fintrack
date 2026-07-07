@@ -1,0 +1,112 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174829"
+  },
+  "applications": ["fintrack"],
+  "documentation": "A spending limit for a recurring or custom period.\\n\\nEmpty account/category/tag relations have domain-specific meanings:\\n- no accounts: all active accounts of the user in the budget currency\\n- no categories: any category\\n- no tags: no tag filtering",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "name",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "100",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "amount",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "currency",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "pattern"],
+      "fieldValidateRulesPattern": "^[A-Z]{3}$"
+    },
+    {
+      "fieldName": "period",
+      "fieldType": "BudgetPeriod",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "WEEKLY,MONTHLY,QUARTERLY,YEARLY,CUSTOM"
+    },
+    {
+      "fieldName": "startDate",
+      "fieldType": "LocalDate",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "endDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "status",
+      "fieldType": "BudgetStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "ACTIVE,PAUSED,COMPLETED"
+    },
+    {
+      "fieldName": "tagMatchMode",
+      "fieldType": "TagMatchMode",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "ANY,ALL"
+    },
+    {
+      "fieldName": "warningPercentage",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["min", "max"],
+      "fieldValidateRulesMax": "100",
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "Budget",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required",
+      "relationshipWithBuiltInEntity": true
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "otherEntityRelationshipName": "budgets",
+      "relationshipName": "accounts",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "category",
+      "otherEntityRelationshipName": "budgets",
+      "relationshipName": "categories",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "tag",
+      "otherEntityRelationshipName": "budgets",
+      "relationshipName": "tags",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-many"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

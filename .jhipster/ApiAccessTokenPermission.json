@@ -1,0 +1,35 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174836"
+  },
+  "applications": ["fintrack"],
+  "documentation": "One permission granted to an API token.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "permission",
+      "fieldType": "ApiPermission",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "CREATE_TRANSACTIONS"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "name": "ApiAccessTokenPermission",
+  "relationships": [
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "apiAccessToken",
+      "otherEntityRelationshipName": "permissions",
+      "relationshipName": "apiAccessToken",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

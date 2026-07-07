@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+    <!--
+        Added the constraints for entity TransactionRule.
+    -->
+    <changeSet id="20260707174826-2" author="jhipster">
+
+        <addForeignKeyConstraint baseColumnNames="user_id"
+                                 baseTableName="transaction_rule"
+                                 constraintName="fk_transaction_rule__user_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="jhi_user"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="resulting_category_id"
+                                 baseTableName="transaction_rule"
+                                 constraintName="fk_transaction_rule__resulting_category_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="category"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="resulting_financial_subscription_id"
+                                 baseTableName="transaction_rule"
+                                 constraintName="fk_transaction_rule__resulting_financial_subscription_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_subscription"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="transaction_rule_id"
+                                 baseTableName="rel_transaction_rule__resulting_tags"
+                                 constraintName="fk_rel_transaction_rule__resulting_tags__transaction_rule_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="transaction_rule"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="resulting_tags_id"
+                                 baseTableName="rel_transaction_rule__resulting_tags"
+                                 constraintName="fk_rel_transaction_rule__resulting_tags__resulting_tags_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="tag"
+                                 />
+    </changeSet>
+</databaseChangeLog>

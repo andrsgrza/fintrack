@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+    <!--
+        Added the constraints for entity TransactionIngestion.
+    -->
+    <changeSet id="20260707174831-2" author="jhipster">
+
+        <addForeignKeyConstraint baseColumnNames="transaction_ingestion_id"
+                                 baseTableName="rel_transaction_ingestion__accounts"
+                                 constraintName="fk_rel_transaction_ingestion__a__transaction_ingestion_a8_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="transaction_ingestion"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="accounts_id"
+                                 baseTableName="rel_transaction_ingestion__accounts"
+                                 constraintName="fk_rel_transaction_ingestion__accounts__accounts_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_account"
+                                 />
+    </changeSet>
+</databaseChangeLog>

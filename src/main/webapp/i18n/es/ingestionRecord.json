@@ -1,0 +1,32 @@
+{
+  "fintrackApp": {
+    "ingestionRecord": {
+      "home": {
+        "title": "Ingestion Records",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Ingestion Record",
+        "createOrEditLabel": "Crear o editar Ingestion Record",
+        "notFound": "Ningún Ingestion Records encontrado"
+      },
+      "created": "Un nuevo Ingestion Record ha sido creado con el identificador {{ param }}",
+      "updated": "Un Ingestion Record ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Ingestion Record ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Ingestion Record {{ id }}?"
+      },
+      "detail": {
+        "title": "Ingestion Record"
+      },
+      "id": "ID",
+      "recordIndex": "Record Index",
+      "externalRecordId": "External Record Id",
+      "status": "Status",
+      "rawData": "Raw Data",
+      "errorCode": "Error Code",
+      "errorMessage": "Error Message",
+      "createdAt": "Created At",
+      "financialTransaction": "Financial Transaction",
+      "transactionIngestion": "Transaction Ingestion"
+    }
+  }
+}

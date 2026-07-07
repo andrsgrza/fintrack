@@ -1,0 +1,148 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174828"
+  },
+  "applications": ["fintrack"],
+  "documentation": "A recurring expected charge. It does not generate transactions.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "name",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "100",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "description",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
+      "fieldName": "status",
+      "fieldType": "SubscriptionStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "ACTIVE,PAUSED,CANCELLED"
+    },
+    {
+      "fieldName": "expectedAmount",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "amountTolerancePercentage",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["min", "max"],
+      "fieldValidateRulesMax": "100",
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "currency",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "pattern"],
+      "fieldValidateRulesPattern": "^[A-Z]{3}$"
+    },
+    {
+      "fieldName": "recurrenceUnit",
+      "fieldType": "RecurrenceUnit",
+      "fieldTypeDocumentation": "SUBSCRIPTION AND BUDGET ENUMS",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "DAY,WEEK,MONTH,YEAR"
+    },
+    {
+      "fieldName": "intervalCount",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "1"
+    },
+    {
+      "fieldName": "startDate",
+      "fieldType": "LocalDate",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "nextExpectedDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "endDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "automaticPayment",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "notes",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "FinancialSubscription",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required",
+      "relationshipWithBuiltInEntity": true
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "otherEntityRelationshipName": "subscriptions",
+      "relationshipName": "account",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "category",
+      "otherEntityRelationshipName": "subscriptions",
+      "relationshipName": "category",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "tag",
+      "otherEntityRelationshipName": "subscriptions",
+      "relationshipName": "tags",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "financialTransaction",
+      "otherEntityRelationshipName": "financialSubscription",
+      "relationshipName": "financialTransactions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "transactionRule",
+      "otherEntityRelationshipName": "resultingFinancialSubscription",
+      "relationshipName": "transactionRules",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

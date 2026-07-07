@@ -1,0 +1,30 @@
+{
+  "fintrackApp": {
+    "transactionRuleCondition": {
+      "home": {
+        "title": "Transaction Rule Conditions",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Transaction Rule Condition",
+        "createOrEditLabel": "Crear o editar Transaction Rule Condition",
+        "notFound": "Ningún Transaction Rule Conditions encontrado"
+      },
+      "created": "Un nuevo Transaction Rule Condition ha sido creado con el identificador {{ param }}",
+      "updated": "Un Transaction Rule Condition ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Transaction Rule Condition ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Transaction Rule Condition {{ id }}?"
+      },
+      "detail": {
+        "title": "Transaction Rule Condition"
+      },
+      "id": "ID",
+      "field": "Field",
+      "operator": "Operator",
+      "value": "Value",
+      "secondValue": "Second Value",
+      "caseSensitive": "Case Sensitive",
+      "position": "Position",
+      "transactionRule": "Transaction Rule"
+    }
+  }
+}

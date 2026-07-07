@@ -1,0 +1,9 @@
+{
+  "fintrackApp": {
+    "TagMatchMode": {
+      "null": "",
+      "ANY": "ANY",
+      "ALL": "ALL"
+    }
+  }
+}

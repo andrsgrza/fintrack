@@ -1,0 +1,92 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174835"
+  },
+  "applications": ["fintrack"],
+  "documentation": "A hashed API credential owned by a user and restricted to explicitly\\nselected accounts.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "name",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "100",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "tokenPrefix",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "20"
+    },
+    {
+      "fieldName": "tokenHash",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "unique"]
+    },
+    {
+      "fieldName": "status",
+      "fieldType": "ApiTokenStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "ACTIVE,REVOKED,EXPIRED"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "lastUsedAt",
+      "fieldType": "Instant"
+    },
+    {
+      "fieldName": "expiresAt",
+      "fieldType": "Instant"
+    },
+    {
+      "fieldName": "revokedAt",
+      "fieldType": "Instant"
+    }
+  ],
+  "name": "ApiAccessToken",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required",
+      "relationshipWithBuiltInEntity": true
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "otherEntityRelationshipName": "apiAccessTokens",
+      "relationshipName": "accounts",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "apiIngestion",
+      "otherEntityRelationshipName": "apiAccessToken",
+      "relationshipName": "apiIngestions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "apiAccessTokenPermission",
+      "otherEntityRelationshipName": "apiAccessToken",
+      "relationshipName": "permissions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

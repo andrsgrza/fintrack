@@ -1,0 +1,306 @@
+import React, { useEffect } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Button, Col, FormText, Row } from 'reactstrap';
+import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+
+import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
+import { mapIdList } from 'app/shared/util/entity-utils';
+import { useAppDispatch, useAppSelector } from 'app/config/store';
+
+import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
+import { getEntities as getCategories } from 'app/entities/category/category.reducer';
+import { getEntities as getFinancialSubscriptions } from 'app/entities/financial-subscription/financial-subscription.reducer';
+import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
+import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
+import { createEntity, getEntity, reset, updateEntity } from './transaction-rule.reducer';
+
+export const TransactionRuleUpdate = () => {
+  const dispatch = useAppDispatch();
+
+  const navigate = useNavigate();
+
+  const { id } = useParams<'id'>();
+  const isNew = id === undefined;
+
+  const users = useAppSelector(state => state.userManagement.users);
+  const categories = useAppSelector(state => state.category.entities);
+  const financialSubscriptions = useAppSelector(state => state.financialSubscription.entities);
+  const tags = useAppSelector(state => state.tag.entities);
+  const transactionRuleEntity = useAppSelector(state => state.transactionRule.entity);
+  const loading = useAppSelector(state => state.transactionRule.loading);
+  const updating = useAppSelector(state => state.transactionRule.updating);
+  const updateSuccess = useAppSelector(state => state.transactionRule.updateSuccess);
+  const ruleConditionLogicValues = Object.keys(RuleConditionLogic);
+
+  const handleClose = () => {
+    navigate('/transaction-rule');
+  };
+
+  useEffect(() => {
+    if (isNew) {
+      dispatch(reset());
+    } else {
+      dispatch(getEntity(id));
+    }
+
+    dispatch(getUsers({}));
+    dispatch(getCategories({}));
+    dispatch(getFinancialSubscriptions({}));
+    dispatch(getTags({}));
+  }, []);
+
+  useEffect(() => {
+    if (updateSuccess) {
+      handleClose();
+    }
+  }, [updateSuccess]);
+
+  const saveEntity = values => {
+    if (values.id !== undefined && typeof values.id !== 'number') {
+      values.id = Number(values.id);
+    }
+    if (values.priority !== undefined && typeof values.priority !== 'number') {
+      values.priority = Number(values.priority);
+    }
+    values.createdAt = convertDateTimeToServer(values.createdAt);
+    values.updatedAt = convertDateTimeToServer(values.updatedAt);
+
+    const entity = {
+      ...transactionRuleEntity,
+      ...values,
+      user: users.find(it => it.id.toString() === values.user?.toString()),
+      resultingCategory: categories.find(it => it.id.toString() === values.resultingCategory?.toString()),
+      resultingFinancialSubscription: financialSubscriptions.find(
+        it => it.id.toString() === values.resultingFinancialSubscription?.toString(),
+      ),
+      resultingTags: mapIdList(values.resultingTags),
+    };
+
+    if (isNew) {
+      dispatch(createEntity(entity));
+    } else {
+      dispatch(updateEntity(entity));
+    }
+  };
+
+  const defaultValues = () =>
+    isNew
+      ? {
+          createdAt: displayDefaultDateTime(),
+          updatedAt: displayDefaultDateTime(),
+        }
+      : {
+          conditionLogic: 'ALL',
+          ...transactionRuleEntity,
+          createdAt: convertDateTimeFromServer(transactionRuleEntity.createdAt),
+          updatedAt: convertDateTimeFromServer(transactionRuleEntity.updatedAt),
+          user: transactionRuleEntity?.user?.id,
+          resultingCategory: transactionRuleEntity?.resultingCategory?.id,
+          resultingFinancialSubscription: transactionRuleEntity?.resultingFinancialSubscription?.id,
+          resultingTags: transactionRuleEntity?.resultingTags?.map(e => e.id.toString()),
+        };
+
+  return (
+    <div>
+      <Row className="justify-content-center">
+        <Col md="8">
+          <h2 id="fintrackApp.transactionRule.home.createOrEditLabel" data-cy="TransactionRuleCreateUpdateHeading">
+            <Translate contentKey="fintrackApp.transactionRule.home.createOrEditLabel">Create or edit a TransactionRule</Translate>
+          </h2>
+        </Col>
+      </Row>
+      <Row className="justify-content-center">
+        <Col md="8">
+          {loading ? (
+            <p>Loading...</p>
+          ) : (
+            <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
+              {!isNew ? (
+                <ValidatedField
+                  name="id"
+                  required
+                  readOnly
+                  id="transaction-rule-id"
+                  label={translate('global.field.id')}
+                  validate={{ required: true }}
+                />
+              ) : null}
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.name')}
+                id="transaction-rule-name"
+                name="name"
+                data-cy="name"
+                type="text"
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                  minLength: { value: 1, message: translate('entity.validation.minlength', { min: 1 }) },
+                  maxLength: { value: 100, message: translate('entity.validation.maxlength', { max: 100 }) },
+                }}
+              />
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.description')}
+                id="transaction-rule-description"
+                name="description"
+                data-cy="description"
+                type="text"
+                validate={{
+                  maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
+                }}
+              />
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.priority')}
+                id="transaction-rule-priority"
+                name="priority"
+                data-cy="priority"
+                type="text"
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                  min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
+                  validate: v => isNumber(v) || translate('entity.validation.number'),
+                }}
+              />
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.conditionLogic')}
+                id="transaction-rule-conditionLogic"
+                name="conditionLogic"
+                data-cy="conditionLogic"
+                type="select"
+              >
+                {ruleConditionLogicValues.map(ruleConditionLogic => (
+                  <option value={ruleConditionLogic} key={ruleConditionLogic}>
+                    {translate(`fintrackApp.RuleConditionLogic.${ruleConditionLogic}`)}
+                  </option>
+                ))}
+              </ValidatedField>
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.resultingDescription')}
+                id="transaction-rule-resultingDescription"
+                name="resultingDescription"
+                data-cy="resultingDescription"
+                type="text"
+                validate={{
+                  maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
+                }}
+              />
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.active')}
+                id="transaction-rule-active"
+                name="active"
+                data-cy="active"
+                check
+                type="checkbox"
+              />
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.createdAt')}
+                id="transaction-rule-createdAt"
+                name="createdAt"
+                data-cy="createdAt"
+                type="datetime-local"
+                placeholder="YYYY-MM-DD HH:mm"
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                }}
+              />
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.updatedAt')}
+                id="transaction-rule-updatedAt"
+                name="updatedAt"
+                data-cy="updatedAt"
+                type="datetime-local"
+                placeholder="YYYY-MM-DD HH:mm"
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                }}
+              />
+              <ValidatedField
+                id="transaction-rule-user"
+                name="user"
+                data-cy="user"
+                label={translate('fintrackApp.transactionRule.user')}
+                type="select"
+                required
+              >
+                <option value="" key="0" />
+                {users
+                  ? users.map(otherEntity => (
+                      <option value={otherEntity.id} key={otherEntity.id}>
+                        {otherEntity.login}
+                      </option>
+                    ))
+                  : null}
+              </ValidatedField>
+              <FormText>
+                <Translate contentKey="entity.validation.required">This field is required.</Translate>
+              </FormText>
+              <ValidatedField
+                id="transaction-rule-resultingCategory"
+                name="resultingCategory"
+                data-cy="resultingCategory"
+                label={translate('fintrackApp.transactionRule.resultingCategory')}
+                type="select"
+              >
+                <option value="" key="0" />
+                {categories
+                  ? categories.map(otherEntity => (
+                      <option value={otherEntity.id} key={otherEntity.id}>
+                        {otherEntity.name}
+                      </option>
+                    ))
+                  : null}
+              </ValidatedField>
+              <ValidatedField
+                id="transaction-rule-resultingFinancialSubscription"
+                name="resultingFinancialSubscription"
+                data-cy="resultingFinancialSubscription"
+                label={translate('fintrackApp.transactionRule.resultingFinancialSubscription')}
+                type="select"
+              >
+                <option value="" key="0" />
+                {financialSubscriptions
+                  ? financialSubscriptions.map(otherEntity => (
+                      <option value={otherEntity.id} key={otherEntity.id}>
+                        {otherEntity.name}
+                      </option>
+                    ))
+                  : null}
+              </ValidatedField>
+              <ValidatedField
+                label={translate('fintrackApp.transactionRule.resultingTags')}
+                id="transaction-rule-resultingTags"
+                data-cy="resultingTags"
+                type="select"
+                multiple
+                name="resultingTags"
+              >
+                <option value="" key="0" />
+                {tags
+                  ? tags.map(otherEntity => (
+                      <option value={otherEntity.id} key={otherEntity.id}>
+                        {otherEntity.name}
+                      </option>
+                    ))
+                  : null}
+              </ValidatedField>
+              <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/transaction-rule" replace color="info">
+                <FontAwesomeIcon icon="arrow-left" />
+                &nbsp;
+                <span className="d-none d-md-inline">
+                  <Translate contentKey="entity.action.back">Back</Translate>
+                </span>
+              </Button>
+              &nbsp;
+              <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
+                <FontAwesomeIcon icon="save" />
+                &nbsp;
+                <Translate contentKey="entity.action.save">Save</Translate>
+              </Button>
+            </ValidatedForm>
+          )}
+        </Col>
+      </Row>
+    </div>
+  );
+};
+
+export default TransactionRuleUpdate;

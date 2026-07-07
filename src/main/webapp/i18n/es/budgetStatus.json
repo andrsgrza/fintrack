@@ -1,0 +1,10 @@
+{
+  "fintrackApp": {
+    "BudgetStatus": {
+      "null": "",
+      "ACTIVE": "ACTIVE",
+      "PAUSED": "PAUSED",
+      "COMPLETED": "COMPLETED"
+    }
+  }
+}

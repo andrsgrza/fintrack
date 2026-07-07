@@ -1,0 +1,44 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174830"
+  },
+  "applications": ["fintrack"],
+  "documentation": "Links the OUT and IN transactions that represent a movement between two\\naccounts owned by the same user and using the same currency.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "notes",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "name": "InternalTransfer",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "financialTransaction",
+      "otherEntityRelationshipName": "outgoingInternalTransfer",
+      "relationshipName": "outgoingTransaction",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "financialTransaction",
+      "otherEntityRelationshipName": "incomingInternalTransfer",
+      "relationshipName": "incomingTransaction",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

@@ -1,0 +1,8 @@
+{
+  "fintrackApp": {
+    "ApiPermission": {
+      "null": "",
+      "CREATE_TRANSACTIONS": "CREATE_TRANSACTIONS"
+    }
+  }
+}

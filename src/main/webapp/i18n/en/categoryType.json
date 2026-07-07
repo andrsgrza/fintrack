@@ -1,0 +1,10 @@
+{
+  "fintrackApp": {
+    "CategoryType": {
+      "null": "",
+      "EXPENSE": "EXPENSE",
+      "INCOME": "INCOME",
+      "BOTH": "BOTH"
+    }
+  }
+}

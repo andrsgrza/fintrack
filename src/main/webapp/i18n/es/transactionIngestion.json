@@ -1,0 +1,39 @@
+{
+  "fintrackApp": {
+    "transactionIngestion": {
+      "home": {
+        "title": "Transaction Ingestions",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Transaction Ingestion",
+        "createOrEditLabel": "Crear o editar Transaction Ingestion",
+        "notFound": "Ningún Transaction Ingestions encontrado"
+      },
+      "created": "Un nuevo Transaction Ingestion ha sido creado con el identificador {{ param }}",
+      "updated": "Un Transaction Ingestion ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Transaction Ingestion ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Transaction Ingestion {{ id }}?"
+      },
+      "detail": {
+        "title": "Transaction Ingestion"
+      },
+      "id": "ID",
+      "ingestionType": "Ingestion Type",
+      "status": "Status",
+      "sourceLabel": "Source Label",
+      "startedAt": "Started At",
+      "completedAt": "Completed At",
+      "recordsReceived": "Records Received",
+      "recordsCreated": "Records Created",
+      "recordsSkipped": "Records Skipped",
+      "recordsRejected": "Records Rejected",
+      "errorMessage": "Error Message",
+      "createdAt": "Created At",
+      "accounts": "Accounts",
+      "fileIngestion": "File Ingestion",
+      "apiIngestion": "Api Ingestion",
+      "financialTransactions": "Financial Transactions",
+      "records": "Records"
+    }
+  }
+}

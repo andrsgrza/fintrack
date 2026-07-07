@@ -1,0 +1,128 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174823"
+  },
+  "applications": ["fintrack"],
+  "documentation": "A monetary movement in an account.\\n\\nThe amount is always positive. The flow determines whether money enters\\nor leaves the account. There is no transaction-level currency field.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "transactionDate",
+      "fieldType": "LocalDate",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "postingDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "description",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "500",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "amount",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "flow",
+      "fieldType": "TransactionFlow",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "IN,OUT"
+    },
+    {
+      "fieldName": "origin",
+      "fieldType": "TransactionOrigin",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "MANUAL,FILE_IMPORT,API"
+    },
+    {
+      "fieldName": "externalReference",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "150"
+    },
+    {
+      "fieldName": "notes",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "1000"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "FinancialTransaction",
+  "pagination": "pagination",
+  "relationships": [
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "otherEntityRelationshipName": "financialTransactions",
+      "relationshipName": "account",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "category",
+      "otherEntityRelationshipName": "financialTransactions",
+      "relationshipName": "category",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialSubscription",
+      "otherEntityRelationshipName": "financialTransactions",
+      "relationshipName": "financialSubscription",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionIngestion",
+      "otherEntityRelationshipName": "financialTransactions",
+      "relationshipName": "transactionIngestion",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "tag",
+      "otherEntityRelationshipName": "financialTransactions",
+      "relationshipName": "tags",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "internalTransfer",
+      "otherEntityRelationshipName": "outgoingTransaction",
+      "relationshipName": "outgoingInternalTransfer",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-one"
+    },
+    {
+      "otherEntityName": "internalTransfer",
+      "otherEntityRelationshipName": "incomingTransaction",
+      "relationshipName": "incomingInternalTransfer",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-one"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

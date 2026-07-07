@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+    <!--
+        Added the constraints for entity Budget.
+    -->
+    <changeSet id="20260707174829-2" author="jhipster">
+
+        <addForeignKeyConstraint baseColumnNames="user_id"
+                                 baseTableName="budget"
+                                 constraintName="fk_budget__user_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="jhi_user"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="budget_id"
+                                 baseTableName="rel_budget__accounts"
+                                 constraintName="fk_rel_budget__accounts__budget_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="budget"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="accounts_id"
+                                 baseTableName="rel_budget__accounts"
+                                 constraintName="fk_rel_budget__accounts__accounts_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_account"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="budget_id"
+                                 baseTableName="rel_budget__categories"
+                                 constraintName="fk_rel_budget__categories__budget_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="budget"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="categories_id"
+                                 baseTableName="rel_budget__categories"
+                                 constraintName="fk_rel_budget__categories__categories_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="category"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="budget_id"
+                                 baseTableName="rel_budget__tags"
+                                 constraintName="fk_rel_budget__tags__budget_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="budget"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="tags_id"
+                                 baseTableName="rel_budget__tags"
+                                 constraintName="fk_rel_budget__tags__tags_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="tag"
+                                 />
+    </changeSet>
+</databaseChangeLog>

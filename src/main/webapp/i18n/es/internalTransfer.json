@@ -1,0 +1,27 @@
+{
+  "fintrackApp": {
+    "internalTransfer": {
+      "home": {
+        "title": "Internal Transfers",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Internal Transfer",
+        "createOrEditLabel": "Crear o editar Internal Transfer",
+        "notFound": "Ningún Internal Transfers encontrado"
+      },
+      "created": "Un nuevo Internal Transfer ha sido creado con el identificador {{ param }}",
+      "updated": "Un Internal Transfer ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Internal Transfer ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Internal Transfer {{ id }}?"
+      },
+      "detail": {
+        "title": "Internal Transfer"
+      },
+      "id": "ID",
+      "notes": "Notes",
+      "createdAt": "Created At",
+      "outgoingTransaction": "Outgoing Transaction",
+      "incomingTransaction": "Incoming Transaction"
+    }
+  }
+}

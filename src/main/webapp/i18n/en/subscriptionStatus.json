@@ -1,0 +1,10 @@
+{
+  "fintrackApp": {
+    "SubscriptionStatus": {
+      "null": "",
+      "ACTIVE": "ACTIVE",
+      "PAUSED": "PAUSED",
+      "CANCELLED": "CANCELLED"
+    }
+  }
+}

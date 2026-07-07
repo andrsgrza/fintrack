@@ -1,0 +1,30 @@
+{
+  "fintrackApp": {
+    "creditAccountDetails": {
+      "home": {
+        "title": "Credit Account Details",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Credit Account Details",
+        "createOrEditLabel": "Crear o editar Credit Account Details",
+        "notFound": "Ningún Credit Account Details encontrado"
+      },
+      "created": "Un nuevo Credit Account Details ha sido creado con el identificador {{ param }}",
+      "updated": "Un Credit Account Details ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Credit Account Details ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Credit Account Details {{ id }}?"
+      },
+      "detail": {
+        "title": "Credit Account Details"
+      },
+      "id": "ID",
+      "creditLimit": "Credit Limit",
+      "statementDay": "Statement Day",
+      "paymentDueDay": "Payment Due Day",
+      "annualInterestRate": "Annual Interest Rate",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "account": "Account"
+    }
+  }
+}

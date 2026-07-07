@@ -1,0 +1,36 @@
+{
+  "fintrackApp": {
+    "transactionRule": {
+      "home": {
+        "title": "Transaction Rules",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Transaction Rule",
+        "createOrEditLabel": "Crear o editar Transaction Rule",
+        "notFound": "Ningún Transaction Rules encontrado"
+      },
+      "created": "Un nuevo Transaction Rule ha sido creado con el identificador {{ param }}",
+      "updated": "Un Transaction Rule ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Transaction Rule ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Transaction Rule {{ id }}?"
+      },
+      "detail": {
+        "title": "Transaction Rule"
+      },
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "priority": "Priority",
+      "conditionLogic": "Condition Logic",
+      "resultingDescription": "Resulting Description",
+      "active": "Active",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "user": "User",
+      "resultingCategory": "Resulting Category",
+      "resultingFinancialSubscription": "Resulting Financial Subscription",
+      "resultingTags": "Resulting Tags",
+      "conditions": "Conditions"
+    }
+  }
+}

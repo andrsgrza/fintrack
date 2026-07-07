@@ -1,0 +1,72 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174834"
+  },
+  "applications": ["fintrack"],
+  "documentation": "One row, object or extracted item processed during an ingestion.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "recordIndex",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "externalRecordId",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "150"
+    },
+    {
+      "fieldName": "status",
+      "fieldType": "IngestionRecordStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "CREATED,SKIPPED_DUPLICATE,REJECTED"
+    },
+    {
+      "fieldName": "rawData",
+      "fieldType": "TextBlob"
+    },
+    {
+      "fieldName": "errorCode",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "errorMessage",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "1000"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "IngestionRecord",
+  "pagination": "pagination",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "financialTransaction",
+      "relationshipName": "financialTransaction",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one"
+    },
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionIngestion",
+      "otherEntityRelationshipName": "records",
+      "relationshipName": "transactionIngestion",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

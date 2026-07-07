@@ -1,0 +1,86 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174832"
+  },
+  "applications": ["fintrack"],
+  "documentation": "File-specific metadata for a FILE ingestion.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "originalFilename",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "255",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "fileType",
+      "fieldType": "ImportFileType",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "CSV,PDF,XLSX,JSON,OFX,OTHER"
+    },
+    {
+      "fieldName": "contentType",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "fileSizeBytes",
+      "fieldType": "Long",
+      "fieldValidateRules": ["min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "checksum",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "128"
+    },
+    {
+      "fieldName": "storageKey",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
+      "fieldName": "parserName",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "parserVersion",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "50"
+    },
+    {
+      "fieldName": "statementStartDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "statementEndDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "name": "FileIngestion",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionIngestion",
+      "otherEntityRelationshipName": "fileIngestion",
+      "relationshipName": "transactionIngestion",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

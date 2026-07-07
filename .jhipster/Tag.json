@@ -1,0 +1,87 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174825"
+  },
+  "applications": ["fintrack"],
+  "documentation": "A flexible, non-hierarchical classification label.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "name",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "50",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "description",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "250"
+    },
+    {
+      "fieldName": "color",
+      "fieldType": "String",
+      "fieldValidateRules": ["pattern"],
+      "fieldValidateRulesPattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    {
+      "fieldName": "active",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "Tag",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required",
+      "relationshipWithBuiltInEntity": true
+    },
+    {
+      "otherEntityName": "financialTransaction",
+      "otherEntityRelationshipName": "tags",
+      "relationshipName": "financialTransactions",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "transactionRule",
+      "otherEntityRelationshipName": "resultingTags",
+      "relationshipName": "transactionRules",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "financialSubscription",
+      "otherEntityRelationshipName": "tags",
+      "relationshipName": "subscriptions",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "budget",
+      "otherEntityRelationshipName": "tags",
+      "relationshipName": "budgets",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

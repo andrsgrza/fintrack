@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+    <!--
+        Added the constraints for entity ApiIngestion.
+    -->
+    <changeSet id="20260707174833-2" author="jhipster">
+
+        <addForeignKeyConstraint baseColumnNames="transaction_ingestion_id"
+                                 baseTableName="api_ingestion"
+                                 constraintName="fk_api_ingestion__transaction_ingestion_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="transaction_ingestion"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="api_access_token_id"
+                                 baseTableName="api_ingestion"
+                                 constraintName="fk_api_ingestion__api_access_token_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="api_access_token"
+                                 />
+    </changeSet>
+</databaseChangeLog>

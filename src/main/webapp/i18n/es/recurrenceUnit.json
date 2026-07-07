@@ -1,0 +1,11 @@
+{
+  "fintrackApp": {
+    "RecurrenceUnit": {
+      "null": "",
+      "DAY": "DAY",
+      "WEEK": "WEEK",
+      "MONTH": "MONTH",
+      "YEAR": "YEAR"
+    }
+  }
+}

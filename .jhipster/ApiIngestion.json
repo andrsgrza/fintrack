@@ -1,0 +1,80 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174833"
+  },
+  "applications": ["fintrack"],
+  "documentation": "Request metadata for an API ingestion.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "requestId",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength", "unique"],
+      "fieldValidateRulesMaxlength": "100",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "idempotencyKey",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "150"
+    },
+    {
+      "fieldName": "sourceSystem",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "apiVersion",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "20"
+    },
+    {
+      "fieldName": "endpoint",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "150"
+    },
+    {
+      "fieldName": "clientReference",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "150"
+    },
+    {
+      "fieldName": "receivedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "name": "ApiIngestion",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionIngestion",
+      "otherEntityRelationshipName": "apiIngestion",
+      "relationshipName": "transactionIngestion",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "apiAccessToken",
+      "otherEntityRelationshipName": "apiIngestions",
+      "relationshipName": "apiAccessToken",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

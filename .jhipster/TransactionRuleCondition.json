@@ -1,0 +1,59 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174827"
+  },
+  "applications": ["fintrack"],
+  "documentation": "One condition inside a transaction rule.\\n\\nvalue and secondValue are stored as strings and interpreted according to\\nfield and operator by the service layer.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "field",
+      "fieldType": "TransactionRuleField",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "DESCRIPTION,AMOUNT,FLOW,EXTERNAL_REFERENCE,ORIGIN,TRANSACTION_DATE,POSTING_DATE,ACCOUNT"
+    },
+    {
+      "fieldName": "operator",
+      "fieldType": "RuleOperator",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "EQUALS,NOT_EQUALS,CONTAINS,NOT_CONTAINS,STARTS_WITH,ENDS_WITH,REGEX,GREATER_THAN,GREATER_THAN_OR_EQUAL,LESS_THAN,LESS_THAN_OR_EQUAL,BEFORE,AFTER,BETWEEN,IN,NOT_IN"
+    },
+    {
+      "fieldName": "value",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "1000"
+    },
+    {
+      "fieldName": "secondValue",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "1000"
+    },
+    {
+      "fieldName": "caseSensitive",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "position",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    }
+  ],
+  "name": "TransactionRuleCondition",
+  "relationships": [
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "transactionRule",
+      "otherEntityRelationshipName": "conditions",
+      "relationshipName": "transactionRule",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

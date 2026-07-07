@@ -1,0 +1,39 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174837"
+  },
+  "applications": ["fintrack"],
+  "documentation": "Stores JSON preferences for the application's fixed dashboard.\\n\\nJHipster 8.11 generates this as ManyToOne to the built-in User entity.\\nA unique database constraint on user_id will enforce one preference row\\nper user after generation.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "configuration",
+      "fieldType": "TextBlob",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "name": "UserDashboardPreference",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required",
+      "relationshipWithBuiltInEntity": true
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

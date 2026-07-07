@@ -1,0 +1,117 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174831"
+  },
+  "applications": ["fintrack"],
+  "documentation": "One execution that imports or receives one or many transactions.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "ingestionType",
+      "fieldType": "IngestionType",
+      "fieldTypeDocumentation": "INGESTION AND API ENUMS",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "FILE,API"
+    },
+    {
+      "fieldName": "status",
+      "fieldType": "IngestionStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "PENDING,PROCESSING,COMPLETED,PARTIALLY_COMPLETED,FAILED"
+    },
+    {
+      "fieldName": "sourceLabel",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "startedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "completedAt",
+      "fieldType": "Instant"
+    },
+    {
+      "fieldName": "recordsReceived",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "recordsCreated",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "recordsSkipped",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "recordsRejected",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "errorMessage",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "2000"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "TransactionIngestion",
+  "pagination": "pagination",
+  "relationships": [
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "otherEntityRelationshipName": "transactionIngestions",
+      "relationshipName": "accounts",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-many",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityName": "fileIngestion",
+      "otherEntityRelationshipName": "transactionIngestion",
+      "relationshipName": "fileIngestion",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-one"
+    },
+    {
+      "otherEntityName": "apiIngestion",
+      "otherEntityRelationshipName": "transactionIngestion",
+      "relationshipName": "apiIngestion",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-one"
+    },
+    {
+      "otherEntityName": "financialTransaction",
+      "otherEntityRelationshipName": "transactionIngestion",
+      "relationshipName": "financialTransactions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "ingestionRecord",
+      "otherEntityRelationshipName": "transactionIngestion",
+      "relationshipName": "records",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

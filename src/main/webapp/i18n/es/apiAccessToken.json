@@ -1,0 +1,36 @@
+{
+  "fintrackApp": {
+    "apiAccessToken": {
+      "home": {
+        "title": "Api Access Tokens",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Api Access Token",
+        "createOrEditLabel": "Crear o editar Api Access Token",
+        "notFound": "Ningún Api Access Tokens encontrado"
+      },
+      "created": "Un nuevo Api Access Token ha sido creado con el identificador {{ param }}",
+      "updated": "Un Api Access Token ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Api Access Token ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Api Access Token {{ id }}?"
+      },
+      "detail": {
+        "title": "Api Access Token"
+      },
+      "id": "ID",
+      "name": "Name",
+      "tokenPrefix": "Token Prefix",
+      "tokenHash": "Token Hash",
+      "status": "Status",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "lastUsedAt": "Last Used At",
+      "expiresAt": "Expires At",
+      "revokedAt": "Revoked At",
+      "user": "User",
+      "accounts": "Accounts",
+      "apiIngestions": "Api Ingestions",
+      "permissions": "Permissions"
+    }
+  }
+}

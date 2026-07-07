@@ -1,0 +1,10 @@
+{
+  "fintrackApp": {
+    "ApiTokenStatus": {
+      "null": "",
+      "ACTIVE": "ACTIVE",
+      "REVOKED": "REVOKED",
+      "EXPIRED": "EXPIRED"
+    }
+  }
+}

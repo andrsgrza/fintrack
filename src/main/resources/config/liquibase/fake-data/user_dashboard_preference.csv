@@ -1,0 +1,11 @@
+id;configuration;created_at;updated_at;user_id
+1;../fake-data/blob/hipster.txt;2026-07-07T06:53:21;2026-07-07T04:59:47;1
+2;../fake-data/blob/hipster.txt;2026-07-07T00:11:19;2026-07-06T17:50:29;2
+3;../fake-data/blob/hipster.txt;2026-07-07T15:41:54;2026-07-06T20:54:33;1
+4;../fake-data/blob/hipster.txt;2026-07-07T08:45:39;2026-07-07T14:13:29;2
+5;../fake-data/blob/hipster.txt;2026-07-07T15:26:48;2026-07-06T19:39:35;2
+6;../fake-data/blob/hipster.txt;2026-07-07T15:48:43;2026-07-06T20:42:05;2
+7;../fake-data/blob/hipster.txt;2026-07-07T05:35:54;2026-07-07T12:28:13;2
+8;../fake-data/blob/hipster.txt;2026-07-07T08:28:17;2026-07-07T16:32:45;1
+9;../fake-data/blob/hipster.txt;2026-07-06T20:59:51;2026-07-07T15:03:06;1
+10;../fake-data/blob/hipster.txt;2026-07-06T22:13:37;2026-07-07T04:10:27;2

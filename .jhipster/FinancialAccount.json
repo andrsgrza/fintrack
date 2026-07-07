@@ -1,0 +1,147 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174821"
+  },
+  "applications": ["fintrack"],
+  "documentation": "A financial account owned by a user.\\n\\nThe current balance is calculated and is not persisted.\\nEvery transaction amount is expressed in this account's currency.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "name",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "100",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "institutionName",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "accountType",
+      "fieldType": "AccountType",
+      "fieldTypeDocumentation": "ACCOUNTING AND TRANSACTION ENUMS",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "DEBIT,CASH,CREDIT_CARD,INVESTMENT"
+    },
+    {
+      "fieldName": "currency",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "pattern"],
+      "fieldValidateRulesPattern": "^[A-Z]{3}$"
+    },
+    {
+      "fieldName": "initialBalance",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "initialBalanceDate",
+      "fieldType": "LocalDate",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "lastFourDigits",
+      "fieldType": "String",
+      "fieldValidateRules": ["pattern"],
+      "fieldValidateRulesPattern": "^[0-9]{4}$"
+    },
+    {
+      "fieldName": "description",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
+      "fieldName": "color",
+      "fieldType": "String",
+      "fieldValidateRules": ["pattern"],
+      "fieldValidateRulesPattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    {
+      "fieldName": "icon",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "50"
+    },
+    {
+      "fieldName": "active",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "includeInNetWorth",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "FinancialAccount",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required",
+      "relationshipWithBuiltInEntity": true
+    },
+    {
+      "otherEntityName": "creditAccountDetails",
+      "otherEntityRelationshipName": "account",
+      "relationshipName": "creditAccountDetails",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-one"
+    },
+    {
+      "otherEntityName": "financialTransaction",
+      "otherEntityRelationshipName": "account",
+      "relationshipName": "financialTransactions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "financialSubscription",
+      "otherEntityRelationshipName": "account",
+      "relationshipName": "subscriptions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "budget",
+      "otherEntityRelationshipName": "accounts",
+      "relationshipName": "budgets",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "transactionIngestion",
+      "otherEntityRelationshipName": "accounts",
+      "relationshipName": "transactionIngestions",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    },
+    {
+      "otherEntityName": "apiAccessToken",
+      "otherEntityRelationshipName": "accounts",
+      "relationshipName": "apiAccessTokens",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

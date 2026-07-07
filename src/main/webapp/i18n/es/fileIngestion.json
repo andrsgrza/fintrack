@@ -1,0 +1,35 @@
+{
+  "fintrackApp": {
+    "fileIngestion": {
+      "home": {
+        "title": "File Ingestions",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo File Ingestion",
+        "createOrEditLabel": "Crear o editar File Ingestion",
+        "notFound": "Ningún File Ingestions encontrado"
+      },
+      "created": "Un nuevo File Ingestion ha sido creado con el identificador {{ param }}",
+      "updated": "Un File Ingestion ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un File Ingestion ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar File Ingestion {{ id }}?"
+      },
+      "detail": {
+        "title": "File Ingestion"
+      },
+      "id": "ID",
+      "originalFilename": "Original Filename",
+      "fileType": "File Type",
+      "contentType": "Content Type",
+      "fileSizeBytes": "File Size Bytes",
+      "checksum": "Checksum",
+      "storageKey": "Storage Key",
+      "parserName": "Parser Name",
+      "parserVersion": "Parser Version",
+      "statementStartDate": "Statement Start Date",
+      "statementEndDate": "Statement End Date",
+      "createdAt": "Created At",
+      "transactionIngestion": "Transaction Ingestion"
+    }
+  }
+}

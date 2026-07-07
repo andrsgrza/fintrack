@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+    <!--
+        Added the constraints for entity FinancialSubscription.
+    -->
+    <changeSet id="20260707174828-2" author="jhipster">
+
+        <addForeignKeyConstraint baseColumnNames="user_id"
+                                 baseTableName="financial_subscription"
+                                 constraintName="fk_financial_subscription__user_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="jhi_user"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="account_id"
+                                 baseTableName="financial_subscription"
+                                 constraintName="fk_financial_subscription__account_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_account"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="category_id"
+                                 baseTableName="financial_subscription"
+                                 constraintName="fk_financial_subscription__category_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="category"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="financial_subscription_id"
+                                 baseTableName="rel_financial_subscription__tags"
+                                 constraintName="fk_rel_financial_subscription__tags__financial_subscription_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_subscription"
+                                 />
+
+        <addForeignKeyConstraint baseColumnNames="tags_id"
+                                 baseTableName="rel_financial_subscription__tags"
+                                 constraintName="fk_rel_financial_subscription__tags__tags_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="tag"
+                                 />
+    </changeSet>
+</databaseChangeLog>

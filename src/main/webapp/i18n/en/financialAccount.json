@@ -1,0 +1,44 @@
+{
+  "fintrackApp": {
+    "financialAccount": {
+      "home": {
+        "title": "Financial Accounts",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Create a new Financial Account",
+        "createOrEditLabel": "Create or edit a Financial Account",
+        "notFound": "No Financial Accounts found"
+      },
+      "created": "A new Financial Account is created with identifier {{ param }}",
+      "updated": "A Financial Account is updated with identifier {{ param }}",
+      "deleted": "A Financial Account is deleted with identifier {{ param }}",
+      "delete": {
+        "question": "Are you sure you want to delete Financial Account {{ id }}?"
+      },
+      "detail": {
+        "title": "Financial Account"
+      },
+      "id": "ID",
+      "name": "Name",
+      "institutionName": "Institution Name",
+      "accountType": "Account Type",
+      "currency": "Currency",
+      "initialBalance": "Initial Balance",
+      "initialBalanceDate": "Initial Balance Date",
+      "lastFourDigits": "Last Four Digits",
+      "description": "Description",
+      "color": "Color",
+      "icon": "Icon",
+      "active": "Active",
+      "includeInNetWorth": "Include In Net Worth",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "user": "User",
+      "creditAccountDetails": "Credit Account Details",
+      "financialTransactions": "Financial Transactions",
+      "subscriptions": "Subscriptions",
+      "budgets": "Budgets",
+      "transactionIngestions": "Transaction Ingestions",
+      "apiAccessTokens": "Api Access Tokens"
+    }
+  }
+}

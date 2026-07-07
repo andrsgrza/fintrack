@@ -1,0 +1,41 @@
+{
+  "fintrackApp": {
+    "financialTransaction": {
+      "home": {
+        "title": "Financial Transactions",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Financial Transaction",
+        "createOrEditLabel": "Crear o editar Financial Transaction",
+        "notFound": "Ningún Financial Transactions encontrado"
+      },
+      "created": "Un nuevo Financial Transaction ha sido creado con el identificador {{ param }}",
+      "updated": "Un Financial Transaction ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Financial Transaction ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Financial Transaction {{ id }}?"
+      },
+      "detail": {
+        "title": "Financial Transaction"
+      },
+      "id": "ID",
+      "transactionDate": "Transaction Date",
+      "postingDate": "Posting Date",
+      "description": "Description",
+      "amount": "Amount",
+      "flow": "Flow",
+      "origin": "Origin",
+      "externalReference": "External Reference",
+      "notes": "Notes",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "account": "Account",
+      "category": "Category",
+      "financialSubscription": "Financial Subscription",
+      "transactionIngestion": "Transaction Ingestion",
+      "tags": "Tags",
+      "outgoingInternalTransfer": "Outgoing Internal Transfer",
+      "incomingInternalTransfer": "Incoming Internal Transfer",
+      "ingestionRecord": "Ingestion Record"
+    }
+  }
+}

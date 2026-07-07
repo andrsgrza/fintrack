@@ -1,0 +1,26 @@
+{
+  "fintrackApp": {
+    "apiAccessTokenPermission": {
+      "home": {
+        "title": "Api Access Token Permissions",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Create a new Api Access Token Permission",
+        "createOrEditLabel": "Create or edit a Api Access Token Permission",
+        "notFound": "No Api Access Token Permissions found"
+      },
+      "created": "A new Api Access Token Permission is created with identifier {{ param }}",
+      "updated": "A Api Access Token Permission is updated with identifier {{ param }}",
+      "deleted": "A Api Access Token Permission is deleted with identifier {{ param }}",
+      "delete": {
+        "question": "Are you sure you want to delete Api Access Token Permission {{ id }}?"
+      },
+      "detail": {
+        "title": "Api Access Token Permission"
+      },
+      "id": "ID",
+      "permission": "Permission",
+      "createdAt": "Created At",
+      "apiAccessToken": "Api Access Token"
+    }
+  }
+}

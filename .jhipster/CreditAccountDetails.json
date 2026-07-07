@@ -1,0 +1,60 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174822"
+  },
+  "applications": ["fintrack"],
+  "documentation": "Additional data that exists only for CREDIT_CARD accounts.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "creditLimit",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["required", "min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "statementDay",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min", "max"],
+      "fieldValidateRulesMax": "31",
+      "fieldValidateRulesMin": "1"
+    },
+    {
+      "fieldName": "paymentDueDay",
+      "fieldType": "Integer",
+      "fieldValidateRules": ["required", "min", "max"],
+      "fieldValidateRulesMax": "31",
+      "fieldValidateRulesMin": "1"
+    },
+    {
+      "fieldName": "annualInterestRate",
+      "fieldType": "BigDecimal",
+      "fieldValidateRules": ["min"],
+      "fieldValidateRulesMin": "0"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "name": "CreditAccountDetails",
+  "relationships": [
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "otherEntityRelationshipName": "creditAccountDetails",
+      "relationshipName": "account",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

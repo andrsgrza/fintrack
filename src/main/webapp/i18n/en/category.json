@@ -1,0 +1,38 @@
+{
+  "fintrackApp": {
+    "category": {
+      "home": {
+        "title": "Categories",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Create a new Category",
+        "createOrEditLabel": "Create or edit a Category",
+        "notFound": "No Categories found"
+      },
+      "created": "A new Category is created with identifier {{ param }}",
+      "updated": "A Category is updated with identifier {{ param }}",
+      "deleted": "A Category is deleted with identifier {{ param }}",
+      "delete": {
+        "question": "Are you sure you want to delete Category {{ id }}?"
+      },
+      "detail": {
+        "title": "Category"
+      },
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "categoryType": "Category Type",
+      "color": "Color",
+      "icon": "Icon",
+      "active": "Active",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "user": "User",
+      "parentCategory": "Parent Category",
+      "financialTransactions": "Financial Transactions",
+      "childCategories": "Child Categories",
+      "transactionRules": "Transaction Rules",
+      "subscriptions": "Subscriptions",
+      "budgets": "Budgets"
+    }
+  }
+}

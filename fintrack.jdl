@@ -1,0 +1,576 @@
+/**
+ * FINTRACK
+ *
+ * Complete initial JHipster application and domain model.
+ *
+ * IMPORTANT:
+ * JDL generates the structural baseline. Cross-entity ownership checks,
+ * conditional validations, partial/composite unique constraints, balance
+ * calculations, rule execution, import processing and analytics must be
+ * implemented after generation in services and/or Liquibase.
+ */
+
+application {
+  config {
+    baseName fintrack
+    applicationType monolith
+    authenticationType jwt
+    packageName com.fintrack.app
+    buildTool maven
+    clientFramework react
+    databaseType sql
+    devDatabaseType postgresql
+    prodDatabaseType postgresql
+    cacheProvider no
+    enableHibernateCache false
+    enableTranslation true
+    nativeLanguage es
+    languages [es, en]
+    reactive false
+    searchEngine no
+    messageBroker no
+    serviceDiscoveryType no
+    websocket no
+    testFrameworks [cypress]
+    serverPort 8080
+  }
+
+  entities *
+}
+
+/**
+ * ACCOUNTING AND TRANSACTION ENUMS
+ */
+
+enum AccountType {
+  DEBIT,
+  CASH,
+  CREDIT_CARD,
+  INVESTMENT
+}
+
+enum TransactionFlow {
+  IN,
+  OUT
+}
+
+enum TransactionOrigin {
+  MANUAL,
+  FILE_IMPORT,
+  API
+}
+
+enum CategoryType {
+  EXPENSE,
+  INCOME,
+  BOTH
+}
+
+/**
+ * AUTOMATIC CLASSIFICATION ENUMS
+ */
+
+enum RuleConditionLogic {
+  ALL,
+  ANY
+}
+
+enum TransactionRuleField {
+  DESCRIPTION,
+  AMOUNT,
+  FLOW,
+  EXTERNAL_REFERENCE,
+  ORIGIN,
+  TRANSACTION_DATE,
+  POSTING_DATE,
+  ACCOUNT
+}
+
+enum RuleOperator {
+  EQUALS,
+  NOT_EQUALS,
+  CONTAINS,
+  NOT_CONTAINS,
+  STARTS_WITH,
+  ENDS_WITH,
+  REGEX,
+  GREATER_THAN,
+  GREATER_THAN_OR_EQUAL,
+  LESS_THAN,
+  LESS_THAN_OR_EQUAL,
+  BEFORE,
+  AFTER,
+  BETWEEN,
+  IN,
+  NOT_IN
+}
+
+/**
+ * SUBSCRIPTION AND BUDGET ENUMS
+ */
+
+enum RecurrenceUnit {
+  DAY,
+  WEEK,
+  MONTH,
+  YEAR
+}
+
+enum SubscriptionStatus {
+  ACTIVE,
+  PAUSED,
+  CANCELLED
+}
+
+enum BudgetPeriod {
+  WEEKLY,
+  MONTHLY,
+  QUARTERLY,
+  YEARLY,
+  CUSTOM
+}
+
+enum BudgetStatus {
+  ACTIVE,
+  PAUSED,
+  COMPLETED
+}
+
+enum TagMatchMode {
+  ANY,
+  ALL
+}
+
+/**
+ * INGESTION AND API ENUMS
+ */
+
+enum IngestionType {
+  FILE,
+  API
+}
+
+enum IngestionStatus {
+  PENDING,
+  PROCESSING,
+  COMPLETED,
+  PARTIALLY_COMPLETED,
+  FAILED
+}
+
+enum ImportFileType {
+  CSV,
+  PDF,
+  XLSX,
+  JSON,
+  OFX,
+  OTHER
+}
+
+enum IngestionRecordStatus {
+  CREATED,
+  SKIPPED_DUPLICATE,
+  REJECTED
+}
+
+enum ApiTokenStatus {
+  ACTIVE,
+  REVOKED,
+  EXPIRED
+}
+
+enum ApiPermission {
+  CREATE_TRANSACTIONS
+}
+
+/**
+ * A financial account owned by a user.
+ *
+ * The current balance is calculated and is not persisted.
+ * Every transaction amount is expressed in this account's currency.
+ */
+entity FinancialAccount {
+  name String required minlength(1) maxlength(100)
+  institutionName String maxlength(100)
+  accountType AccountType required
+  currency String required pattern(/^[A-Z]{3}$/)
+  initialBalance BigDecimal required
+  initialBalanceDate LocalDate required
+  lastFourDigits String pattern(/^[0-9]{4}$/)
+  description String maxlength(500)
+  color String pattern(/^#[0-9A-Fa-f]{6}$/)
+  icon String maxlength(50)
+  active Boolean required
+  includeInNetWorth Boolean required
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * Additional data that exists only for CREDIT_CARD accounts.
+ */
+entity CreditAccountDetails {
+  creditLimit BigDecimal required min(0)
+  statementDay Integer required min(1) max(31)
+  paymentDueDay Integer required min(1) max(31)
+  annualInterestRate BigDecimal min(0)
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * A monetary movement in an account.
+ *
+ * The amount is always positive. The flow determines whether money enters
+ * or leaves the account. There is no transaction-level currency field.
+ */
+entity FinancialTransaction {
+  transactionDate LocalDate required
+  postingDate LocalDate
+  description String required minlength(1) maxlength(500)
+  amount BigDecimal required min(0)
+  flow TransactionFlow required
+  origin TransactionOrigin required
+  externalReference String maxlength(150)
+  notes String maxlength(1000)
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * The primary classification assigned to a transaction.
+ * Categories can form a hierarchy.
+ */
+entity Category {
+  name String required minlength(1) maxlength(80)
+  description String maxlength(300)
+  categoryType CategoryType required
+  color String pattern(/^#[0-9A-Fa-f]{6}$/)
+  icon String maxlength(50)
+  active Boolean required
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * A flexible, non-hierarchical classification label.
+ */
+entity Tag {
+  name String required minlength(1) maxlength(50)
+  description String maxlength(250)
+  color String pattern(/^#[0-9A-Fa-f]{6}$/)
+  active Boolean required
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * A user-owned rule evaluated only when a transaction is created.
+ *
+ * Higher numeric priority wins for category, subscription and description.
+ * Tags from every matching rule are accumulated without duplicates.
+ */
+entity TransactionRule {
+  name String required minlength(1) maxlength(100)
+  description String maxlength(500)
+  priority Integer required min(0)
+  conditionLogic RuleConditionLogic required
+  resultingDescription String maxlength(500)
+  active Boolean required
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * One condition inside a transaction rule.
+ *
+ * value and secondValue are stored as strings and interpreted according to
+ * field and operator by the service layer.
+ */
+entity TransactionRuleCondition {
+  field TransactionRuleField required
+  operator RuleOperator required
+  value String required maxlength(1000)
+  secondValue String maxlength(1000)
+  caseSensitive Boolean required
+  position Integer required min(0)
+}
+
+/**
+ * A recurring expected charge. It does not generate transactions.
+ */
+entity FinancialSubscription {
+  name String required minlength(1) maxlength(100)
+  description String maxlength(500)
+  status SubscriptionStatus required
+  expectedAmount BigDecimal min(0)
+  amountTolerancePercentage BigDecimal min(0) max(100)
+  currency String required pattern(/^[A-Z]{3}$/)
+  recurrenceUnit RecurrenceUnit required
+  intervalCount Integer required min(1)
+  startDate LocalDate required
+  nextExpectedDate LocalDate
+  endDate LocalDate
+  automaticPayment Boolean required
+  notes String maxlength(500)
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * A spending limit for a recurring or custom period.
+ *
+ * Empty account/category/tag relations have domain-specific meanings:
+ * - no accounts: all active accounts of the user in the budget currency
+ * - no categories: any category
+ * - no tags: no tag filtering
+ */
+entity Budget {
+  name String required minlength(1) maxlength(100)
+  amount BigDecimal required min(0)
+  currency String required pattern(/^[A-Z]{3}$/)
+  period BudgetPeriod required
+  startDate LocalDate required
+  endDate LocalDate
+  status BudgetStatus required
+  tagMatchMode TagMatchMode required
+  warningPercentage BigDecimal min(0) max(100)
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * Links the OUT and IN transactions that represent a movement between two
+ * accounts owned by the same user and using the same currency.
+ */
+entity InternalTransfer {
+  notes String maxlength(500)
+  createdAt Instant required
+}
+
+/**
+ * One execution that imports or receives one or many transactions.
+ */
+entity TransactionIngestion {
+  ingestionType IngestionType required
+  status IngestionStatus required
+  sourceLabel String maxlength(100)
+  startedAt Instant required
+  completedAt Instant
+  recordsReceived Integer required min(0)
+  recordsCreated Integer required min(0)
+  recordsSkipped Integer required min(0)
+  recordsRejected Integer required min(0)
+  errorMessage String maxlength(2000)
+  createdAt Instant required
+}
+
+/**
+ * File-specific metadata for a FILE ingestion.
+ */
+entity FileIngestion {
+  originalFilename String required minlength(1) maxlength(255)
+  fileType ImportFileType required
+  contentType String maxlength(100)
+  fileSizeBytes Long min(0)
+  checksum String maxlength(128)
+  storageKey String maxlength(500)
+  parserName String maxlength(100)
+  parserVersion String maxlength(50)
+  statementStartDate LocalDate
+  statementEndDate LocalDate
+  createdAt Instant required
+}
+
+/**
+ * Request metadata for an API ingestion.
+ */
+entity ApiIngestion {
+  requestId String required minlength(1) maxlength(100) unique
+  idempotencyKey String maxlength(150)
+  sourceSystem String maxlength(100)
+  apiVersion String required maxlength(20)
+  endpoint String required maxlength(150)
+  clientReference String maxlength(150)
+  receivedAt Instant required
+  createdAt Instant required
+}
+
+/**
+ * One row, object or extracted item processed during an ingestion.
+ */
+entity IngestionRecord {
+  recordIndex Integer required min(0)
+  externalRecordId String maxlength(150)
+  status IngestionRecordStatus required
+  rawData TextBlob
+  errorCode String maxlength(100)
+  errorMessage String maxlength(1000)
+  createdAt Instant required
+}
+
+/**
+ * A hashed API credential owned by a user and restricted to explicitly
+ * selected accounts.
+ */
+entity ApiAccessToken {
+  name String required minlength(1) maxlength(100)
+  tokenPrefix String required maxlength(20)
+  tokenHash String required unique
+  status ApiTokenStatus required
+  createdAt Instant required
+  updatedAt Instant required
+  lastUsedAt Instant
+  expiresAt Instant
+  revokedAt Instant
+}
+
+/**
+ * One permission granted to an API token.
+ */
+entity ApiAccessTokenPermission {
+  permission ApiPermission required
+  createdAt Instant required
+}
+
+/**
+ * Stores JSON preferences for the application's fixed dashboard.
+
+ * JHipster 8.11 generates this as ManyToOne to the built-in User entity.
+ * A unique database constraint on user_id will enforce one preference row
+ * per user after generation.
+ */
+entity UserDashboardPreference {
+  configuration TextBlob required
+  createdAt Instant required
+  updatedAt Instant required
+}
+
+/**
+ * DIRECT USER OWNERSHIP
+ *
+ * These are unidirectional relationships to JHipster's built-in User entity.
+ */
+relationship ManyToOne {
+  FinancialAccount{user(login) required} to User with builtInEntity
+  Category{user(login) required} to User with builtInEntity
+  Tag{user(login) required} to User with builtInEntity
+  TransactionRule{user(login) required} to User with builtInEntity
+  FinancialSubscription{user(login) required} to User with builtInEntity
+  Budget{user(login) required} to User with builtInEntity
+  ApiAccessToken{user(login) required} to User with builtInEntity
+  UserDashboardPreference{user(login) required} to User with builtInEntity
+}
+
+/**
+ * FINANCIAL ACCOUNT AND TRANSACTION RELATIONSHIPS
+ */
+relationship OneToOne {
+  CreditAccountDetails{account(name) required} to FinancialAccount{creditAccountDetails}
+}
+
+relationship ManyToOne {
+  FinancialTransaction{account(name) required} to FinancialAccount{financialTransactions}
+  FinancialTransaction{category(name)} to Category{financialTransactions}
+  FinancialTransaction{financialSubscription(name)} to FinancialSubscription{financialTransactions}
+  FinancialTransaction{transactionIngestion(id)} to TransactionIngestion{financialTransactions}
+}
+
+relationship ManyToMany {
+  FinancialTransaction{tags(name)} to Tag{financialTransactions}
+}
+
+/**
+ * CATEGORY HIERARCHY
+ */
+relationship ManyToOne {
+  Category{parentCategory(name)} to Category{childCategories}
+}
+
+/**
+ * TRANSACTION RULE RELATIONSHIPS
+ */
+relationship ManyToOne {
+  TransactionRuleCondition{transactionRule(name) required} to TransactionRule{conditions}
+  TransactionRule{resultingCategory(name)} to Category{transactionRules}
+  TransactionRule{resultingFinancialSubscription(name)} to FinancialSubscription{transactionRules}
+}
+
+relationship ManyToMany {
+  TransactionRule{resultingTags(name)} to Tag{transactionRules}
+}
+
+/**
+ * FINANCIAL SUBSCRIPTION RELATIONSHIPS
+ */
+relationship ManyToOne {
+  FinancialSubscription{account(name)} to FinancialAccount{subscriptions}
+  FinancialSubscription{category(name)} to Category{subscriptions}
+}
+
+relationship ManyToMany {
+  FinancialSubscription{tags(name)} to Tag{subscriptions}
+}
+
+/**
+ * BUDGET RELATIONSHIPS
+ */
+relationship ManyToMany {
+  Budget{accounts(name)} to FinancialAccount{budgets}
+  Budget{categories(name)} to Category{budgets}
+  Budget{tags(name)} to Tag{budgets}
+}
+
+/**
+ * INTERNAL TRANSFER RELATIONSHIPS
+ *
+ * Both sides are intentionally unidirectional. Domain services must guarantee
+ * different accounts, equal amounts, equal currencies and opposite flows.
+ */
+relationship OneToOne {
+  InternalTransfer{outgoingTransaction(id) required} to FinancialTransaction{outgoingInternalTransfer}
+  InternalTransfer{incomingTransaction(id) required} to FinancialTransaction{incomingInternalTransfer}
+}
+
+/**
+ * INGESTION RELATIONSHIPS
+ */
+relationship ManyToMany {
+  TransactionIngestion{accounts(name) required} to FinancialAccount{transactionIngestions}
+}
+
+relationship OneToOne {
+  FileIngestion{transactionIngestion(id) required} to TransactionIngestion{fileIngestion}
+  ApiIngestion{transactionIngestion(id) required} to TransactionIngestion{apiIngestion}
+  IngestionRecord{financialTransaction(id)} to FinancialTransaction
+}
+
+relationship ManyToOne {
+  IngestionRecord{transactionIngestion(id) required} to TransactionIngestion{records}
+  ApiIngestion{apiAccessToken(name) required} to ApiAccessToken{apiIngestions}
+}
+
+/**
+ * API TOKEN RELATIONSHIPS
+ */
+relationship ManyToMany {
+  ApiAccessToken{accounts(name)} to FinancialAccount{apiAccessTokens}
+}
+
+relationship ManyToOne {
+  ApiAccessTokenPermission{apiAccessToken(name) required} to ApiAccessToken{permissions}
+}
+
+/**
+ * GENERATION OPTIONS
+ *
+ * MapStruct DTOs and service classes are generated for the whole domain.
+ * Filtering is enabled only for entities that users will actively search.
+ * Pagination is enabled for potentially large datasets.
+ */
+dto * with mapstruct
+service * with serviceClass
+
+filter FinancialAccount, FinancialTransaction, Category, Tag, TransactionRule, FinancialSubscription, Budget, TransactionIngestion, IngestionRecord
+
+use pagination for FinancialTransaction, TransactionIngestion, IngestionRecord

@@ -1,0 +1,34 @@
+{
+  "fintrackApp": {
+    "tag": {
+      "home": {
+        "title": "Tags",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Tag",
+        "createOrEditLabel": "Crear o editar Tag",
+        "notFound": "Ningún Tags encontrado"
+      },
+      "created": "Un nuevo Tag ha sido creado con el identificador {{ param }}",
+      "updated": "Un Tag ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Tag ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Tag {{ id }}?"
+      },
+      "detail": {
+        "title": "Tag"
+      },
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "color": "Color",
+      "active": "Active",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "user": "User",
+      "financialTransactions": "Financial Transactions",
+      "transactionRules": "Transaction Rules",
+      "subscriptions": "Subscriptions",
+      "budgets": "Budgets"
+    }
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "annotations": {
+    "changelogDate": "20260707174824"
+  },
+  "applications": ["fintrack"],
+  "documentation": "The primary classification assigned to a transaction.\\nCategories can form a hierarchy.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "name",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "minlength", "maxlength"],
+      "fieldValidateRulesMaxlength": "80",
+      "fieldValidateRulesMinlength": "1"
+    },
+    {
+      "fieldName": "description",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "300"
+    },
+    {
+      "fieldName": "categoryType",
+      "fieldType": "CategoryType",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "EXPENSE,INCOME,BOTH"
+    },
+    {
+      "fieldName": "color",
+      "fieldType": "String",
+      "fieldValidateRules": ["pattern"],
+      "fieldValidateRulesPattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    {
+      "fieldName": "icon",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "50"
+    },
+    {
+      "fieldName": "active",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "name": "Category",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required",
+      "relationshipWithBuiltInEntity": true
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "category",
+      "otherEntityRelationshipName": "childCategories",
+      "relationshipName": "parentCategory",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityName": "financialTransaction",
+      "otherEntityRelationshipName": "category",
+      "relationshipName": "financialTransactions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "category",
+      "otherEntityRelationshipName": "parentCategory",
+      "relationshipName": "childCategories",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "transactionRule",
+      "otherEntityRelationshipName": "resultingCategory",
+      "relationshipName": "transactionRules",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "financialSubscription",
+      "otherEntityRelationshipName": "category",
+      "relationshipName": "subscriptions",
+      "relationshipSide": "right",
+      "relationshipType": "one-to-many"
+    },
+    {
+      "otherEntityName": "budget",
+      "otherEntityRelationshipName": "categories",
+      "relationshipName": "budgets",
+      "relationshipSide": "right",
+      "relationshipType": "many-to-many"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

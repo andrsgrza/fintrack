@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <!--
+        Added the entity FileIngestion.
+    -->
+    <changeSet id="20260707174832-1" author="jhipster">
+        <createTable tableName="file_ingestion" remarks="File-specific metadata for a FILE ingestion.">
+            <column name="id" type="bigint">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="original_filename" type="varchar(255)">
+                <constraints nullable="false" />
+            </column>
+            <column name="file_type" type="varchar(255)">
+                <constraints nullable="false" />
+            </column>
+            <column name="content_type" type="varchar(100)">
+                <constraints nullable="true" />
+            </column>
+            <column name="file_size_bytes" type="bigint">
+                <constraints nullable="true" />
+            </column>
+            <column name="checksum" type="varchar(128)">
+                <constraints nullable="true" />
+            </column>
+            <column name="storage_key" type="varchar(500)">
+                <constraints nullable="true" />
+            </column>
+            <column name="parser_name" type="varchar(100)">
+                <constraints nullable="true" />
+            </column>
+            <column name="parser_version" type="varchar(50)">
+                <constraints nullable="true" />
+            </column>
+            <column name="statement_start_date" type="date">
+                <constraints nullable="true" />
+            </column>
+            <column name="statement_end_date" type="date">
+                <constraints nullable="true" />
+            </column>
+            <column name="created_at" type="${datetimeType}">
+                <constraints nullable="false" />
+            </column>
+            <column name="transaction_ingestion_id" type="bigint">
+                <constraints nullable="false" unique="true" uniqueConstraintName="ux_file_ingestion__transaction_ingestion_id" />
+            </column>
+            <!-- jhipster-needle-liquibase-add-column - JHipster will add columns here -->
+        </createTable>
+        <dropDefaultValue tableName="file_ingestion" columnName="created_at" columnDataType="${datetimeType}"/>
+    </changeSet>
+
+    <!-- jhipster-needle-liquibase-add-changeset - JHipster will add changesets here -->
+
+    <!--
+        Load sample data generated with Faker.js
+        - This data can be easily edited using a CSV editor (or even MS Excel) and
+          is located in the 'src/main/resources/config/liquibase/fake-data' directory
+        - By default this data is applied when running with the JHipster 'dev' profile.
+          This can be customized by adding or removing 'faker' in the 'spring.liquibase.contexts'
+          Spring Boot configuration key.
+    -->
+    <changeSet id="20260707174832-1-data" author="jhipster" context="faker">
+        <loadData
+                  file="config/liquibase/fake-data/file_ingestion.csv"
+                  separator=";"
+                  tableName="file_ingestion"
+                  usePreparedStatements="true">
+            <column name="id" type="numeric"/>
+            <column name="original_filename" type="string"/>
+            <column name="file_type" type="string"/>
+            <column name="content_type" type="string"/>
+            <column name="file_size_bytes" type="numeric"/>
+            <column name="checksum" type="string"/>
+            <column name="storage_key" type="string"/>
+            <column name="parser_name" type="string"/>
+            <column name="parser_version" type="string"/>
+            <column name="statement_start_date" type="date"/>
+            <column name="statement_end_date" type="date"/>
+            <column name="created_at" type="date"/>
+            <column name="transaction_ingestion_id" type="numeric"/>
+            <!-- jhipster-needle-liquibase-add-loadcolumn - JHipster (and/or extensions) can add load columns here -->
+        </loadData>
+    </changeSet>
+</databaseChangeLog>
