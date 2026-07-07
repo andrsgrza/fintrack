@@ -1,0 +1,10 @@
+{
+  "fintrackApp": {
+    "CurrencyCode": {
+      "null": "",
+      "MXN": "MXN",
+      "USD": "USD",
+      "EUR": "EUR"
+    }
+  }
+}

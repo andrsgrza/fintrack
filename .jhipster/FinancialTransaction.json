@@ -63,6 +63,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "jpaMetamodelFiltering": true,
   "name": "FinancialTransaction",
   "pagination": "pagination",

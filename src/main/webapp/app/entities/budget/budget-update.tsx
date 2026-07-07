@@ -12,6 +12,7 @@ import { getUsers } from 'app/modules/administration/user-management/user-manage
 import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
+import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { BudgetPeriod } from 'app/shared/model/enumerations/budget-period.model';
 import { BudgetStatus } from 'app/shared/model/enumerations/budget-status.model';
 import { TagMatchMode } from 'app/shared/model/enumerations/tag-match-mode.model';
@@ -33,6 +34,7 @@ export const BudgetUpdate = () => {
   const loading = useAppSelector(state => state.budget.loading);
   const updating = useAppSelector(state => state.budget.updating);
   const updateSuccess = useAppSelector(state => state.budget.updateSuccess);
+  const currencyCodeValues = Object.keys(CurrencyCode);
   const budgetPeriodValues = Object.keys(BudgetPeriod);
   const budgetStatusValues = Object.keys(BudgetStatus);
   const tagMatchModeValues = Object.keys(TagMatchMode);
@@ -96,6 +98,7 @@ export const BudgetUpdate = () => {
           updatedAt: displayDefaultDateTime(),
         }
       : {
+          currency: 'MXN',
           period: 'WEEKLY',
           status: 'ACTIVE',
           tagMatchMode: 'ANY',
@@ -162,12 +165,14 @@ export const BudgetUpdate = () => {
                 id="budget-currency"
                 name="currency"
                 data-cy="currency"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  pattern: { value: /^[A-Z]{3}$/, message: translate('entity.validation.pattern', { pattern: '^[A-Z]{3}$' }) },
-                }}
-              />
+                type="select"
+              >
+                {currencyCodeValues.map(currencyCode => (
+                  <option value={currencyCode} key={currencyCode}>
+                    {translate(`fintrackApp.CurrencyCode.${currencyCode}`)}
+                  </option>
+                ))}
+              </ValidatedField>
               <ValidatedField
                 label={translate('fintrackApp.budget.period')}
                 id="budget-period"

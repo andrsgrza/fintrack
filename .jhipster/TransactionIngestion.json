@@ -70,6 +70,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "jpaMetamodelFiltering": true,
   "name": "TransactionIngestion",
   "pagination": "pagination",

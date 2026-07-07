@@ -12,23 +12,11 @@ public class FinancialSubscriptionTestSamples {
     private static final AtomicInteger intCount = new AtomicInteger(random.nextInt() + (2 * Short.MAX_VALUE));
 
     public static FinancialSubscription getFinancialSubscriptionSample1() {
-        return new FinancialSubscription()
-            .id(1L)
-            .name("name1")
-            .description("description1")
-            .currency("currency1")
-            .intervalCount(1)
-            .notes("notes1");
+        return new FinancialSubscription().id(1L).name("name1").description("description1").intervalCount(1).notes("notes1");
     }
 
     public static FinancialSubscription getFinancialSubscriptionSample2() {
-        return new FinancialSubscription()
-            .id(2L)
-            .name("name2")
-            .description("description2")
-            .currency("currency2")
-            .intervalCount(2)
-            .notes("notes2");
+        return new FinancialSubscription().id(2L).name("name2").description("description2").intervalCount(2).notes("notes2");
     }
 
     public static FinancialSubscription getFinancialSubscriptionRandomSampleGenerator() {
@@ -36,7 +24,6 @@ public class FinancialSubscriptionTestSamples {
             .id(longCount.incrementAndGet())
             .name(UUID.randomUUID().toString())
             .description(UUID.randomUUID().toString())
-            .currency(UUID.randomUUID().toString())
             .intervalCount(intCount.incrementAndGet())
             .notes(UUID.randomUUID().toString());
     }

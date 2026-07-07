@@ -43,6 +43,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "name": "CreditAccountDetails",
   "relationships": [
     {

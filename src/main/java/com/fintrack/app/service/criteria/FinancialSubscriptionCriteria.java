@@ -1,5 +1,6 @@
 package com.fintrack.app.service.criteria;
 
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.domain.enumeration.SubscriptionStatus;
 import java.io.Serializable;
@@ -40,6 +41,23 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
     }
 
     /**
+     * Class for filtering CurrencyCode
+     */
+    public static class CurrencyCodeFilter extends Filter<CurrencyCode> {
+
+        public CurrencyCodeFilter() {}
+
+        public CurrencyCodeFilter(CurrencyCodeFilter filter) {
+            super(filter);
+        }
+
+        @Override
+        public CurrencyCodeFilter copy() {
+            return new CurrencyCodeFilter(this);
+        }
+    }
+
+    /**
      * Class for filtering RecurrenceUnit
      */
     public static class RecurrenceUnitFilter extends Filter<RecurrenceUnit> {
@@ -70,7 +88,7 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
 
     private BigDecimalFilter amountTolerancePercentage;
 
-    private StringFilter currency;
+    private CurrencyCodeFilter currency;
 
     private RecurrenceUnitFilter recurrenceUnit;
 
@@ -113,7 +131,7 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
         this.status = other.optionalStatus().map(SubscriptionStatusFilter::copy).orElse(null);
         this.expectedAmount = other.optionalExpectedAmount().map(BigDecimalFilter::copy).orElse(null);
         this.amountTolerancePercentage = other.optionalAmountTolerancePercentage().map(BigDecimalFilter::copy).orElse(null);
-        this.currency = other.optionalCurrency().map(StringFilter::copy).orElse(null);
+        this.currency = other.optionalCurrency().map(CurrencyCodeFilter::copy).orElse(null);
         this.recurrenceUnit = other.optionalRecurrenceUnit().map(RecurrenceUnitFilter::copy).orElse(null);
         this.intervalCount = other.optionalIntervalCount().map(IntegerFilter::copy).orElse(null);
         this.startDate = other.optionalStartDate().map(LocalDateFilter::copy).orElse(null);
@@ -251,22 +269,22 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
         this.amountTolerancePercentage = amountTolerancePercentage;
     }
 
-    public StringFilter getCurrency() {
+    public CurrencyCodeFilter getCurrency() {
         return currency;
     }
 
-    public Optional<StringFilter> optionalCurrency() {
+    public Optional<CurrencyCodeFilter> optionalCurrency() {
         return Optional.ofNullable(currency);
     }
 
-    public StringFilter currency() {
+    public CurrencyCodeFilter currency() {
         if (currency == null) {
-            setCurrency(new StringFilter());
+            setCurrency(new CurrencyCodeFilter());
         }
         return currency;
     }
 
-    public void setCurrency(StringFilter currency) {
+    public void setCurrency(CurrencyCodeFilter currency) {
         this.currency = currency;
     }
 

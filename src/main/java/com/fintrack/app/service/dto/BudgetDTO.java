@@ -2,6 +2,7 @@ package com.fintrack.app.service.dto;
 
 import com.fintrack.app.domain.enumeration.BudgetPeriod;
 import com.fintrack.app.domain.enumeration.BudgetStatus;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TagMatchMode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
@@ -33,8 +34,7 @@ public class BudgetDTO implements Serializable {
     private BigDecimal amount;
 
     @NotNull
-    @Pattern(regexp = "^[A-Z]{3}$")
-    private String currency;
+    private CurrencyCode currency;
 
     @NotNull
     private BudgetPeriod period;
@@ -93,11 +93,11 @@ public class BudgetDTO implements Serializable {
         this.amount = amount;
     }
 
-    public String getCurrency() {
+    public CurrencyCode getCurrency() {
         return currency;
     }
 
-    public void setCurrency(String currency) {
+    public void setCurrency(CurrencyCode currency) {
         this.currency = currency;
     }
 

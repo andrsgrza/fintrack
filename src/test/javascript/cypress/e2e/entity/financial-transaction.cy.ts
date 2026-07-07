@@ -30,7 +30,7 @@ describe('FinancialTransaction e2e test', () => {
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/financial-accounts',
-      body: {"name":"neatly where","institutionName":"vibration woot meatloaf","accountType":"INVESTMENT","currency":"ALQ","initialBalance":21492.46,"initialBalanceDate":"2026-07-07","lastFourDigits":"3945","description":"hourly mmm rapidly","color":"#CcEaC8","icon":"as","active":false,"includeInNetWorth":false,"createdAt":"2026-07-07T16:37:01.349Z","updatedAt":"2026-07-07T14:31:17.904Z"},
+      body: {"name":"whoever dime of","institutionName":"testimonial yuck now","accountType":"CREDIT_CARD","currency":"EUR","initialBalance":19371.43,"initialBalanceDate":"2026-07-07","lastFourDigits":"7904","description":"mmm rapidly","color":"#CcEaC8","icon":"as","active":false,"includeInNetWorth":false,"createdAt":"2026-07-07T16:37:01.349Z","updatedAt":"2026-07-07T14:31:17.904Z"},
     }).then(({ body }) => {
       financialAccount = body;
     });

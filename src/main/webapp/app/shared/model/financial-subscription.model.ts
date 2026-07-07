@@ -4,6 +4,7 @@ import { IFinancialAccount } from 'app/shared/model/financial-account.model';
 import { ICategory } from 'app/shared/model/category.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { SubscriptionStatus } from 'app/shared/model/enumerations/subscription-status.model';
+import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { RecurrenceUnit } from 'app/shared/model/enumerations/recurrence-unit.model';
 
 export interface IFinancialSubscription {
@@ -13,7 +14,7 @@ export interface IFinancialSubscription {
   status?: keyof typeof SubscriptionStatus;
   expectedAmount?: number | null;
   amountTolerancePercentage?: number | null;
-  currency?: string;
+  currency?: keyof typeof CurrencyCode;
   recurrenceUnit?: keyof typeof RecurrenceUnit;
   intervalCount?: number;
   startDate?: dayjs.Dayjs;

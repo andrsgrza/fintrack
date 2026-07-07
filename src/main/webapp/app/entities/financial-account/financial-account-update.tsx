@@ -13,6 +13,7 @@ import { getEntities as getBudgets } from 'app/entities/budget/budget.reducer';
 import { getEntities as getTransactionIngestions } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
 import { getEntities as getApiAccessTokens } from 'app/entities/api-access-token/api-access-token.reducer';
 import { AccountType } from 'app/shared/model/enumerations/account-type.model';
+import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { createEntity, getEntity, reset, updateEntity } from './financial-account.reducer';
 
 export const FinancialAccountUpdate = () => {
@@ -32,6 +33,7 @@ export const FinancialAccountUpdate = () => {
   const updating = useAppSelector(state => state.financialAccount.updating);
   const updateSuccess = useAppSelector(state => state.financialAccount.updateSuccess);
   const accountTypeValues = Object.keys(AccountType);
+  const currencyCodeValues = Object.keys(CurrencyCode);
 
   const handleClose = () => {
     navigate('/financial-account');
@@ -90,6 +92,7 @@ export const FinancialAccountUpdate = () => {
         }
       : {
           accountType: 'DEBIT',
+          currency: 'MXN',
           ...financialAccountEntity,
           createdAt: convertDateTimeFromServer(financialAccountEntity.createdAt),
           updatedAt: convertDateTimeFromServer(financialAccountEntity.updatedAt),
@@ -164,12 +167,14 @@ export const FinancialAccountUpdate = () => {
                 id="financial-account-currency"
                 name="currency"
                 data-cy="currency"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  pattern: { value: /^[A-Z]{3}$/, message: translate('entity.validation.pattern', { pattern: '^[A-Z]{3}$' }) },
-                }}
-              />
+                type="select"
+              >
+                {currencyCodeValues.map(currencyCode => (
+                  <option value={currencyCode} key={currencyCode}>
+                    {translate(`fintrackApp.CurrencyCode.${currencyCode}`)}
+                  </option>
+                ))}
+              </ValidatedField>
               <ValidatedField
                 label={translate('fintrackApp.financialAccount.initialBalance')}
                 id="financial-account-initialBalance"

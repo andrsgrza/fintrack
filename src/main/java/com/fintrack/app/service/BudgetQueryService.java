@@ -74,7 +74,7 @@ public class BudgetQueryService extends QueryService<Budget> {
                 buildRangeSpecification(criteria.getId(), Budget_.id),
                 buildStringSpecification(criteria.getName(), Budget_.name),
                 buildRangeSpecification(criteria.getAmount(), Budget_.amount),
-                buildStringSpecification(criteria.getCurrency(), Budget_.currency),
+                buildSpecification(criteria.getCurrency(), Budget_.currency),
                 buildSpecification(criteria.getPeriod(), Budget_.period),
                 buildRangeSpecification(criteria.getStartDate(), Budget_.startDate),
                 buildRangeSpecification(criteria.getEndDate(), Budget_.endDate),

@@ -1,6 +1,7 @@
 package com.fintrack.app.service.criteria;
 
 import com.fintrack.app.domain.enumeration.AccountType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import java.io.Serializable;
 import java.util.Objects;
 import java.util.Optional;
@@ -38,6 +39,23 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         }
     }
 
+    /**
+     * Class for filtering CurrencyCode
+     */
+    public static class CurrencyCodeFilter extends Filter<CurrencyCode> {
+
+        public CurrencyCodeFilter() {}
+
+        public CurrencyCodeFilter(CurrencyCodeFilter filter) {
+            super(filter);
+        }
+
+        @Override
+        public CurrencyCodeFilter copy() {
+            return new CurrencyCodeFilter(this);
+        }
+    }
+
     private static final long serialVersionUID = 1L;
 
     private LongFilter id;
@@ -48,7 +66,7 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
 
     private AccountTypeFilter accountType;
 
-    private StringFilter currency;
+    private CurrencyCodeFilter currency;
 
     private BigDecimalFilter initialBalance;
 
@@ -93,7 +111,7 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.name = other.optionalName().map(StringFilter::copy).orElse(null);
         this.institutionName = other.optionalInstitutionName().map(StringFilter::copy).orElse(null);
         this.accountType = other.optionalAccountType().map(AccountTypeFilter::copy).orElse(null);
-        this.currency = other.optionalCurrency().map(StringFilter::copy).orElse(null);
+        this.currency = other.optionalCurrency().map(CurrencyCodeFilter::copy).orElse(null);
         this.initialBalance = other.optionalInitialBalance().map(BigDecimalFilter::copy).orElse(null);
         this.initialBalanceDate = other.optionalInitialBalanceDate().map(LocalDateFilter::copy).orElse(null);
         this.lastFourDigits = other.optionalLastFourDigits().map(StringFilter::copy).orElse(null);
@@ -195,22 +213,22 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.accountType = accountType;
     }
 
-    public StringFilter getCurrency() {
+    public CurrencyCodeFilter getCurrency() {
         return currency;
     }
 
-    public Optional<StringFilter> optionalCurrency() {
+    public Optional<CurrencyCodeFilter> optionalCurrency() {
         return Optional.ofNullable(currency);
     }
 
-    public StringFilter currency() {
+    public CurrencyCodeFilter currency() {
         if (currency == null) {
-            setCurrency(new StringFilter());
+            setCurrency(new CurrencyCodeFilter());
         }
         return currency;
     }
 
-    public void setCurrency(StringFilter currency) {
+    public void setCurrency(CurrencyCodeFilter currency) {
         this.currency = currency;
     }
 

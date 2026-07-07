@@ -13,6 +13,7 @@ import { getEntities as getFinancialAccounts } from 'app/entities/financial-acco
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
 import { SubscriptionStatus } from 'app/shared/model/enumerations/subscription-status.model';
+import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { RecurrenceUnit } from 'app/shared/model/enumerations/recurrence-unit.model';
 import { createEntity, getEntity, reset, updateEntity } from './financial-subscription.reducer';
 
@@ -33,6 +34,7 @@ export const FinancialSubscriptionUpdate = () => {
   const updating = useAppSelector(state => state.financialSubscription.updating);
   const updateSuccess = useAppSelector(state => state.financialSubscription.updateSuccess);
   const subscriptionStatusValues = Object.keys(SubscriptionStatus);
+  const currencyCodeValues = Object.keys(CurrencyCode);
   const recurrenceUnitValues = Object.keys(RecurrenceUnit);
 
   const handleClose = () => {
@@ -98,6 +100,7 @@ export const FinancialSubscriptionUpdate = () => {
         }
       : {
           status: 'ACTIVE',
+          currency: 'MXN',
           recurrenceUnit: 'DAY',
           ...financialSubscriptionEntity,
           createdAt: convertDateTimeFromServer(financialSubscriptionEntity.createdAt),
@@ -198,12 +201,14 @@ export const FinancialSubscriptionUpdate = () => {
                 id="financial-subscription-currency"
                 name="currency"
                 data-cy="currency"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  pattern: { value: /^[A-Z]{3}$/, message: translate('entity.validation.pattern', { pattern: '^[A-Z]{3}$' }) },
-                }}
-              />
+                type="select"
+              >
+                {currencyCodeValues.map(currencyCode => (
+                  <option value={currencyCode} key={currencyCode}>
+                    {translate(`fintrackApp.CurrencyCode.${currencyCode}`)}
+                  </option>
+                ))}
+              </ValidatedField>
               <ValidatedField
                 label={translate('fintrackApp.financialSubscription.recurrenceUnit')}
                 id="financial-subscription-recurrenceUnit"

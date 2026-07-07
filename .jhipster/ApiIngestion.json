@@ -54,6 +54,7 @@
       "fieldValidateRules": ["required"]
     }
   ],
+  "incrementalChangelog": false,
   "name": "ApiIngestion",
   "relationships": [
     {

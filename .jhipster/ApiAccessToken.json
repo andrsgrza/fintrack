@@ -53,6 +53,7 @@
       "fieldType": "Instant"
     }
   ],
+  "incrementalChangelog": false,
   "name": "ApiAccessToken",
   "relationships": [
     {

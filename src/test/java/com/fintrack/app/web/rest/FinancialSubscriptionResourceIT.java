@@ -16,6 +16,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.domain.enumeration.SubscriptionStatus;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
@@ -73,8 +74,8 @@ class FinancialSubscriptionResourceIT {
     private static final BigDecimal UPDATED_AMOUNT_TOLERANCE_PERCENTAGE = new BigDecimal(1);
     private static final BigDecimal SMALLER_AMOUNT_TOLERANCE_PERCENTAGE = new BigDecimal(0 - 1);
 
-    private static final String DEFAULT_CURRENCY = "RLN";
-    private static final String UPDATED_CURRENCY = "QMB";
+    private static final CurrencyCode DEFAULT_CURRENCY = CurrencyCode.MXN;
+    private static final CurrencyCode UPDATED_CURRENCY = CurrencyCode.USD;
 
     private static final RecurrenceUnit DEFAULT_RECURRENCE_UNIT = RecurrenceUnit.DAY;
     private static final RecurrenceUnit UPDATED_RECURRENCE_UNIT = RecurrenceUnit.WEEK;
@@ -433,7 +434,7 @@ class FinancialSubscriptionResourceIT {
             .andExpect(jsonPath("$.[*].status").value(hasItem(DEFAULT_STATUS.toString())))
             .andExpect(jsonPath("$.[*].expectedAmount").value(hasItem(sameNumber(DEFAULT_EXPECTED_AMOUNT))))
             .andExpect(jsonPath("$.[*].amountTolerancePercentage").value(hasItem(sameNumber(DEFAULT_AMOUNT_TOLERANCE_PERCENTAGE))))
-            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY)))
+            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY.toString())))
             .andExpect(jsonPath("$.[*].recurrenceUnit").value(hasItem(DEFAULT_RECURRENCE_UNIT.toString())))
             .andExpect(jsonPath("$.[*].intervalCount").value(hasItem(DEFAULT_INTERVAL_COUNT)))
             .andExpect(jsonPath("$.[*].startDate").value(hasItem(DEFAULT_START_DATE.toString())))
@@ -479,7 +480,7 @@ class FinancialSubscriptionResourceIT {
             .andExpect(jsonPath("$.status").value(DEFAULT_STATUS.toString()))
             .andExpect(jsonPath("$.expectedAmount").value(sameNumber(DEFAULT_EXPECTED_AMOUNT)))
             .andExpect(jsonPath("$.amountTolerancePercentage").value(sameNumber(DEFAULT_AMOUNT_TOLERANCE_PERCENTAGE)))
-            .andExpect(jsonPath("$.currency").value(DEFAULT_CURRENCY))
+            .andExpect(jsonPath("$.currency").value(DEFAULT_CURRENCY.toString()))
             .andExpect(jsonPath("$.recurrenceUnit").value(DEFAULT_RECURRENCE_UNIT.toString()))
             .andExpect(jsonPath("$.intervalCount").value(DEFAULT_INTERVAL_COUNT))
             .andExpect(jsonPath("$.startDate").value(DEFAULT_START_DATE.toString()))
@@ -849,26 +850,6 @@ class FinancialSubscriptionResourceIT {
 
         // Get all the financialSubscriptionList where currency is not null
         defaultFinancialSubscriptionFiltering("currency.specified=true", "currency.specified=false");
-    }
-
-    @Test
-    @Transactional
-    void getAllFinancialSubscriptionsByCurrencyContainsSomething() throws Exception {
-        // Initialize the database
-        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
-
-        // Get all the financialSubscriptionList where currency contains
-        defaultFinancialSubscriptionFiltering("currency.contains=" + DEFAULT_CURRENCY, "currency.contains=" + UPDATED_CURRENCY);
-    }
-
-    @Test
-    @Transactional
-    void getAllFinancialSubscriptionsByCurrencyNotContainsSomething() throws Exception {
-        // Initialize the database
-        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
-
-        // Get all the financialSubscriptionList where currency does not contain
-        defaultFinancialSubscriptionFiltering("currency.doesNotContain=" + UPDATED_CURRENCY, "currency.doesNotContain=" + DEFAULT_CURRENCY);
     }
 
     @Test
@@ -1494,7 +1475,7 @@ class FinancialSubscriptionResourceIT {
             .andExpect(jsonPath("$.[*].status").value(hasItem(DEFAULT_STATUS.toString())))
             .andExpect(jsonPath("$.[*].expectedAmount").value(hasItem(sameNumber(DEFAULT_EXPECTED_AMOUNT))))
             .andExpect(jsonPath("$.[*].amountTolerancePercentage").value(hasItem(sameNumber(DEFAULT_AMOUNT_TOLERANCE_PERCENTAGE))))
-            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY)))
+            .andExpect(jsonPath("$.[*].currency").value(hasItem(DEFAULT_CURRENCY.toString())))
             .andExpect(jsonPath("$.[*].recurrenceUnit").value(hasItem(DEFAULT_RECURRENCE_UNIT.toString())))
             .andExpect(jsonPath("$.[*].intervalCount").value(hasItem(DEFAULT_INTERVAL_COUNT)))
             .andExpect(jsonPath("$.[*].startDate").value(hasItem(DEFAULT_START_DATE.toString())))
@@ -1659,14 +1640,13 @@ class FinancialSubscriptionResourceIT {
         partialUpdatedFinancialSubscription.setId(financialSubscription.getId());
 
         partialUpdatedFinancialSubscription
-            .status(UPDATED_STATUS)
-            .expectedAmount(UPDATED_EXPECTED_AMOUNT)
-            .intervalCount(UPDATED_INTERVAL_COUNT)
+            .description(UPDATED_DESCRIPTION)
+            .amountTolerancePercentage(UPDATED_AMOUNT_TOLERANCE_PERCENTAGE)
+            .currency(UPDATED_CURRENCY)
             .startDate(UPDATED_START_DATE)
             .nextExpectedDate(UPDATED_NEXT_EXPECTED_DATE)
-            .endDate(UPDATED_END_DATE)
-            .automaticPayment(UPDATED_AUTOMATIC_PAYMENT)
-            .createdAt(UPDATED_CREATED_AT);
+            .createdAt(UPDATED_CREATED_AT)
+            .updatedAt(UPDATED_UPDATED_AT);
 
         restFinancialSubscriptionMockMvc
             .perform(
