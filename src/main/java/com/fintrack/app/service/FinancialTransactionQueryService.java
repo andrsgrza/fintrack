@@ -32,12 +32,16 @@ public class FinancialTransactionQueryService extends QueryService<FinancialTran
 
     private final FinancialTransactionMapper financialTransactionMapper;
 
+    private final CurrentUserService currentUserService;
+
     public FinancialTransactionQueryService(
         FinancialTransactionRepository financialTransactionRepository,
-        FinancialTransactionMapper financialTransactionMapper
+        FinancialTransactionMapper financialTransactionMapper,
+        CurrentUserService currentUserService
     ) {
         this.financialTransactionRepository = financialTransactionRepository;
         this.financialTransactionMapper = financialTransactionMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -112,6 +116,17 @@ public class FinancialTransactionQueryService extends QueryService<FinancialTran
                     root.join(FinancialTransaction_.ingestionRecord, JoinType.LEFT).get(IngestionRecord_.id)
                 )
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                        root
+                            .join(FinancialTransaction_.account, JoinType.INNER)
+                            .join(FinancialAccount_.user, JoinType.INNER)
+                            .get(User_.login),
+                        currentUserService.getCurrentUserLogin()
+                    )
+                );
+            }
         }
         return specification;
     }

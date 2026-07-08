@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -17,9 +18,12 @@ import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialTransactionService;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
@@ -67,9 +71,9 @@ class FinancialTransactionResourceIT {
     private static final String DEFAULT_DESCRIPTION = "AAAAAAAAAA";
     private static final String UPDATED_DESCRIPTION = "BBBBBBBBBB";
 
-    private static final BigDecimal DEFAULT_AMOUNT = new BigDecimal(0);
-    private static final BigDecimal UPDATED_AMOUNT = new BigDecimal(1);
-    private static final BigDecimal SMALLER_AMOUNT = new BigDecimal(0 - 1);
+    private static final BigDecimal DEFAULT_AMOUNT = new BigDecimal(1);
+    private static final BigDecimal UPDATED_AMOUNT = new BigDecimal(2);
+    private static final BigDecimal SMALLER_AMOUNT = new BigDecimal(0);
 
     private static final TransactionFlow DEFAULT_FLOW = TransactionFlow.IN;
     private static final TransactionFlow UPDATED_FLOW = TransactionFlow.OUT;
@@ -92,6 +96,8 @@ class FinancialTransactionResourceIT {
     private static final String ENTITY_API_URL = "/api/financial-transactions";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
 
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
+
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
 
@@ -100,6 +106,9 @@ class FinancialTransactionResourceIT {
 
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private FinancialAccountRepository financialAccountRepository;
 
     @Mock
     private FinancialTransactionRepository financialTransactionRepositoryMock;
@@ -1184,6 +1193,7 @@ class FinancialTransactionResourceIT {
 
         // Validate the FinancialTransaction in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        updatedFinancialTransaction.setOrigin(DEFAULT_ORIGIN);
         assertPersistedFinancialTransactionToMatchAllProperties(updatedFinancialTransaction);
     }
 
@@ -1264,8 +1274,7 @@ class FinancialTransactionResourceIT {
         partialUpdatedFinancialTransaction
             .transactionDate(UPDATED_TRANSACTION_DATE)
             .postingDate(UPDATED_POSTING_DATE)
-            .amount(UPDATED_AMOUNT)
-            .origin(UPDATED_ORIGIN);
+            .amount(UPDATED_AMOUNT);
 
         restFinancialTransactionMockMvc
             .perform(
@@ -1302,7 +1311,6 @@ class FinancialTransactionResourceIT {
             .description(UPDATED_DESCRIPTION)
             .amount(UPDATED_AMOUNT)
             .flow(UPDATED_FLOW)
-            .origin(UPDATED_ORIGIN)
             .externalReference(UPDATED_EXTERNAL_REFERENCE)
             .notes(UPDATED_NOTES)
             .createdAt(UPDATED_CREATED_AT)
@@ -1319,6 +1327,7 @@ class FinancialTransactionResourceIT {
         // Validate the FinancialTransaction in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        partialUpdatedFinancialTransaction.setOrigin(DEFAULT_ORIGIN);
         assertFinancialTransactionUpdatableFieldsEquals(
             partialUpdatedFinancialTransaction,
             getPersistedFinancialTransaction(partialUpdatedFinancialTransaction)
@@ -1403,6 +1412,241 @@ class FinancialTransactionResourceIT {
             .andExpect(status().isNoContent());
 
         // Validate the database contains one less item
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
+    }
+
+    private FinancialTransaction saveTransactionOnOtherUsersAccount() {
+        FinancialAccount otherAccount = FinancialAccountResourceIT.createEntity(em);
+        otherAccount.setUser(createOtherUser(em));
+        em.persist(otherAccount);
+        em.flush();
+        FinancialTransaction otherTransaction = createEntity(em);
+        otherTransaction.setAccount(otherAccount);
+        return financialTransactionRepository.saveAndFlush(otherTransaction);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionOnInaccessibleAccountFails() throws Exception {
+        FinancialAccount otherAccount = FinancialAccountResourceIT.createEntity(em);
+        otherAccount.setUser(createOtherUser(em));
+        em.persist(otherAccount);
+        em.flush();
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.getAccount().setId(otherAccount.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionAssignsManualOriginRegardlessOfPayload() throws Exception {
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setOrigin(TransactionOrigin.FILE_IMPORT);
+
+        FinancialTransactionDTO returnedFinancialTransactionDTO = om.readValue(
+            restFinancialTransactionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialTransactionDTO.class
+        );
+
+        assertThat(returnedFinancialTransactionDTO.getOrigin()).isEqualTo(TransactionOrigin.MANUAL);
+        assertThat(returnedFinancialTransactionDTO.getTransactionIngestion()).isNull();
+        insertedFinancialTransaction = financialTransactionMapper.toEntity(returnedFinancialTransactionDTO);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithZeroAmountFails() throws Exception {
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setAmount(BigDecimal.ZERO);
+
+        restFinancialTransactionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void getFinancialTransactionOnAnotherUsersAccountIsNotFound() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+
+        restFinancialTransactionMockMvc.perform(get(ENTITY_API_URL_ID, otherTransaction.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllFinancialTransactionsDoesNotIncludeAnotherUsersTransactions() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+
+        restFinancialTransactionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherTransaction.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetFinancialTransactionOnAnotherUsersAccount() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+
+        restFinancialTransactionMockMvc
+            .perform(get(ENTITY_API_URL_ID, otherTransaction.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(otherTransaction.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void putFinancialTransactionOnAnotherUsersAccountIsNotFound() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(otherTransaction);
+        financialTransactionDTO.setDescription(UPDATED_DESCRIPTION);
+
+        restFinancialTransactionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialTransactionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialTransactionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialTransactionOnAnotherUsersAccountIsNotFound() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+
+        FinancialTransactionDTO financialTransactionDTO = new FinancialTransactionDTO();
+        financialTransactionDTO.setId(otherTransaction.getId());
+        financialTransactionDTO.setDescription(UPDATED_DESCRIPTION);
+
+        restFinancialTransactionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialTransactionDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(financialTransactionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialTransactionOnAnotherUsersAccountIsNotFound() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+
+        restFinancialTransactionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherTransaction.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+
+        assertThat(financialTransactionRepository.existsById(otherTransaction.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateFinancialTransactionCannotChangeOrigin() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setOrigin(TransactionOrigin.FILE_IMPORT);
+        financialTransactionDTO.setDescription(UPDATED_DESCRIPTION);
+
+        restFinancialTransactionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialTransactionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialTransactionDTO))
+            )
+            .andExpect(status().isOk());
+
+        FinancialTransaction persistedFinancialTransaction = financialTransactionRepository
+            .findById(financialTransaction.getId())
+            .orElseThrow();
+        assertThat(persistedFinancialTransaction.getOrigin()).isEqualTo(DEFAULT_ORIGIN);
+        assertThat(persistedFinancialTransaction.getDescription()).isEqualTo(UPDATED_DESCRIPTION);
+    }
+
+    @Test
+    @Transactional
+    void getFinancialTransactionCountDoesNotIncludeAnotherUsersTransactions() throws Exception {
+        saveTransactionOnOtherUsersAccount();
+
+        restFinancialTransactionMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllFinancialTransactionsIncludingOtherUsers() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+
+        restFinancialTransactionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(financialTransaction.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherTransaction.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCountAllFinancialTransactionsIncludingOtherUsers() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        saveTransactionOnOtherUsersAccount();
+
+        restFinancialTransactionMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("2"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateFinancialTransactionOwnedByAnotherUser() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(otherTransaction);
+        financialTransactionDTO.setDescription(UPDATED_DESCRIPTION);
+
+        restFinancialTransactionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialTransactionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialTransactionDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.description").value(UPDATED_DESCRIPTION));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteFinancialTransactionOwnedByAnotherUser() throws Exception {
+        FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restFinancialTransactionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherTransaction.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
     }
 

@@ -15,74 +15,75 @@ describe('FinancialTransaction e2e test', () => {
   const financialTransactionPageUrlPattern = new RegExp('/financial-transaction(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const financialTransactionSample = {"transactionDate":"2026-07-07","description":"lifestyle sequester trusting","amount":11741.24,"flow":"OUT","origin":"MANUAL","createdAt":"2026-07-07T10:51:29.674Z","updatedAt":"2026-07-07T02:46:16.867Z"};
+  const adminUsername = Cypress.env('E2E_ADMIN_USERNAME') ?? 'admin';
+  const adminPassword = Cypress.env('E2E_ADMIN_PASSWORD') ?? 'admin';
 
   let financialTransaction;
-  // let financialAccount;
+  let financialAccount;
+
+  const buildFinancialAccountPayload = (name: string) => {
+    const now = new Date().toISOString();
+    return {
+      name,
+      institutionName: 'E2E Bank',
+      accountType: 'DEBIT',
+      currency: 'MXN',
+      initialBalance: 1000,
+      initialBalanceDate: '2026-07-08',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  const buildFinancialTransactionPayload = (accountId: number) => {
+    const now = new Date().toISOString();
+    return {
+      transactionDate: '2026-07-08',
+      description: 'E2E transaction',
+      amount: 100.5,
+      flow: 'OUT',
+      origin: 'MANUAL',
+      createdAt: now,
+      updatedAt: now,
+      account: { id: accountId },
+    };
+  };
+
+  const fillCreateForm = () => {
+    cy.get('[data-cy="transactionDate"]').type('2026-07-08');
+    cy.get('[data-cy="description"]').clear().type('E2E transaction');
+    cy.get('[data-cy="amount"]').clear().type('100.5');
+    cy.get('[data-cy="flow"]').select('OUT');
+    cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
+    cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');
+    cy.get('[data-cy="account"]').select(1);
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
 
-  /* Disabled due to incompatibility
   beforeEach(() => {
-    // create an instance at the required relationship entity:
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/financial-accounts',
-      body: {"name":"wash near hoof","institutionName":"yum whoa","accountType":"CREDIT_CARD","currency":"USD","initialBalance":22902.49,"initialBalanceDate":"2026-07-07","lastFourDigits":"1145","description":"ick","color":"#5e1E8a","icon":"woot meatloaf yum","active":false,"createdAt":"2026-07-07T05:12:31.975Z","updatedAt":"2026-07-07T06:02:53.163Z"},
+      body: buildFinancialAccountPayload(`tx-account-${Date.now()}`),
     }).then(({ body }) => {
       financialAccount = body;
     });
   });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/financial-transactions+(?*|)').as('entitiesRequest');
     cy.intercept('POST', '/api/financial-transactions').as('postEntityRequest');
     cy.intercept('DELETE', '/api/financial-transactions/*').as('deleteEntityRequest');
+    cy.intercept('GET', '/api/financial-accounts+(?*|)').as('accountsRequest');
+    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
+    cy.intercept('GET', '/api/financial-subscriptions+(?*|)').as('subscriptionsRequest');
+    cy.intercept('GET', '/api/transaction-ingestions+(?*|)').as('ingestionsRequest');
+    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/financial-accounts', {
-      statusCode: 200,
-      body: [financialAccount],
-    });
-
-    cy.intercept('GET', '/api/categories', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/financial-subscriptions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/transaction-ingestions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/tags', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/internal-transfers', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/ingestion-records', {
-      statusCode: 200,
-      body: [],
-    });
-
-  });
-   */
 
   afterEach(() => {
     if (financialTransaction) {
@@ -95,7 +96,6 @@ describe('FinancialTransaction e2e test', () => {
     }
   });
 
-  /* Disabled due to incompatibility
   afterEach(() => {
     if (financialAccount) {
       cy.authenticatedRequest({
@@ -106,7 +106,6 @@ describe('FinancialTransaction e2e test', () => {
       });
     }
   });
-   */
 
   it('FinancialTransactions menu should load FinancialTransactions page', () => {
     cy.visit('/');
@@ -143,48 +142,17 @@ describe('FinancialTransaction e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/financial-transactions',
-          body: {
-            ...financialTransactionSample,
-            account: financialAccount,
-          },
+          body: buildFinancialTransactionPayload(financialAccount.id),
         }).then(({ body }) => {
           financialTransaction = body;
-
-          cy.intercept(
-            {
-              method: 'GET',
-              url: '/api/financial-transactions+(?*|)',
-              times: 1,
-            },
-            {
-              statusCode: 200,
-              headers: {
-                link: '<http://localhost/api/financial-transactions?page=0&size=20>; rel="last",<http://localhost/api/financial-transactions?page=0&size=20>; rel="first"',
-              },
-              body: [financialTransaction],
-            }
-          ).as('entitiesRequestInternal');
         });
 
         cy.visit(financialTransactionPageUrl);
-
-        cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(financialTransactionPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
+        cy.wait('@entitiesRequest');
       });
 
       it('detail button click should load details FinancialTransaction page', () => {
@@ -218,8 +186,7 @@ describe('FinancialTransaction e2e test', () => {
         cy.url().should('match', financialTransactionPageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of FinancialTransaction', () => {
+      it('last delete button click should delete instance of FinancialTransaction', () => {
         cy.intercept('GET', '/api/financial-transactions/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -240,57 +207,104 @@ describe('FinancialTransaction e2e test', () => {
 
   describe('new FinancialTransaction page', () => {
     beforeEach(() => {
-      cy.visit(`${financialTransactionPageUrl}`);
-      cy.get(entityCreateButtonSelector).click();
+      cy.visit(`${financialTransactionPageUrl}/new`);
+      cy.wait('@accountsRequest');
+      cy.wait('@categoriesRequest');
+      cy.wait('@subscriptionsRequest');
+      cy.wait('@ingestionsRequest');
+      cy.wait('@tagsRequest');
       cy.getEntityCreateUpdateHeading('FinancialTransaction');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of FinancialTransaction', () => {
-      cy.get(`[data-cy="transactionDate"]`).type('2026-07-07');
-      cy.get(`[data-cy="transactionDate"]`).blur();
-      cy.get(`[data-cy="transactionDate"]`).should('have.value', '2026-07-07');
-
-      cy.get(`[data-cy="postingDate"]`).type('2026-07-07');
-      cy.get(`[data-cy="postingDate"]`).blur();
-      cy.get(`[data-cy="postingDate"]`).should('have.value', '2026-07-07');
-
-      cy.get(`[data-cy="description"]`).type('sashay continually term');
-      cy.get(`[data-cy="description"]`).should('have.value', 'sashay continually term');
-
-      cy.get(`[data-cy="amount"]`).type('22788.63');
-      cy.get(`[data-cy="amount"]`).should('have.value', '22788.63');
-
-      cy.get(`[data-cy="flow"]`).select('OUT');
-
-      cy.get(`[data-cy="origin"]`).select('API');
-
-      cy.get(`[data-cy="externalReference"]`).type('by');
-      cy.get(`[data-cy="externalReference"]`).should('have.value', 'by');
-
-      cy.get(`[data-cy="notes"]`).type('reclassify transcend underneath');
-      cy.get(`[data-cy="notes"]`).should('have.value', 'reclassify transcend underneath');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T00:40');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T00:40');
-
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-06T22:56');
-      cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-06T22:56');
-
-      cy.get(`[data-cy="account"]`).select(1);
-
+    it('should create an instance of FinancialTransaction', () => {
+      cy.get('[data-cy="origin"]').should('be.disabled');
+      cy.get('[data-cy="transactionIngestion"]').should('not.exist');
+      fillCreateForm();
       cy.get(entityCreateSaveButtonSelector).click();
 
       cy.wait('@postEntityRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(201);
+        expect(response?.body.origin).to.equal('MANUAL');
+        expect(response?.body.transactionIngestion).to.equal(null);
         financialTransaction = response.body;
       });
-      cy.wait('@entitiesRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-      });
       cy.url().should('match', financialTransactionPageUrlPattern);
+    });
+  });
+
+  describe('FinancialTransaction ownership', () => {
+    it('should not render transaction ingestion on create form', () => {
+      cy.visit(`${financialTransactionPageUrl}/new`);
+      cy.get('[data-cy="transactionIngestion"]').should('not.exist');
+    });
+
+    it('regular user should not see transactions on another users account', () => {
+      const adminAccountName = `admin-tx-account-${Date.now()}`;
+
+      cy.login(adminUsername, adminPassword);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/financial-accounts',
+        body: buildFinancialAccountPayload(adminAccountName),
+      }).then(({ body: adminAccount }) => {
+        cy.authenticatedRequest({
+          method: 'POST',
+          url: '/api/financial-transactions',
+          body: buildFinancialTransactionPayload(adminAccount.id),
+        }).then(({ body: adminTransaction }) => {
+          cy.login(username, password);
+          cy.authenticatedRequest({
+            method: 'GET',
+            url: '/api/financial-transactions',
+          }).then(({ body: userTransactions }) => {
+            expect(userTransactions.some(transaction => transaction.id === adminTransaction.id)).to.equal(false);
+          });
+
+          cy.login(adminUsername, adminPassword);
+          cy.authenticatedRequest({
+            method: 'DELETE',
+            url: `/api/financial-transactions/${adminTransaction.id}`,
+          });
+          cy.authenticatedRequest({
+            method: 'DELETE',
+            url: `/api/financial-accounts/${adminAccount.id}`,
+          });
+        });
+      });
+    });
+
+    it('admin should see transactions on another users account', () => {
+      const userAccountName = `user-tx-account-${Date.now()}`;
+
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/financial-accounts',
+        body: buildFinancialAccountPayload(userAccountName),
+      }).then(({ body: userAccount }) => {
+        cy.authenticatedRequest({
+          method: 'POST',
+          url: '/api/financial-transactions',
+          body: buildFinancialTransactionPayload(userAccount.id),
+        }).then(({ body: userTransaction }) => {
+          cy.login(adminUsername, adminPassword);
+          cy.authenticatedRequest({
+            method: 'GET',
+            url: '/api/financial-transactions',
+          }).then(({ body: adminTransactions }) => {
+            expect(adminTransactions.some(transaction => transaction.id === userTransaction.id)).to.equal(true);
+          });
+
+          cy.login(username, password);
+          cy.authenticatedRequest({
+            method: 'DELETE',
+            url: `/api/financial-transactions/${userTransaction.id}`,
+          });
+          cy.authenticatedRequest({
+            method: 'DELETE',
+            url: `/api/financial-accounts/${userAccount.id}`,
+          });
+        });
+      });
     });
   });
 });

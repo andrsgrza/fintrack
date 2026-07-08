@@ -53,4 +53,9 @@ public interface FinancialSubscriptionRepository
         "select financialSubscription from FinancialSubscription financialSubscription left join fetch financialSubscription.user left join fetch financialSubscription.account left join fetch financialSubscription.category where financialSubscription.id =:id"
     )
     Optional<FinancialSubscription> findOneWithToOneRelationships(@Param("id") Long id);
+
+    @Query(
+        "select financialSubscription from FinancialSubscription financialSubscription where financialSubscription.id = :id and financialSubscription.user.login = :login"
+    )
+    Optional<FinancialSubscription> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 }

@@ -148,6 +148,17 @@ public class FinancialAccountService {
     }
 
     /**
+     * Returns the financial account when it is accessible to the current user.
+     *
+     * @param id the id of the entity.
+     * @return the account entity when accessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<FinancialAccount> findAccessibleAccountEntity(Long id) {
+        return findAccessibleEntity(id);
+    }
+
+    /**
      * Delete the financialAccount by id.
      *
      * @param id the id of the entity.
