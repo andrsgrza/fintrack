@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.TagAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -18,8 +19,10 @@ import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TagService;
 import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.TagMapper;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
@@ -40,6 +43,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -71,6 +75,8 @@ class TagResourceIT {
 
     private static final String ENTITY_API_URL = "/api/tags";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
+
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
@@ -117,11 +123,7 @@ class TagResourceIT {
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        tag.setUser(user);
+        tag.setUser(getCurrentMockUser(em));
         return tag;
     }
 
@@ -139,12 +141,23 @@ class TagResourceIT {
             .active(UPDATED_ACTIVE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedTag.setUser(user);
+        updatedTag.setUser(getCurrentMockUser(em));
         return updatedTag;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -585,17 +598,8 @@ class TagResourceIT {
     @Test
     @Transactional
     void getAllTagsByUserIsEqualToSomething() throws Exception {
-        User user;
-        if (TestUtil.findAll(em, User.class).isEmpty()) {
-            tagRepository.saveAndFlush(tag);
-            user = UserResourceIT.createEntity();
-        } else {
-            user = TestUtil.findAll(em, User.class).get(0);
-        }
-        em.persist(user);
-        em.flush();
-        tag.setUser(user);
-        tagRepository.saveAndFlush(tag);
+        User user = getCurrentMockUser(em);
+        insertedTag = tagRepository.saveAndFlush(tag);
         Long userId = user.getId();
         // Get all the tagList where user equals to userId
         defaultTagShouldBeFound("userId.equals=" + userId);
@@ -702,7 +706,7 @@ class TagResourceIT {
      */
     private void defaultTagShouldBeFound(String filter) throws Exception {
         restTagMockMvc
-            .perform(get(ENTITY_API_URL + "?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL, filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$.[*].id").value(hasItem(tag.getId().intValue())))
@@ -715,7 +719,7 @@ class TagResourceIT {
 
         // Check, that the count call also returns 1
         restTagMockMvc
-            .perform(get(ENTITY_API_URL + "/count?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL + "/count", filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(content().string("1"));
@@ -726,7 +730,7 @@ class TagResourceIT {
      */
     private void defaultTagShouldNotBeFound(String filter) throws Exception {
         restTagMockMvc
-            .perform(get(ENTITY_API_URL + "?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL, filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$").isArray())
@@ -734,10 +738,19 @@ class TagResourceIT {
 
         // Check, that the count call also returns 0
         restTagMockMvc
-            .perform(get(ENTITY_API_URL + "/count?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL + "/count", filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(content().string("0"));
+    }
+
+    private MockHttpServletRequestBuilder buildFilterRequest(String url, String filter) {
+        MockHttpServletRequestBuilder request = get(url).param("sort", "id,desc");
+        int separatorIndex = filter.indexOf('=');
+        if (separatorIndex > 0) {
+            request.param(filter.substring(0, separatorIndex), filter.substring(separatorIndex + 1));
+        }
+        return request;
     }
 
     @Test
@@ -970,6 +983,243 @@ class TagResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createTagAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setId(null);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        tagDTO.setUser(otherUserDTO);
+
+        TagDTO returnedTagDTO = om.readValue(
+            restTagMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TagDTO.class
+        );
+
+        assertThat(returnedTagDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedTag = tagMapper.toEntity(returnedTagDTO);
+    }
+
+    @Test
+    @Transactional
+    void getTagOwnedByAnotherUserIsNotFound() throws Exception {
+        tag.setUser(createOtherUser(em));
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        restTagMockMvc.perform(get(ENTITY_API_URL_ID, tag.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllTagsDoesNotIncludeAnotherUsersTags() throws Exception {
+        tag.setUser(createOtherUser(em));
+        tagRepository.saveAndFlush(tag);
+
+        restTagMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(tag.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetTagOwnedByAnotherUser() throws Exception {
+        tag.setUser(createOtherUser(em));
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        restTagMockMvc
+            .perform(get(ENTITY_API_URL_ID, tag.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(tag.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void createTagWithoutUserInPayloadSucceeds() throws Exception {
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setId(null);
+        tagDTO.setUser(null);
+
+        TagDTO returnedTagDTO = om.readValue(
+            restTagMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TagDTO.class
+        );
+
+        assertThat(returnedTagDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedTag = tagMapper.toEntity(returnedTagDTO);
+    }
+
+    @Test
+    @Transactional
+    void putTagOwnedByAnotherUserIsNotFound() throws Exception {
+        tag.setUser(createOtherUser(em));
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setName(UPDATED_NAME);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTagOwnedByAnotherUserIsNotFound() throws Exception {
+        tag.setUser(createOtherUser(em));
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        TagDTO tagDTO = new TagDTO();
+        tagDTO.setId(tag.getId());
+        tagDTO.setName(UPDATED_NAME);
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, tagDTO.getId()).contentType("application/merge-patch+json").content(om.writeValueAsBytes(tagDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteTagOwnedByAnotherUserIsNotFound() throws Exception {
+        tag.setUser(createOtherUser(em));
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        restTagMockMvc.perform(delete(ENTITY_API_URL_ID, tag.getId()).accept(MediaType.APPLICATION_JSON)).andExpect(status().isNotFound());
+
+        assertThat(tagRepository.existsById(tag.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateTagCannotChangeOwner() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        User otherUser = createOtherUser(em);
+
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        tagDTO.setUser(otherUserDTO);
+        tagDTO.setName(UPDATED_NAME);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isOk());
+
+        Tag persistedTag = tagRepository.findById(tag.getId()).orElseThrow();
+        assertThat(persistedTag.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedTag.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchTagCannotChangeOwner() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        User otherUser = createOtherUser(em);
+
+        TagDTO tagDTO = new TagDTO();
+        tagDTO.setId(tag.getId());
+        tagDTO.setName(UPDATED_NAME);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        tagDTO.setUser(otherUserDTO);
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, tagDTO.getId()).contentType("application/merge-patch+json").content(om.writeValueAsBytes(tagDTO))
+            )
+            .andExpect(status().isOk());
+
+        Tag persistedTag = tagRepository.findById(tag.getId()).orElseThrow();
+        assertThat(persistedTag.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedTag.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void getTagCountDoesNotIncludeAnotherUsersTags() throws Exception {
+        tag.setUser(createOtherUser(em));
+        tagRepository.saveAndFlush(tag);
+
+        restTagMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllTagsIncludingOtherUsers() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        Tag otherUsersTag = createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag.setName("OTHER_USER_TAG");
+        otherUsersTag = tagRepository.saveAndFlush(otherUsersTag);
+
+        restTagMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(tag.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherUsersTag.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCountAllTagsIncludingOtherUsers() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        Tag otherUsersTag = createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        tagRepository.saveAndFlush(otherUsersTag);
+
+        restTagMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("2"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateTagOwnedByAnotherUser() throws Exception {
+        tag.setUser(createOtherUser(em));
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setName(UPDATED_NAME);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteTagOwnedByAnotherUser() throws Exception {
+        tag.setUser(createOtherUser(em));
+        insertedTag = tagRepository.saveAndFlush(tag);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restTagMockMvc.perform(delete(ENTITY_API_URL_ID, tag.getId()).accept(MediaType.APPLICATION_JSON)).andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedTag = null;
     }
 
     protected long getRepositoryCount() {

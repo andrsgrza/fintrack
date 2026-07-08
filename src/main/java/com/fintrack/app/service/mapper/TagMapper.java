@@ -36,7 +36,21 @@ public interface TagMapper extends EntityMapper<TagDTO, Tag> {
     @Mapping(target = "removeSubscriptions", ignore = true)
     @Mapping(target = "budgets", ignore = true)
     @Mapping(target = "removeBudgets", ignore = true)
+    @Mapping(target = "user", ignore = true)
     Tag toEntity(TagDTO tagDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "financialTransactions", ignore = true)
+    @Mapping(target = "removeFinancialTransactions", ignore = true)
+    @Mapping(target = "transactionRules", ignore = true)
+    @Mapping(target = "removeTransactionRules", ignore = true)
+    @Mapping(target = "subscriptions", ignore = true)
+    @Mapping(target = "removeSubscriptions", ignore = true)
+    @Mapping(target = "budgets", ignore = true)
+    @Mapping(target = "removeBudgets", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    void partialUpdate(@MappingTarget Tag entity, TagDTO dto);
 
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)

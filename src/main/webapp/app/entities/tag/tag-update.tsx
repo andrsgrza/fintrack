@@ -8,7 +8,6 @@ import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateT
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
 import { getEntities as getFinancialTransactions } from 'app/entities/financial-transaction/financial-transaction.reducer';
 import { getEntities as getTransactionRules } from 'app/entities/transaction-rule/transaction-rule.reducer';
 import { getEntities as getFinancialSubscriptions } from 'app/entities/financial-subscription/financial-subscription.reducer';
@@ -23,7 +22,6 @@ export const TagUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const users = useAppSelector(state => state.userManagement.users);
   const financialTransactions = useAppSelector(state => state.financialTransaction.entities);
   const transactionRules = useAppSelector(state => state.transactionRule.entities);
   const financialSubscriptions = useAppSelector(state => state.financialSubscription.entities);
@@ -44,7 +42,6 @@ export const TagUpdate = () => {
       dispatch(getEntity(id));
     }
 
-    dispatch(getUsers({}));
     dispatch(getFinancialTransactions({}));
     dispatch(getTransactionRules({}));
     dispatch(getFinancialSubscriptions({}));
@@ -67,7 +64,6 @@ export const TagUpdate = () => {
     const entity = {
       ...tagEntity,
       ...values,
-      user: users.find(it => it.id.toString() === values.user?.toString()),
       financialTransactions: mapIdList(values.financialTransactions),
       transactionRules: mapIdList(values.transactionRules),
       subscriptions: mapIdList(values.subscriptions),
@@ -91,7 +87,6 @@ export const TagUpdate = () => {
           ...tagEntity,
           createdAt: convertDateTimeFromServer(tagEntity.createdAt),
           updatedAt: convertDateTimeFromServer(tagEntity.updatedAt),
-          user: tagEntity?.user?.id,
           financialTransactions: tagEntity?.financialTransactions?.map(e => e.id.toString()),
           transactionRules: tagEntity?.transactionRules?.map(e => e.id.toString()),
           subscriptions: tagEntity?.subscriptions?.map(e => e.id.toString()),
@@ -188,19 +183,6 @@ export const TagUpdate = () => {
                   required: { value: true, message: translate('entity.validation.required') },
                 }}
               />
-              <ValidatedField id="tag-user" name="user" data-cy="user" label={translate('fintrackApp.tag.user')} type="select" required>
-                <option value="" key="0" />
-                {users
-                  ? users.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.login}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
               <ValidatedField
                 label={translate('fintrackApp.tag.financialTransactions')}
                 id="tag-financialTransactions"

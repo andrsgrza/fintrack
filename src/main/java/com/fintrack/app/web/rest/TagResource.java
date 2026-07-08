@@ -1,6 +1,5 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.TagQueryService;
 import com.fintrack.app.service.TagService;
 import com.fintrack.app.service.criteria.TagCriteria;
@@ -37,13 +36,10 @@ public class TagResource {
 
     private final TagService tagService;
 
-    private final TagRepository tagRepository;
-
     private final TagQueryService tagQueryService;
 
-    public TagResource(TagService tagService, TagRepository tagRepository, TagQueryService tagQueryService) {
+    public TagResource(TagService tagService, TagQueryService tagQueryService) {
         this.tagService = tagService;
-        this.tagRepository = tagRepository;
         this.tagQueryService = tagQueryService;
     }
 
@@ -87,7 +83,7 @@ public class TagResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!tagRepository.existsById(id)) {
+        if (!tagService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
@@ -121,7 +117,7 @@ public class TagResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!tagRepository.existsById(id)) {
+        if (!tagService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
@@ -181,7 +177,9 @@ public class TagResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTag(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete Tag : {}", id);
-        tagService.delete(id);
+        if (!tagService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

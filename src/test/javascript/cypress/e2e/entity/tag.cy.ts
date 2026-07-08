@@ -15,64 +15,41 @@ describe('Tag e2e test', () => {
   const tagPageUrlPattern = new RegExp('/tag(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const tagSample = {"name":"siege","active":true,"createdAt":"2026-07-07T00:43:46.650Z","updatedAt":"2026-07-07T02:17:36.765Z"};
+  const adminUsername = Cypress.env('E2E_ADMIN_USERNAME') ?? 'admin';
+  const adminPassword = Cypress.env('E2E_ADMIN_PASSWORD') ?? 'admin';
 
   let tag;
-  // let user;
+
+  const buildTagPayload = (name: string) => {
+    const now = new Date().toISOString();
+    return {
+      name,
+      description: 'E2E tag',
+      color: '#a1b2c3',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  const fillCreateForm = (name: string) => {
+    cy.get('[data-cy="name"]').clear().type(name);
+    cy.get('[data-cy="description"]').clear().type('E2E tag');
+    cy.get('[data-cy="color"]').clear().type('#a1b2c3');
+    cy.get('[data-cy="active"]').check();
+    cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
+    cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // create an instance at the required relationship entity:
-    cy.authenticatedRequest({
-      method: 'POST',
-      url: '/api/users',
-      body: {"login":"Um@MR","firstName":"Benito","lastName":"Guardado Rojas","email":"Benjamin.CepedaCasanova27@gmail.com","imageUrl":"barring however","langKey":"questionab"},
-    }).then(({ body }) => {
-      user = body;
-    });
-  });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/tags+(?*|)').as('entitiesRequest');
     cy.intercept('POST', '/api/tags').as('postEntityRequest');
     cy.intercept('DELETE', '/api/tags/*').as('deleteEntityRequest');
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/users', {
-      statusCode: 200,
-      body: [user],
-    });
-
-    cy.intercept('GET', '/api/financial-transactions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/transaction-rules', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/financial-subscriptions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/budgets', {
-      statusCode: 200,
-      body: [],
-    });
-
-  });
-   */
 
   afterEach(() => {
     if (tag) {
@@ -84,19 +61,6 @@ describe('Tag e2e test', () => {
       });
     }
   });
-
-  /* Disabled due to incompatibility
-  afterEach(() => {
-    if (user) {
-      cy.authenticatedRequest({
-        method: 'DELETE',
-        url: `/api/users/${user.id}`,
-      }).then(() => {
-        user = undefined;
-      });
-    }
-  });
-   */
 
   it('Tags menu should load Tags page', () => {
     cy.visit('/');
@@ -133,45 +97,17 @@ describe('Tag e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/tags',
-          body: {
-            ...tagSample,
-            user: user,
-          },
+          body: buildTagPayload(`existing-${Date.now()}`),
         }).then(({ body }) => {
           tag = body;
-
-          cy.intercept(
-            {
-              method: 'GET',
-              url: '/api/tags+(?*|)',
-              times: 1,
-            },
-            {
-              statusCode: 200,
-              body: [tag],
-            }
-          ).as('entitiesRequestInternal');
         });
 
         cy.visit(tagPageUrl);
-
-        cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(tagPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
+        cy.wait('@entitiesRequest');
       });
 
       it('detail button click should load details Tag page', () => {
@@ -205,8 +141,7 @@ describe('Tag e2e test', () => {
         cy.url().should('match', tagPageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of Tag', () => {
+      it('last delete button click should delete instance of Tag', () => {
         cy.intercept('GET', '/api/tags/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -227,46 +162,79 @@ describe('Tag e2e test', () => {
 
   describe('new Tag page', () => {
     beforeEach(() => {
-      cy.visit(`${tagPageUrl}`);
-      cy.get(entityCreateButtonSelector).click();
+      cy.visit(`${tagPageUrl}/new`);
       cy.getEntityCreateUpdateHeading('Tag');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of Tag', () => {
-      cy.get(`[data-cy="name"]`).type('raw how outside');
-      cy.get(`[data-cy="name"]`).should('have.value', 'raw how outside');
-
-      cy.get(`[data-cy="description"]`).type('till');
-      cy.get(`[data-cy="description"]`).should('have.value', 'till');
-
-      cy.get(`[data-cy="color"]`).type('#adFC0C');
-      cy.get(`[data-cy="color"]`).should('have.value', '#adFC0C');
-
-      cy.get(`[data-cy="active"]`).should('not.be.checked');
-      cy.get(`[data-cy="active"]`).click();
-      cy.get(`[data-cy="active"]`).should('be.checked');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T09:01');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T09:01');
-
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T00:54');
-      cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T00:54');
-
-      cy.get(`[data-cy="user"]`).select(1);
-
+    it('should create an instance of Tag', () => {
+      const tagName = `create-${Date.now()}`;
+      fillCreateForm(tagName);
+      cy.get('[data-cy="user"]').should('not.exist');
       cy.get(entityCreateSaveButtonSelector).click();
 
       cy.wait('@postEntityRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(201);
+        expect(response?.body.user.login).to.equal(username);
         tag = response.body;
       });
-      cy.wait('@entitiesRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-      });
       cy.url().should('match', tagPageUrlPattern);
+    });
+  });
+
+  describe('Tag ownership', () => {
+    it('should not render user selector on create form', () => {
+      cy.visit(`${tagPageUrl}/new`);
+      cy.get('[data-cy="user"]').should('not.exist');
+    });
+
+    it('regular user should not see tags created by admin', () => {
+      const adminTagName = `admin-only-${Date.now()}`;
+
+      cy.login(adminUsername, adminPassword);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/tags',
+        body: buildTagPayload(adminTagName),
+      }).then(({ body: adminTag }) => {
+        cy.login(username, password);
+        cy.authenticatedRequest({
+          method: 'GET',
+          url: '/api/tags',
+        }).then(({ body: userTags }) => {
+          expect(userTags.some(t => t.id === adminTag.id)).to.equal(false);
+        });
+
+        cy.login(adminUsername, adminPassword);
+        cy.authenticatedRequest({
+          method: 'DELETE',
+          url: `/api/tags/${adminTag.id}`,
+        });
+      });
+    });
+
+    it('admin should see tags created by another user', () => {
+      const userTagName = `user-owned-${Date.now()}`;
+
+      cy.login(username, password);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/tags',
+        body: buildTagPayload(userTagName),
+      }).then(({ body: userTag }) => {
+        cy.login(adminUsername, adminPassword);
+        cy.authenticatedRequest({
+          method: 'GET',
+          url: '/api/tags',
+        }).then(({ body: adminTags }) => {
+          expect(adminTags.some(t => t.id === userTag.id)).to.equal(true);
+        });
+
+        cy.login(username, password);
+        cy.authenticatedRequest({
+          method: 'DELETE',
+          url: `/api/tags/${userTag.id}`,
+        });
+      });
     });
   });
 });

@@ -69,10 +69,6 @@ export const TagDetail = () => {
           </dt>
           <dd>{tagEntity.updatedAt ? <TextFormat value={tagEntity.updatedAt} type="date" format={APP_DATE_FORMAT} /> : null}</dd>
           <dt>
-            <Translate contentKey="fintrackApp.tag.user">User</Translate>
-          </dt>
-          <dd>{tagEntity.user ? tagEntity.user.login : ''}</dd>
-          <dt>
             <Translate contentKey="fintrackApp.tag.financialTransactions">Financial Transactions</Translate>
           </dt>
           <dd>
