@@ -1,6 +1,5 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.service.FinancialAccountQueryService;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.criteria.FinancialAccountCriteria;
@@ -37,17 +36,13 @@ public class FinancialAccountResource {
 
     private final FinancialAccountService financialAccountService;
 
-    private final FinancialAccountRepository financialAccountRepository;
-
     private final FinancialAccountQueryService financialAccountQueryService;
 
     public FinancialAccountResource(
         FinancialAccountService financialAccountService,
-        FinancialAccountRepository financialAccountRepository,
         FinancialAccountQueryService financialAccountQueryService
     ) {
         this.financialAccountService = financialAccountService;
-        this.financialAccountRepository = financialAccountRepository;
         this.financialAccountQueryService = financialAccountQueryService;
     }
 
@@ -94,7 +89,7 @@ public class FinancialAccountResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialAccountRepository.existsById(id)) {
+        if (!financialAccountService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
@@ -128,7 +123,7 @@ public class FinancialAccountResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialAccountRepository.existsById(id)) {
+        if (!financialAccountService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
@@ -188,7 +183,9 @@ public class FinancialAccountResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFinancialAccount(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete FinancialAccount : {}", id);
-        financialAccountService.delete(id);
+        if (!financialAccountService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

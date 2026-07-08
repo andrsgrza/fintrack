@@ -8,6 +8,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,9 +30,16 @@ public class FinancialAccountService {
 
     private final FinancialAccountMapper financialAccountMapper;
 
-    public FinancialAccountService(FinancialAccountRepository financialAccountRepository, FinancialAccountMapper financialAccountMapper) {
+    private final CurrentUserService currentUserService;
+
+    public FinancialAccountService(
+        FinancialAccountRepository financialAccountRepository,
+        FinancialAccountMapper financialAccountMapper,
+        CurrentUserService currentUserService
+    ) {
         this.financialAccountRepository = financialAccountRepository;
         this.financialAccountMapper = financialAccountMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -43,6 +51,7 @@ public class FinancialAccountService {
     public FinancialAccountDTO save(FinancialAccountDTO financialAccountDTO) {
         LOG.debug("Request to save FinancialAccount : {}", financialAccountDTO);
         FinancialAccount financialAccount = financialAccountMapper.toEntity(financialAccountDTO);
+        financialAccount.setUser(currentUserService.getCurrentUser());
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
     }
@@ -55,7 +64,9 @@ public class FinancialAccountService {
      */
     public FinancialAccountDTO update(FinancialAccountDTO financialAccountDTO) {
         LOG.debug("Request to update FinancialAccount : {}", financialAccountDTO);
+        FinancialAccount existingFinancialAccount = findAccessibleEntity(financialAccountDTO.getId()).orElseThrow();
         FinancialAccount financialAccount = financialAccountMapper.toEntity(financialAccountDTO);
+        financialAccount.setUser(existingFinancialAccount.getUser());
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
     }
@@ -69,11 +80,9 @@ public class FinancialAccountService {
     public Optional<FinancialAccountDTO> partialUpdate(FinancialAccountDTO financialAccountDTO) {
         LOG.debug("Request to partially update FinancialAccount : {}", financialAccountDTO);
 
-        return financialAccountRepository
-            .findById(financialAccountDTO.getId())
+        return findAccessibleEntity(financialAccountDTO.getId())
             .map(existingFinancialAccount -> {
                 financialAccountMapper.partialUpdate(existingFinancialAccount, financialAccountDTO);
-
                 return existingFinancialAccount;
             })
             .map(financialAccountRepository::save)
@@ -86,7 +95,12 @@ public class FinancialAccountService {
      * @return the list of entities.
      */
     public Page<FinancialAccountDTO> findAllWithEagerRelationships(Pageable pageable) {
-        return financialAccountRepository.findAllWithEagerRelationships(pageable).map(financialAccountMapper::toDto);
+        if (currentUserService.isAdmin()) {
+            return financialAccountRepository.findAllWithEagerRelationships(pageable).map(financialAccountMapper::toDto);
+        }
+        return financialAccountRepository
+            .findAllWithToOneRelationshipsByUserLogin(currentUserService.getCurrentUserLogin(), pageable)
+            .map(financialAccountMapper::toDto);
     }
 
     /**
@@ -96,7 +110,15 @@ public class FinancialAccountService {
     @Transactional(readOnly = true)
     public List<FinancialAccountDTO> findAllWhereCreditAccountDetailsIsNull() {
         LOG.debug("Request to get all financialAccounts where CreditAccountDetails is null");
-        return StreamSupport.stream(financialAccountRepository.findAll().spliterator(), false)
+        Stream<FinancialAccount> accountStream;
+        if (currentUserService.isAdmin()) {
+            accountStream = StreamSupport.stream(financialAccountRepository.findAll().spliterator(), false);
+        } else {
+            accountStream = financialAccountRepository
+                .findAllWithToOneRelationshipsByUserLogin(currentUserService.getCurrentUserLogin())
+                .stream();
+        }
+        return accountStream
             .filter(financialAccount -> financialAccount.getCreditAccountDetails() == null)
             .map(financialAccountMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
@@ -111,16 +133,40 @@ public class FinancialAccountService {
     @Transactional(readOnly = true)
     public Optional<FinancialAccountDTO> findOne(Long id) {
         LOG.debug("Request to get FinancialAccount : {}", id);
-        return financialAccountRepository.findOneWithEagerRelationships(id).map(financialAccountMapper::toDto);
+        return findAccessibleEntity(id).map(financialAccountMapper::toDto);
+    }
+
+    /**
+     * Returns whether the current user can access the financial account.
+     *
+     * @param id the id of the entity.
+     * @return true when the account exists and is visible to the current user.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAccessible(Long id) {
+        return findAccessibleEntity(id).isPresent();
     }
 
     /**
      * Delete the financialAccount by id.
      *
      * @param id the id of the entity.
+     * @return true when the account was deleted.
      */
-    public void delete(Long id) {
+    public boolean delete(Long id) {
         LOG.debug("Request to delete FinancialAccount : {}", id);
+        Optional<FinancialAccount> financialAccount = findAccessibleEntity(id);
+        if (financialAccount.isEmpty()) {
+            return false;
+        }
         financialAccountRepository.deleteById(id);
+        return true;
+    }
+
+    private Optional<FinancialAccount> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return financialAccountRepository.findOneWithEagerRelationships(id);
+        }
+        return financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 }

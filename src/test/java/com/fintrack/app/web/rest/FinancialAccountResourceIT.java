@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -19,8 +20,10 @@ import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -44,6 +47,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -99,6 +103,8 @@ class FinancialAccountResourceIT {
     private static final String ENTITY_API_URL = "/api/financial-accounts";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
 
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
+
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
 
@@ -151,11 +157,7 @@ class FinancialAccountResourceIT {
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        financialAccount.setUser(user);
+        financialAccount.setUser(getCurrentMockUser(em));
         return financialAccount;
     }
 
@@ -180,12 +182,23 @@ class FinancialAccountResourceIT {
             .active(UPDATED_ACTIVE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedFinancialAccount.setUser(user);
+        updatedFinancialAccount.setUser(getCurrentMockUser(em));
         return updatedFinancialAccount;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -1133,17 +1146,8 @@ class FinancialAccountResourceIT {
     @Test
     @Transactional
     void getAllFinancialAccountsByUserIsEqualToSomething() throws Exception {
-        User user;
-        if (TestUtil.findAll(em, User.class).isEmpty()) {
-            financialAccountRepository.saveAndFlush(financialAccount);
-            user = UserResourceIT.createEntity();
-        } else {
-            user = TestUtil.findAll(em, User.class).get(0);
-        }
-        em.persist(user);
-        em.flush();
-        financialAccount.setUser(user);
-        financialAccountRepository.saveAndFlush(financialAccount);
+        User user = getCurrentMockUser(em);
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
         Long userId = user.getId();
         // Get all the financialAccountList where user equals to userId
         defaultFinancialAccountShouldBeFound("userId.equals=" + userId);
@@ -1206,7 +1210,7 @@ class FinancialAccountResourceIT {
      */
     private void defaultFinancialAccountShouldBeFound(String filter) throws Exception {
         restFinancialAccountMockMvc
-            .perform(get(ENTITY_API_URL + "?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL, filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$.[*].id").value(hasItem(financialAccount.getId().intValue())))
@@ -1226,7 +1230,7 @@ class FinancialAccountResourceIT {
 
         // Check, that the count call also returns 1
         restFinancialAccountMockMvc
-            .perform(get(ENTITY_API_URL + "/count?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL + "/count", filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(content().string("1"));
@@ -1237,7 +1241,7 @@ class FinancialAccountResourceIT {
      */
     private void defaultFinancialAccountShouldNotBeFound(String filter) throws Exception {
         restFinancialAccountMockMvc
-            .perform(get(ENTITY_API_URL + "?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL, filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$").isArray())
@@ -1245,10 +1249,19 @@ class FinancialAccountResourceIT {
 
         // Check, that the count call also returns 0
         restFinancialAccountMockMvc
-            .perform(get(ENTITY_API_URL + "/count?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL + "/count", filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(content().string("0"));
+    }
+
+    private MockHttpServletRequestBuilder buildFilterRequest(String url, String filter) {
+        MockHttpServletRequestBuilder request = get(url).param("sort", "id,desc");
+        int separatorIndex = filter.indexOf('=');
+        if (separatorIndex > 0) {
+            request.param(filter.substring(0, separatorIndex), filter.substring(separatorIndex + 1));
+        }
+        return request;
     }
 
     @Test
@@ -1513,6 +1526,263 @@ class FinancialAccountResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialAccountAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setId(null);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        financialAccountDTO.setUser(otherUserDTO);
+
+        FinancialAccountDTO returnedFinancialAccountDTO = om.readValue(
+            restFinancialAccountMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialAccountDTO.class
+        );
+
+        assertThat(returnedFinancialAccountDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedFinancialAccount = financialAccountMapper.toEntity(returnedFinancialAccountDTO);
+    }
+
+    @Test
+    @Transactional
+    void getFinancialAccountOwnedByAnotherUserIsNotFound() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc.perform(get(ENTITY_API_URL_ID, financialAccount.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllFinancialAccountsDoesNotIncludeAnotherUsersAccounts() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(financialAccount.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetFinancialAccountOwnedByAnotherUser() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID, financialAccount.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(financialAccount.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void createFinancialAccountWithoutUserInPayloadSucceeds() throws Exception {
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setId(null);
+        financialAccountDTO.setUser(null);
+
+        FinancialAccountDTO returnedFinancialAccountDTO = om.readValue(
+            restFinancialAccountMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialAccountDTO.class
+        );
+
+        assertThat(returnedFinancialAccountDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedFinancialAccount = financialAccountMapper.toEntity(returnedFinancialAccountDTO);
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountOwnedByAnotherUserIsNotFound() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setName(UPDATED_NAME);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountOwnedByAnotherUserIsNotFound() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = new FinancialAccountDTO();
+        financialAccountDTO.setId(financialAccount.getId());
+        financialAccountDTO.setName(UPDATED_NAME);
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialAccountOwnedByAnotherUserIsNotFound() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(delete(ENTITY_API_URL_ID, financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateFinancialAccountCannotChangeOwner() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        User otherUser = createOtherUser(em);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        financialAccountDTO.setUser(otherUserDTO);
+        financialAccountDTO.setName(UPDATED_NAME);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isOk());
+
+        FinancialAccount persistedFinancialAccount = financialAccountRepository.findById(financialAccount.getId()).orElseThrow();
+        assertThat(persistedFinancialAccount.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedFinancialAccount.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotChangeOwner() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        User otherUser = createOtherUser(em);
+
+        FinancialAccountDTO financialAccountDTO = new FinancialAccountDTO();
+        financialAccountDTO.setId(financialAccount.getId());
+        financialAccountDTO.setName(UPDATED_NAME);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        financialAccountDTO.setUser(otherUserDTO);
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isOk());
+
+        FinancialAccount persistedFinancialAccount = financialAccountRepository.findById(financialAccount.getId()).orElseThrow();
+        assertThat(persistedFinancialAccount.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedFinancialAccount.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void getFinancialAccountCountDoesNotIncludeAnotherUsersAccounts() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllFinancialAccountsIncludingOtherUsers() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        FinancialAccount otherUsersAccount = createEntity(em);
+        otherUsersAccount.setUser(createOtherUser(em));
+        otherUsersAccount.setName("OTHER_USER_ACCOUNT");
+        otherUsersAccount = financialAccountRepository.saveAndFlush(otherUsersAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(financialAccount.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherUsersAccount.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCountAllFinancialAccountsIncludingOtherUsers() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        FinancialAccount otherUsersAccount = createEntity(em);
+        otherUsersAccount.setUser(createOtherUser(em));
+        financialAccountRepository.saveAndFlush(otherUsersAccount);
+
+        restFinancialAccountMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("2"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateFinancialAccountOwnedByAnotherUser() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setName(UPDATED_NAME);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteFinancialAccountOwnedByAnotherUser() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restFinancialAccountMockMvc
+            .perform(delete(ENTITY_API_URL_ID, financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedFinancialAccount = null;
     }
 
     protected long getRepositoryCount() {

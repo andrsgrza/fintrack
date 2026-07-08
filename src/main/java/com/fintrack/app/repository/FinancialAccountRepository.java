@@ -17,6 +17,24 @@ public interface FinancialAccountRepository extends JpaRepository<FinancialAccou
     @Query("select financialAccount from FinancialAccount financialAccount where financialAccount.user.login = ?#{authentication.name}")
     List<FinancialAccount> findByUserIsCurrentUser();
 
+    @Query(
+        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.id = :id and financialAccount.user.login = :login"
+    )
+    Optional<FinancialAccount> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        value = "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.user.login = :login",
+        countQuery = "select count(financialAccount) from FinancialAccount financialAccount where financialAccount.user.login = :login"
+    )
+    Page<FinancialAccount> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
+
+    @Query(
+        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.user.login = :login"
+    )
+    List<FinancialAccount> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
+
+    boolean existsByIdAndUser_Login(Long id, String login);
+
     default Optional<FinancialAccount> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
     }

@@ -123,10 +123,6 @@ export const FinancialAccountDetail = () => {
             ) : null}
           </dd>
           <dt>
-            <Translate contentKey="fintrackApp.financialAccount.user">User</Translate>
-          </dt>
-          <dd>{financialAccountEntity.user ? financialAccountEntity.user.login : ''}</dd>
-          <dt>
             <Translate contentKey="fintrackApp.financialAccount.budgets">Budgets</Translate>
           </dt>
           <dd>
