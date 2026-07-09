@@ -19,6 +19,15 @@ class ApiAccessTokenMapperTest {
     void shouldConvertToDtoAndBack() {
         var expected = getApiAccessTokenSample1();
         var actual = apiAccessTokenMapper.toEntity(apiAccessTokenMapper.toDto(expected));
+        actual.setTokenHash(expected.getTokenHash());
         assertApiAccessTokenAllPropertiesEquals(expected, actual);
+    }
+
+    @Test
+    void shouldNotExposeTokenHashInDto() {
+        var expected = getApiAccessTokenSample1();
+        var dto = apiAccessTokenMapper.toDto(expected);
+        org.assertj.core.api.Assertions.assertThat(dto.getTokenHash()).isNull();
+        org.assertj.core.api.Assertions.assertThat(dto.getName()).isEqualTo(expected.getName());
     }
 }

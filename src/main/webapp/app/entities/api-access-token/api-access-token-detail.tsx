@@ -45,12 +45,6 @@ export const ApiAccessTokenDetail = () => {
           </dt>
           <dd>{apiAccessTokenEntity.tokenPrefix}</dd>
           <dt>
-            <span id="tokenHash">
-              <Translate contentKey="fintrackApp.apiAccessToken.tokenHash">Token Hash</Translate>
-            </span>
-          </dt>
-          <dd>{apiAccessTokenEntity.tokenHash}</dd>
-          <dt>
             <span id="status">
               <Translate contentKey="fintrackApp.apiAccessToken.status">Status</Translate>
             </span>

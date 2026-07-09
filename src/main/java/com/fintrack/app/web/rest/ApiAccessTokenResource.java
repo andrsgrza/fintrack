@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.ApiAccessTokenRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.ApiAccessTokenService;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,11 +36,11 @@ public class ApiAccessTokenResource {
 
     private final ApiAccessTokenService apiAccessTokenService;
 
-    private final ApiAccessTokenRepository apiAccessTokenRepository;
+    private final ObjectMapper objectMapper;
 
-    public ApiAccessTokenResource(ApiAccessTokenService apiAccessTokenService, ApiAccessTokenRepository apiAccessTokenRepository) {
+    public ApiAccessTokenResource(ApiAccessTokenService apiAccessTokenService, ObjectMapper objectMapper) {
         this.apiAccessTokenService = apiAccessTokenService;
-        this.apiAccessTokenRepository = apiAccessTokenRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -56,7 +57,11 @@ public class ApiAccessTokenResource {
         if (apiAccessTokenDTO.getId() != null) {
             throw new BadRequestAlertException("A new apiAccessToken cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        apiAccessTokenDTO = apiAccessTokenService.save(apiAccessTokenDTO);
+        try {
+            apiAccessTokenDTO = apiAccessTokenService.save(apiAccessTokenDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/api-access-tokens/" + apiAccessTokenDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, apiAccessTokenDTO.getId().toString()))
             .body(apiAccessTokenDTO);
@@ -85,11 +90,15 @@ public class ApiAccessTokenResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!apiAccessTokenRepository.existsById(id)) {
+        if (!apiAccessTokenService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        apiAccessTokenDTO = apiAccessTokenService.update(apiAccessTokenDTO);
+        try {
+            apiAccessTokenDTO = apiAccessTokenService.update(apiAccessTokenDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, apiAccessTokenDTO.getId().toString()))
             .body(apiAccessTokenDTO);
@@ -99,7 +108,7 @@ public class ApiAccessTokenResource {
      * {@code PATCH  /api-access-tokens/:id} : Partial updates given fields of an existing apiAccessToken, field will ignore if it is null
      *
      * @param id the id of the apiAccessTokenDTO to save.
-     * @param apiAccessTokenDTO the apiAccessTokenDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated apiAccessTokenDTO,
      * or with status {@code 400 (Bad Request)} if the apiAccessTokenDTO is not valid,
      * or with status {@code 404 (Not Found)} if the apiAccessTokenDTO is not found,
@@ -109,21 +118,35 @@ public class ApiAccessTokenResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<ApiAccessTokenDTO> partialUpdateApiAccessToken(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody ApiAccessTokenDTO apiAccessTokenDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update ApiAccessToken partially : {}, {}", id, apiAccessTokenDTO);
+        LOG.debug("REST request to partial update ApiAccessToken partially : {}, {}", id, patchNode);
+        if (patchNode.has("user") && patchNode.get("user").isNull()) {
+            throw new BadRequestAlertException("User cannot be null", ENTITY_NAME, "invalid");
+        }
+        ApiAccessTokenDTO apiAccessTokenDTO;
+        try {
+            apiAccessTokenDTO = objectMapper.treeToValue(patchNode, ApiAccessTokenDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (apiAccessTokenDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            apiAccessTokenDTO.setId(id);
         }
         if (!Objects.equals(id, apiAccessTokenDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!apiAccessTokenRepository.existsById(id)) {
+        if (!apiAccessTokenService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<ApiAccessTokenDTO> result = apiAccessTokenService.partialUpdate(apiAccessTokenDTO);
+        Optional<ApiAccessTokenDTO> result;
+        try {
+            result = apiAccessTokenService.partialUpdate(apiAccessTokenDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -167,7 +190,9 @@ public class ApiAccessTokenResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApiAccessToken(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete ApiAccessToken : {}", id);
-        apiAccessTokenService.delete(id);
+        if (!apiAccessTokenService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

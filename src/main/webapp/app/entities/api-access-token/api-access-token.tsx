@@ -96,10 +96,6 @@ export const ApiAccessToken = () => {
                   <Translate contentKey="fintrackApp.apiAccessToken.tokenPrefix">Token Prefix</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('tokenPrefix')} />
                 </th>
-                <th className="hand" onClick={sort('tokenHash')}>
-                  <Translate contentKey="fintrackApp.apiAccessToken.tokenHash">Token Hash</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('tokenHash')} />
-                </th>
                 <th className="hand" onClick={sort('status')}>
                   <Translate contentKey="fintrackApp.apiAccessToken.status">Status</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('status')} />
@@ -140,7 +136,6 @@ export const ApiAccessToken = () => {
                   </td>
                   <td>{apiAccessToken.name}</td>
                   <td>{apiAccessToken.tokenPrefix}</td>
-                  <td>{apiAccessToken.tokenHash}</td>
                   <td>
                     <Translate contentKey={`fintrackApp.ApiTokenStatus.${apiAccessToken.status}`} />
                   </td>

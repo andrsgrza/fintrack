@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.ApiAccessTokenAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -14,9 +15,10 @@ import com.fintrack.app.domain.ApiAccessToken;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.ApiTokenStatus;
 import com.fintrack.app.repository.ApiAccessTokenRepository;
-import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.ApiAccessTokenService;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.ApiAccessTokenMapper;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
@@ -47,6 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
 @AutoConfigureMockMvc
 @WithMockUser
 class ApiAccessTokenResourceIT {
+
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
     private static final String DEFAULT_NAME = "AAAAAAAAAA";
     private static final String UPDATED_NAME = "BBBBBBBBBB";
@@ -87,9 +91,6 @@ class ApiAccessTokenResourceIT {
     @Autowired
     private ApiAccessTokenRepository apiAccessTokenRepository;
 
-    @Autowired
-    private UserRepository userRepository;
-
     @Mock
     private ApiAccessTokenRepository apiAccessTokenRepositoryMock;
 
@@ -126,11 +127,7 @@ class ApiAccessTokenResourceIT {
             .lastUsedAt(DEFAULT_LAST_USED_AT)
             .expiresAt(DEFAULT_EXPIRES_AT)
             .revokedAt(DEFAULT_REVOKED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        apiAccessToken.setUser(user);
+        apiAccessToken.setUser(getCurrentMockUser(em));
         return apiAccessToken;
     }
 
@@ -151,12 +148,31 @@ class ApiAccessTokenResourceIT {
             .lastUsedAt(UPDATED_LAST_USED_AT)
             .expiresAt(UPDATED_EXPIRES_AT)
             .revokedAt(UPDATED_REVOKED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedApiAccessToken.setUser(user);
+        updatedApiAccessToken.setUser(getCurrentMockUser(em));
         return updatedApiAccessToken;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
+    }
+
+    private ApiAccessTokenDTO toCreateDto(ApiAccessToken apiAccessToken) {
+        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        apiAccessTokenDTO.setId(null);
+        apiAccessTokenDTO.setTokenHash(apiAccessToken.getTokenHash());
+        apiAccessTokenDTO.setTokenPrefix(apiAccessToken.getTokenPrefix());
+        return apiAccessTokenDTO;
     }
 
     @BeforeEach
@@ -177,11 +193,12 @@ class ApiAccessTokenResourceIT {
     void createApiAccessToken() throws Exception {
         long databaseSizeBeforeCreate = getRepositoryCount();
         // Create the ApiAccessToken
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
         var returnedApiAccessTokenDTO = om.readValue(
             restApiAccessTokenMockMvc
                 .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tokenHash").doesNotExist())
                 .andReturn()
                 .getResponse()
                 .getContentAsString(),
@@ -190,10 +207,10 @@ class ApiAccessTokenResourceIT {
 
         // Validate the ApiAccessToken in the database
         assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
-        var returnedApiAccessToken = apiAccessTokenMapper.toEntity(returnedApiAccessTokenDTO);
-        assertApiAccessTokenUpdatableFieldsEquals(returnedApiAccessToken, getPersistedApiAccessToken(returnedApiAccessToken));
-
-        insertedApiAccessToken = returnedApiAccessToken;
+        assertThat(returnedApiAccessTokenDTO.getId()).isNotNull();
+        insertedApiAccessToken = apiAccessTokenRepository.findById(returnedApiAccessTokenDTO.getId()).orElseThrow();
+        assertThat(insertedApiAccessToken.getTokenHash()).isEqualTo(DEFAULT_TOKEN_HASH);
+        assertThat(insertedApiAccessToken.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
     }
 
     @Test
@@ -201,7 +218,8 @@ class ApiAccessTokenResourceIT {
     void createApiAccessTokenWithExistingId() throws Exception {
         // Create the ApiAccessToken with an existing ID
         apiAccessToken.setId(1L);
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
+        apiAccessTokenDTO.setId(1L);
 
         long databaseSizeBeforeCreate = getRepositoryCount();
 
@@ -222,7 +240,7 @@ class ApiAccessTokenResourceIT {
         apiAccessToken.setName(null);
 
         // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
 
         restApiAccessTokenMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
@@ -239,7 +257,7 @@ class ApiAccessTokenResourceIT {
         apiAccessToken.setTokenPrefix(null);
 
         // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
 
         restApiAccessTokenMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
@@ -256,7 +274,7 @@ class ApiAccessTokenResourceIT {
         apiAccessToken.setTokenHash(null);
 
         // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
 
         restApiAccessTokenMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
@@ -273,7 +291,7 @@ class ApiAccessTokenResourceIT {
         apiAccessToken.setStatus(null);
 
         // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
 
         restApiAccessTokenMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
@@ -290,7 +308,7 @@ class ApiAccessTokenResourceIT {
         apiAccessToken.setCreatedAt(null);
 
         // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
 
         restApiAccessTokenMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
@@ -307,7 +325,7 @@ class ApiAccessTokenResourceIT {
         apiAccessToken.setUpdatedAt(null);
 
         // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
 
         restApiAccessTokenMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
@@ -330,7 +348,7 @@ class ApiAccessTokenResourceIT {
             .andExpect(jsonPath("$.[*].id").value(hasItem(apiAccessToken.getId().intValue())))
             .andExpect(jsonPath("$.[*].name").value(hasItem(DEFAULT_NAME)))
             .andExpect(jsonPath("$.[*].tokenPrefix").value(hasItem(DEFAULT_TOKEN_PREFIX)))
-            .andExpect(jsonPath("$.[*].tokenHash").value(hasItem(DEFAULT_TOKEN_HASH)))
+            .andExpect(jsonPath("$.[*].tokenHash").doesNotExist())
             .andExpect(jsonPath("$.[*].status").value(hasItem(DEFAULT_STATUS.toString())))
             .andExpect(jsonPath("$.[*].createdAt").value(hasItem(DEFAULT_CREATED_AT.toString())))
             .andExpect(jsonPath("$.[*].updatedAt").value(hasItem(DEFAULT_UPDATED_AT.toString())))
@@ -370,7 +388,7 @@ class ApiAccessTokenResourceIT {
             .andExpect(jsonPath("$.id").value(apiAccessToken.getId().intValue()))
             .andExpect(jsonPath("$.name").value(DEFAULT_NAME))
             .andExpect(jsonPath("$.tokenPrefix").value(DEFAULT_TOKEN_PREFIX))
-            .andExpect(jsonPath("$.tokenHash").value(DEFAULT_TOKEN_HASH))
+            .andExpect(jsonPath("$.tokenHash").doesNotExist())
             .andExpect(jsonPath("$.status").value(DEFAULT_STATUS.toString()))
             .andExpect(jsonPath("$.createdAt").value(DEFAULT_CREATED_AT.toString()))
             .andExpect(jsonPath("$.updatedAt").value(DEFAULT_UPDATED_AT.toString()))
@@ -400,8 +418,6 @@ class ApiAccessTokenResourceIT {
         em.detach(updatedApiAccessToken);
         updatedApiAccessToken
             .name(UPDATED_NAME)
-            .tokenPrefix(UPDATED_TOKEN_PREFIX)
-            .tokenHash(UPDATED_TOKEN_HASH)
             .status(UPDATED_STATUS)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT)
@@ -416,11 +432,16 @@ class ApiAccessTokenResourceIT {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(om.writeValueAsBytes(apiAccessTokenDTO))
             )
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tokenHash").doesNotExist());
 
         // Validate the ApiAccessToken in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedApiAccessTokenToMatchAllProperties(updatedApiAccessToken);
+        ApiAccessToken persisted = getPersistedApiAccessToken(apiAccessToken);
+        assertThat(persisted.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
+        assertThat(persisted.getTokenHash()).isEqualTo(DEFAULT_TOKEN_HASH);
+        assertThat(persisted.getTokenPrefix()).isEqualTo(DEFAULT_TOKEN_PREFIX);
     }
 
     @Test
@@ -494,27 +515,34 @@ class ApiAccessTokenResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the apiAccessToken using partial update
-        ApiAccessToken partialUpdatedApiAccessToken = new ApiAccessToken();
-        partialUpdatedApiAccessToken.setId(apiAccessToken.getId());
-
-        partialUpdatedApiAccessToken
-            .name(UPDATED_NAME)
-            .tokenPrefix(UPDATED_TOKEN_PREFIX)
-            .updatedAt(UPDATED_UPDATED_AT)
-            .lastUsedAt(UPDATED_LAST_USED_AT)
-            .expiresAt(UPDATED_EXPIRES_AT);
+        String patchJson =
+            "{\"id\":" +
+            apiAccessToken.getId() +
+            ",\"name\":\"" +
+            UPDATED_NAME +
+            "\",\"updatedAt\":\"" +
+            UPDATED_UPDATED_AT +
+            "\",\"lastUsedAt\":\"" +
+            UPDATED_LAST_USED_AT +
+            "\",\"expiresAt\":\"" +
+            UPDATED_EXPIRES_AT +
+            "\"}";
 
         restApiAccessTokenMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedApiAccessToken.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedApiAccessToken))
-            )
-            .andExpect(status().isOk());
+            .perform(patch(ENTITY_API_URL_ID, apiAccessToken.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tokenHash").doesNotExist());
 
         // Validate the ApiAccessToken in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        ApiAccessToken partialUpdatedApiAccessToken = new ApiAccessToken();
+        partialUpdatedApiAccessToken.setId(apiAccessToken.getId());
+        partialUpdatedApiAccessToken
+            .name(UPDATED_NAME)
+            .updatedAt(UPDATED_UPDATED_AT)
+            .lastUsedAt(UPDATED_LAST_USED_AT)
+            .expiresAt(UPDATED_EXPIRES_AT);
         assertApiAccessTokenUpdatableFieldsEquals(
             createUpdateProxyForBean(partialUpdatedApiAccessToken, apiAccessToken),
             getPersistedApiAccessToken(apiAccessToken)
@@ -530,32 +558,46 @@ class ApiAccessTokenResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the apiAccessToken using partial update
-        ApiAccessToken partialUpdatedApiAccessToken = new ApiAccessToken();
-        partialUpdatedApiAccessToken.setId(apiAccessToken.getId());
+        String patchJson =
+            "{\"id\":" +
+            apiAccessToken.getId() +
+            ",\"name\":\"" +
+            UPDATED_NAME +
+            "\",\"status\":\"" +
+            UPDATED_STATUS +
+            "\",\"createdAt\":\"" +
+            UPDATED_CREATED_AT +
+            "\",\"updatedAt\":\"" +
+            UPDATED_UPDATED_AT +
+            "\",\"lastUsedAt\":\"" +
+            UPDATED_LAST_USED_AT +
+            "\",\"expiresAt\":\"" +
+            UPDATED_EXPIRES_AT +
+            "\",\"revokedAt\":\"" +
+            UPDATED_REVOKED_AT +
+            "\"}";
 
-        partialUpdatedApiAccessToken
+        restApiAccessTokenMockMvc
+            .perform(patch(ENTITY_API_URL_ID, apiAccessToken.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tokenHash").doesNotExist());
+
+        // Validate the ApiAccessToken in the database
+
+        assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        ApiAccessToken partialUpdatedApiAccessToken = new ApiAccessToken()
             .name(UPDATED_NAME)
-            .tokenPrefix(UPDATED_TOKEN_PREFIX)
-            .tokenHash(UPDATED_TOKEN_HASH)
             .status(UPDATED_STATUS)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT)
             .lastUsedAt(UPDATED_LAST_USED_AT)
             .expiresAt(UPDATED_EXPIRES_AT)
             .revokedAt(UPDATED_REVOKED_AT);
-
-        restApiAccessTokenMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedApiAccessToken.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedApiAccessToken))
-            )
-            .andExpect(status().isOk());
-
-        // Validate the ApiAccessToken in the database
-
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertApiAccessTokenUpdatableFieldsEquals(partialUpdatedApiAccessToken, getPersistedApiAccessToken(partialUpdatedApiAccessToken));
+        partialUpdatedApiAccessToken.setId(apiAccessToken.getId());
+        assertApiAccessTokenUpdatableFieldsEquals(
+            createUpdateProxyForBean(partialUpdatedApiAccessToken, apiAccessToken),
+            getPersistedApiAccessToken(partialUpdatedApiAccessToken)
+        );
     }
 
     @Test
@@ -635,6 +677,278 @@ class ApiAccessTokenResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void getApiAccessTokenOwnedByAnotherUserIsNotFound() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        restApiAccessTokenMockMvc.perform(get(ENTITY_API_URL_ID, apiAccessToken.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllApiAccessTokensDoesNotIncludeAnotherUsersTokens() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        restApiAccessTokenMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(apiAccessToken.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetApiAccessTokenOwnedByAnotherUser() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        restApiAccessTokenMockMvc
+            .perform(get(ENTITY_API_URL_ID, apiAccessToken.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(apiAccessToken.getId().intValue()))
+            .andExpect(jsonPath("$.tokenHash").doesNotExist());
+    }
+
+    @Test
+    @Transactional
+    void putApiAccessTokenOwnedByAnotherUserIsNotFound() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        apiAccessTokenDTO.setName(UPDATED_NAME);
+
+        restApiAccessTokenMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenOwnedByAnotherUserIsNotFound() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        String patchJson = "{\"id\":" + apiAccessToken.getId() + ",\"name\":\"" + UPDATED_NAME + "\"}";
+
+        restApiAccessTokenMockMvc
+            .perform(patch(ENTITY_API_URL_ID, apiAccessToken.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteApiAccessTokenOwnedByAnotherUserIsNotFound() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        restApiAccessTokenMockMvc
+            .perform(delete(ENTITY_API_URL_ID, apiAccessToken.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllApiAccessTokensIncludingOtherUsers() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+        ApiAccessToken otherToken = createEntity(em);
+        otherToken.setUser(createOtherUser(em));
+        otherToken.setTokenHash("OTHER_TOKEN_HASH");
+        otherToken = apiAccessTokenRepository.saveAndFlush(otherToken);
+
+        restApiAccessTokenMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(apiAccessToken.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherToken.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateApiAccessTokenOwnedByAnotherUser() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        apiAccessTokenDTO.setName(UPDATED_NAME);
+
+        restApiAccessTokenMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteApiAccessTokenOwnedByAnotherUser() throws Exception {
+        apiAccessToken.setUser(createOtherUser(em));
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restApiAccessTokenMockMvc
+            .perform(delete(ENTITY_API_URL_ID, apiAccessToken.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedApiAccessToken = null;
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenWithoutUserInPayloadSucceeds() throws Exception {
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
+        apiAccessTokenDTO.setUser(null);
+
+        ApiAccessTokenDTO returnedApiAccessTokenDTO = om.readValue(
+            restApiAccessTokenMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.user.login").value(CURRENT_MOCK_USER_LOGIN))
+                .andExpect(jsonPath("$.tokenHash").doesNotExist())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            ApiAccessTokenDTO.class
+        );
+
+        assertThat(returnedApiAccessTokenDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedApiAccessToken = apiAccessTokenRepository.findById(returnedApiAccessTokenDTO.getId()).orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenWithForeignUserAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
+        apiAccessTokenDTO.setTokenHash("FOREIGN_USER_TOKEN_HASH");
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        apiAccessTokenDTO.setUser(otherUserDTO);
+
+        ApiAccessTokenDTO returnedApiAccessTokenDTO = om.readValue(
+            restApiAccessTokenMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.user.login").value(CURRENT_MOCK_USER_LOGIN))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            ApiAccessTokenDTO.class
+        );
+
+        insertedApiAccessToken = apiAccessTokenRepository.findById(returnedApiAccessTokenDTO.getId()).orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenWithDuplicateTokenHashFails() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(createEntity(em));
+        apiAccessTokenDTO.setTokenHash(DEFAULT_TOKEN_HASH);
+
+        restApiAccessTokenMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateApiAccessTokenWithDifferentTokenHashFails() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        apiAccessTokenDTO.setTokenHash(UPDATED_TOKEN_HASH);
+
+        restApiAccessTokenMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenWithDifferentTokenPrefixFails() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        String patchJson = "{\"id\":" + apiAccessToken.getId() + ",\"tokenPrefix\":\"" + UPDATED_TOKEN_PREFIX + "\"}";
+
+        restApiAccessTokenMockMvc
+            .perform(patch(ENTITY_API_URL_ID, apiAccessToken.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenWithNullUserFails() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        String patchJson = "{\"id\":" + apiAccessToken.getId() + ",\"user\":null}";
+
+        restApiAccessTokenMockMvc
+            .perform(patch(ENTITY_API_URL_ID, apiAccessToken.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenWithoutUserFieldPreservesOwner() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+
+        String patchJson = "{\"id\":" + apiAccessToken.getId() + ",\"name\":\"" + UPDATED_NAME + "\"}";
+
+        restApiAccessTokenMockMvc
+            .perform(patch(ENTITY_API_URL_ID, apiAccessToken.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.login").value(CURRENT_MOCK_USER_LOGIN));
+
+        assertThat(getPersistedApiAccessToken(apiAccessToken).getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+    }
+
+    @Test
+    @Transactional
+    void updateApiAccessTokenCannotChangeOwner() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+        User otherUser = createOtherUser(em);
+
+        ApiAccessTokenDTO apiAccessTokenDTO = apiAccessTokenMapper.toDto(apiAccessToken);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        apiAccessTokenDTO.setUser(otherUserDTO);
+        apiAccessTokenDTO.setName(UPDATED_NAME);
+
+        restApiAccessTokenMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenDTO))
+            )
+            .andExpect(status().isOk());
+
+        ApiAccessToken persisted = getPersistedApiAccessToken(apiAccessToken);
+        assertThat(persisted.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persisted.getName()).isEqualTo(UPDATED_NAME);
     }
 
     protected long getRepositoryCount() {

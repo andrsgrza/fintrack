@@ -1,5 +1,6 @@
 package com.fintrack.app.service.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fintrack.app.domain.enumeration.ApiTokenStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
@@ -24,7 +25,7 @@ public class ApiAccessTokenDTO implements Serializable {
     @Size(max = 20)
     private String tokenPrefix;
 
-    @NotNull
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private String tokenHash;
 
     @NotNull
@@ -42,7 +43,6 @@ public class ApiAccessTokenDTO implements Serializable {
 
     private Instant revokedAt;
 
-    @NotNull
     private UserDTO user;
 
     public Long getId() {

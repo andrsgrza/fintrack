@@ -14,11 +14,14 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface ApiAccessTokenRepository extends JpaRepository<ApiAccessToken, Long> {
-    @Query("select apiAccessToken from ApiAccessToken apiAccessToken where apiAccessToken.user.login = ?#{authentication.name}")
-    List<ApiAccessToken> findByUserIsCurrentUser();
+    boolean existsByTokenHash(String tokenHash);
 
     default Optional<ApiAccessToken> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
+    }
+
+    default Optional<ApiAccessToken> findOneWithEagerRelationshipsByIdAndUserLogin(Long id, String login) {
+        return this.findOneWithToOneRelationshipsByIdAndUserLogin(id, login);
     }
 
     default List<ApiAccessToken> findAllWithEagerRelationships() {
@@ -27,6 +30,10 @@ public interface ApiAccessTokenRepository extends JpaRepository<ApiAccessToken, 
 
     default Page<ApiAccessToken> findAllWithEagerRelationships(Pageable pageable) {
         return this.findAllWithToOneRelationships(pageable);
+    }
+
+    default List<ApiAccessToken> findAllWithEagerRelationshipsByUserLogin(String login) {
+        return this.findAllWithToOneRelationshipsByUserLogin(login);
     }
 
     @Query(
@@ -40,4 +47,14 @@ public interface ApiAccessTokenRepository extends JpaRepository<ApiAccessToken, 
 
     @Query("select apiAccessToken from ApiAccessToken apiAccessToken left join fetch apiAccessToken.user where apiAccessToken.id =:id")
     Optional<ApiAccessToken> findOneWithToOneRelationships(@Param("id") Long id);
+
+    @Query(
+        "select apiAccessToken from ApiAccessToken apiAccessToken left join fetch apiAccessToken.user where apiAccessToken.id = :id and apiAccessToken.user.login = :login"
+    )
+    Optional<ApiAccessToken> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select apiAccessToken from ApiAccessToken apiAccessToken left join fetch apiAccessToken.user where apiAccessToken.user.login = :login"
+    )
+    List<ApiAccessToken> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
 }
