@@ -32,12 +32,16 @@ public class TransactionIngestionQueryService extends QueryService<TransactionIn
 
     private final TransactionIngestionMapper transactionIngestionMapper;
 
+    private final CurrentUserService currentUserService;
+
     public TransactionIngestionQueryService(
         TransactionIngestionRepository transactionIngestionRepository,
-        TransactionIngestionMapper transactionIngestionMapper
+        TransactionIngestionMapper transactionIngestionMapper,
+        CurrentUserService currentUserService
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.transactionIngestionMapper = transactionIngestionMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -104,6 +108,17 @@ public class TransactionIngestionQueryService extends QueryService<TransactionIn
                     root.join(TransactionIngestion_.records, JoinType.LEFT).get(IngestionRecord_.id)
                 )
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                        root
+                            .join(TransactionIngestion_.account, JoinType.INNER)
+                            .join(FinancialAccount_.user, JoinType.INNER)
+                            .get(User_.login),
+                        currentUserService.getCurrentUserLogin()
+                    )
+                );
+            }
         }
         return specification;
     }

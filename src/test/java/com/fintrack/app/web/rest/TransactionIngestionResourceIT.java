@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.TransactionIngestionAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -12,10 +13,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.repository.TransactionIngestionRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TransactionIngestionService;
+import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.TransactionIngestionMapper;
 import jakarta.persistence.EntityManager;
@@ -111,6 +115,9 @@ class TransactionIngestionResourceIT {
 
     @Autowired
     private MockMvc restTransactionIngestionMockMvc;
+
+    @Autowired
+    private TransactionIngestionService transactionIngestionService;
 
     private TransactionIngestion transactionIngestion;
 
@@ -213,13 +220,12 @@ class TransactionIngestionResourceIT {
 
         // Validate the TransactionIngestion in the database
         assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
-        var returnedTransactionIngestion = transactionIngestionMapper.toEntity(returnedTransactionIngestionDTO);
-        assertTransactionIngestionUpdatableFieldsEquals(
-            returnedTransactionIngestion,
-            getPersistedTransactionIngestion(returnedTransactionIngestion)
-        );
+        assertThat(returnedTransactionIngestionDTO.getStatus()).isEqualTo(IngestionStatus.PENDING);
+        assertThat(returnedTransactionIngestionDTO.getRecordsReceived()).isZero();
+        TransactionIngestion persisted = transactionIngestionRepository.findById(returnedTransactionIngestionDTO.getId()).orElseThrow();
+        assertThat(persisted.getStatus()).isEqualTo(IngestionStatus.PENDING);
 
-        insertedTransactionIngestion = returnedTransactionIngestion;
+        insertedTransactionIngestion = persisted;
     }
 
     @Test
@@ -259,121 +265,88 @@ class TransactionIngestionResourceIT {
 
     @Test
     @Transactional
-    void checkStatusIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        transactionIngestion.setStatus(null);
+    void createTransactionIngestionWithoutStatusPersistsPending() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
+        TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
+        transactionIngestionDTO.setIngestionType(DEFAULT_INGESTION_TYPE);
+        transactionIngestionDTO.setSourceLabel(DEFAULT_SOURCE_LABEL);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(transactionIngestion.getAccount().getId());
+        transactionIngestionDTO.setAccount(accountDTO);
 
-        // Create the TransactionIngestion, which fails.
-        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
+        var returnedTransactionIngestionDTO = om.readValue(
+            restTransactionIngestionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value(IngestionStatus.PENDING.toString()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionIngestionDTO.class
+        );
 
-        restTransactionIngestionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        TransactionIngestion persisted = transactionIngestionRepository.findById(returnedTransactionIngestionDTO.getId()).orElseThrow();
+        assertThat(persisted.getStatus()).isEqualTo(IngestionStatus.PENDING);
+        insertedTransactionIngestion = persisted;
     }
 
     @Test
     @Transactional
-    void checkStartedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        transactionIngestion.setStartedAt(null);
+    void createTransactionIngestionWithoutServerFieldsSucceeds() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
+        TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
+        transactionIngestionDTO.setIngestionType(DEFAULT_INGESTION_TYPE);
+        transactionIngestionDTO.setSourceLabel(DEFAULT_SOURCE_LABEL);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(transactionIngestion.getAccount().getId());
+        transactionIngestionDTO.setAccount(accountDTO);
 
-        // Create the TransactionIngestion, which fails.
-        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
+        var returnedTransactionIngestionDTO = om.readValue(
+            restTransactionIngestionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value(IngestionStatus.PENDING.toString()))
+                .andExpect(jsonPath("$.recordsReceived").value(0))
+                .andExpect(jsonPath("$.recordsCreated").value(0))
+                .andExpect(jsonPath("$.recordsSkipped").value(0))
+                .andExpect(jsonPath("$.recordsRejected").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionIngestionDTO.class
+        );
 
-        restTransactionIngestionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        assertThat(returnedTransactionIngestionDTO.getCreatedAt()).isNotNull();
+        assertThat(returnedTransactionIngestionDTO.getStartedAt()).isNotNull();
+        assertThat(returnedTransactionIngestionDTO.getCompletedAt()).isNull();
+        assertThat(returnedTransactionIngestionDTO.getErrorMessage()).isNull();
+        insertedTransactionIngestion = transactionIngestionMapper.toEntity(returnedTransactionIngestionDTO);
     }
 
     @Test
     @Transactional
-    void checkRecordsReceivedIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        transactionIngestion.setRecordsReceived(null);
-
-        // Create the TransactionIngestion, which fails.
-        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
-
-        restTransactionIngestionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkRecordsCreatedIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        transactionIngestion.setRecordsCreated(null);
-
-        // Create the TransactionIngestion, which fails.
-        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
+    void createTransactionIngestionIgnoresClientStatusAndCompletedAt() throws Exception {
+        TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
+        transactionIngestionDTO.setIngestionType(DEFAULT_INGESTION_TYPE);
+        transactionIngestionDTO.setStatus(UPDATED_STATUS);
+        transactionIngestionDTO.setCompletedAt(UPDATED_COMPLETED_AT);
+        transactionIngestionDTO.setErrorMessage(UPDATED_ERROR_MESSAGE);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(transactionIngestion.getAccount().getId());
+        transactionIngestionDTO.setAccount(accountDTO);
 
         restTransactionIngestionMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkRecordsSkippedIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        transactionIngestion.setRecordsSkipped(null);
-
-        // Create the TransactionIngestion, which fails.
-        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
-
-        restTransactionIngestionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkRecordsRejectedIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        transactionIngestion.setRecordsRejected(null);
-
-        // Create the TransactionIngestion, which fails.
-        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
-
-        restTransactionIngestionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        transactionIngestion.setCreatedAt(null);
-
-        // Create the TransactionIngestion, which fails.
-        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
-
-        restTransactionIngestionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value(IngestionStatus.PENDING.toString()))
+            .andExpect(jsonPath("$.completedAt").doesNotExist())
+            .andExpect(jsonPath("$.errorMessage").doesNotExist());
     }
 
     @Test
@@ -1193,17 +1166,14 @@ class TransactionIngestionResourceIT {
         // Disconnect from session so that the updates on updatedTransactionIngestion are not directly saved in db
         em.detach(updatedTransactionIngestion);
         updatedTransactionIngestion
-            .ingestionType(UPDATED_INGESTION_TYPE)
             .status(UPDATED_STATUS)
             .sourceLabel(UPDATED_SOURCE_LABEL)
-            .startedAt(UPDATED_STARTED_AT)
             .completedAt(UPDATED_COMPLETED_AT)
             .recordsReceived(UPDATED_RECORDS_RECEIVED)
             .recordsCreated(UPDATED_RECORDS_CREATED)
             .recordsSkipped(UPDATED_RECORDS_SKIPPED)
             .recordsRejected(UPDATED_RECORDS_REJECTED)
-            .errorMessage(UPDATED_ERROR_MESSAGE)
-            .createdAt(UPDATED_CREATED_AT);
+            .errorMessage(UPDATED_ERROR_MESSAGE);
         TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(updatedTransactionIngestion);
 
         restTransactionIngestionMockMvc
@@ -1216,7 +1186,13 @@ class TransactionIngestionResourceIT {
 
         // Validate the TransactionIngestion in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedTransactionIngestionToMatchAllProperties(updatedTransactionIngestion);
+        TransactionIngestion persisted = getPersistedTransactionIngestion(transactionIngestion);
+        assertThat(persisted.getIngestionType()).isEqualTo(DEFAULT_INGESTION_TYPE);
+        assertThat(persisted.getStartedAt()).isEqualTo(DEFAULT_STARTED_AT);
+        assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
+        assertThat(persisted.getSourceLabel()).isEqualTo(UPDATED_SOURCE_LABEL);
+        assertThat(persisted.getRecordsReceived()).isEqualTo(UPDATED_RECORDS_RECEIVED);
     }
 
     @Test
@@ -1293,29 +1269,30 @@ class TransactionIngestionResourceIT {
         TransactionIngestion partialUpdatedTransactionIngestion = new TransactionIngestion();
         partialUpdatedTransactionIngestion.setId(transactionIngestion.getId());
 
-        partialUpdatedTransactionIngestion
-            .status(UPDATED_STATUS)
-            .startedAt(UPDATED_STARTED_AT)
-            .recordsCreated(UPDATED_RECORDS_CREATED)
-            .recordsSkipped(UPDATED_RECORDS_SKIPPED)
-            .errorMessage(UPDATED_ERROR_MESSAGE)
-            .createdAt(UPDATED_CREATED_AT);
+        String patchJson =
+            "{\"id\":" +
+            transactionIngestion.getId() +
+            ",\"status\":\"" +
+            UPDATED_STATUS +
+            "\",\"recordsCreated\":" +
+            UPDATED_RECORDS_CREATED +
+            ",\"errorMessage\":\"" +
+            UPDATED_ERROR_MESSAGE +
+            "\"}";
 
         restTransactionIngestionMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTransactionIngestion.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedTransactionIngestion))
-            )
+            .perform(patch(ENTITY_API_URL_ID, transactionIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
             .andExpect(status().isOk());
 
         // Validate the TransactionIngestion in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertTransactionIngestionUpdatableFieldsEquals(
-            createUpdateProxyForBean(partialUpdatedTransactionIngestion, transactionIngestion),
-            getPersistedTransactionIngestion(transactionIngestion)
-        );
+        TransactionIngestion persisted = getPersistedTransactionIngestion(transactionIngestion);
+        assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
+        assertThat(persisted.getRecordsCreated()).isEqualTo(UPDATED_RECORDS_CREATED);
+        assertThat(persisted.getErrorMessage()).isEqualTo(UPDATED_ERROR_MESSAGE);
+        assertThat(persisted.getStartedAt()).isEqualTo(DEFAULT_STARTED_AT);
+        assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
     }
 
     @Test
@@ -1330,34 +1307,40 @@ class TransactionIngestionResourceIT {
         TransactionIngestion partialUpdatedTransactionIngestion = new TransactionIngestion();
         partialUpdatedTransactionIngestion.setId(transactionIngestion.getId());
 
-        partialUpdatedTransactionIngestion
-            .ingestionType(UPDATED_INGESTION_TYPE)
-            .status(UPDATED_STATUS)
-            .sourceLabel(UPDATED_SOURCE_LABEL)
-            .startedAt(UPDATED_STARTED_AT)
-            .completedAt(UPDATED_COMPLETED_AT)
-            .recordsReceived(UPDATED_RECORDS_RECEIVED)
-            .recordsCreated(UPDATED_RECORDS_CREATED)
-            .recordsSkipped(UPDATED_RECORDS_SKIPPED)
-            .recordsRejected(UPDATED_RECORDS_REJECTED)
-            .errorMessage(UPDATED_ERROR_MESSAGE)
-            .createdAt(UPDATED_CREATED_AT);
+        String patchJson =
+            "{\"id\":" +
+            transactionIngestion.getId() +
+            ",\"status\":\"" +
+            UPDATED_STATUS +
+            "\",\"sourceLabel\":\"" +
+            UPDATED_SOURCE_LABEL +
+            "\",\"completedAt\":\"" +
+            UPDATED_COMPLETED_AT +
+            "\",\"recordsReceived\":" +
+            UPDATED_RECORDS_RECEIVED +
+            ",\"recordsCreated\":" +
+            UPDATED_RECORDS_CREATED +
+            ",\"recordsSkipped\":" +
+            UPDATED_RECORDS_SKIPPED +
+            ",\"recordsRejected\":" +
+            UPDATED_RECORDS_REJECTED +
+            ",\"errorMessage\":\"" +
+            UPDATED_ERROR_MESSAGE +
+            "\"}";
 
         restTransactionIngestionMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTransactionIngestion.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedTransactionIngestion))
-            )
+            .perform(patch(ENTITY_API_URL_ID, transactionIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
             .andExpect(status().isOk());
 
         // Validate the TransactionIngestion in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertTransactionIngestionUpdatableFieldsEquals(
-            partialUpdatedTransactionIngestion,
-            getPersistedTransactionIngestion(partialUpdatedTransactionIngestion)
-        );
+        TransactionIngestion persisted = getPersistedTransactionIngestion(transactionIngestion);
+        assertThat(persisted.getIngestionType()).isEqualTo(DEFAULT_INGESTION_TYPE);
+        assertThat(persisted.getStartedAt()).isEqualTo(DEFAULT_STARTED_AT);
+        assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
+        assertThat(persisted.getSourceLabel()).isEqualTo(UPDATED_SOURCE_LABEL);
     }
 
     @Test
@@ -1439,6 +1422,271 @@ class TransactionIngestionResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void getTransactionIngestionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+
+        restTransactionIngestionMockMvc.perform(get(ENTITY_API_URL_ID, otherIngestion.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllTransactionIngestionsDoesNotIncludeAnotherUsersIngestions() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+
+        restTransactionIngestionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(transactionIngestion.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherIngestion.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetTransactionIngestionOwnedByAnotherUser() throws Exception {
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+
+        restTransactionIngestionMockMvc
+            .perform(get(ENTITY_API_URL_ID, otherIngestion.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(otherIngestion.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void putTransactionIngestionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(otherIngestion);
+        transactionIngestionDTO.setStatus(UPDATED_STATUS);
+
+        restTransactionIngestionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionIngestionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionIngestionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionIngestionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+        String patchJson = "{\"id\":" + otherIngestion.getId() + ",\"status\":\"" + UPDATED_STATUS + "\"}";
+
+        restTransactionIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, otherIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteTransactionIngestionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+
+        restTransactionIngestionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherIngestion.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllTransactionIngestionsIncludingOtherUsers() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+
+        restTransactionIngestionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(transactionIngestion.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherIngestion.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateTransactionIngestionOwnedByAnotherUser() throws Exception {
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(otherIngestion);
+        transactionIngestionDTO.setStatus(UPDATED_STATUS);
+
+        restTransactionIngestionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionIngestionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionIngestionDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value(UPDATED_STATUS.toString()));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteTransactionIngestionOwnedByAnotherUser() throws Exception {
+        TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restTransactionIngestionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherIngestion.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createTransactionIngestionWithAccountOwnedByAnotherUserFails() throws Exception {
+        FinancialAccount otherUsersAccount = createAccountForUser(em, createOtherUser(em));
+        TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
+        transactionIngestionDTO.setIngestionType(DEFAULT_INGESTION_TYPE);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherUsersAccount.getId());
+        transactionIngestionDTO.setAccount(accountDTO);
+
+        restTransactionIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCreateTransactionIngestionWithForeignAccount() throws Exception {
+        FinancialAccount otherUsersAccount = createAccountForUser(em, createOtherUser(em));
+        TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
+        transactionIngestionDTO.setIngestionType(IngestionType.API);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherUsersAccount.getId());
+        transactionIngestionDTO.setAccount(accountDTO);
+
+        restTransactionIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionIngestionDTO)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.ingestionType").value(IngestionType.API.toString()));
+    }
+
+    @Test
+    @Transactional
+    void updateTransactionIngestionWithDifferentAccountFails() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+        FinancialAccount otherAccount = createAccountForUser(em, createOtherUser(em));
+        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherAccount.getId());
+        transactionIngestionDTO.setAccount(accountDTO);
+
+        restTransactionIngestionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionIngestionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionIngestionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionIngestionWithNullAccountFails() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+        String patchJson = "{\"id\":" + transactionIngestion.getId() + ",\"account\":null}";
+
+        restTransactionIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionIngestionWithDifferentAccountFails() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+        FinancialAccount otherAccount = createAccountForUser(em, createOtherUser(em));
+        String patchJson = "{\"id\":" + transactionIngestion.getId() + ",\"account\":{\"id\":" + otherAccount.getId() + "}}";
+
+        restTransactionIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateTransactionIngestionWithDifferentIngestionTypeFails() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+        TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(transactionIngestion);
+        transactionIngestionDTO.setIngestionType(UPDATED_INGESTION_TYPE);
+
+        restTransactionIngestionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionIngestionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionIngestionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void findAllWhereFileIngestionIsNullIsScopedAndFileOnly() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+        TransactionIngestion otherFileIngestion = saveIngestionOnOtherUsersAccount();
+        otherFileIngestion.setIngestionType(IngestionType.FILE);
+        transactionIngestionRepository.saveAndFlush(otherFileIngestion);
+
+        TransactionIngestion apiIngestion = createEntity(em);
+        apiIngestion.setIngestionType(IngestionType.API);
+        apiIngestion = transactionIngestionRepository.saveAndFlush(apiIngestion);
+
+        assertThat(transactionIngestionService.findAllWhereFileIngestionIsNull())
+            .extracting(TransactionIngestionDTO::getId)
+            .contains(transactionIngestion.getId())
+            .doesNotContain(otherFileIngestion.getId(), apiIngestion.getId());
+    }
+
+    @Test
+    @Transactional
+    void findAllWhereApiIngestionIsNullIsScopedAndApiOnly() throws Exception {
+        TransactionIngestion apiIngestion = createEntity(em);
+        apiIngestion.setIngestionType(IngestionType.API);
+        apiIngestion = transactionIngestionRepository.saveAndFlush(apiIngestion);
+
+        TransactionIngestion otherApiIngestion = saveIngestionOnOtherUsersAccount();
+        otherApiIngestion.setIngestionType(IngestionType.API);
+        transactionIngestionRepository.saveAndFlush(otherApiIngestion);
+
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+
+        assertThat(transactionIngestionService.findAllWhereApiIngestionIsNull())
+            .extracting(TransactionIngestionDTO::getId)
+            .contains(apiIngestion.getId())
+            .doesNotContain(otherApiIngestion.getId(), transactionIngestion.getId());
+    }
+
+    private TransactionIngestion saveIngestionOnOtherUsersAccount() {
+        FinancialAccount otherAccount = createAccountForUser(em, createOtherUser(em));
+        TransactionIngestion otherIngestion = createEntity(em);
+        otherIngestion.setAccount(otherAccount);
+        return transactionIngestionRepository.saveAndFlush(otherIngestion);
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
+    }
+
+    private static FinancialAccount createAccountForUser(EntityManager em, User user) {
+        FinancialAccount financialAccount = FinancialAccountResourceIT.createEntity(em);
+        financialAccount.setUser(user);
+        em.persist(financialAccount);
+        em.flush();
+        return financialAccount;
     }
 
     protected long getRepositoryCount() {

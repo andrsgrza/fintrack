@@ -20,37 +20,30 @@ public class TransactionIngestionDTO implements Serializable {
     @NotNull
     private IngestionType ingestionType;
 
-    @NotNull
     private IngestionStatus status;
 
     @Size(max = 100)
     private String sourceLabel;
 
-    @NotNull
     private Instant startedAt;
 
     private Instant completedAt;
 
-    @NotNull
     @Min(value = 0)
     private Integer recordsReceived;
 
-    @NotNull
     @Min(value = 0)
     private Integer recordsCreated;
 
-    @NotNull
     @Min(value = 0)
     private Integer recordsSkipped;
 
-    @NotNull
     @Min(value = 0)
     private Integer recordsRejected;
 
     @Size(max = 2000)
     private String errorMessage;
 
-    @NotNull
     private Instant createdAt;
 
     @NotNull
