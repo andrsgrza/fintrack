@@ -4,8 +4,6 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.mapstruct.*;
 
 /**
@@ -13,10 +11,11 @@ import org.mapstruct.*;
  */
 @Mapper(componentModel = "spring")
 public interface TransactionIngestionMapper extends EntityMapper<TransactionIngestionDTO, TransactionIngestion> {
-    @Mapping(target = "accounts", source = "accounts", qualifiedByName = "financialAccountNameSet")
+    @Mapping(target = "account", source = "account", qualifiedByName = "financialAccountName")
     TransactionIngestionDTO toDto(TransactionIngestion s);
 
-    @Mapping(target = "removeAccounts", ignore = true)
+    @Mapping(target = "removeFinancialTransactions", ignore = true)
+    @Mapping(target = "removeRecords", ignore = true)
     TransactionIngestion toEntity(TransactionIngestionDTO transactionIngestionDTO);
 
     @Named("financialAccountName")
@@ -24,9 +23,4 @@ public interface TransactionIngestionMapper extends EntityMapper<TransactionInge
     @Mapping(target = "id", source = "id")
     @Mapping(target = "name", source = "name")
     FinancialAccountDTO toDtoFinancialAccountName(FinancialAccount financialAccount);
-
-    @Named("financialAccountNameSet")
-    default Set<FinancialAccountDTO> toDtoFinancialAccountNameSet(Set<FinancialAccount> financialAccount) {
-        return financialAccount.stream().map(this::toDtoFinancialAccountName).collect(Collectors.toSet());
-    }
 }

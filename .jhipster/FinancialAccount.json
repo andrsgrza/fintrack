@@ -125,10 +125,10 @@
     },
     {
       "otherEntityName": "transactionIngestion",
-      "otherEntityRelationshipName": "accounts",
+      "otherEntityRelationshipName": "account",
       "relationshipName": "transactionIngestions",
       "relationshipSide": "right",
-      "relationshipType": "many-to-many"
+      "relationshipType": "one-to-many"
     }
   ],
   "searchEngine": "no",

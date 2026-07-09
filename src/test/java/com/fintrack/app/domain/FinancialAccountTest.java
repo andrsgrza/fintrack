@@ -116,18 +116,18 @@ class FinancialAccountTest {
 
         financialAccount.addTransactionIngestions(transactionIngestionBack);
         assertThat(financialAccount.getTransactionIngestions()).containsOnly(transactionIngestionBack);
-        assertThat(transactionIngestionBack.getAccounts()).containsOnly(financialAccount);
+        assertThat(transactionIngestionBack.getAccount()).isEqualTo(financialAccount);
 
         financialAccount.removeTransactionIngestions(transactionIngestionBack);
         assertThat(financialAccount.getTransactionIngestions()).doesNotContain(transactionIngestionBack);
-        assertThat(transactionIngestionBack.getAccounts()).doesNotContain(financialAccount);
+        assertThat(transactionIngestionBack.getAccount()).isNull();
 
         financialAccount.transactionIngestions(new HashSet<>(Set.of(transactionIngestionBack)));
         assertThat(financialAccount.getTransactionIngestions()).containsOnly(transactionIngestionBack);
-        assertThat(transactionIngestionBack.getAccounts()).containsOnly(financialAccount);
+        assertThat(transactionIngestionBack.getAccount()).isEqualTo(financialAccount);
 
         financialAccount.setTransactionIngestions(new HashSet<>());
         assertThat(financialAccount.getTransactionIngestions()).doesNotContain(transactionIngestionBack);
-        assertThat(transactionIngestionBack.getAccounts()).doesNotContain(financialAccount);
+        assertThat(transactionIngestionBack.getAccount()).isNull();
     }
 }

@@ -5,7 +5,6 @@ import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'r
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
-import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
@@ -72,7 +71,7 @@ export const TransactionIngestionUpdate = () => {
     const entity = {
       ...transactionIngestionEntity,
       ...values,
-      accounts: mapIdList(values.accounts),
+      account: financialAccounts.find(it => it.id.toString() === values.account?.toString()),
     };
 
     if (isNew) {
@@ -96,7 +95,7 @@ export const TransactionIngestionUpdate = () => {
           startedAt: convertDateTimeFromServer(transactionIngestionEntity.startedAt),
           completedAt: convertDateTimeFromServer(transactionIngestionEntity.completedAt),
           createdAt: convertDateTimeFromServer(transactionIngestionEntity.createdAt),
-          accounts: transactionIngestionEntity?.accounts?.map(e => e.id.toString()),
+          account: transactionIngestionEntity?.account?.id,
         };
 
   return (
@@ -251,12 +250,14 @@ export const TransactionIngestionUpdate = () => {
                 }}
               />
               <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.accounts')}
-                id="transaction-ingestion-accounts"
-                data-cy="accounts"
+                label={translate('fintrackApp.transactionIngestion.account')}
+                id="transaction-ingestion-account"
+                data-cy="account"
                 type="select"
-                multiple
-                name="accounts"
+                name="account"
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                }}
               >
                 <option value="" key="0" />
                 {financialAccounts

@@ -50,9 +50,7 @@ public class TransactionIngestionQueryService extends QueryService<TransactionIn
     public Page<TransactionIngestionDTO> findByCriteria(TransactionIngestionCriteria criteria, Pageable page) {
         LOG.debug("find by criteria : {}, page: {}", criteria, page);
         final Specification<TransactionIngestion> specification = createSpecification(criteria);
-        return transactionIngestionRepository
-            .fetchBagRelationships(transactionIngestionRepository.findAll(specification, page))
-            .map(transactionIngestionMapper::toDto);
+        return transactionIngestionRepository.findAll(specification, page).map(transactionIngestionMapper::toDto);
     }
 
     /**
@@ -90,8 +88,8 @@ public class TransactionIngestionQueryService extends QueryService<TransactionIn
                 buildRangeSpecification(criteria.getRecordsRejected(), TransactionIngestion_.recordsRejected),
                 buildStringSpecification(criteria.getErrorMessage(), TransactionIngestion_.errorMessage),
                 buildRangeSpecification(criteria.getCreatedAt(), TransactionIngestion_.createdAt),
-                buildSpecification(criteria.getAccountsId(), root ->
-                    root.join(TransactionIngestion_.accounts, JoinType.LEFT).get(FinancialAccount_.id)
+                buildSpecification(criteria.getAccountId(), root ->
+                    root.join(TransactionIngestion_.account, JoinType.LEFT).get(FinancialAccount_.id)
                 ),
                 buildSpecification(criteria.getFileIngestionId(), root ->
                     root.join(TransactionIngestion_.fileIngestion, JoinType.LEFT).get(FileIngestion_.id)

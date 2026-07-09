@@ -84,7 +84,7 @@ public class TransactionIngestionService {
     }
 
     /**
-     * Get all the transactionIngestions with eager load of many-to-many relationships.
+     * Get all the transactionIngestions with eager load of relationships.
      *
      * @return the list of entities.
      */

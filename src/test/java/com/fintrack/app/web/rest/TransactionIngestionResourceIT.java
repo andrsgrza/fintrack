@@ -144,7 +144,7 @@ class TransactionIngestionResourceIT {
         } else {
             financialAccount = TestUtil.findAll(em, FinancialAccount.class).get(0);
         }
-        transactionIngestion.getAccounts().add(financialAccount);
+        transactionIngestion.setAccount(financialAccount);
         return transactionIngestion;
     }
 
@@ -176,7 +176,7 @@ class TransactionIngestionResourceIT {
         } else {
             financialAccount = TestUtil.findAll(em, FinancialAccount.class).get(0);
         }
-        updatedTransactionIngestion.getAccounts().add(financialAccount);
+        updatedTransactionIngestion.setAccount(financialAccount);
         return updatedTransactionIngestion;
     }
 
@@ -1098,24 +1098,24 @@ class TransactionIngestionResourceIT {
 
     @Test
     @Transactional
-    void getAllTransactionIngestionsByAccountsIsEqualToSomething() throws Exception {
-        FinancialAccount accounts;
+    void getAllTransactionIngestionsByAccountIsEqualToSomething() throws Exception {
+        FinancialAccount account;
         if (TestUtil.findAll(em, FinancialAccount.class).isEmpty()) {
             transactionIngestionRepository.saveAndFlush(transactionIngestion);
-            accounts = FinancialAccountResourceIT.createEntity(em);
+            account = FinancialAccountResourceIT.createEntity(em);
         } else {
-            accounts = TestUtil.findAll(em, FinancialAccount.class).get(0);
+            account = TestUtil.findAll(em, FinancialAccount.class).get(0);
         }
-        em.persist(accounts);
+        em.persist(account);
         em.flush();
-        transactionIngestion.addAccounts(accounts);
+        transactionIngestion.setAccount(account);
         transactionIngestionRepository.saveAndFlush(transactionIngestion);
-        Long accountsId = accounts.getId();
-        // Get all the transactionIngestionList where accounts equals to accountsId
-        defaultTransactionIngestionShouldBeFound("accountsId.equals=" + accountsId);
+        Long accountId = account.getId();
+        // Get all the transactionIngestionList where account equals to accountId
+        defaultTransactionIngestionShouldBeFound("accountId.equals=" + accountId);
 
-        // Get all the transactionIngestionList where accounts equals to (accountsId + 1)
-        defaultTransactionIngestionShouldNotBeFound("accountsId.equals=" + (accountsId + 1));
+        // Get all the transactionIngestionList where account equals to (accountId + 1)
+        defaultTransactionIngestionShouldNotBeFound("accountId.equals=" + (accountId + 1));
     }
 
     private void defaultTransactionIngestionFiltering(String shouldBeFound, String shouldNotBeFound) throws Exception {

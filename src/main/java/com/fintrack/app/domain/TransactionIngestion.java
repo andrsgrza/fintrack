@@ -11,7 +11,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * One execution that imports or receives one or many transactions.
+ * One execution that imports or receives transactions for one account.
  */
 @Entity
 @Table(name = "transaction_ingestion")
@@ -75,18 +75,13 @@ public class TransactionIngestion implements Serializable {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToOne(optional = false)
     @NotNull
-    @JoinTable(
-        name = "rel_transaction_ingestion__accounts",
-        joinColumns = @JoinColumn(name = "transaction_ingestion_id"),
-        inverseJoinColumns = @JoinColumn(name = "accounts_id")
-    )
     @JsonIgnoreProperties(
-        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions" },
+        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "transactionIngestions", "budgets" },
         allowSetters = true
     )
-    private Set<FinancialAccount> accounts = new HashSet<>();
+    private FinancialAccount account;
 
     @JsonIgnoreProperties(value = { "transactionIngestion" }, allowSetters = true)
     @OneToOne(fetch = FetchType.LAZY, mappedBy = "transactionIngestion")
@@ -274,26 +269,16 @@ public class TransactionIngestion implements Serializable {
         this.createdAt = createdAt;
     }
 
-    public Set<FinancialAccount> getAccounts() {
-        return this.accounts;
+    public FinancialAccount getAccount() {
+        return this.account;
     }
 
-    public void setAccounts(Set<FinancialAccount> financialAccounts) {
-        this.accounts = financialAccounts;
+    public void setAccount(FinancialAccount financialAccount) {
+        this.account = financialAccount;
     }
 
-    public TransactionIngestion accounts(Set<FinancialAccount> financialAccounts) {
-        this.setAccounts(financialAccounts);
-        return this;
-    }
-
-    public TransactionIngestion addAccounts(FinancialAccount financialAccount) {
-        this.accounts.add(financialAccount);
-        return this;
-    }
-
-    public TransactionIngestion removeAccounts(FinancialAccount financialAccount) {
-        this.accounts.remove(financialAccount);
+    public TransactionIngestion account(FinancialAccount financialAccount) {
+        this.setAccount(financialAccount);
         return this;
     }
 

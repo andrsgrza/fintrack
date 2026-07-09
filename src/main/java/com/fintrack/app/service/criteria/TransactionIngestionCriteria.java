@@ -82,7 +82,7 @@ public class TransactionIngestionCriteria implements Serializable, Criteria {
 
     private InstantFilter createdAt;
 
-    private LongFilter accountsId;
+    private LongFilter accountId;
 
     private LongFilter fileIngestionId;
 
@@ -109,7 +109,7 @@ public class TransactionIngestionCriteria implements Serializable, Criteria {
         this.recordsRejected = other.optionalRecordsRejected().map(IntegerFilter::copy).orElse(null);
         this.errorMessage = other.optionalErrorMessage().map(StringFilter::copy).orElse(null);
         this.createdAt = other.optionalCreatedAt().map(InstantFilter::copy).orElse(null);
-        this.accountsId = other.optionalAccountsId().map(LongFilter::copy).orElse(null);
+        this.accountId = other.optionalAccountId().map(LongFilter::copy).orElse(null);
         this.fileIngestionId = other.optionalFileIngestionId().map(LongFilter::copy).orElse(null);
         this.apiIngestionId = other.optionalApiIngestionId().map(LongFilter::copy).orElse(null);
         this.financialTransactionsId = other.optionalFinancialTransactionsId().map(LongFilter::copy).orElse(null);
@@ -350,23 +350,23 @@ public class TransactionIngestionCriteria implements Serializable, Criteria {
         this.createdAt = createdAt;
     }
 
-    public LongFilter getAccountsId() {
-        return accountsId;
+    public LongFilter getAccountId() {
+        return accountId;
     }
 
-    public Optional<LongFilter> optionalAccountsId() {
-        return Optional.ofNullable(accountsId);
+    public Optional<LongFilter> optionalAccountId() {
+        return Optional.ofNullable(accountId);
     }
 
-    public LongFilter accountsId() {
-        if (accountsId == null) {
-            setAccountsId(new LongFilter());
+    public LongFilter accountId() {
+        if (accountId == null) {
+            setAccountId(new LongFilter());
         }
-        return accountsId;
+        return accountId;
     }
 
-    public void setAccountsId(LongFilter accountsId) {
-        this.accountsId = accountsId;
+    public void setAccountId(LongFilter accountId) {
+        this.accountId = accountId;
     }
 
     public LongFilter getFileIngestionId() {
@@ -486,7 +486,7 @@ public class TransactionIngestionCriteria implements Serializable, Criteria {
             Objects.equals(recordsRejected, that.recordsRejected) &&
             Objects.equals(errorMessage, that.errorMessage) &&
             Objects.equals(createdAt, that.createdAt) &&
-            Objects.equals(accountsId, that.accountsId) &&
+            Objects.equals(accountId, that.accountId) &&
             Objects.equals(fileIngestionId, that.fileIngestionId) &&
             Objects.equals(apiIngestionId, that.apiIngestionId) &&
             Objects.equals(financialTransactionsId, that.financialTransactionsId) &&
@@ -510,7 +510,7 @@ public class TransactionIngestionCriteria implements Serializable, Criteria {
             recordsRejected,
             errorMessage,
             createdAt,
-            accountsId,
+            accountId,
             fileIngestionId,
             apiIngestionId,
             financialTransactionsId,
@@ -535,7 +535,7 @@ public class TransactionIngestionCriteria implements Serializable, Criteria {
             optionalRecordsRejected().map(f -> "recordsRejected=" + f + ", ").orElse("") +
             optionalErrorMessage().map(f -> "errorMessage=" + f + ", ").orElse("") +
             optionalCreatedAt().map(f -> "createdAt=" + f + ", ").orElse("") +
-            optionalAccountsId().map(f -> "accountsId=" + f + ", ").orElse("") +
+            optionalAccountId().map(f -> "accountId=" + f + ", ").orElse("") +
             optionalFileIngestionId().map(f -> "fileIngestionId=" + f + ", ").orElse("") +
             optionalApiIngestionId().map(f -> "apiIngestionId=" + f + ", ").orElse("") +
             optionalFinancialTransactionsId().map(f -> "financialTransactionsId=" + f + ", ").orElse("") +

@@ -140,7 +140,7 @@ describe('TransactionIngestion e2e test', () => {
           url: '/api/transaction-ingestions',
           body: {
             ...transactionIngestionSample,
-            accounts: financialAccount,
+            account: financialAccount,
           },
         }).then(({ body }) => {
           transactionIngestion = body;
@@ -271,7 +271,7 @@ describe('TransactionIngestion e2e test', () => {
       cy.get(`[data-cy="createdAt"]`).blur();
       cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T03:39');
 
-      cy.get(`[data-cy="accounts"]`).select([0]);
+      cy.get(`[data-cy="account"]`).select(1);
 
       cy.get(entityCreateSaveButtonSelector).click();
 

@@ -16,7 +16,7 @@ export interface ITransactionIngestion {
   recordsRejected?: number;
   errorMessage?: string | null;
   createdAt?: dayjs.Dayjs;
-  accounts?: IFinancialAccount[];
+  account?: IFinancialAccount | null;
 }
 
 export const defaultValue: Readonly<ITransactionIngestion> = {};

@@ -111,18 +111,9 @@ export const TransactionIngestionDetail = () => {
             ) : null}
           </dd>
           <dt>
-            <Translate contentKey="fintrackApp.transactionIngestion.accounts">Accounts</Translate>
+            <Translate contentKey="fintrackApp.transactionIngestion.account">Account</Translate>
           </dt>
-          <dd>
-            {transactionIngestionEntity.accounts
-              ? transactionIngestionEntity.accounts.map((val, i) => (
-                  <span key={val.id}>
-                    <a>{val.name}</a>
-                    {transactionIngestionEntity.accounts && i === transactionIngestionEntity.accounts.length - 1 ? '' : ', '}
-                  </span>
-                ))
-              : null}
-          </dd>
+          <dd>{transactionIngestionEntity.account ? transactionIngestionEntity.account.name : ''}</dd>
         </dl>
         <Button tag={Link} to="/transaction-ingestion" replace color="info" data-cy="entityDetailsBackButton">
           <FontAwesomeIcon icon="arrow-left" />{' '}

@@ -6,14 +6,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * A DTO for the {@link com.fintrack.app.domain.TransactionIngestion} entity.
  */
-@Schema(description = "One execution that imports or receives one or many transactions.")
+@Schema(description = "One execution that imports or receives transactions for one account.")
 @SuppressWarnings("common-java:DuplicatedBlocks")
 public class TransactionIngestionDTO implements Serializable {
 
@@ -56,7 +54,7 @@ public class TransactionIngestionDTO implements Serializable {
     private Instant createdAt;
 
     @NotNull
-    private Set<FinancialAccountDTO> accounts = new HashSet<>();
+    private FinancialAccountDTO account;
 
     public Long getId() {
         return id;
@@ -154,12 +152,12 @@ public class TransactionIngestionDTO implements Serializable {
         this.createdAt = createdAt;
     }
 
-    public Set<FinancialAccountDTO> getAccounts() {
-        return accounts;
+    public FinancialAccountDTO getAccount() {
+        return account;
     }
 
-    public void setAccounts(Set<FinancialAccountDTO> accounts) {
-        this.accounts = accounts;
+    public void setAccount(FinancialAccountDTO account) {
+        this.account = account;
     }
 
     @Override
@@ -199,7 +197,7 @@ public class TransactionIngestionDTO implements Serializable {
             ", recordsRejected=" + getRecordsRejected() +
             ", errorMessage='" + getErrorMessage() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
-            ", accounts=" + getAccounts() +
+            ", account=" + getAccount() +
             "}";
     }
 }

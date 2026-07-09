@@ -356,7 +356,7 @@ entity InternalTransfer {
 }
 
 /**
- * One execution that imports or receives one or many transactions.
+ * One execution that imports or receives transactions for one account.
  */
 entity TransactionIngestion {
   ingestionType IngestionType required
@@ -542,8 +542,8 @@ relationship OneToOne {
 /**
  * INGESTION RELATIONSHIPS
  */
-relationship ManyToMany {
-  TransactionIngestion{accounts(name) required} to FinancialAccount{transactionIngestions}
+relationship ManyToOne {
+  TransactionIngestion{account(name) required} to FinancialAccount{transactionIngestions}
 }
 
 relationship OneToOne {

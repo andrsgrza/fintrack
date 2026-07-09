@@ -3,7 +3,7 @@
     "changelogDate": "20260707174831"
   },
   "applications": ["fintrack"],
-  "documentation": "One execution that imports or receives one or many transactions.",
+  "documentation": "One execution that imports or receives transactions for one account.",
   "dto": "mapstruct",
   "fields": [
     {
@@ -79,9 +79,9 @@
       "otherEntityField": "name",
       "otherEntityName": "financialAccount",
       "otherEntityRelationshipName": "transactionIngestions",
-      "relationshipName": "accounts",
+      "relationshipName": "account",
       "relationshipSide": "left",
-      "relationshipType": "many-to-many",
+      "relationshipType": "many-to-one",
       "relationshipValidateRules": "required"
     },
     {
