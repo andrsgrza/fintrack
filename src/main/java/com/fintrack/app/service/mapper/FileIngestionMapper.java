@@ -14,6 +14,16 @@ public interface FileIngestionMapper extends EntityMapper<FileIngestionDTO, File
     @Mapping(target = "transactionIngestion", source = "transactionIngestion", qualifiedByName = "transactionIngestionId")
     FileIngestionDTO toDto(FileIngestion s);
 
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    FileIngestion toEntity(FileIngestionDTO fileIngestionDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void partialUpdate(@MappingTarget FileIngestion entity, FileIngestionDTO dto);
+
     @Named("transactionIngestionId")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

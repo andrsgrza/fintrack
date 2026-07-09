@@ -1646,6 +1646,13 @@ class TransactionIngestionResourceIT {
             .extracting(TransactionIngestionDTO::getId)
             .contains(transactionIngestion.getId())
             .doesNotContain(otherFileIngestion.getId(), apiIngestion.getId());
+
+        restTransactionIngestionMockMvc
+            .perform(get(ENTITY_API_URL + "/file-ingestion-is-null"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id").value(hasItem(transactionIngestion.getId().intValue())))
+            .andExpect(jsonPath("$[*].id").value(not(hasItem(otherFileIngestion.getId().intValue()))))
+            .andExpect(jsonPath("$[*].id").value(not(hasItem(apiIngestion.getId().intValue()))));
     }
 
     @Test

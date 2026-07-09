@@ -46,7 +46,6 @@ public class FileIngestionDTO implements Serializable {
 
     private LocalDate statementEndDate;
 
-    @NotNull
     private Instant createdAt;
 
     @NotNull

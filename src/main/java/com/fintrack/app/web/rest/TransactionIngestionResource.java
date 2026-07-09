@@ -204,6 +204,17 @@ public class TransactionIngestionResource {
     }
 
     /**
+     * {@code GET  /transaction-ingestions/file-ingestion-is-null} : get FILE ingestions without file metadata (scoped).
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list in body.
+     */
+    @GetMapping("/file-ingestion-is-null")
+    public List<TransactionIngestionDTO> getAllTransactionIngestionsWhereFileIngestionIsNull() {
+        LOG.debug("REST request to get TransactionIngestions where FileIngestion is null");
+        return transactionIngestionService.findAllWhereFileIngestionIsNull();
+    }
+
+    /**
      * {@code GET  /transaction-ingestions/:id} : get the "id" transactionIngestion.
      *
      * @param id the id of the transactionIngestionDTO to retrieve.

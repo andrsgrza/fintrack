@@ -4,7 +4,7 @@ import { cleanEntity } from 'app/shared/util/entity-utils';
 import { EntityState, IQueryParams, createEntitySlice, serializeAxiosError } from 'app/shared/reducers/reducer.utils';
 import { ITransactionIngestion, defaultValue } from 'app/shared/model/transaction-ingestion.model';
 
-const initialState: EntityState<ITransactionIngestion> = {
+const initialState = {
   loading: false,
   errorMessage: null,
   entities: [],
@@ -12,7 +12,11 @@ const initialState: EntityState<ITransactionIngestion> = {
   updating: false,
   totalItems: 0,
   updateSuccess: false,
+  fileIngestionParentCandidates: [] as ITransactionIngestion[],
+  loadingFileIngestionParentCandidates: false,
 };
+
+export type TransactionIngestionState = typeof initialState;
 
 const apiUrl = 'api/transaction-ingestions';
 
@@ -66,6 +70,12 @@ export const partialUpdateEntity = createAsyncThunk(
   { serializeError: serializeAxiosError },
 );
 
+export const getEntitiesWhereFileIngestionIsNull = createAsyncThunk(
+  'transactionIngestion/fetch_file_ingestion_parent_candidates',
+  async () => axios.get<ITransactionIngestion[]>(`${apiUrl}/file-ingestion-is-null`),
+  { serializeError: serializeAxiosError },
+);
+
 export const deleteEntity = createAsyncThunk(
   'transactionIngestion/delete_entity',
   async (id: string | number, thunkAPI) => {
@@ -81,7 +91,7 @@ export const deleteEntity = createAsyncThunk(
 
 export const TransactionIngestionSlice = createEntitySlice({
   name: 'transactionIngestion',
-  initialState,
+  initialState: initialState as EntityState<ITransactionIngestion>,
   extraReducers(builder) {
     builder
       .addCase(getEntity.fulfilled, (state, action) => {
@@ -92,6 +102,17 @@ export const TransactionIngestionSlice = createEntitySlice({
         state.updating = false;
         state.updateSuccess = true;
         state.entity = {};
+      })
+      .addCase(getEntitiesWhereFileIngestionIsNull.pending, state => {
+        (state as TransactionIngestionState).loadingFileIngestionParentCandidates = true;
+      })
+      .addCase(getEntitiesWhereFileIngestionIsNull.fulfilled, (state, action) => {
+        const typedState = state as TransactionIngestionState;
+        typedState.loadingFileIngestionParentCandidates = false;
+        typedState.fileIngestionParentCandidates = action.payload.data;
+      })
+      .addCase(getEntitiesWhereFileIngestionIsNull.rejected, state => {
+        (state as TransactionIngestionState).loadingFileIngestionParentCandidates = false;
       })
       .addMatcher(isFulfilled(getEntities), (state, action) => {
         const { data, headers } = action.payload;
