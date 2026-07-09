@@ -10,6 +10,7 @@ import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
@@ -54,6 +55,8 @@ public class FinancialTransactionService {
 
     private final FinancialSubscriptionRepository financialSubscriptionRepository;
 
+    private final InternalTransferRepository internalTransferRepository;
+
     private final CurrentUserService currentUserService;
 
     public FinancialTransactionService(
@@ -63,6 +66,7 @@ public class FinancialTransactionService {
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
+        InternalTransferRepository internalTransferRepository,
         CurrentUserService currentUserService
     ) {
         this.financialTransactionRepository = financialTransactionRepository;
@@ -71,6 +75,7 @@ public class FinancialTransactionService {
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
         this.financialSubscriptionRepository = financialSubscriptionRepository;
+        this.internalTransferRepository = internalTransferRepository;
         this.currentUserService = currentUserService;
     }
 
@@ -168,7 +173,7 @@ public class FinancialTransactionService {
     public List<FinancialTransactionDTO> findOutgoingInternalTransferCandidates() {
         LOG.debug("Request to get outgoing internal transfer candidates");
         return accessibleTransactionStream()
-            .filter(financialTransaction -> financialTransaction.getOutgoingInternalTransfer() == null)
+            .filter(financialTransaction -> !internalTransferRepository.existsByOutgoingTransactionId(financialTransaction.getId()))
             .filter(financialTransaction -> financialTransaction.getFlow() == TransactionFlow.OUT)
             .filter(financialTransaction -> financialTransaction.getOrigin() == TransactionOrigin.MANUAL)
             .map(financialTransactionMapper::toDto)
@@ -184,7 +189,7 @@ public class FinancialTransactionService {
     public List<FinancialTransactionDTO> findIncomingInternalTransferCandidates() {
         LOG.debug("Request to get incoming internal transfer candidates");
         return accessibleTransactionStream()
-            .filter(financialTransaction -> financialTransaction.getIncomingInternalTransfer() == null)
+            .filter(financialTransaction -> !internalTransferRepository.existsByIncomingTransactionId(financialTransaction.getId()))
             .filter(financialTransaction -> financialTransaction.getFlow() == TransactionFlow.IN)
             .filter(financialTransaction -> financialTransaction.getOrigin() == TransactionOrigin.MANUAL)
             .map(financialTransactionMapper::toDto)

@@ -17,6 +17,7 @@ import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
@@ -67,6 +68,9 @@ class InternalTransferResourceIT {
 
     @Autowired
     private InternalTransferRepository internalTransferRepository;
+
+    @Autowired
+    private FinancialTransactionRepository financialTransactionRepository;
 
     @Autowired
     private InternalTransferMapper internalTransferMapper;
@@ -464,6 +468,22 @@ class InternalTransferResourceIT {
 
     @Test
     @Transactional
+    void deleteInternalTransferLeavesTransactionsIntact() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        Long outgoingTransactionId = internalTransfer.getOutgoingTransaction().getId();
+        Long incomingTransactionId = internalTransfer.getIncomingTransaction().getId();
+
+        restInternalTransferMockMvc
+            .perform(delete(ENTITY_API_URL_ID, internalTransfer.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(financialTransactionRepository.findById(outgoingTransactionId)).isPresent();
+        assertThat(financialTransactionRepository.findById(incomingTransactionId)).isPresent();
+        insertedInternalTransfer = null;
+    }
+
+    @Test
+    @Transactional
     void getInternalTransferOwnedByAnotherUserIsNotFound() throws Exception {
         InternalTransfer otherTransfer = saveTransferOnOtherUsersTransactions();
 
@@ -574,6 +594,66 @@ class InternalTransferResourceIT {
             .andExpect(status().isNoContent());
 
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createInternalTransferWithIncomingTransactionOwnedByAnotherUserFails() throws Exception {
+        User otherUser = createOtherUser(em);
+        FinancialAccount otherAccount = FinancialAccountResourceIT.createEntity(em);
+        otherAccount.setUser(otherUser);
+        em.persist(otherAccount);
+        em.flush();
+        FinancialTransaction otherIncoming = createManualTransaction(em, otherAccount, TransactionFlow.IN, TRANSFER_AMOUNT);
+        em.persist(otherIncoming);
+        em.flush();
+
+        TransferLegPair legs = createTransferLegPair(em);
+        InternalTransferDTO internalTransferDTO = toCreateDto(legs);
+        FinancialTransactionDTO otherIncomingDTO = new FinancialTransactionDTO();
+        otherIncomingDTO.setId(otherIncoming.getId());
+        internalTransferDTO.setIncomingTransaction(otherIncomingDTO);
+
+        restInternalTransferMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(internalTransferDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCannotCreateInternalTransferWithCrossOwnerLegs() throws Exception {
+        User otherUser = createOtherUser(em);
+        User currentUser = getCurrentMockUser(em);
+
+        FinancialAccount outgoingAccount = FinancialAccountResourceIT.createEntity(em);
+        outgoingAccount.setUser(currentUser);
+        em.persist(outgoingAccount);
+
+        FinancialAccount incomingAccount = FinancialAccountResourceIT.createEntity(em);
+        incomingAccount.setUser(otherUser);
+        incomingAccount.setCurrency(outgoingAccount.getCurrency());
+        em.persist(incomingAccount);
+        em.flush();
+
+        FinancialTransaction outgoing = createManualTransaction(em, outgoingAccount, TransactionFlow.OUT, TRANSFER_AMOUNT);
+        FinancialTransaction incoming = createManualTransaction(em, incomingAccount, TransactionFlow.IN, TRANSFER_AMOUNT);
+        em.persist(outgoing);
+        em.persist(incoming);
+        em.flush();
+
+        InternalTransferDTO internalTransferDTO = new InternalTransferDTO();
+        internalTransferDTO.setNotes(DEFAULT_NOTES);
+        FinancialTransactionDTO outgoingTransactionDTO = new FinancialTransactionDTO();
+        outgoingTransactionDTO.setId(outgoing.getId());
+        FinancialTransactionDTO incomingTransactionDTO = new FinancialTransactionDTO();
+        incomingTransactionDTO.setId(incoming.getId());
+        internalTransferDTO.setOutgoingTransaction(outgoingTransactionDTO);
+        internalTransferDTO.setIncomingTransaction(incomingTransactionDTO);
+
+        restInternalTransferMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(internalTransferDTO)))
+            .andExpect(status().isBadRequest());
     }
 
     @Test

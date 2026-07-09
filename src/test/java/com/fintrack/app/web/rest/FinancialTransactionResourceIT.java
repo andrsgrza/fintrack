@@ -16,6 +16,7 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
@@ -95,6 +96,8 @@ class FinancialTransactionResourceIT {
 
     private static final String ENTITY_API_URL = "/api/financial-transactions";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
+    private static final String OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL = ENTITY_API_URL + "/outgoing-internal-transfer-candidates";
+    private static final String INCOMING_INTERNAL_TRANSFER_CANDIDATES_API_URL = ENTITY_API_URL + "/incoming-internal-transfer-candidates";
 
     private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
@@ -1648,6 +1651,139 @@ class FinancialTransactionResourceIT {
             .andExpect(status().isNoContent());
 
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void getOutgoingInternalTransferCandidatesDoesNotIncludeAnotherUsersTransactions() throws Exception {
+        FinancialTransaction otherOutgoing = saveTransactionOnOtherUsersAccount();
+        otherOutgoing.setFlow(TransactionFlow.OUT);
+        otherOutgoing.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionRepository.saveAndFlush(otherOutgoing);
+
+        FinancialTransaction eligibleOutgoing = createEntity(em);
+        eligibleOutgoing.setFlow(TransactionFlow.OUT);
+        eligibleOutgoing.setOrigin(TransactionOrigin.MANUAL);
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(eligibleOutgoing);
+
+        restFinancialTransactionMockMvc
+            .perform(get(OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleOutgoing.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherOutgoing.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    void getOutgoingInternalTransferCandidatesIncludeOnlyOutManualUnlinked() throws Exception {
+        FinancialAccount account = financialTransaction.getAccount();
+
+        FinancialTransaction eligibleOutgoing = createEntity(em);
+        eligibleOutgoing.setAccount(account);
+        eligibleOutgoing.setFlow(TransactionFlow.OUT);
+        eligibleOutgoing.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionRepository.saveAndFlush(eligibleOutgoing);
+
+        FinancialTransaction inFlowTransaction = createEntity(em);
+        inFlowTransaction.setAccount(account);
+        inFlowTransaction.setFlow(TransactionFlow.IN);
+        inFlowTransaction.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionRepository.saveAndFlush(inFlowTransaction);
+
+        FinancialTransaction importedOutgoing = createEntity(em);
+        importedOutgoing.setAccount(account);
+        importedOutgoing.setFlow(TransactionFlow.OUT);
+        importedOutgoing.setOrigin(TransactionOrigin.FILE_IMPORT);
+        financialTransactionRepository.saveAndFlush(importedOutgoing);
+
+        InternalTransfer linkedTransfer = InternalTransferResourceIT.createEntity(em);
+        Long linkedOutgoingId = linkedTransfer.getOutgoingTransaction().getId();
+        em.persist(linkedTransfer);
+        em.flush();
+        em.clear();
+
+        restFinancialTransactionMockMvc
+            .perform(get(OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleOutgoing.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(inFlowTransaction.getId().intValue()))))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(importedOutgoing.getId().intValue()))))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(linkedOutgoingId.intValue()))));
+    }
+
+    @Test
+    @Transactional
+    void getIncomingInternalTransferCandidatesDoesNotIncludeAnotherUsersTransactions() throws Exception {
+        FinancialTransaction otherIncoming = saveTransactionOnOtherUsersAccount();
+        otherIncoming.setFlow(TransactionFlow.IN);
+        otherIncoming.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionRepository.saveAndFlush(otherIncoming);
+
+        FinancialTransaction eligibleIncoming = createEntity(em);
+        eligibleIncoming.setFlow(TransactionFlow.IN);
+        eligibleIncoming.setOrigin(TransactionOrigin.MANUAL);
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(eligibleIncoming);
+
+        restFinancialTransactionMockMvc
+            .perform(get(INCOMING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleIncoming.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherIncoming.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    void getIncomingInternalTransferCandidatesIncludeOnlyInManualUnlinked() throws Exception {
+        FinancialAccount account = financialTransaction.getAccount();
+
+        FinancialTransaction eligibleIncoming = createEntity(em);
+        eligibleIncoming.setAccount(account);
+        eligibleIncoming.setFlow(TransactionFlow.IN);
+        eligibleIncoming.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionRepository.saveAndFlush(eligibleIncoming);
+
+        FinancialTransaction outFlowTransaction = createEntity(em);
+        outFlowTransaction.setAccount(account);
+        outFlowTransaction.setFlow(TransactionFlow.OUT);
+        outFlowTransaction.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionRepository.saveAndFlush(outFlowTransaction);
+
+        FinancialTransaction importedIncoming = createEntity(em);
+        importedIncoming.setAccount(account);
+        importedIncoming.setFlow(TransactionFlow.IN);
+        importedIncoming.setOrigin(TransactionOrigin.FILE_IMPORT);
+        financialTransactionRepository.saveAndFlush(importedIncoming);
+
+        InternalTransfer linkedTransfer = InternalTransferResourceIT.createEntity(em);
+        Long linkedIncomingId = linkedTransfer.getIncomingTransaction().getId();
+        em.persist(linkedTransfer);
+        em.flush();
+        em.clear();
+
+        restFinancialTransactionMockMvc
+            .perform(get(INCOMING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleIncoming.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(outFlowTransaction.getId().intValue()))))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(importedIncoming.getId().intValue()))))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(linkedIncomingId.intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminOutgoingInternalTransferCandidatesCanIncludeAnotherUsersTransactions() throws Exception {
+        FinancialTransaction otherOutgoing = saveTransactionOnOtherUsersAccount();
+        otherOutgoing.setFlow(TransactionFlow.OUT);
+        otherOutgoing.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionRepository.saveAndFlush(otherOutgoing);
+
+        restFinancialTransactionMockMvc
+            .perform(get(OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherOutgoing.getId().intValue())));
     }
 
     protected long getRepositoryCount() {

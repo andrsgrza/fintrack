@@ -15,6 +15,7 @@ import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
@@ -53,6 +54,9 @@ class FinancialTransactionServiceTest {
 
     @Mock
     private FinancialSubscriptionRepository financialSubscriptionRepository;
+
+    @Mock
+    private InternalTransferRepository internalTransferRepository;
 
     @Mock
     private CurrentUserService currentUserService;
