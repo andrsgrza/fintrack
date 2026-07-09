@@ -30,12 +30,20 @@ public interface FinancialSubscriptionRepository
         return this.fetchBagRelationships(this.findOneWithToOneRelationships(id));
     }
 
+    default Optional<FinancialSubscription> findOneWithEagerRelationshipsByIdAndUserLogin(Long id, String login) {
+        return this.fetchBagRelationships(this.findOneWithToOneRelationshipsByIdAndUserLogin(id, login));
+    }
+
     default List<FinancialSubscription> findAllWithEagerRelationships() {
         return this.fetchBagRelationships(this.findAllWithToOneRelationships());
     }
 
     default Page<FinancialSubscription> findAllWithEagerRelationships(Pageable pageable) {
         return this.fetchBagRelationships(this.findAllWithToOneRelationships(pageable));
+    }
+
+    default Page<FinancialSubscription> findAllWithEagerRelationshipsByUserLogin(String login, Pageable pageable) {
+        return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByUserLogin(login, pageable));
     }
 
     @Query(
@@ -58,4 +66,20 @@ public interface FinancialSubscriptionRepository
         "select financialSubscription from FinancialSubscription financialSubscription where financialSubscription.id = :id and financialSubscription.user.login = :login"
     )
     Optional<FinancialSubscription> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select financialSubscription from FinancialSubscription financialSubscription left join fetch financialSubscription.user left join fetch financialSubscription.account left join fetch financialSubscription.category where financialSubscription.id = :id and financialSubscription.user.login = :login"
+    )
+    Optional<FinancialSubscription> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        value = "select financialSubscription from FinancialSubscription financialSubscription left join fetch financialSubscription.user left join fetch financialSubscription.account left join fetch financialSubscription.category where financialSubscription.user.login = :login",
+        countQuery = "select count(financialSubscription) from FinancialSubscription financialSubscription where financialSubscription.user.login = :login"
+    )
+    Page<FinancialSubscription> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
+
+    @Query(
+        "select financialSubscription from FinancialSubscription financialSubscription left join fetch financialSubscription.user left join fetch financialSubscription.account left join fetch financialSubscription.category where financialSubscription.user.login = :login"
+    )
+    List<FinancialSubscription> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
 }

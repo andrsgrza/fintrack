@@ -68,7 +68,6 @@ public class FinancialSubscriptionDTO implements Serializable {
     @NotNull
     private Instant updatedAt;
 
-    @NotNull
     private UserDTO user;
 
     private FinancialAccountDTO account;

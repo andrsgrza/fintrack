@@ -26,7 +26,20 @@ public interface FinancialSubscriptionMapper extends EntityMapper<FinancialSubsc
     FinancialSubscriptionDTO toDto(FinancialSubscription s);
 
     @Mapping(target = "removeTags", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "account", ignore = true)
+    @Mapping(target = "category", ignore = true)
+    @Mapping(target = "tags", ignore = true)
     FinancialSubscription toEntity(FinancialSubscriptionDTO financialSubscriptionDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "removeTags", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "account", ignore = true)
+    @Mapping(target = "category", ignore = true)
+    @Mapping(target = "tags", ignore = true)
+    void partialUpdate(@MappingTarget FinancialSubscription entity, FinancialSubscriptionDTO dto);
 
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)

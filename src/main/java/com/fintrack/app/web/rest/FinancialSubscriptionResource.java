@@ -1,6 +1,5 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.service.FinancialSubscriptionQueryService;
 import com.fintrack.app.service.FinancialSubscriptionService;
 import com.fintrack.app.service.criteria.FinancialSubscriptionCriteria;
@@ -37,17 +36,13 @@ public class FinancialSubscriptionResource {
 
     private final FinancialSubscriptionService financialSubscriptionService;
 
-    private final FinancialSubscriptionRepository financialSubscriptionRepository;
-
     private final FinancialSubscriptionQueryService financialSubscriptionQueryService;
 
     public FinancialSubscriptionResource(
         FinancialSubscriptionService financialSubscriptionService,
-        FinancialSubscriptionRepository financialSubscriptionRepository,
         FinancialSubscriptionQueryService financialSubscriptionQueryService
     ) {
         this.financialSubscriptionService = financialSubscriptionService;
-        this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.financialSubscriptionQueryService = financialSubscriptionQueryService;
     }
 
@@ -66,7 +61,11 @@ public class FinancialSubscriptionResource {
         if (financialSubscriptionDTO.getId() != null) {
             throw new BadRequestAlertException("A new financialSubscription cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        financialSubscriptionDTO = financialSubscriptionService.save(financialSubscriptionDTO);
+        try {
+            financialSubscriptionDTO = financialSubscriptionService.save(financialSubscriptionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/financial-subscriptions/" + financialSubscriptionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, financialSubscriptionDTO.getId().toString()))
             .body(financialSubscriptionDTO);
@@ -95,11 +94,15 @@ public class FinancialSubscriptionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialSubscriptionRepository.existsById(id)) {
+        if (!financialSubscriptionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        financialSubscriptionDTO = financialSubscriptionService.update(financialSubscriptionDTO);
+        try {
+            financialSubscriptionDTO = financialSubscriptionService.update(financialSubscriptionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, financialSubscriptionDTO.getId().toString()))
             .body(financialSubscriptionDTO);
@@ -129,11 +132,16 @@ public class FinancialSubscriptionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialSubscriptionRepository.existsById(id)) {
+        if (!financialSubscriptionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<FinancialSubscriptionDTO> result = financialSubscriptionService.partialUpdate(financialSubscriptionDTO);
+        Optional<FinancialSubscriptionDTO> result;
+        try {
+            result = financialSubscriptionService.partialUpdate(financialSubscriptionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -189,7 +197,9 @@ public class FinancialSubscriptionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFinancialSubscription(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete FinancialSubscription : {}", id);
-        financialSubscriptionService.delete(id);
+        if (!financialSubscriptionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

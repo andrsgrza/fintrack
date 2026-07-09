@@ -143,10 +143,6 @@ export const FinancialSubscriptionDetail = () => {
             ) : null}
           </dd>
           <dt>
-            <Translate contentKey="fintrackApp.financialSubscription.user">User</Translate>
-          </dt>
-          <dd>{financialSubscriptionEntity.user ? financialSubscriptionEntity.user.login : ''}</dd>
-          <dt>
             <Translate contentKey="fintrackApp.financialSubscription.account">Account</Translate>
           </dt>
           <dd>{financialSubscriptionEntity.account ? financialSubscriptionEntity.account.name : ''}</dd>
