@@ -81,10 +81,6 @@ export const CategoryDetail = () => {
           </dt>
           <dd>{categoryEntity.updatedAt ? <TextFormat value={categoryEntity.updatedAt} type="date" format={APP_DATE_FORMAT} /> : null}</dd>
           <dt>
-            <Translate contentKey="fintrackApp.category.user">User</Translate>
-          </dt>
-          <dd>{categoryEntity.user ? categoryEntity.user.login : ''}</dd>
-          <dt>
             <Translate contentKey="fintrackApp.category.parentCategory">Parent Category</Translate>
           </dt>
           <dd>{categoryEntity.parentCategory ? categoryEntity.parentCategory.name : ''}</dd>

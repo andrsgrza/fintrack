@@ -43,7 +43,6 @@ public class CategoryDTO implements Serializable {
     @NotNull
     private Instant updatedAt;
 
-    @NotNull
     private UserDTO user;
 
     private CategoryDTO parentCategory;

@@ -31,9 +31,16 @@ public class CategoryQueryService extends QueryService<Category> {
 
     private final CategoryMapper categoryMapper;
 
-    public CategoryQueryService(CategoryRepository categoryRepository, CategoryMapper categoryMapper) {
+    private final CurrentUserService currentUserService;
+
+    public CategoryQueryService(
+        CategoryRepository categoryRepository,
+        CategoryMapper categoryMapper,
+        CurrentUserService currentUserService
+    ) {
         this.categoryRepository = categoryRepository;
         this.categoryMapper = categoryMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -98,6 +105,14 @@ public class CategoryQueryService extends QueryService<Category> {
                 ),
                 buildSpecification(criteria.getBudgetsId(), root -> root.join(Category_.budgets, JoinType.LEFT).get(Budget_.id))
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                        root.join(Category_.user, JoinType.INNER).get(User_.login),
+                        currentUserService.getCurrentUserLogin()
+                    )
+                );
+            }
         }
         return specification;
     }

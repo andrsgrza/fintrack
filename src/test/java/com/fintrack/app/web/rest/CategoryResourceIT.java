@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.CategoryAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -17,8 +18,10 @@ import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.CategoryService;
 import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
@@ -39,6 +42,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -76,6 +80,8 @@ class CategoryResourceIT {
 
     private static final String ENTITY_API_URL = "/api/categories";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
+
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
@@ -124,11 +130,7 @@ class CategoryResourceIT {
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        category.setUser(user);
+        category.setUser(getCurrentMockUser(em));
         return category;
     }
 
@@ -148,12 +150,23 @@ class CategoryResourceIT {
             .active(UPDATED_ACTIVE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedCategory.setUser(user);
+        updatedCategory.setUser(getCurrentMockUser(em));
         return updatedCategory;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -701,15 +714,7 @@ class CategoryResourceIT {
     @Test
     @Transactional
     void getAllCategoriesByUserIsEqualToSomething() throws Exception {
-        User user;
-        if (TestUtil.findAll(em, User.class).isEmpty()) {
-            categoryRepository.saveAndFlush(category);
-            user = UserResourceIT.createEntity();
-        } else {
-            user = TestUtil.findAll(em, User.class).get(0);
-        }
-        em.persist(user);
-        em.flush();
+        User user = getCurrentMockUser(em);
         category.setUser(user);
         categoryRepository.saveAndFlush(category);
         Long userId = user.getId();
@@ -774,7 +779,7 @@ class CategoryResourceIT {
      */
     private void defaultCategoryShouldBeFound(String filter) throws Exception {
         restCategoryMockMvc
-            .perform(get(ENTITY_API_URL + "?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL, filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$.[*].id").value(hasItem(category.getId().intValue())))
@@ -789,7 +794,7 @@ class CategoryResourceIT {
 
         // Check, that the count call also returns 1
         restCategoryMockMvc
-            .perform(get(ENTITY_API_URL + "/count?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL + "/count", filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(content().string("1"));
@@ -800,7 +805,7 @@ class CategoryResourceIT {
      */
     private void defaultCategoryShouldNotBeFound(String filter) throws Exception {
         restCategoryMockMvc
-            .perform(get(ENTITY_API_URL + "?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL, filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$").isArray())
@@ -808,10 +813,19 @@ class CategoryResourceIT {
 
         // Check, that the count call also returns 0
         restCategoryMockMvc
-            .perform(get(ENTITY_API_URL + "/count?sort=id,desc&" + filter))
+            .perform(buildFilterRequest(ENTITY_API_URL + "/count", filter))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(content().string("0"));
+    }
+
+    private MockHttpServletRequestBuilder buildFilterRequest(String url, String filter) {
+        MockHttpServletRequestBuilder requestBuilder = get(url).param("sort", "id,desc");
+        for (String param : filter.split("&")) {
+            String[] keyValue = param.split("=", 2);
+            requestBuilder.param(keyValue[0], keyValue[1]);
+        }
+        return requestBuilder;
     }
 
     @Test
@@ -1065,6 +1079,351 @@ class CategoryResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createCategoryAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setId(null);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        categoryDTO.setUser(otherUserDTO);
+
+        CategoryDTO returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
+
+        assertThat(returnedCategoryDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedCategory = categoryMapper.toEntity(returnedCategoryDTO);
+    }
+
+    @Test
+    @Transactional
+    void getCategoryOwnedByAnotherUserIsNotFound() throws Exception {
+        category.setUser(createOtherUser(em));
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        restCategoryMockMvc.perform(get(ENTITY_API_URL_ID, category.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllCategoriesDoesNotIncludeAnotherUsersCategories() throws Exception {
+        category.setUser(createOtherUser(em));
+        categoryRepository.saveAndFlush(category);
+
+        restCategoryMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(category.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetCategoryOwnedByAnotherUser() throws Exception {
+        category.setUser(createOtherUser(em));
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        restCategoryMockMvc
+            .perform(get(ENTITY_API_URL_ID, category.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(category.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void createCategoryWithoutUserInPayloadSucceeds() throws Exception {
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setId(null);
+        categoryDTO.setUser(null);
+
+        CategoryDTO returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
+
+        assertThat(returnedCategoryDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedCategory = categoryMapper.toEntity(returnedCategoryDTO);
+    }
+
+    @Test
+    @Transactional
+    void putCategoryOwnedByAnotherUserIsNotFound() throws Exception {
+        category.setUser(createOtherUser(em));
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setName(UPDATED_NAME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryOwnedByAnotherUserIsNotFound() throws Exception {
+        category.setUser(createOtherUser(em));
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(category.getId());
+        categoryDTO.setName(UPDATED_NAME);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteCategoryOwnedByAnotherUserIsNotFound() throws Exception {
+        category.setUser(createOtherUser(em));
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, category.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+
+        assertThat(categoryRepository.existsById(category.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateCategoryCannotChangeOwner() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        User otherUser = createOtherUser(em);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        categoryDTO.setUser(otherUserDTO);
+        categoryDTO.setName(UPDATED_NAME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isOk());
+
+        Category persistedCategory = categoryRepository.findById(category.getId()).orElseThrow();
+        assertThat(persistedCategory.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedCategory.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryCannotChangeOwner() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        User otherUser = createOtherUser(em);
+
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(category.getId());
+        categoryDTO.setName(UPDATED_NAME);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        categoryDTO.setUser(otherUserDTO);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isOk());
+
+        Category persistedCategory = categoryRepository.findById(category.getId()).orElseThrow();
+        assertThat(persistedCategory.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedCategory.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void getCategoryCountDoesNotIncludeAnotherUsersCategories() throws Exception {
+        category.setUser(createOtherUser(em));
+        categoryRepository.saveAndFlush(category);
+
+        restCategoryMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllCategoriesIncludingOtherUsers() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        Category otherUsersCategory = createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory.setName("OTHER_USER_CATEGORY");
+        otherUsersCategory = categoryRepository.saveAndFlush(otherUsersCategory);
+
+        restCategoryMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(category.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherUsersCategory.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCountAllCategoriesIncludingOtherUsers() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        Category otherUsersCategory = createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        categoryRepository.saveAndFlush(otherUsersCategory);
+
+        restCategoryMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("2"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateCategoryOwnedByAnotherUser() throws Exception {
+        category.setUser(createOtherUser(em));
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setName(UPDATED_NAME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteCategoryOwnedByAnotherUser() throws Exception {
+        category.setUser(createOtherUser(em));
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, category.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void createCategoryWithParentOwnedByAnotherUserFails() throws Exception {
+        Category otherUsersParent = createEntity(em);
+        otherUsersParent.setUser(createOtherUser(em));
+        otherUsersParent = categoryRepository.saveAndFlush(otherUsersParent);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setId(null);
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(otherUsersParent.getId());
+        categoryDTO.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateCategoryWithSelfAsParentFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(category.getId());
+        categoryDTO.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateCategoryCreatingCycleFails() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT_CATEGORY");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        category.setParentCategory(parentCategory);
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(parentCategory);
+        CategoryDTO childDTO = new CategoryDTO();
+        childDTO.setId(category.getId());
+        categoryDTO.setParentCategory(childDTO);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createCategoryWithAccessibleParentSucceeds() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT_CATEGORY");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setId(null);
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(parentCategory.getId());
+        categoryDTO.setParentCategory(parentDTO);
+
+        CategoryDTO returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
+
+        assertThat(returnedCategoryDTO.getParentCategory().getId()).isEqualTo(parentCategory.getId());
+        insertedCategory = categoryMapper.toEntity(returnedCategoryDTO);
     }
 
     protected long getRepositoryCount() {
