@@ -25,12 +25,20 @@ public interface BudgetRepository
         return this.fetchBagRelationships(this.findOneWithToOneRelationships(id));
     }
 
+    default Optional<Budget> findOneWithEagerRelationshipsByIdAndUserLogin(Long id, String login) {
+        return this.fetchBagRelationships(this.findOneWithToOneRelationshipsByIdAndUserLogin(id, login));
+    }
+
     default List<Budget> findAllWithEagerRelationships() {
         return this.fetchBagRelationships(this.findAllWithToOneRelationships());
     }
 
     default Page<Budget> findAllWithEagerRelationships(Pageable pageable) {
         return this.fetchBagRelationships(this.findAllWithToOneRelationships(pageable));
+    }
+
+    default Page<Budget> findAllWithEagerRelationshipsByUserLogin(String login, Pageable pageable) {
+        return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByUserLogin(login, pageable));
     }
 
     @Query(value = "select budget from Budget budget left join fetch budget.user", countQuery = "select count(budget) from Budget budget")
@@ -41,4 +49,19 @@ public interface BudgetRepository
 
     @Query("select budget from Budget budget left join fetch budget.user where budget.id =:id")
     Optional<Budget> findOneWithToOneRelationships(@Param("id") Long id);
+
+    @Query("select budget from Budget budget where budget.id = :id and budget.user.login = :login")
+    Optional<Budget> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query("select budget from Budget budget left join fetch budget.user where budget.id = :id and budget.user.login = :login")
+    Optional<Budget> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        value = "select budget from Budget budget left join fetch budget.user where budget.user.login = :login",
+        countQuery = "select count(budget) from Budget budget where budget.user.login = :login"
+    )
+    Page<Budget> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
+
+    @Query("select budget from Budget budget left join fetch budget.user where budget.user.login = :login")
+    List<Budget> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
 }

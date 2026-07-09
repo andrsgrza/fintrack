@@ -1,6 +1,5 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.service.BudgetQueryService;
 import com.fintrack.app.service.BudgetService;
 import com.fintrack.app.service.criteria.BudgetCriteria;
@@ -37,13 +36,10 @@ public class BudgetResource {
 
     private final BudgetService budgetService;
 
-    private final BudgetRepository budgetRepository;
-
     private final BudgetQueryService budgetQueryService;
 
-    public BudgetResource(BudgetService budgetService, BudgetRepository budgetRepository, BudgetQueryService budgetQueryService) {
+    public BudgetResource(BudgetService budgetService, BudgetQueryService budgetQueryService) {
         this.budgetService = budgetService;
-        this.budgetRepository = budgetRepository;
         this.budgetQueryService = budgetQueryService;
     }
 
@@ -60,7 +56,11 @@ public class BudgetResource {
         if (budgetDTO.getId() != null) {
             throw new BadRequestAlertException("A new budget cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        budgetDTO = budgetService.save(budgetDTO);
+        try {
+            budgetDTO = budgetService.save(budgetDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/budgets/" + budgetDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, budgetDTO.getId().toString()))
             .body(budgetDTO);
@@ -89,11 +89,15 @@ public class BudgetResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!budgetRepository.existsById(id)) {
+        if (!budgetService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        budgetDTO = budgetService.update(budgetDTO);
+        try {
+            budgetDTO = budgetService.update(budgetDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, budgetDTO.getId().toString()))
             .body(budgetDTO);
@@ -123,11 +127,16 @@ public class BudgetResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!budgetRepository.existsById(id)) {
+        if (!budgetService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<BudgetDTO> result = budgetService.partialUpdate(budgetDTO);
+        Optional<BudgetDTO> result;
+        try {
+            result = budgetService.partialUpdate(budgetDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -183,7 +192,9 @@ public class BudgetResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteBudget(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete Budget : {}", id);
-        budgetService.delete(id);
+        if (!budgetService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

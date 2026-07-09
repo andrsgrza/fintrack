@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -8,7 +8,6 @@ import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateT
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
 import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
@@ -26,7 +25,6 @@ export const BudgetUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const users = useAppSelector(state => state.userManagement.users);
   const financialAccounts = useAppSelector(state => state.financialAccount.entities);
   const categories = useAppSelector(state => state.category.entities);
   const tags = useAppSelector(state => state.tag.entities);
@@ -50,7 +48,6 @@ export const BudgetUpdate = () => {
       dispatch(getEntity(id));
     }
 
-    dispatch(getUsers({}));
     dispatch(getFinancialAccounts({}));
     dispatch(getCategories({}));
     dispatch(getTags({}));
@@ -78,7 +75,6 @@ export const BudgetUpdate = () => {
     const entity = {
       ...budgetEntity,
       ...values,
-      user: users.find(it => it.id.toString() === values.user?.toString()),
       accounts: mapIdList(values.accounts),
       categories: mapIdList(values.categories),
       tags: mapIdList(values.tags),
@@ -105,7 +101,6 @@ export const BudgetUpdate = () => {
           ...budgetEntity,
           createdAt: convertDateTimeFromServer(budgetEntity.createdAt),
           updatedAt: convertDateTimeFromServer(budgetEntity.updatedAt),
-          user: budgetEntity?.user?.id,
           accounts: budgetEntity?.accounts?.map(e => e.id.toString()),
           categories: budgetEntity?.categories?.map(e => e.id.toString()),
           tags: budgetEntity?.tags?.map(e => e.id.toString()),
@@ -263,26 +258,6 @@ export const BudgetUpdate = () => {
                   required: { value: true, message: translate('entity.validation.required') },
                 }}
               />
-              <ValidatedField
-                id="budget-user"
-                name="user"
-                data-cy="user"
-                label={translate('fintrackApp.budget.user')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {users
-                  ? users.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.login}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
               <ValidatedField
                 label={translate('fintrackApp.budget.accounts')}
                 id="budget-accounts"
