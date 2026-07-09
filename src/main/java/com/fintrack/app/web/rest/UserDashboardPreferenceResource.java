@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.UserDashboardPreferenceRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.UserDashboardPreferenceService;
 import com.fintrack.app.service.dto.UserDashboardPreferenceDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,14 +36,11 @@ public class UserDashboardPreferenceResource {
 
     private final UserDashboardPreferenceService userDashboardPreferenceService;
 
-    private final UserDashboardPreferenceRepository userDashboardPreferenceRepository;
+    private final ObjectMapper objectMapper;
 
-    public UserDashboardPreferenceResource(
-        UserDashboardPreferenceService userDashboardPreferenceService,
-        UserDashboardPreferenceRepository userDashboardPreferenceRepository
-    ) {
+    public UserDashboardPreferenceResource(UserDashboardPreferenceService userDashboardPreferenceService, ObjectMapper objectMapper) {
         this.userDashboardPreferenceService = userDashboardPreferenceService;
-        this.userDashboardPreferenceRepository = userDashboardPreferenceRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -60,7 +58,11 @@ public class UserDashboardPreferenceResource {
         if (userDashboardPreferenceDTO.getId() != null) {
             throw new BadRequestAlertException("A new userDashboardPreference cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        userDashboardPreferenceDTO = userDashboardPreferenceService.save(userDashboardPreferenceDTO);
+        try {
+            userDashboardPreferenceDTO = userDashboardPreferenceService.save(userDashboardPreferenceDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/user-dashboard-preferences/" + userDashboardPreferenceDTO.getId()))
             .headers(
                 HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, userDashboardPreferenceDTO.getId().toString())
@@ -91,7 +93,7 @@ public class UserDashboardPreferenceResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!userDashboardPreferenceRepository.existsById(id)) {
+        if (!userDashboardPreferenceService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
@@ -105,7 +107,7 @@ public class UserDashboardPreferenceResource {
      * {@code PATCH  /user-dashboard-preferences/:id} : Partial updates given fields of an existing userDashboardPreference, field will ignore if it is null
      *
      * @param id the id of the userDashboardPreferenceDTO to save.
-     * @param userDashboardPreferenceDTO the userDashboardPreferenceDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated userDashboardPreferenceDTO,
      * or with status {@code 400 (Bad Request)} if the userDashboardPreferenceDTO is not valid,
      * or with status {@code 404 (Not Found)} if the userDashboardPreferenceDTO is not found,
@@ -115,21 +117,35 @@ public class UserDashboardPreferenceResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<UserDashboardPreferenceDTO> partialUpdateUserDashboardPreference(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody UserDashboardPreferenceDTO userDashboardPreferenceDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update UserDashboardPreference partially : {}, {}", id, userDashboardPreferenceDTO);
+        LOG.debug("REST request to partial update UserDashboardPreference partially : {}, {}", id, patchNode);
+        if (patchNode.has("user") && patchNode.get("user").isNull()) {
+            throw new BadRequestAlertException("User cannot be null", ENTITY_NAME, "invalid");
+        }
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO;
+        try {
+            userDashboardPreferenceDTO = objectMapper.treeToValue(patchNode, UserDashboardPreferenceDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (userDashboardPreferenceDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            userDashboardPreferenceDTO.setId(id);
         }
         if (!Objects.equals(id, userDashboardPreferenceDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!userDashboardPreferenceRepository.existsById(id)) {
+        if (!userDashboardPreferenceService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<UserDashboardPreferenceDTO> result = userDashboardPreferenceService.partialUpdate(userDashboardPreferenceDTO);
+        Optional<UserDashboardPreferenceDTO> result;
+        try {
+            result = userDashboardPreferenceService.partialUpdate(userDashboardPreferenceDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -173,7 +189,9 @@ public class UserDashboardPreferenceResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUserDashboardPreference(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete UserDashboardPreference : {}", id);
-        userDashboardPreferenceService.delete(id);
+        if (!userDashboardPreferenceService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

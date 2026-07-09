@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.UserDashboardPreferenceAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -13,8 +14,9 @@ import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.UserDashboardPreference;
 import com.fintrack.app.repository.UserDashboardPreferenceRepository;
-import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.UserDashboardPreferenceService;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.dto.UserDashboardPreferenceDTO;
 import com.fintrack.app.service.mapper.UserDashboardPreferenceMapper;
 import jakarta.persistence.EntityManager;
@@ -47,6 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
 @WithMockUser
 class UserDashboardPreferenceResourceIT {
 
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
+
     private static final String DEFAULT_CONFIGURATION = "AAAAAAAAAA";
     private static final String UPDATED_CONFIGURATION = "BBBBBBBBBB";
 
@@ -67,9 +71,6 @@ class UserDashboardPreferenceResourceIT {
 
     @Autowired
     private UserDashboardPreferenceRepository userDashboardPreferenceRepository;
-
-    @Autowired
-    private UserRepository userRepository;
 
     @Mock
     private UserDashboardPreferenceRepository userDashboardPreferenceRepositoryMock;
@@ -101,11 +102,7 @@ class UserDashboardPreferenceResourceIT {
             .configuration(DEFAULT_CONFIGURATION)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        userDashboardPreference.setUser(user);
+        userDashboardPreference.setUser(getCurrentMockUser(em));
         return userDashboardPreference;
     }
 
@@ -120,12 +117,23 @@ class UserDashboardPreferenceResourceIT {
             .configuration(UPDATED_CONFIGURATION)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedUserDashboardPreference.setUser(user);
+        updatedUserDashboardPreference.setUser(getCurrentMockUser(em));
         return updatedUserDashboardPreference;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -381,26 +389,18 @@ class UserDashboardPreferenceResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the userDashboardPreference using partial update
-        UserDashboardPreference partialUpdatedUserDashboardPreference = new UserDashboardPreference();
-        partialUpdatedUserDashboardPreference.setId(userDashboardPreference.getId());
-
-        partialUpdatedUserDashboardPreference.configuration(UPDATED_CONFIGURATION);
+        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"configuration\":\"" + UPDATED_CONFIGURATION + "\"}";
 
         restUserDashboardPreferenceMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedUserDashboardPreference.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedUserDashboardPreference))
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
             )
             .andExpect(status().isOk());
 
         // Validate the UserDashboardPreference in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertUserDashboardPreferenceUpdatableFieldsEquals(
-            createUpdateProxyForBean(partialUpdatedUserDashboardPreference, userDashboardPreference),
-            getPersistedUserDashboardPreference(userDashboardPreference)
-        );
+        assertThat(getPersistedUserDashboardPreference(userDashboardPreference).getConfiguration()).isEqualTo(UPDATED_CONFIGURATION);
     }
 
     @Test
@@ -411,30 +411,30 @@ class UserDashboardPreferenceResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the userDashboardPreference using partial update
-        UserDashboardPreference partialUpdatedUserDashboardPreference = new UserDashboardPreference();
-        partialUpdatedUserDashboardPreference.setId(userDashboardPreference.getId());
-
-        partialUpdatedUserDashboardPreference
-            .configuration(UPDATED_CONFIGURATION)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+        String patchJson =
+            "{\"id\":" +
+            userDashboardPreference.getId() +
+            ",\"configuration\":\"" +
+            UPDATED_CONFIGURATION +
+            "\",\"createdAt\":\"" +
+            UPDATED_CREATED_AT +
+            "\",\"updatedAt\":\"" +
+            UPDATED_UPDATED_AT +
+            "\"}";
 
         restUserDashboardPreferenceMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedUserDashboardPreference.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedUserDashboardPreference))
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
             )
             .andExpect(status().isOk());
 
         // Validate the UserDashboardPreference in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertUserDashboardPreferenceUpdatableFieldsEquals(
-            partialUpdatedUserDashboardPreference,
-            getPersistedUserDashboardPreference(partialUpdatedUserDashboardPreference)
-        );
+        UserDashboardPreference persisted = getPersistedUserDashboardPreference(userDashboardPreference);
+        assertThat(persisted.getConfiguration()).isEqualTo(UPDATED_CONFIGURATION);
+        assertThat(persisted.getCreatedAt()).isEqualTo(UPDATED_CREATED_AT);
+        assertThat(persisted.getUpdatedAt()).isEqualTo(UPDATED_UPDATED_AT);
     }
 
     @Test
@@ -516,6 +516,287 @@ class UserDashboardPreferenceResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void getUserDashboardPreferenceOwnedByAnotherUserIsNotFound() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(get(ENTITY_API_URL_ID, userDashboardPreference.getId()))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllUserDashboardPreferencesDoesNotIncludeAnotherUsersPreferences() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(userDashboardPreference.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetUserDashboardPreferenceOwnedByAnotherUser() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(get(ENTITY_API_URL_ID, userDashboardPreference.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(userDashboardPreference.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void createUserDashboardPreferenceWithoutUserInPayloadSucceeds() throws Exception {
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setId(null);
+        userDashboardPreferenceDTO.setUser(null);
+
+        UserDashboardPreferenceDTO returnedUserDashboardPreferenceDTO = om.readValue(
+            restUserDashboardPreferenceMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(userDashboardPreferenceDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            UserDashboardPreferenceDTO.class
+        );
+
+        assertThat(returnedUserDashboardPreferenceDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedUserDashboardPreference = userDashboardPreferenceMapper.toEntity(returnedUserDashboardPreferenceDTO);
+    }
+
+    @Test
+    @Transactional
+    void createUserDashboardPreferenceWithForeignUserAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setId(null);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        userDashboardPreferenceDTO.setUser(otherUserDTO);
+
+        UserDashboardPreferenceDTO returnedUserDashboardPreferenceDTO = om.readValue(
+            restUserDashboardPreferenceMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(userDashboardPreferenceDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            UserDashboardPreferenceDTO.class
+        );
+
+        assertThat(returnedUserDashboardPreferenceDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedUserDashboardPreference = userDashboardPreferenceMapper.toEntity(returnedUserDashboardPreferenceDTO);
+    }
+
+    @Test
+    @Transactional
+    void createUserDashboardPreferenceWhenUserAlreadyHasPreferenceFails() throws Exception {
+        userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(createEntity(em));
+        userDashboardPreferenceDTO.setId(null);
+        userDashboardPreferenceDTO.setUser(null);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(userDashboardPreferenceDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void putUserDashboardPreferenceOwnedByAnotherUserIsNotFound() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setConfiguration(UPDATED_CONFIGURATION);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, userDashboardPreferenceDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(userDashboardPreferenceDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchUserDashboardPreferenceOwnedByAnotherUserIsNotFound() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"configuration\":\"" + UPDATED_CONFIGURATION + "\"}";
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteUserDashboardPreferenceOwnedByAnotherUserIsNotFound() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(delete(ENTITY_API_URL_ID, userDashboardPreference.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+
+        assertThat(userDashboardPreferenceRepository.existsById(userDashboardPreference.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateUserDashboardPreferenceCannotChangeOwner() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+        User otherUser = createOtherUser(em);
+
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        userDashboardPreferenceDTO.setUser(otherUserDTO);
+        userDashboardPreferenceDTO.setConfiguration(UPDATED_CONFIGURATION);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, userDashboardPreferenceDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(userDashboardPreferenceDTO))
+            )
+            .andExpect(status().isOk());
+
+        UserDashboardPreference persisted = userDashboardPreferenceRepository.findById(userDashboardPreference.getId()).orElseThrow();
+        assertThat(persisted.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persisted.getConfiguration()).isEqualTo(UPDATED_CONFIGURATION);
+    }
+
+    @Test
+    @Transactional
+    void patchUserDashboardPreferenceCannotChangeOwner() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+        User otherUser = createOtherUser(em);
+
+        String patchJson =
+            "{\"id\":" +
+            userDashboardPreference.getId() +
+            ",\"configuration\":\"" +
+            UPDATED_CONFIGURATION +
+            "\",\"user\":{\"id\":" +
+            otherUser.getId() +
+            ",\"login\":\"" +
+            otherUser.getLogin() +
+            "\"}}";
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isOk());
+
+        UserDashboardPreference persisted = userDashboardPreferenceRepository.findById(userDashboardPreference.getId()).orElseThrow();
+        assertThat(persisted.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persisted.getConfiguration()).isEqualTo(UPDATED_CONFIGURATION);
+    }
+
+    @Test
+    @Transactional
+    void patchUserDashboardPreferenceWithoutUserFieldPreservesOwner() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"configuration\":\"" + UPDATED_CONFIGURATION + "\"}";
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.login").value(CURRENT_MOCK_USER_LOGIN));
+    }
+
+    @Test
+    @Transactional
+    void patchUserDashboardPreferenceWithNullUserFails() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"user\":null}";
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllUserDashboardPreferencesIncludingOtherUsers() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+        UserDashboardPreference otherPreference = createEntity(em);
+        otherPreference.setUser(createOtherUser(em));
+        otherPreference = userDashboardPreferenceRepository.saveAndFlush(otherPreference);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(userDashboardPreference.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherPreference.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateUserDashboardPreferenceOwnedByAnotherUser() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setConfiguration(UPDATED_CONFIGURATION);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, userDashboardPreferenceDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(userDashboardPreferenceDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.configuration").value(UPDATED_CONFIGURATION));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteUserDashboardPreferenceOwnedByAnotherUser() throws Exception {
+        userDashboardPreference.setUser(createOtherUser(em));
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restUserDashboardPreferenceMockMvc
+            .perform(delete(ENTITY_API_URL_ID, userDashboardPreference.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedUserDashboardPreference = null;
     }
 
     protected long getRepositoryCount() {
