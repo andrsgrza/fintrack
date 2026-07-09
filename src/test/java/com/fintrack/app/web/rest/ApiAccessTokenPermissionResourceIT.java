@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.ApiAccessTokenPermissionAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -12,9 +13,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.ApiAccessToken;
 import com.fintrack.app.domain.ApiAccessTokenPermission;
+import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.ApiPermission;
 import com.fintrack.app.repository.ApiAccessTokenPermissionRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.ApiAccessTokenPermissionService;
+import com.fintrack.app.service.dto.ApiAccessTokenDTO;
 import com.fintrack.app.service.dto.ApiAccessTokenPermissionDTO;
 import com.fintrack.app.service.mapper.ApiAccessTokenPermissionMapper;
 import jakarta.persistence.EntityManager;
@@ -46,6 +50,8 @@ import org.springframework.transaction.annotation.Transactional;
 @AutoConfigureMockMvc
 @WithMockUser
 class ApiAccessTokenPermissionResourceIT {
+
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
     private static final ApiPermission DEFAULT_PERMISSION = ApiPermission.CREATE_TRANSACTIONS;
     private static final ApiPermission UPDATED_PERMISSION = ApiPermission.CREATE_TRANSACTIONS;
@@ -94,16 +100,7 @@ class ApiAccessTokenPermissionResourceIT {
         ApiAccessTokenPermission apiAccessTokenPermission = new ApiAccessTokenPermission()
             .permission(DEFAULT_PERMISSION)
             .createdAt(DEFAULT_CREATED_AT);
-        // Add required entity
-        ApiAccessToken apiAccessToken;
-        if (TestUtil.findAll(em, ApiAccessToken.class).isEmpty()) {
-            apiAccessToken = ApiAccessTokenResourceIT.createEntity(em);
-            em.persist(apiAccessToken);
-            em.flush();
-        } else {
-            apiAccessToken = TestUtil.findAll(em, ApiAccessToken.class).get(0);
-        }
-        apiAccessTokenPermission.setApiAccessToken(apiAccessToken);
+        apiAccessTokenPermission.setApiAccessToken(createPersistedApiAccessToken(em));
         return apiAccessTokenPermission;
     }
 
@@ -117,17 +114,40 @@ class ApiAccessTokenPermissionResourceIT {
         ApiAccessTokenPermission updatedApiAccessTokenPermission = new ApiAccessTokenPermission()
             .permission(UPDATED_PERMISSION)
             .createdAt(UPDATED_CREATED_AT);
-        // Add required entity
-        ApiAccessToken apiAccessToken;
-        if (TestUtil.findAll(em, ApiAccessToken.class).isEmpty()) {
-            apiAccessToken = ApiAccessTokenResourceIT.createUpdatedEntity(em);
-            em.persist(apiAccessToken);
-            em.flush();
-        } else {
-            apiAccessToken = TestUtil.findAll(em, ApiAccessToken.class).get(0);
-        }
-        updatedApiAccessTokenPermission.setApiAccessToken(apiAccessToken);
+        updatedApiAccessTokenPermission.setApiAccessToken(createPersistedUpdatedApiAccessToken(em));
         return updatedApiAccessTokenPermission;
+    }
+
+    private static ApiAccessToken createPersistedApiAccessToken(EntityManager em) {
+        ApiAccessToken apiAccessToken = ApiAccessTokenResourceIT.createEntity(em);
+        apiAccessToken.setTokenHash("hash-default-" + longCount.incrementAndGet());
+        em.persist(apiAccessToken);
+        em.flush();
+        return apiAccessToken;
+    }
+
+    private static ApiAccessToken createPersistedUpdatedApiAccessToken(EntityManager em) {
+        ApiAccessToken apiAccessToken = ApiAccessTokenResourceIT.createUpdatedEntity(em);
+        apiAccessToken.setTokenHash("hash-updated-" + longCount.incrementAndGet());
+        em.persist(apiAccessToken);
+        em.flush();
+        return apiAccessToken;
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
+    }
+
+    private ApiAccessTokenPermissionDTO toCreateDto(ApiAccessTokenPermission entity) {
+        ApiAccessTokenPermissionDTO dto = new ApiAccessTokenPermissionDTO();
+        dto.setPermission(entity.getPermission());
+        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
+        apiAccessTokenDTO.setId(entity.getApiAccessToken().getId());
+        dto.setApiAccessToken(apiAccessTokenDTO);
+        return dto;
     }
 
     @BeforeEach
@@ -148,7 +168,7 @@ class ApiAccessTokenPermissionResourceIT {
     void createApiAccessTokenPermission() throws Exception {
         long databaseSizeBeforeCreate = getRepositoryCount();
         // Create the ApiAccessTokenPermission
-        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(apiAccessTokenPermission);
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = toCreateDto(apiAccessTokenPermission);
         var returnedApiAccessTokenPermissionDTO = om.readValue(
             restApiAccessTokenPermissionMockMvc
                 .perform(
@@ -163,13 +183,14 @@ class ApiAccessTokenPermissionResourceIT {
 
         // Validate the ApiAccessTokenPermission in the database
         assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
-        var returnedApiAccessTokenPermission = apiAccessTokenPermissionMapper.toEntity(returnedApiAccessTokenPermissionDTO);
-        assertApiAccessTokenPermissionUpdatableFieldsEquals(
-            returnedApiAccessTokenPermission,
-            getPersistedApiAccessTokenPermission(returnedApiAccessTokenPermission)
+        assertThat(returnedApiAccessTokenPermissionDTO.getCreatedAt()).isNotNull();
+        assertThat(returnedApiAccessTokenPermissionDTO.getCreatedAt()).isNotEqualTo(DEFAULT_CREATED_AT);
+        assertThat(returnedApiAccessTokenPermissionDTO.getPermission()).isEqualTo(DEFAULT_PERMISSION);
+        assertThat(returnedApiAccessTokenPermissionDTO.getApiAccessToken().getId()).isEqualTo(
+            apiAccessTokenPermission.getApiAccessToken().getId()
         );
 
-        insertedApiAccessTokenPermission = returnedApiAccessTokenPermission;
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionMapper.toEntity(returnedApiAccessTokenPermissionDTO);
     }
 
     @Test
@@ -200,26 +221,7 @@ class ApiAccessTokenPermissionResourceIT {
         apiAccessTokenPermission.setPermission(null);
 
         // Create the ApiAccessTokenPermission, which fails.
-        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(apiAccessTokenPermission);
-
-        restApiAccessTokenPermissionMockMvc
-            .perform(
-                post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
-            )
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        apiAccessTokenPermission.setCreatedAt(null);
-
-        // Create the ApiAccessTokenPermission, which fails.
-        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(apiAccessTokenPermission);
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = toCreateDto(apiAccessTokenPermission);
 
         restApiAccessTokenPermissionMockMvc
             .perform(
@@ -294,14 +296,10 @@ class ApiAccessTokenPermissionResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the apiAccessTokenPermission
-        ApiAccessTokenPermission updatedApiAccessTokenPermission = apiAccessTokenPermissionRepository
-            .findById(apiAccessTokenPermission.getId())
-            .orElseThrow();
-        // Disconnect from session so that the updates on updatedApiAccessTokenPermission are not directly saved in db
-        em.detach(updatedApiAccessTokenPermission);
-        updatedApiAccessTokenPermission.permission(UPDATED_PERMISSION).createdAt(UPDATED_CREATED_AT);
-        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(updatedApiAccessTokenPermission);
+        // Update the apiAccessTokenPermission without changing immutable fields
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(
+            getPersistedApiAccessTokenPermission(apiAccessTokenPermission)
+        );
 
         restApiAccessTokenPermissionMockMvc
             .perform(
@@ -313,7 +311,10 @@ class ApiAccessTokenPermissionResourceIT {
 
         // Validate the ApiAccessTokenPermission in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedApiAccessTokenPermissionToMatchAllProperties(updatedApiAccessTokenPermission);
+        ApiAccessTokenPermission persisted = getPersistedApiAccessTokenPermission(apiAccessTokenPermission);
+        assertThat(persisted.getPermission()).isEqualTo(DEFAULT_PERMISSION);
+        assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persisted.getApiAccessToken().getId()).isEqualTo(apiAccessTokenPermission.getApiAccessToken().getId());
     }
 
     @Test
@@ -386,27 +387,20 @@ class ApiAccessTokenPermissionResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the apiAccessTokenPermission using partial update
-        ApiAccessTokenPermission partialUpdatedApiAccessTokenPermission = new ApiAccessTokenPermission();
-        partialUpdatedApiAccessTokenPermission.setId(apiAccessTokenPermission.getId());
-
-        partialUpdatedApiAccessTokenPermission.createdAt(UPDATED_CREATED_AT);
+        String patchJson = "{\"id\":" + apiAccessTokenPermission.getId() + "}";
 
         restApiAccessTokenPermissionMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedApiAccessTokenPermission.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedApiAccessTokenPermission))
+                patch(ENTITY_API_URL_ID, apiAccessTokenPermission.getId()).contentType("application/merge-patch+json").content(patchJson)
             )
             .andExpect(status().isOk());
 
         // Validate the ApiAccessTokenPermission in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertApiAccessTokenPermissionUpdatableFieldsEquals(
-            createUpdateProxyForBean(partialUpdatedApiAccessTokenPermission, apiAccessTokenPermission),
-            getPersistedApiAccessTokenPermission(apiAccessTokenPermission)
-        );
+        ApiAccessTokenPermission persisted = getPersistedApiAccessTokenPermission(apiAccessTokenPermission);
+        assertThat(persisted.getPermission()).isEqualTo(DEFAULT_PERMISSION);
+        assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
     }
 
     @Test
@@ -417,27 +411,15 @@ class ApiAccessTokenPermissionResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the apiAccessTokenPermission using partial update
-        ApiAccessTokenPermission partialUpdatedApiAccessTokenPermission = new ApiAccessTokenPermission();
-        partialUpdatedApiAccessTokenPermission.setId(apiAccessTokenPermission.getId());
-
-        partialUpdatedApiAccessTokenPermission.permission(UPDATED_PERMISSION).createdAt(UPDATED_CREATED_AT);
+        String patchJson = "{\"id\":" + apiAccessTokenPermission.getId() + ",\"createdAt\":\"" + UPDATED_CREATED_AT + "\"}";
 
         restApiAccessTokenPermissionMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedApiAccessTokenPermission.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedApiAccessTokenPermission))
+                patch(ENTITY_API_URL_ID, apiAccessTokenPermission.getId()).contentType("application/merge-patch+json").content(patchJson)
             )
-            .andExpect(status().isOk());
-
-        // Validate the ApiAccessTokenPermission in the database
+            .andExpect(status().isBadRequest());
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertApiAccessTokenPermissionUpdatableFieldsEquals(
-            partialUpdatedApiAccessTokenPermission,
-            getPersistedApiAccessTokenPermission(partialUpdatedApiAccessTokenPermission)
-        );
     }
 
     @Test
@@ -519,6 +501,260 @@ class ApiAccessTokenPermissionResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void getApiAccessTokenPermissionOwnedByAnotherUserIsNotFound() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+
+        restApiAccessTokenPermissionMockMvc.perform(get(ENTITY_API_URL_ID, otherPermission.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllApiAccessTokenPermissionsDoesNotIncludeAnotherUsersPermissions() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherPermission.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetApiAccessTokenPermissionOwnedByAnotherUser() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(get(ENTITY_API_URL_ID, otherPermission.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(otherPermission.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void putApiAccessTokenPermissionOwnedByAnotherUserIsNotFound() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(otherPermission);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenPermissionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenPermissionOwnedByAnotherUserIsNotFound() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+        String patchJson = "{\"id\":" + otherPermission.getId() + "}";
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, otherPermission.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteApiAccessTokenPermissionOwnedByAnotherUserIsNotFound() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherPermission.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllApiAccessTokenPermissionsIncludingOtherUsers() throws Exception {
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(apiAccessTokenPermission.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherPermission.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateApiAccessTokenPermissionOwnedByAnotherUser() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(otherPermission);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenPermissionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.permission").value(DEFAULT_PERMISSION.toString()));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteApiAccessTokenPermissionOwnedByAnotherUser() throws Exception {
+        ApiAccessTokenPermission otherPermission = savePermissionOnOtherUsersToken();
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherPermission.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenPermissionWithTokenOwnedByAnotherUserFails() throws Exception {
+        ApiAccessToken otherUsersToken = createApiAccessTokenForUser(em, createOtherUser(em));
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = toCreateDto(apiAccessTokenPermission);
+        apiAccessTokenPermissionDTO.setId(null);
+        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
+        apiAccessTokenDTO.setId(otherUsersToken.getId());
+        apiAccessTokenPermissionDTO.setApiAccessToken(apiAccessTokenDTO);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenPermissionForTokenThatAlreadyHasPermissionFails() throws Exception {
+        ApiAccessToken apiAccessTokenEntity = apiAccessTokenPermission.getApiAccessToken();
+        apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = toCreateDto(createEntity(em));
+        apiAccessTokenPermissionDTO.setId(null);
+        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
+        apiAccessTokenDTO.setId(apiAccessTokenEntity.getId());
+        apiAccessTokenPermissionDTO.setApiAccessToken(apiAccessTokenDTO);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateApiAccessTokenPermissionWithDifferentApiAccessTokenFails() throws Exception {
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+        ApiAccessToken anotherApiAccessToken = createPersistedUpdatedApiAccessToken(em);
+
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(apiAccessTokenPermission);
+        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
+        apiAccessTokenDTO.setId(anotherApiAccessToken.getId());
+        apiAccessTokenPermissionDTO.setApiAccessToken(apiAccessTokenDTO);
+        apiAccessTokenPermissionDTO.setCreatedAt(DEFAULT_CREATED_AT);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenPermissionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenPermissionWithDifferentApiAccessTokenFails() throws Exception {
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+        ApiAccessToken anotherApiAccessToken = createPersistedUpdatedApiAccessToken(em);
+
+        String patchJson =
+            "{\"id\":" + apiAccessTokenPermission.getId() + ",\"apiAccessToken\":{\"id\":" + anotherApiAccessToken.getId() + "}}";
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, apiAccessTokenPermission.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenPermissionWithoutApiAccessTokenFieldPreservesParent() throws Exception {
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+        Long originalTokenId = apiAccessTokenPermission.getApiAccessToken().getId();
+
+        String patchJson = "{\"id\":" + apiAccessTokenPermission.getId() + "}";
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, apiAccessTokenPermission.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.apiAccessToken.id").value(originalTokenId.intValue()));
+
+        assertThat(getPersistedApiAccessTokenPermission(apiAccessTokenPermission).getApiAccessToken().getId()).isEqualTo(originalTokenId);
+    }
+
+    @Test
+    @Transactional
+    void patchApiAccessTokenPermissionWithNullApiAccessTokenFails() throws Exception {
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+
+        String patchJson = "{\"id\":" + apiAccessTokenPermission.getId() + ",\"apiAccessToken\":null}";
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, apiAccessTokenPermission.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateApiAccessTokenPermissionWithDifferentCreatedAtFails() throws Exception {
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = apiAccessTokenPermissionMapper.toDto(apiAccessTokenPermission);
+        apiAccessTokenPermissionDTO.setCreatedAt(UPDATED_CREATED_AT);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiAccessTokenPermissionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    private ApiAccessToken createApiAccessTokenForUser(EntityManager em, User user) {
+        ApiAccessToken apiAccessTokenEntity = ApiAccessTokenResourceIT.createEntity(em);
+        apiAccessTokenEntity.setUser(user);
+        apiAccessTokenEntity.setTokenHash("hash-other-" + longCount.incrementAndGet());
+        em.persist(apiAccessTokenEntity);
+        em.flush();
+        return apiAccessTokenEntity;
+    }
+
+    private ApiAccessTokenPermission savePermissionOnOtherUsersToken() {
+        ApiAccessToken otherUsersToken = createApiAccessTokenForUser(em, createOtherUser(em));
+        return savePermissionOnToken(otherUsersToken);
+    }
+
+    private ApiAccessTokenPermission savePermissionOnToken(ApiAccessToken apiAccessTokenEntity) {
+        ApiAccessTokenPermission permission = new ApiAccessTokenPermission().permission(DEFAULT_PERMISSION).createdAt(DEFAULT_CREATED_AT);
+        permission.setApiAccessToken(apiAccessTokenEntity);
+        return apiAccessTokenPermissionRepository.saveAndFlush(permission);
     }
 
     protected long getRepositoryCount() {

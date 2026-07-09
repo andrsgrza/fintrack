@@ -15,44 +15,42 @@ describe('ApiAccessTokenPermission e2e test', () => {
   const apiAccessTokenPermissionPageUrlPattern = new RegExp('/api-access-token-permission(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const apiAccessTokenPermissionSample = {"permission":"CREATE_TRANSACTIONS","createdAt":"2026-07-07T01:55:14.962Z"};
 
   let apiAccessTokenPermission;
-  // let apiAccessToken;
+  let apiAccessToken;
+
+  const buildTokenPayload = (suffix: string) => {
+    const now = new Date().toISOString();
+    return {
+      name: `token-${suffix}`,
+      tokenPrefix: 'ftk_',
+      tokenHash: `hash-${suffix}`,
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
 
-  /* Disabled due to incompatibility
   beforeEach(() => {
-    // create an instance at the required relationship entity:
+    const suffix = `${Date.now()}`;
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/api-access-tokens',
-      body: {"name":"intensely boohoo","tokenPrefix":"hairy amid","tokenHash":"better unfreeze","status":"EXPIRED","createdAt":"2026-07-07T01:22:08.983Z","updatedAt":"2026-07-07T07:02:06.868Z","lastUsedAt":"2026-07-07T10:32:51.716Z","expiresAt":"2026-07-07T16:20:58.806Z","revokedAt":"2026-07-07T00:57:27.595Z"},
+      body: buildTokenPayload(suffix),
     }).then(({ body }) => {
       apiAccessToken = body;
     });
   });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/api-access-token-permissions+(?*|)').as('entitiesRequest');
     cy.intercept('POST', '/api/api-access-token-permissions').as('postEntityRequest');
     cy.intercept('DELETE', '/api/api-access-token-permissions/*').as('deleteEntityRequest');
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/api-access-tokens', {
-      statusCode: 200,
-      body: [apiAccessToken],
-    });
-
-  });
-   */
 
   afterEach(() => {
     if (apiAccessTokenPermission) {
@@ -65,7 +63,6 @@ describe('ApiAccessTokenPermission e2e test', () => {
     }
   });
 
-  /* Disabled due to incompatibility
   afterEach(() => {
     if (apiAccessToken) {
       cy.authenticatedRequest({
@@ -76,7 +73,6 @@ describe('ApiAccessTokenPermission e2e test', () => {
       });
     }
   });
-   */
 
   it('ApiAccessTokenPermissions menu should load ApiAccessTokenPermissions page', () => {
     cy.visit('/');
@@ -95,6 +91,10 @@ describe('ApiAccessTokenPermission e2e test', () => {
   describe('ApiAccessTokenPermission page', () => {
     describe('create button click', () => {
       beforeEach(() => {
+        cy.intercept('GET', '/api/api-access-tokens+(?*|)', {
+          statusCode: 200,
+          body: [apiAccessToken],
+        });
         cy.visit(apiAccessTokenPermissionPageUrl);
         cy.wait('@entitiesRequest');
       });
@@ -103,6 +103,7 @@ describe('ApiAccessTokenPermission e2e test', () => {
         cy.get(entityCreateButtonSelector).click();
         cy.url().should('match', new RegExp('/api-access-token-permission/new$'));
         cy.getEntityCreateUpdateHeading('ApiAccessTokenPermission');
+        cy.get('[data-cy="createdAt"]').should('not.exist');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
@@ -113,14 +114,13 @@ describe('ApiAccessTokenPermission e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/api-access-token-permissions',
           body: {
-            ...apiAccessTokenPermissionSample,
-            apiAccessToken: apiAccessToken,
+            permission: 'CREATE_TRANSACTIONS',
+            apiAccessToken: { id: apiAccessToken.id },
           },
         }).then(({ body }) => {
           apiAccessTokenPermission = body;
@@ -134,24 +134,12 @@ describe('ApiAccessTokenPermission e2e test', () => {
             {
               statusCode: 200,
               body: [apiAccessTokenPermission],
-            }
+            },
           ).as('entitiesRequestInternal');
         });
 
         cy.visit(apiAccessTokenPermissionPageUrl);
-
         cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(apiAccessTokenPermissionPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
       });
 
       it('detail button click should load details ApiAccessTokenPermission page', () => {
@@ -167,6 +155,9 @@ describe('ApiAccessTokenPermission e2e test', () => {
       it('edit button click should load edit ApiAccessTokenPermission page and go back', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('ApiAccessTokenPermission');
+        cy.get('[data-cy="permission"]').should('have.attr', 'readonly');
+        cy.get('[data-cy="apiAccessToken"]').should('have.attr', 'readonly');
+        cy.get('[data-cy="createdAt"]').should('not.exist');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
@@ -185,8 +176,7 @@ describe('ApiAccessTokenPermission e2e test', () => {
         cy.url().should('match', apiAccessTokenPermissionPageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of ApiAccessTokenPermission', () => {
+      it('last delete button click should delete instance of ApiAccessTokenPermission', () => {
         cy.intercept('GET', '/api/api-access-token-permissions/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -207,20 +197,18 @@ describe('ApiAccessTokenPermission e2e test', () => {
 
   describe('new ApiAccessTokenPermission page', () => {
     beforeEach(() => {
+      cy.intercept('GET', '/api/api-access-tokens+(?*|)', {
+        statusCode: 200,
+        body: [apiAccessToken],
+      });
       cy.visit(`${apiAccessTokenPermissionPageUrl}`);
       cy.get(entityCreateButtonSelector).click();
       cy.getEntityCreateUpdateHeading('ApiAccessTokenPermission');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of ApiAccessTokenPermission', () => {
+    it('should create an instance of ApiAccessTokenPermission', () => {
       cy.get(`[data-cy="permission"]`).select('CREATE_TRANSACTIONS');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T09:36');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T09:36');
-
-      cy.get(`[data-cy="apiAccessToken"]`).select(1);
+      cy.get(`[data-cy="apiAccessToken"]`).select(`${apiAccessToken.id}`);
 
       cy.get(entityCreateSaveButtonSelector).click();
 

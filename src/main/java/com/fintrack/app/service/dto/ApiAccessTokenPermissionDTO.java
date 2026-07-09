@@ -19,7 +19,6 @@ public class ApiAccessTokenPermissionDTO implements Serializable {
     @NotNull
     private ApiPermission permission;
 
-    @NotNull
     private Instant createdAt;
 
     @NotNull

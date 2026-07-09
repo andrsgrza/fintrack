@@ -4,7 +4,6 @@ import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities as getApiAccessTokens } from 'app/entities/api-access-token/api-access-token.reducer';
@@ -50,12 +49,13 @@ export const ApiAccessTokenPermissionUpdate = () => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
 
     const entity = {
       ...apiAccessTokenPermissionEntity,
       ...values,
-      apiAccessToken: apiAccessTokens.find(it => it.id.toString() === values.apiAccessToken?.toString()),
+      apiAccessToken: isNew
+        ? apiAccessTokens.find(it => it.id.toString() === values.apiAccessToken?.toString())
+        : apiAccessTokenPermissionEntity.apiAccessToken,
     };
 
     if (isNew) {
@@ -68,13 +68,11 @@ export const ApiAccessTokenPermissionUpdate = () => {
   const defaultValues = () =>
     isNew
       ? {
-          createdAt: displayDefaultDateTime(),
+          permission: 'CREATE_TRANSACTIONS',
         }
       : {
-          permission: 'CREATE_TRANSACTIONS',
           ...apiAccessTokenPermissionEntity,
-          createdAt: convertDateTimeFromServer(apiAccessTokenPermissionEntity.createdAt),
-          apiAccessToken: apiAccessTokenPermissionEntity?.apiAccessToken?.id,
+          apiAccessToken: apiAccessTokenPermissionEntity?.apiAccessToken?.name,
         };
 
   return (
@@ -110,6 +108,7 @@ export const ApiAccessTokenPermissionUpdate = () => {
                 name="permission"
                 data-cy="permission"
                 type="select"
+                readOnly={!isNew}
               >
                 {apiPermissionValues.map(apiPermission => (
                   <option value={apiPermission} key={apiPermission}>
@@ -117,34 +116,34 @@ export const ApiAccessTokenPermissionUpdate = () => {
                   </option>
                 ))}
               </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.apiAccessTokenPermission.createdAt')}
-                id="api-access-token-permission-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                id="api-access-token-permission-apiAccessToken"
-                name="apiAccessToken"
-                data-cy="apiAccessToken"
-                label={translate('fintrackApp.apiAccessTokenPermission.apiAccessToken')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {apiAccessTokens
-                  ? apiAccessTokens.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.name}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
+              {isNew ? (
+                <ValidatedField
+                  id="api-access-token-permission-apiAccessToken"
+                  name="apiAccessToken"
+                  data-cy="apiAccessToken"
+                  label={translate('fintrackApp.apiAccessTokenPermission.apiAccessToken')}
+                  type="select"
+                  required
+                >
+                  <option value="" key="0" />
+                  {apiAccessTokens
+                    ? apiAccessTokens.map(otherEntity => (
+                        <option value={otherEntity.id} key={otherEntity.id}>
+                          {otherEntity.name}
+                        </option>
+                      ))
+                    : null}
+                </ValidatedField>
+              ) : (
+                <ValidatedField
+                  id="api-access-token-permission-apiAccessToken"
+                  name="apiAccessToken"
+                  data-cy="apiAccessToken"
+                  label={translate('fintrackApp.apiAccessTokenPermission.apiAccessToken')}
+                  type="text"
+                  readOnly
+                />
+              )}
               <FormText>
                 <Translate contentKey="entity.validation.required">This field is required.</Translate>
               </FormText>

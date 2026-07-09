@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.ApiAccessTokenPermissionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.ApiAccessTokenPermissionService;
 import com.fintrack.app.service.dto.ApiAccessTokenPermissionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,14 +36,11 @@ public class ApiAccessTokenPermissionResource {
 
     private final ApiAccessTokenPermissionService apiAccessTokenPermissionService;
 
-    private final ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepository;
+    private final ObjectMapper objectMapper;
 
-    public ApiAccessTokenPermissionResource(
-        ApiAccessTokenPermissionService apiAccessTokenPermissionService,
-        ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepository
-    ) {
+    public ApiAccessTokenPermissionResource(ApiAccessTokenPermissionService apiAccessTokenPermissionService, ObjectMapper objectMapper) {
         this.apiAccessTokenPermissionService = apiAccessTokenPermissionService;
-        this.apiAccessTokenPermissionRepository = apiAccessTokenPermissionRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -60,7 +58,11 @@ public class ApiAccessTokenPermissionResource {
         if (apiAccessTokenPermissionDTO.getId() != null) {
             throw new BadRequestAlertException("A new apiAccessTokenPermission cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        apiAccessTokenPermissionDTO = apiAccessTokenPermissionService.save(apiAccessTokenPermissionDTO);
+        try {
+            apiAccessTokenPermissionDTO = apiAccessTokenPermissionService.save(apiAccessTokenPermissionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/api-access-token-permissions/" + apiAccessTokenPermissionDTO.getId()))
             .headers(
                 HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, apiAccessTokenPermissionDTO.getId().toString())
@@ -91,11 +93,15 @@ public class ApiAccessTokenPermissionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!apiAccessTokenPermissionRepository.existsById(id)) {
+        if (!apiAccessTokenPermissionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        apiAccessTokenPermissionDTO = apiAccessTokenPermissionService.update(apiAccessTokenPermissionDTO);
+        try {
+            apiAccessTokenPermissionDTO = apiAccessTokenPermissionService.update(apiAccessTokenPermissionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, apiAccessTokenPermissionDTO.getId().toString()))
             .body(apiAccessTokenPermissionDTO);
@@ -105,7 +111,7 @@ public class ApiAccessTokenPermissionResource {
      * {@code PATCH  /api-access-token-permissions/:id} : Partial updates given fields of an existing apiAccessTokenPermission, field will ignore if it is null
      *
      * @param id the id of the apiAccessTokenPermissionDTO to save.
-     * @param apiAccessTokenPermissionDTO the apiAccessTokenPermissionDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated apiAccessTokenPermissionDTO,
      * or with status {@code 400 (Bad Request)} if the apiAccessTokenPermissionDTO is not valid,
      * or with status {@code 404 (Not Found)} if the apiAccessTokenPermissionDTO is not found,
@@ -115,21 +121,35 @@ public class ApiAccessTokenPermissionResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<ApiAccessTokenPermissionDTO> partialUpdateApiAccessTokenPermission(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update ApiAccessTokenPermission partially : {}, {}", id, apiAccessTokenPermissionDTO);
+        LOG.debug("REST request to partial update ApiAccessTokenPermission partially : {}, {}", id, patchNode);
+        if (patchNode.has("apiAccessToken") && patchNode.get("apiAccessToken").isNull()) {
+            throw new BadRequestAlertException("Api access token cannot be null", ENTITY_NAME, "invalid");
+        }
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO;
+        try {
+            apiAccessTokenPermissionDTO = objectMapper.treeToValue(patchNode, ApiAccessTokenPermissionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (apiAccessTokenPermissionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            apiAccessTokenPermissionDTO.setId(id);
         }
         if (!Objects.equals(id, apiAccessTokenPermissionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!apiAccessTokenPermissionRepository.existsById(id)) {
+        if (!apiAccessTokenPermissionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<ApiAccessTokenPermissionDTO> result = apiAccessTokenPermissionService.partialUpdate(apiAccessTokenPermissionDTO);
+        Optional<ApiAccessTokenPermissionDTO> result;
+        try {
+            result = apiAccessTokenPermissionService.partialUpdate(apiAccessTokenPermissionDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -173,7 +193,9 @@ public class ApiAccessTokenPermissionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApiAccessTokenPermission(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete ApiAccessTokenPermission : {}", id);
-        apiAccessTokenPermissionService.delete(id);
+        if (!apiAccessTokenPermissionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

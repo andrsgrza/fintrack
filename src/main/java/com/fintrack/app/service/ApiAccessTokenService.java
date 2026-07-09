@@ -180,6 +180,17 @@ public class ApiAccessTokenService {
         return true;
     }
 
+    /**
+     * Returns the api access token entity when it is visible to the current user.
+     *
+     * @param id the id of the entity.
+     * @return the entity when accessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ApiAccessToken> findAccessibleApiAccessTokenEntity(Long id) {
+        return findAccessibleEntity(id);
+    }
+
     private Optional<ApiAccessToken> findAccessibleEntity(Long id) {
         if (currentUserService.isAdmin()) {
             return apiAccessTokenRepository.findOneWithEagerRelationships(id);
