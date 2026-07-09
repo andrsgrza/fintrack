@@ -15,27 +15,35 @@ describe('TransactionRuleCondition e2e test', () => {
   const transactionRuleConditionPageUrlPattern = new RegExp('/transaction-rule-condition(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const transactionRuleConditionSample = {"field":"POSTING_DATE","operator":"ENDS_WITH","value":"past","caseSensitive":false,"position":15276};
 
   let transactionRuleCondition;
-  // let transactionRule;
+  let transactionRule;
+
+  const buildTransactionRulePayload = (name: string) => {
+    const now = new Date().toISOString();
+    return {
+      name,
+      priority: 1,
+      conditionLogic: 'ALL',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
 
-  /* Disabled due to incompatibility
   beforeEach(() => {
-    // create an instance at the required relationship entity:
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/transaction-rules',
-      body: {"name":"upside-down that","description":"annual","priority":27948,"conditionLogic":"ALL","resultingDescription":"shoot","active":false,"createdAt":"2026-07-06T19:19:16.579Z","updatedAt":"2026-07-07T13:07:39.039Z"},
+      body: buildTransactionRulePayload(`rule-for-condition-${Date.now()}`),
     }).then(({ body }) => {
       transactionRule = body;
     });
   });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/transaction-rule-conditions+(?*|)').as('entitiesRequest');
@@ -43,16 +51,12 @@ describe('TransactionRuleCondition e2e test', () => {
     cy.intercept('DELETE', '/api/transaction-rule-conditions/*').as('deleteEntityRequest');
   });
 
-  /* Disabled due to incompatibility
   beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
     cy.intercept('GET', '/api/transaction-rules', {
       statusCode: 200,
       body: [transactionRule],
     });
-
   });
-   */
 
   afterEach(() => {
     if (transactionRuleCondition) {
@@ -65,7 +69,6 @@ describe('TransactionRuleCondition e2e test', () => {
     }
   });
 
-  /* Disabled due to incompatibility
   afterEach(() => {
     if (transactionRule) {
       cy.authenticatedRequest({
@@ -76,7 +79,6 @@ describe('TransactionRuleCondition e2e test', () => {
       });
     }
   });
-   */
 
   it('TransactionRuleConditions menu should load TransactionRuleConditions page', () => {
     cy.visit('/');
@@ -113,14 +115,17 @@ describe('TransactionRuleCondition e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/transaction-rule-conditions',
           body: {
-            ...transactionRuleConditionSample,
-            transactionRule: transactionRule,
+            field: 'DESCRIPTION',
+            operator: 'EQUALS',
+            value: 'cypress-value',
+            caseSensitive: false,
+            position: 1,
+            transactionRule: { id: transactionRule.id },
           },
         }).then(({ body }) => {
           transactionRuleCondition = body;
@@ -134,24 +139,12 @@ describe('TransactionRuleCondition e2e test', () => {
             {
               statusCode: 200,
               body: [transactionRuleCondition],
-            }
+            },
           ).as('entitiesRequestInternal');
         });
 
         cy.visit(transactionRuleConditionPageUrl);
-
         cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(transactionRuleConditionPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
       });
 
       it('detail button click should load details TransactionRuleCondition page', () => {
@@ -185,8 +178,7 @@ describe('TransactionRuleCondition e2e test', () => {
         cy.url().should('match', transactionRuleConditionPageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of TransactionRuleCondition', () => {
+      it('last delete button click should delete instance of TransactionRuleCondition', () => {
         cy.intercept('GET', '/api/transaction-rule-conditions/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -212,31 +204,19 @@ describe('TransactionRuleCondition e2e test', () => {
       cy.getEntityCreateUpdateHeading('TransactionRuleCondition');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of TransactionRuleCondition', () => {
-      cy.get(`[data-cy="field"]`).select('TRANSACTION_DATE');
-
-      cy.get(`[data-cy="operator"]`).select('NOT_IN');
-
-      cy.get(`[data-cy="value"]`).type('upright judgementally formula');
-      cy.get(`[data-cy="value"]`).should('have.value', 'upright judgementally formula');
-
-      cy.get(`[data-cy="secondValue"]`).type('grandiose about');
-      cy.get(`[data-cy="secondValue"]`).should('have.value', 'grandiose about');
-
+    it('should create an instance of TransactionRuleCondition', () => {
+      cy.get(`[data-cy="field"]`).select('DESCRIPTION');
+      cy.get(`[data-cy="operator"]`).select('EQUALS');
+      cy.get(`[data-cy="value"]`).type('cypress-create-value');
       cy.get(`[data-cy="caseSensitive"]`).should('not.be.checked');
-      cy.get(`[data-cy="caseSensitive"]`).click();
-      cy.get(`[data-cy="caseSensitive"]`).should('be.checked');
-
-      cy.get(`[data-cy="position"]`).type('10376');
-      cy.get(`[data-cy="position"]`).should('have.value', '10376');
-
+      cy.get(`[data-cy="position"]`).type('1');
       cy.get(`[data-cy="transactionRule"]`).select(1);
 
       cy.get(entityCreateSaveButtonSelector).click();
 
       cy.wait('@postEntityRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(201);
+        expect(response?.body.transactionRule.id).to.equal(transactionRule.id);
         transactionRuleCondition = response.body;
       });
       cy.wait('@entitiesRequest').then(({ response }) => {

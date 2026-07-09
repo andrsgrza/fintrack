@@ -1,8 +1,12 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
+import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
+import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleConditionMapper;
 import java.util.LinkedList;
 import java.util.List;
@@ -28,12 +32,20 @@ public class TransactionRuleConditionService {
 
     private final TransactionRuleConditionMapper transactionRuleConditionMapper;
 
+    private final CurrentUserService currentUserService;
+
+    private final TransactionRuleRepository transactionRuleRepository;
+
     public TransactionRuleConditionService(
         TransactionRuleConditionRepository transactionRuleConditionRepository,
-        TransactionRuleConditionMapper transactionRuleConditionMapper
+        TransactionRuleConditionMapper transactionRuleConditionMapper,
+        CurrentUserService currentUserService,
+        TransactionRuleRepository transactionRuleRepository
     ) {
         this.transactionRuleConditionRepository = transactionRuleConditionRepository;
         this.transactionRuleConditionMapper = transactionRuleConditionMapper;
+        this.currentUserService = currentUserService;
+        this.transactionRuleRepository = transactionRuleRepository;
     }
 
     /**
@@ -45,6 +57,7 @@ public class TransactionRuleConditionService {
     public TransactionRuleConditionDTO save(TransactionRuleConditionDTO transactionRuleConditionDTO) {
         LOG.debug("Request to save TransactionRuleCondition : {}", transactionRuleConditionDTO);
         TransactionRuleCondition transactionRuleCondition = transactionRuleConditionMapper.toEntity(transactionRuleConditionDTO);
+        transactionRuleCondition.setTransactionRule(resolveTransactionRule(transactionRuleConditionDTO.getTransactionRule(), null));
         transactionRuleCondition = transactionRuleConditionRepository.save(transactionRuleCondition);
         return transactionRuleConditionMapper.toDto(transactionRuleCondition);
     }
@@ -57,7 +70,11 @@ public class TransactionRuleConditionService {
      */
     public TransactionRuleConditionDTO update(TransactionRuleConditionDTO transactionRuleConditionDTO) {
         LOG.debug("Request to update TransactionRuleCondition : {}", transactionRuleConditionDTO);
+        TransactionRuleCondition existingTransactionRuleCondition = findAccessibleEntity(transactionRuleConditionDTO.getId()).orElseThrow();
         TransactionRuleCondition transactionRuleCondition = transactionRuleConditionMapper.toEntity(transactionRuleConditionDTO);
+        transactionRuleCondition.setTransactionRule(
+            resolveTransactionRule(transactionRuleConditionDTO.getTransactionRule(), existingTransactionRuleCondition.getTransactionRule())
+        );
         transactionRuleCondition = transactionRuleConditionRepository.save(transactionRuleCondition);
         return transactionRuleConditionMapper.toDto(transactionRuleCondition);
     }
@@ -69,13 +86,29 @@ public class TransactionRuleConditionService {
      * @return the persisted entity.
      */
     public Optional<TransactionRuleConditionDTO> partialUpdate(TransactionRuleConditionDTO transactionRuleConditionDTO) {
+        return partialUpdate(transactionRuleConditionDTO, null);
+    }
+
+    /**
+     * Partially update a transactionRuleCondition, applying parent changes only when present in the patch body.
+     *
+     * @param transactionRuleConditionDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<TransactionRuleConditionDTO> partialUpdate(
+        TransactionRuleConditionDTO transactionRuleConditionDTO,
+        JsonNode patchNode
+    ) {
         LOG.debug("Request to partially update TransactionRuleCondition : {}", transactionRuleConditionDTO);
 
-        return transactionRuleConditionRepository
-            .findById(transactionRuleConditionDTO.getId())
+        return findAccessibleEntity(transactionRuleConditionDTO.getId())
             .map(existingTransactionRuleCondition -> {
+                if (patchNode != null && patchNode.has("transactionRule") && patchNode.get("transactionRule").isNull()) {
+                    throw new IllegalArgumentException("Transaction rule cannot be null");
+                }
                 transactionRuleConditionMapper.partialUpdate(existingTransactionRuleCondition, transactionRuleConditionDTO);
-
+                applyTransactionRuleForPartialUpdate(existingTransactionRuleCondition, transactionRuleConditionDTO, patchNode);
                 return existingTransactionRuleCondition;
             })
             .map(transactionRuleConditionRepository::save)
@@ -90,8 +123,15 @@ public class TransactionRuleConditionService {
     @Transactional(readOnly = true)
     public List<TransactionRuleConditionDTO> findAll() {
         LOG.debug("Request to get all TransactionRuleConditions");
+        if (currentUserService.isAdmin()) {
+            return transactionRuleConditionRepository
+                .findAllWithEagerRelationships()
+                .stream()
+                .map(transactionRuleConditionMapper::toDto)
+                .collect(Collectors.toCollection(LinkedList::new));
+        }
         return transactionRuleConditionRepository
-            .findAll()
+            .findAllWithEagerRelationshipsByRuleUserLogin(currentUserService.getCurrentUserLogin())
             .stream()
             .map(transactionRuleConditionMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
@@ -103,7 +143,10 @@ public class TransactionRuleConditionService {
      * @return the list of entities.
      */
     public Page<TransactionRuleConditionDTO> findAllWithEagerRelationships(Pageable pageable) {
-        return transactionRuleConditionRepository.findAllWithEagerRelationships(pageable).map(transactionRuleConditionMapper::toDto);
+        if (currentUserService.isAdmin()) {
+            return transactionRuleConditionRepository.findAllWithEagerRelationships(pageable).map(transactionRuleConditionMapper::toDto);
+        }
+        throw new UnsupportedOperationException("Paged access is only supported for admin users");
     }
 
     /**
@@ -115,16 +158,86 @@ public class TransactionRuleConditionService {
     @Transactional(readOnly = true)
     public Optional<TransactionRuleConditionDTO> findOne(Long id) {
         LOG.debug("Request to get TransactionRuleCondition : {}", id);
-        return transactionRuleConditionRepository.findOneWithEagerRelationships(id).map(transactionRuleConditionMapper::toDto);
+        return findAccessibleEntity(id).map(transactionRuleConditionMapper::toDto);
+    }
+
+    /**
+     * Returns whether the current user can access the transaction rule condition.
+     *
+     * @param id the id of the entity.
+     * @return true when the condition exists and is visible to the current user.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAccessible(Long id) {
+        return findAccessibleEntity(id).isPresent();
     }
 
     /**
      * Delete the transactionRuleCondition by id.
      *
      * @param id the id of the entity.
+     * @return true when the condition was deleted.
      */
-    public void delete(Long id) {
+    public boolean delete(Long id) {
         LOG.debug("Request to delete TransactionRuleCondition : {}", id);
+        Optional<TransactionRuleCondition> transactionRuleCondition = findAccessibleEntity(id);
+        if (transactionRuleCondition.isEmpty()) {
+            return false;
+        }
         transactionRuleConditionRepository.deleteById(id);
+        return true;
+    }
+
+    private Optional<TransactionRuleCondition> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return transactionRuleConditionRepository.findOneWithEagerRelationships(id);
+        }
+        return transactionRuleConditionRepository.findOneWithEagerRelationshipsByIdAndRuleUserLogin(
+            id,
+            currentUserService.getCurrentUserLogin()
+        );
+    }
+
+    private void applyTransactionRuleForPartialUpdate(
+        TransactionRuleCondition transactionRuleCondition,
+        TransactionRuleConditionDTO transactionRuleConditionDTO,
+        JsonNode patchNode
+    ) {
+        if (patchNode != null) {
+            if (patchNode.has("transactionRule")) {
+                transactionRuleCondition.setTransactionRule(
+                    resolveTransactionRule(transactionRuleConditionDTO.getTransactionRule(), transactionRuleCondition.getTransactionRule())
+                );
+            }
+            return;
+        }
+        if (transactionRuleConditionDTO.getTransactionRule() != null) {
+            transactionRuleCondition.setTransactionRule(
+                resolveTransactionRule(transactionRuleConditionDTO.getTransactionRule(), transactionRuleCondition.getTransactionRule())
+            );
+        }
+    }
+
+    private TransactionRule resolveTransactionRule(TransactionRuleDTO transactionRuleDTO, TransactionRule existingParentRule) {
+        if (transactionRuleDTO == null || transactionRuleDTO.getId() == null) {
+            throw new IllegalArgumentException("Transaction rule is required");
+        }
+        TransactionRule transactionRule = findAccessibleRule(transactionRuleDTO.getId()).orElseThrow(() ->
+            new IllegalArgumentException("Transaction rule is not accessible")
+        );
+        if (existingParentRule != null) {
+            String existingOwnerLogin = existingParentRule.getUser().getLogin();
+            if (!existingOwnerLogin.equals(transactionRule.getUser().getLogin())) {
+                throw new IllegalArgumentException("Transaction rule must belong to the same owner");
+            }
+        }
+        return transactionRule;
+    }
+
+    private Optional<TransactionRule> findAccessibleRule(Long id) {
+        if (currentUserService.isAdmin()) {
+            return transactionRuleRepository.findOneWithToOneRelationships(id);
+        }
+        return transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 }
