@@ -1,13 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
+import { convertDateTimeFromServer } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
+import { IFinancialTransaction } from 'app/shared/model/financial-transaction.model';
 
-import { getEntities as getFinancialTransactions } from 'app/entities/financial-transaction/financial-transaction.reducer';
 import { createEntity, getEntity, reset, updateEntity } from './internal-transfer.reducer';
 
 export const InternalTransferUpdate = () => {
@@ -18,7 +19,9 @@ export const InternalTransferUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const financialTransactions = useAppSelector(state => state.financialTransaction.entities);
+  const [outgoingTransactions, setOutgoingTransactions] = useState<IFinancialTransaction[]>([]);
+  const [incomingTransactions, setIncomingTransactions] = useState<IFinancialTransaction[]>([]);
+
   const internalTransferEntity = useAppSelector(state => state.internalTransfer.entity);
   const loading = useAppSelector(state => state.internalTransfer.loading);
   const updating = useAppSelector(state => state.internalTransfer.updating);
@@ -31,11 +34,15 @@ export const InternalTransferUpdate = () => {
   useEffect(() => {
     if (isNew) {
       dispatch(reset());
+      axios.get<IFinancialTransaction[]>('api/financial-transactions/outgoing-internal-transfer-candidates').then(response => {
+        setOutgoingTransactions(response.data);
+      });
+      axios.get<IFinancialTransaction[]>('api/financial-transactions/incoming-internal-transfer-candidates').then(response => {
+        setIncomingTransactions(response.data);
+      });
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getFinancialTransactions({}));
   }, []);
 
   useEffect(() => {
@@ -48,13 +55,16 @@ export const InternalTransferUpdate = () => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
 
     const entity = {
       ...internalTransferEntity,
       ...values,
-      outgoingTransaction: financialTransactions.find(it => it.id.toString() === values.outgoingTransaction?.toString()),
-      incomingTransaction: financialTransactions.find(it => it.id.toString() === values.incomingTransaction?.toString()),
+      outgoingTransaction: isNew
+        ? outgoingTransactions.find(it => it.id.toString() === values.outgoingTransaction?.toString())
+        : internalTransferEntity.outgoingTransaction,
+      incomingTransaction: isNew
+        ? incomingTransactions.find(it => it.id.toString() === values.incomingTransaction?.toString())
+        : internalTransferEntity.incomingTransaction,
     };
 
     if (isNew) {
@@ -66,9 +76,7 @@ export const InternalTransferUpdate = () => {
 
   const defaultValues = () =>
     isNew
-      ? {
-          createdAt: displayDefaultDateTime(),
-        }
+      ? {}
       : {
           ...internalTransferEntity,
           createdAt: convertDateTimeFromServer(internalTransferEntity.createdAt),
@@ -111,57 +119,78 @@ export const InternalTransferUpdate = () => {
                   maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.internalTransfer.createdAt')}
-                id="internal-transfer-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                id="internal-transfer-outgoingTransaction"
-                name="outgoingTransaction"
-                data-cy="outgoingTransaction"
-                label={translate('fintrackApp.internalTransfer.outgoingTransaction')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {financialTransactions
-                  ? financialTransactions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
-              <ValidatedField
-                id="internal-transfer-incomingTransaction"
-                name="incomingTransaction"
-                data-cy="incomingTransaction"
-                label={translate('fintrackApp.internalTransfer.incomingTransaction')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {financialTransactions
-                  ? financialTransactions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
+              {!isNew ? (
+                <ValidatedField
+                  label={translate('fintrackApp.internalTransfer.createdAt')}
+                  id="internal-transfer-createdAt"
+                  name="createdAt"
+                  data-cy="createdAt"
+                  type="datetime-local"
+                  readOnly
+                />
+              ) : null}
+              {isNew ? (
+                <ValidatedField
+                  id="internal-transfer-outgoingTransaction"
+                  name="outgoingTransaction"
+                  data-cy="outgoingTransaction"
+                  label={translate('fintrackApp.internalTransfer.outgoingTransaction')}
+                  type="select"
+                  required
+                >
+                  <option value="" key="0" />
+                  {outgoingTransactions.map(otherEntity => (
+                    <option value={otherEntity.id} key={otherEntity.id}>
+                      {otherEntity.id}
+                    </option>
+                  ))}
+                </ValidatedField>
+              ) : (
+                <ValidatedField
+                  label={translate('fintrackApp.internalTransfer.outgoingTransaction')}
+                  id="internal-transfer-outgoingTransaction"
+                  name="outgoingTransaction"
+                  data-cy="outgoingTransaction"
+                  type="text"
+                  readOnly
+                />
+              )}
+              {isNew ? (
+                <FormText>
+                  <Translate contentKey="entity.validation.required">This field is required.</Translate>
+                </FormText>
+              ) : null}
+              {isNew ? (
+                <ValidatedField
+                  id="internal-transfer-incomingTransaction"
+                  name="incomingTransaction"
+                  data-cy="incomingTransaction"
+                  label={translate('fintrackApp.internalTransfer.incomingTransaction')}
+                  type="select"
+                  required
+                >
+                  <option value="" key="0" />
+                  {incomingTransactions.map(otherEntity => (
+                    <option value={otherEntity.id} key={otherEntity.id}>
+                      {otherEntity.id}
+                    </option>
+                  ))}
+                </ValidatedField>
+              ) : (
+                <ValidatedField
+                  label={translate('fintrackApp.internalTransfer.incomingTransaction')}
+                  id="internal-transfer-incomingTransaction"
+                  name="incomingTransaction"
+                  data-cy="incomingTransaction"
+                  type="text"
+                  readOnly
+                />
+              )}
+              {isNew ? (
+                <FormText>
+                  <Translate contentKey="entity.validation.required">This field is required.</Translate>
+                </FormText>
+              ) : null}
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/internal-transfer" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;

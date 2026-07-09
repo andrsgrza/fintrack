@@ -47,8 +47,7 @@ public class InternalTransferAsserts {
     public static void assertInternalTransferUpdatableFieldsEquals(InternalTransfer expected, InternalTransfer actual) {
         assertThat(actual)
             .as("Verify InternalTransfer relevant properties")
-            .satisfies(a -> assertThat(a.getNotes()).as("check notes").isEqualTo(expected.getNotes()))
-            .satisfies(a -> assertThat(a.getCreatedAt()).as("check createdAt").isEqualTo(expected.getCreatedAt()));
+            .satisfies(a -> assertThat(a.getNotes()).as("check notes").isEqualTo(expected.getNotes()));
     }
 
     /**
@@ -58,13 +57,6 @@ public class InternalTransferAsserts {
      * @param actual the actual entity
      */
     public static void assertInternalTransferUpdatableRelationshipsEquals(InternalTransfer expected, InternalTransfer actual) {
-        assertThat(actual)
-            .as("Verify InternalTransfer relationships")
-            .satisfies(a ->
-                assertThat(a.getOutgoingTransaction()).as("check outgoingTransaction").isEqualTo(expected.getOutgoingTransaction())
-            )
-            .satisfies(a ->
-                assertThat(a.getIncomingTransaction()).as("check incomingTransaction").isEqualTo(expected.getIncomingTransaction())
-            );
+        // Transaction legs are immutable after create.
     }
 }

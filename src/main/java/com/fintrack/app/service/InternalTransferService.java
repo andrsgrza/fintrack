@@ -1,9 +1,15 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.InternalTransfer;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
+import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.InternalTransferRepository;
+import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.InternalTransferDTO;
 import com.fintrack.app.service.mapper.InternalTransferMapper;
+import java.time.Instant;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
@@ -26,9 +32,20 @@ public class InternalTransferService {
 
     private final InternalTransferMapper internalTransferMapper;
 
-    public InternalTransferService(InternalTransferRepository internalTransferRepository, InternalTransferMapper internalTransferMapper) {
+    private final CurrentUserService currentUserService;
+
+    private final FinancialTransactionService financialTransactionService;
+
+    public InternalTransferService(
+        InternalTransferRepository internalTransferRepository,
+        InternalTransferMapper internalTransferMapper,
+        CurrentUserService currentUserService,
+        FinancialTransactionService financialTransactionService
+    ) {
         this.internalTransferRepository = internalTransferRepository;
         this.internalTransferMapper = internalTransferMapper;
+        this.currentUserService = currentUserService;
+        this.financialTransactionService = financialTransactionService;
     }
 
     /**
@@ -40,6 +57,12 @@ public class InternalTransferService {
     public InternalTransferDTO save(InternalTransferDTO internalTransferDTO) {
         LOG.debug("Request to save InternalTransfer : {}", internalTransferDTO);
         InternalTransfer internalTransfer = internalTransferMapper.toEntity(internalTransferDTO);
+        FinancialTransaction outgoingTransaction = resolveOutgoingTransactionForCreate(internalTransferDTO.getOutgoingTransaction());
+        FinancialTransaction incomingTransaction = resolveIncomingTransactionForCreate(internalTransferDTO.getIncomingTransaction());
+        validateTransferPair(outgoingTransaction, incomingTransaction);
+        internalTransfer.setOutgoingTransaction(outgoingTransaction);
+        internalTransfer.setIncomingTransaction(incomingTransaction);
+        internalTransfer.setCreatedAt(Instant.now());
         internalTransfer = internalTransferRepository.save(internalTransfer);
         return internalTransferMapper.toDto(internalTransfer);
     }
@@ -52,7 +75,13 @@ public class InternalTransferService {
      */
     public InternalTransferDTO update(InternalTransferDTO internalTransferDTO) {
         LOG.debug("Request to update InternalTransfer : {}", internalTransferDTO);
+        InternalTransfer existingInternalTransfer = findAccessibleEntity(internalTransferDTO.getId()).orElseThrow();
+        rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getOutgoingTransaction(), "Outgoing transaction");
+        rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getIncomingTransaction(), "Incoming transaction");
         InternalTransfer internalTransfer = internalTransferMapper.toEntity(internalTransferDTO);
+        internalTransfer.setOutgoingTransaction(existingInternalTransfer.getOutgoingTransaction());
+        internalTransfer.setIncomingTransaction(existingInternalTransfer.getIncomingTransaction());
+        internalTransfer.setCreatedAt(existingInternalTransfer.getCreatedAt());
         internalTransfer = internalTransferRepository.save(internalTransfer);
         return internalTransferMapper.toDto(internalTransfer);
     }
@@ -64,13 +93,34 @@ public class InternalTransferService {
      * @return the persisted entity.
      */
     public Optional<InternalTransferDTO> partialUpdate(InternalTransferDTO internalTransferDTO) {
+        return partialUpdate(internalTransferDTO, null);
+    }
+
+    /**
+     * Partially update a internalTransfer, applying transaction changes only when present in the patch body.
+     *
+     * @param internalTransferDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<InternalTransferDTO> partialUpdate(InternalTransferDTO internalTransferDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update InternalTransfer : {}", internalTransferDTO);
 
-        return internalTransferRepository
-            .findById(internalTransferDTO.getId())
+        return findAccessibleEntity(internalTransferDTO.getId())
             .map(existingInternalTransfer -> {
+                if (patchNode != null && patchNode.has("outgoingTransaction") && patchNode.get("outgoingTransaction").isNull()) {
+                    throw new IllegalArgumentException("Outgoing transaction cannot be null");
+                }
+                if (patchNode != null && patchNode.has("incomingTransaction") && patchNode.get("incomingTransaction").isNull()) {
+                    throw new IllegalArgumentException("Incoming transaction cannot be null");
+                }
+                if (patchNode != null && patchNode.has("outgoingTransaction")) {
+                    rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getOutgoingTransaction(), "Outgoing transaction");
+                }
+                if (patchNode != null && patchNode.has("incomingTransaction")) {
+                    rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getIncomingTransaction(), "Incoming transaction");
+                }
                 internalTransferMapper.partialUpdate(existingInternalTransfer, internalTransferDTO);
-
                 return existingInternalTransfer;
             })
             .map(internalTransferRepository::save)
@@ -85,8 +135,15 @@ public class InternalTransferService {
     @Transactional(readOnly = true)
     public List<InternalTransferDTO> findAll() {
         LOG.debug("Request to get all InternalTransfers");
+        if (currentUserService.isAdmin()) {
+            return internalTransferRepository
+                .findAllWithEagerRelationships()
+                .stream()
+                .map(internalTransferMapper::toDto)
+                .collect(Collectors.toCollection(LinkedList::new));
+        }
         return internalTransferRepository
-            .findAll()
+            .findAllWithEagerRelationshipsByAccountUserLogin(currentUserService.getCurrentUserLogin())
             .stream()
             .map(internalTransferMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
@@ -101,16 +158,114 @@ public class InternalTransferService {
     @Transactional(readOnly = true)
     public Optional<InternalTransferDTO> findOne(Long id) {
         LOG.debug("Request to get InternalTransfer : {}", id);
-        return internalTransferRepository.findById(id).map(internalTransferMapper::toDto);
+        return findAccessibleEntity(id).map(internalTransferMapper::toDto);
+    }
+
+    /**
+     * Returns whether the current user can access the internal transfer.
+     *
+     * @param id the id of the entity.
+     * @return true when the transfer exists and is visible to the current user.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAccessible(Long id) {
+        return findAccessibleEntity(id).isPresent();
     }
 
     /**
      * Delete the internalTransfer by id.
      *
      * @param id the id of the entity.
+     * @return true when the transfer was deleted.
      */
-    public void delete(Long id) {
+    public boolean delete(Long id) {
         LOG.debug("Request to delete InternalTransfer : {}", id);
+        Optional<InternalTransfer> internalTransfer = findAccessibleEntity(id);
+        if (internalTransfer.isEmpty()) {
+            return false;
+        }
         internalTransferRepository.deleteById(id);
+        return true;
+    }
+
+    private Optional<InternalTransfer> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return internalTransferRepository.findOneWithEagerRelationships(id);
+        }
+        return internalTransferRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(
+            id,
+            currentUserService.getCurrentUserLogin()
+        );
+    }
+
+    private FinancialTransaction resolveOutgoingTransactionForCreate(FinancialTransactionDTO outgoingTransactionDTO) {
+        if (outgoingTransactionDTO == null || outgoingTransactionDTO.getId() == null) {
+            throw new IllegalArgumentException("Outgoing transaction is required");
+        }
+        return financialTransactionService
+            .findAccessibleTransactionEntity(outgoingTransactionDTO.getId())
+            .orElseThrow(() -> new IllegalArgumentException("Outgoing transaction is not accessible"));
+    }
+
+    private FinancialTransaction resolveIncomingTransactionForCreate(FinancialTransactionDTO incomingTransactionDTO) {
+        if (incomingTransactionDTO == null || incomingTransactionDTO.getId() == null) {
+            throw new IllegalArgumentException("Incoming transaction is required");
+        }
+        return financialTransactionService
+            .findAccessibleTransactionEntity(incomingTransactionDTO.getId())
+            .orElseThrow(() -> new IllegalArgumentException("Incoming transaction is not accessible"));
+    }
+
+    private void validateTransferPair(FinancialTransaction outgoingTransaction, FinancialTransaction incomingTransaction) {
+        if (outgoingTransaction.getId().equals(incomingTransaction.getId())) {
+            throw new IllegalArgumentException("Outgoing and incoming transactions must be different");
+        }
+        if (outgoingTransaction.getOrigin() != TransactionOrigin.MANUAL || incomingTransaction.getOrigin() != TransactionOrigin.MANUAL) {
+            throw new IllegalArgumentException("Only manual transactions can be linked");
+        }
+        if (outgoingTransaction.getFlow() != TransactionFlow.OUT) {
+            throw new IllegalArgumentException("Outgoing transaction must have OUT flow");
+        }
+        if (incomingTransaction.getFlow() != TransactionFlow.IN) {
+            throw new IllegalArgumentException("Incoming transaction must have IN flow");
+        }
+        if (outgoingTransaction.getAccount().getId().equals(incomingTransaction.getAccount().getId())) {
+            throw new IllegalArgumentException("Transactions must belong to different accounts");
+        }
+        if (outgoingTransaction.getAccount().getCurrency() != incomingTransaction.getAccount().getCurrency()) {
+            throw new IllegalArgumentException("Transactions must use the same currency");
+        }
+        if (outgoingTransaction.getAmount().compareTo(incomingTransaction.getAmount()) != 0) {
+            throw new IllegalArgumentException("Transaction amounts must match");
+        }
+        if (
+            outgoingTransaction.getAccount().getUser() == null ||
+            incomingTransaction.getAccount().getUser() == null ||
+            !outgoingTransaction.getAccount().getUser().getId().equals(incomingTransaction.getAccount().getUser().getId())
+        ) {
+            throw new IllegalArgumentException("Transactions must belong to the same user");
+        }
+        if (internalTransferRepository.existsByOutgoingTransactionId(outgoingTransaction.getId())) {
+            throw new IllegalArgumentException("Outgoing transaction is already linked to an internal transfer");
+        }
+        if (internalTransferRepository.existsByIncomingTransactionId(incomingTransaction.getId())) {
+            throw new IllegalArgumentException("Incoming transaction is already linked to an internal transfer");
+        }
+    }
+
+    private void rejectTransactionChange(
+        InternalTransfer existingInternalTransfer,
+        FinancialTransactionDTO transactionDTO,
+        String fieldLabel
+    ) {
+        if (transactionDTO == null || transactionDTO.getId() == null) {
+            return;
+        }
+        FinancialTransaction existingTransaction = fieldLabel.startsWith("Outgoing")
+            ? existingInternalTransfer.getOutgoingTransaction()
+            : existingInternalTransfer.getIncomingTransaction();
+        if (!transactionDTO.getId().equals(existingTransaction.getId())) {
+            throw new IllegalArgumentException(fieldLabel + " cannot be changed");
+        }
     }
 }

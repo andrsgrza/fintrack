@@ -15,6 +15,18 @@ public interface InternalTransferMapper extends EntityMapper<InternalTransferDTO
     @Mapping(target = "incomingTransaction", source = "incomingTransaction", qualifiedByName = "financialTransactionId")
     InternalTransferDTO toDto(InternalTransfer s);
 
+    @Mapping(target = "outgoingTransaction", ignore = true)
+    @Mapping(target = "incomingTransaction", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    InternalTransfer toEntity(InternalTransferDTO internalTransferDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "outgoingTransaction", ignore = true)
+    @Mapping(target = "incomingTransaction", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void partialUpdate(@MappingTarget InternalTransfer entity, InternalTransferDTO dto);
+
     @Named("financialTransactionId")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

@@ -15,44 +15,83 @@ describe('InternalTransfer e2e test', () => {
   const internalTransferPageUrlPattern = new RegExp('/internal-transfer(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const internalTransferSample = {"createdAt":"2026-07-07T02:16:29.475Z"};
 
   let internalTransfer;
-  // let financialTransaction;
+  let outgoingTransaction;
+  let incomingTransaction;
+  let outgoingAccount;
+  let incomingAccount;
+
+  const buildFinancialAccountPayload = (name: string) => {
+    const now = new Date().toISOString();
+    return {
+      name,
+      institutionName: 'E2E Bank',
+      accountType: 'DEBIT',
+      currency: 'MXN',
+      initialBalance: 1000,
+      initialBalanceDate: '2026-07-08',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  const buildFinancialTransactionPayload = (accountId: number, flow: 'OUT' | 'IN', amount: number) => {
+    const now = new Date().toISOString();
+    return {
+      transactionDate: '2026-07-08',
+      description: `E2E ${flow} transfer leg`,
+      amount,
+      flow,
+      origin: 'MANUAL',
+      createdAt: now,
+      updatedAt: now,
+      account: { id: accountId },
+    };
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
 
-  /* Disabled due to incompatibility
   beforeEach(() => {
-    // create an instance at the required relationship entity:
+    const suffix = `${Date.now()}`;
     cy.authenticatedRequest({
       method: 'POST',
-      url: '/api/financial-transactions',
-      body: {"transactionDate":"2026-07-07","postingDate":"2026-07-06","description":"broadcast geez beneath","amount":32148.45,"flow":"IN","origin":"FILE_IMPORT","externalReference":"lox","notes":"unless","createdAt":"2026-07-06T19:02:18.055Z","updatedAt":"2026-07-06T20:32:12.632Z"},
+      url: '/api/financial-accounts',
+      body: buildFinancialAccountPayload(`transfer-out-${suffix}`),
     }).then(({ body }) => {
-      financialTransaction = body;
+      outgoingAccount = body;
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/financial-accounts',
+        body: buildFinancialAccountPayload(`transfer-in-${suffix}`),
+      }).then(({ body: incomingBody }) => {
+        incomingAccount = incomingBody;
+        cy.authenticatedRequest({
+          method: 'POST',
+          url: '/api/financial-transactions',
+          body: buildFinancialTransactionPayload(outgoingAccount.id, 'OUT', 250),
+        }).then(({ body: outgoingBody }) => {
+          outgoingTransaction = outgoingBody;
+          cy.authenticatedRequest({
+            method: 'POST',
+            url: '/api/financial-transactions',
+            body: buildFinancialTransactionPayload(incomingAccount.id, 'IN', 250),
+          }).then(({ body: incomingBodyTx }) => {
+            incomingTransaction = incomingBodyTx;
+          });
+        });
+      });
     });
   });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/internal-transfers+(?*|)').as('entitiesRequest');
     cy.intercept('POST', '/api/internal-transfers').as('postEntityRequest');
     cy.intercept('DELETE', '/api/internal-transfers/*').as('deleteEntityRequest');
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/financial-transactions', {
-      statusCode: 200,
-      body: [financialTransaction],
-    });
-
-  });
-   */
 
   afterEach(() => {
     if (internalTransfer) {
@@ -65,18 +104,49 @@ describe('InternalTransfer e2e test', () => {
     }
   });
 
-  /* Disabled due to incompatibility
   afterEach(() => {
-    if (financialTransaction) {
+    if (outgoingTransaction) {
       cy.authenticatedRequest({
         method: 'DELETE',
-        url: `/api/financial-transactions/${financialTransaction.id}`,
+        url: `/api/financial-transactions/${outgoingTransaction.id}`,
       }).then(() => {
-        financialTransaction = undefined;
+        outgoingTransaction = undefined;
       });
     }
   });
-   */
+
+  afterEach(() => {
+    if (incomingTransaction) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/financial-transactions/${incomingTransaction.id}`,
+      }).then(() => {
+        incomingTransaction = undefined;
+      });
+    }
+  });
+
+  afterEach(() => {
+    if (outgoingAccount) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/financial-accounts/${outgoingAccount.id}`,
+      }).then(() => {
+        outgoingAccount = undefined;
+      });
+    }
+  });
+
+  afterEach(() => {
+    if (incomingAccount) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/financial-accounts/${incomingAccount.id}`,
+      }).then(() => {
+        incomingAccount = undefined;
+      });
+    }
+  });
 
   it('InternalTransfers menu should load InternalTransfers page', () => {
     cy.visit('/');
@@ -95,6 +165,14 @@ describe('InternalTransfer e2e test', () => {
   describe('InternalTransfer page', () => {
     describe('create button click', () => {
       beforeEach(() => {
+        cy.intercept('GET', '/api/financial-transactions/outgoing-internal-transfer-candidates', {
+          statusCode: 200,
+          body: [outgoingTransaction],
+        });
+        cy.intercept('GET', '/api/financial-transactions/incoming-internal-transfer-candidates', {
+          statusCode: 200,
+          body: [incomingTransaction],
+        });
         cy.visit(internalTransferPageUrl);
         cy.wait('@entitiesRequest');
       });
@@ -103,6 +181,7 @@ describe('InternalTransfer e2e test', () => {
         cy.get(entityCreateButtonSelector).click();
         cy.url().should('match', new RegExp('/internal-transfer/new$'));
         cy.getEntityCreateUpdateHeading('InternalTransfer');
+        cy.get('[data-cy="createdAt"]').should('not.exist');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
@@ -113,15 +192,14 @@ describe('InternalTransfer e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/internal-transfers',
           body: {
-            ...internalTransferSample,
-            outgoingTransaction: financialTransaction,
-            incomingTransaction: financialTransaction,
+            notes: 'E2E internal transfer',
+            outgoingTransaction: { id: outgoingTransaction.id },
+            incomingTransaction: { id: incomingTransaction.id },
           },
         }).then(({ body }) => {
           internalTransfer = body;
@@ -135,24 +213,12 @@ describe('InternalTransfer e2e test', () => {
             {
               statusCode: 200,
               body: [internalTransfer],
-            }
+            },
           ).as('entitiesRequestInternal');
         });
 
         cy.visit(internalTransferPageUrl);
-
         cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(internalTransferPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
       });
 
       it('detail button click should load details InternalTransfer page', () => {
@@ -168,6 +234,8 @@ describe('InternalTransfer e2e test', () => {
       it('edit button click should load edit InternalTransfer page and go back', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('InternalTransfer');
+        cy.get('[data-cy="outgoingTransaction"]').should('have.attr', 'readonly');
+        cy.get('[data-cy="incomingTransaction"]').should('have.attr', 'readonly');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
@@ -179,6 +247,7 @@ describe('InternalTransfer e2e test', () => {
       it('edit button click should load edit InternalTransfer page and save', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('InternalTransfer');
+        cy.get('[data-cy="notes"]').clear().type('updated transfer notes');
         cy.get(entityCreateSaveButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
@@ -186,8 +255,7 @@ describe('InternalTransfer e2e test', () => {
         cy.url().should('match', internalTransferPageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of InternalTransfer', () => {
+      it('last delete button click should delete instance of InternalTransfer', () => {
         cy.intercept('GET', '/api/internal-transfers/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -208,22 +276,23 @@ describe('InternalTransfer e2e test', () => {
 
   describe('new InternalTransfer page', () => {
     beforeEach(() => {
+      cy.intercept('GET', '/api/financial-transactions/outgoing-internal-transfer-candidates', {
+        statusCode: 200,
+        body: [outgoingTransaction],
+      });
+      cy.intercept('GET', '/api/financial-transactions/incoming-internal-transfer-candidates', {
+        statusCode: 200,
+        body: [incomingTransaction],
+      });
       cy.visit(`${internalTransferPageUrl}`);
       cy.get(entityCreateButtonSelector).click();
       cy.getEntityCreateUpdateHeading('InternalTransfer');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of InternalTransfer', () => {
-      cy.get(`[data-cy="notes"]`).type('hydrocarbon how likewise');
-      cy.get(`[data-cy="notes"]`).should('have.value', 'hydrocarbon how likewise');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-06T18:09');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-06T18:09');
-
-      cy.get(`[data-cy="outgoingTransaction"]`).select(1);
-      cy.get(`[data-cy="incomingTransaction"]`).select(1);
+    it('should create an instance of InternalTransfer', () => {
+      cy.get(`[data-cy="notes"]`).type('E2E linked transfer');
+      cy.get(`[data-cy="outgoingTransaction"]`).select(String(outgoingTransaction.id));
+      cy.get(`[data-cy="incomingTransaction"]`).select(String(incomingTransaction.id));
 
       cy.get(entityCreateSaveButtonSelector).click();
 

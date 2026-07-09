@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.InternalTransferRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.InternalTransferService;
 import com.fintrack.app.service.dto.InternalTransferDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,14 +36,11 @@ public class InternalTransferResource {
 
     private final InternalTransferService internalTransferService;
 
-    private final InternalTransferRepository internalTransferRepository;
+    private final ObjectMapper objectMapper;
 
-    public InternalTransferResource(
-        InternalTransferService internalTransferService,
-        InternalTransferRepository internalTransferRepository
-    ) {
+    public InternalTransferResource(InternalTransferService internalTransferService, ObjectMapper objectMapper) {
         this.internalTransferService = internalTransferService;
-        this.internalTransferRepository = internalTransferRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -59,7 +57,11 @@ public class InternalTransferResource {
         if (internalTransferDTO.getId() != null) {
             throw new BadRequestAlertException("A new internalTransfer cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        internalTransferDTO = internalTransferService.save(internalTransferDTO);
+        try {
+            internalTransferDTO = internalTransferService.save(internalTransferDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/internal-transfers/" + internalTransferDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, internalTransferDTO.getId().toString()))
             .body(internalTransferDTO);
@@ -88,11 +90,15 @@ public class InternalTransferResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!internalTransferRepository.existsById(id)) {
+        if (!internalTransferService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        internalTransferDTO = internalTransferService.update(internalTransferDTO);
+        try {
+            internalTransferDTO = internalTransferService.update(internalTransferDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, internalTransferDTO.getId().toString()))
             .body(internalTransferDTO);
@@ -102,7 +108,7 @@ public class InternalTransferResource {
      * {@code PATCH  /internal-transfers/:id} : Partial updates given fields of an existing internalTransfer, field will ignore if it is null
      *
      * @param id the id of the internalTransferDTO to save.
-     * @param internalTransferDTO the internalTransferDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated internalTransferDTO,
      * or with status {@code 400 (Bad Request)} if the internalTransferDTO is not valid,
      * or with status {@code 404 (Not Found)} if the internalTransferDTO is not found,
@@ -112,21 +118,38 @@ public class InternalTransferResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<InternalTransferDTO> partialUpdateInternalTransfer(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody InternalTransferDTO internalTransferDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update InternalTransfer partially : {}, {}", id, internalTransferDTO);
+        LOG.debug("REST request to partial update InternalTransfer partially : {}, {}", id, patchNode);
+        if (patchNode.has("outgoingTransaction") && patchNode.get("outgoingTransaction").isNull()) {
+            throw new BadRequestAlertException("Outgoing transaction cannot be null", ENTITY_NAME, "invalid");
+        }
+        if (patchNode.has("incomingTransaction") && patchNode.get("incomingTransaction").isNull()) {
+            throw new BadRequestAlertException("Incoming transaction cannot be null", ENTITY_NAME, "invalid");
+        }
+        InternalTransferDTO internalTransferDTO;
+        try {
+            internalTransferDTO = objectMapper.treeToValue(patchNode, InternalTransferDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (internalTransferDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            internalTransferDTO.setId(id);
         }
         if (!Objects.equals(id, internalTransferDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!internalTransferRepository.existsById(id)) {
+        if (!internalTransferService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<InternalTransferDTO> result = internalTransferService.partialUpdate(internalTransferDTO);
+        Optional<InternalTransferDTO> result;
+        try {
+            result = internalTransferService.partialUpdate(internalTransferDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -167,7 +190,9 @@ public class InternalTransferResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteInternalTransfer(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete InternalTransfer : {}", id);
-        internalTransferService.delete(id);
+        if (!internalTransferService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

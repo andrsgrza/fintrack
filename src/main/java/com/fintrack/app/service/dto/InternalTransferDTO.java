@@ -20,7 +20,6 @@ public class InternalTransferDTO implements Serializable {
     @Size(max = 500)
     private String notes;
 
-    @NotNull
     private Instant createdAt;
 
     @NotNull

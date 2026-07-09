@@ -186,6 +186,28 @@ public class FinancialTransactionResource {
     }
 
     /**
+     * {@code GET  /financial-transactions/outgoing-internal-transfer-candidates} : get manual OUT transactions available for outgoing internal transfers.
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
+     */
+    @GetMapping("/outgoing-internal-transfer-candidates")
+    public List<FinancialTransactionDTO> getOutgoingInternalTransferCandidates() {
+        LOG.debug("REST request to get outgoing internal transfer candidates");
+        return financialTransactionService.findOutgoingInternalTransferCandidates();
+    }
+
+    /**
+     * {@code GET  /financial-transactions/incoming-internal-transfer-candidates} : get manual IN transactions available for incoming internal transfers.
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
+     */
+    @GetMapping("/incoming-internal-transfer-candidates")
+    public List<FinancialTransactionDTO> getIncomingInternalTransferCandidates() {
+        LOG.debug("REST request to get incoming internal transfer candidates");
+        return financialTransactionService.findIncomingInternalTransferCandidates();
+    }
+
+    /**
      * {@code GET  /financial-transactions/:id} : get the "id" financialTransaction.
      *
      * @param id the id of the financialTransactionDTO to retrieve.

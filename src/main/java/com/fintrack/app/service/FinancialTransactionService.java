@@ -5,6 +5,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
@@ -156,6 +157,49 @@ public class FinancialTransactionService {
             .filter(financialTransaction -> financialTransaction.getOutgoingInternalTransfer() == null)
             .map(financialTransactionMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
+    }
+
+    /**
+     * Get manual OUT transactions that can be linked as the outgoing leg of an internal transfer.
+     *
+     * @return the list of entities.
+     */
+    @Transactional(readOnly = true)
+    public List<FinancialTransactionDTO> findOutgoingInternalTransferCandidates() {
+        LOG.debug("Request to get outgoing internal transfer candidates");
+        return accessibleTransactionStream()
+            .filter(financialTransaction -> financialTransaction.getOutgoingInternalTransfer() == null)
+            .filter(financialTransaction -> financialTransaction.getFlow() == TransactionFlow.OUT)
+            .filter(financialTransaction -> financialTransaction.getOrigin() == TransactionOrigin.MANUAL)
+            .map(financialTransactionMapper::toDto)
+            .collect(Collectors.toCollection(LinkedList::new));
+    }
+
+    /**
+     * Get manual IN transactions that can be linked as the incoming leg of an internal transfer.
+     *
+     * @return the list of entities.
+     */
+    @Transactional(readOnly = true)
+    public List<FinancialTransactionDTO> findIncomingInternalTransferCandidates() {
+        LOG.debug("Request to get incoming internal transfer candidates");
+        return accessibleTransactionStream()
+            .filter(financialTransaction -> financialTransaction.getIncomingInternalTransfer() == null)
+            .filter(financialTransaction -> financialTransaction.getFlow() == TransactionFlow.IN)
+            .filter(financialTransaction -> financialTransaction.getOrigin() == TransactionOrigin.MANUAL)
+            .map(financialTransactionMapper::toDto)
+            .collect(Collectors.toCollection(LinkedList::new));
+    }
+
+    /**
+     * Returns an accessible financial transaction entity for the current user.
+     *
+     * @param id the id of the transaction.
+     * @return the entity when accessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<FinancialTransaction> findAccessibleTransactionEntity(Long id) {
+        return findAccessibleEntity(id);
     }
 
     /**
