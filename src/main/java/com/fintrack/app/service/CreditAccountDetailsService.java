@@ -1,8 +1,12 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.CreditAccountDetails;
+import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.service.dto.CreditAccountDetailsDTO;
+import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.CreditAccountDetailsMapper;
 import java.util.LinkedList;
 import java.util.List;
@@ -28,12 +32,20 @@ public class CreditAccountDetailsService {
 
     private final CreditAccountDetailsMapper creditAccountDetailsMapper;
 
+    private final CurrentUserService currentUserService;
+
+    private final FinancialAccountService financialAccountService;
+
     public CreditAccountDetailsService(
         CreditAccountDetailsRepository creditAccountDetailsRepository,
-        CreditAccountDetailsMapper creditAccountDetailsMapper
+        CreditAccountDetailsMapper creditAccountDetailsMapper,
+        CurrentUserService currentUserService,
+        FinancialAccountService financialAccountService
     ) {
         this.creditAccountDetailsRepository = creditAccountDetailsRepository;
         this.creditAccountDetailsMapper = creditAccountDetailsMapper;
+        this.currentUserService = currentUserService;
+        this.financialAccountService = financialAccountService;
     }
 
     /**
@@ -45,6 +57,7 @@ public class CreditAccountDetailsService {
     public CreditAccountDetailsDTO save(CreditAccountDetailsDTO creditAccountDetailsDTO) {
         LOG.debug("Request to save CreditAccountDetails : {}", creditAccountDetailsDTO);
         CreditAccountDetails creditAccountDetails = creditAccountDetailsMapper.toEntity(creditAccountDetailsDTO);
+        creditAccountDetails.setAccount(resolveAccountForCreate(creditAccountDetailsDTO.getAccount()));
         creditAccountDetails = creditAccountDetailsRepository.save(creditAccountDetails);
         return creditAccountDetailsMapper.toDto(creditAccountDetails);
     }
@@ -57,7 +70,10 @@ public class CreditAccountDetailsService {
      */
     public CreditAccountDetailsDTO update(CreditAccountDetailsDTO creditAccountDetailsDTO) {
         LOG.debug("Request to update CreditAccountDetails : {}", creditAccountDetailsDTO);
+        CreditAccountDetails existingCreditAccountDetails = findAccessibleEntity(creditAccountDetailsDTO.getId()).orElseThrow();
+        rejectAccountChange(existingCreditAccountDetails, creditAccountDetailsDTO.getAccount());
         CreditAccountDetails creditAccountDetails = creditAccountDetailsMapper.toEntity(creditAccountDetailsDTO);
+        creditAccountDetails.setAccount(existingCreditAccountDetails.getAccount());
         creditAccountDetails = creditAccountDetailsRepository.save(creditAccountDetails);
         return creditAccountDetailsMapper.toDto(creditAccountDetails);
     }
@@ -69,13 +85,28 @@ public class CreditAccountDetailsService {
      * @return the persisted entity.
      */
     public Optional<CreditAccountDetailsDTO> partialUpdate(CreditAccountDetailsDTO creditAccountDetailsDTO) {
+        return partialUpdate(creditAccountDetailsDTO, null);
+    }
+
+    /**
+     * Partially update a creditAccountDetails, applying account changes only when present in the patch body.
+     *
+     * @param creditAccountDetailsDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<CreditAccountDetailsDTO> partialUpdate(CreditAccountDetailsDTO creditAccountDetailsDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update CreditAccountDetails : {}", creditAccountDetailsDTO);
 
-        return creditAccountDetailsRepository
-            .findById(creditAccountDetailsDTO.getId())
+        return findAccessibleEntity(creditAccountDetailsDTO.getId())
             .map(existingCreditAccountDetails -> {
+                if (patchNode != null && patchNode.has("account") && patchNode.get("account").isNull()) {
+                    throw new IllegalArgumentException("Account cannot be null");
+                }
+                if (patchNode != null && patchNode.has("account")) {
+                    rejectAccountChange(existingCreditAccountDetails, creditAccountDetailsDTO.getAccount());
+                }
                 creditAccountDetailsMapper.partialUpdate(existingCreditAccountDetails, creditAccountDetailsDTO);
-
                 return existingCreditAccountDetails;
             })
             .map(creditAccountDetailsRepository::save)
@@ -90,8 +121,15 @@ public class CreditAccountDetailsService {
     @Transactional(readOnly = true)
     public List<CreditAccountDetailsDTO> findAll() {
         LOG.debug("Request to get all CreditAccountDetails");
+        if (currentUserService.isAdmin()) {
+            return creditAccountDetailsRepository
+                .findAllWithEagerRelationships()
+                .stream()
+                .map(creditAccountDetailsMapper::toDto)
+                .collect(Collectors.toCollection(LinkedList::new));
+        }
         return creditAccountDetailsRepository
-            .findAll()
+            .findAllWithEagerRelationshipsByAccountUserLogin(currentUserService.getCurrentUserLogin())
             .stream()
             .map(creditAccountDetailsMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
@@ -103,7 +141,10 @@ public class CreditAccountDetailsService {
      * @return the list of entities.
      */
     public Page<CreditAccountDetailsDTO> findAllWithEagerRelationships(Pageable pageable) {
-        return creditAccountDetailsRepository.findAllWithEagerRelationships(pageable).map(creditAccountDetailsMapper::toDto);
+        if (currentUserService.isAdmin()) {
+            return creditAccountDetailsRepository.findAllWithEagerRelationships(pageable).map(creditAccountDetailsMapper::toDto);
+        }
+        throw new UnsupportedOperationException("Paged access is only supported for admin users");
     }
 
     /**
@@ -115,16 +156,72 @@ public class CreditAccountDetailsService {
     @Transactional(readOnly = true)
     public Optional<CreditAccountDetailsDTO> findOne(Long id) {
         LOG.debug("Request to get CreditAccountDetails : {}", id);
-        return creditAccountDetailsRepository.findOneWithEagerRelationships(id).map(creditAccountDetailsMapper::toDto);
+        return findAccessibleEntity(id).map(creditAccountDetailsMapper::toDto);
+    }
+
+    /**
+     * Returns whether the current user can access the credit account details.
+     *
+     * @param id the id of the entity.
+     * @return true when the details exist and are visible to the current user.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAccessible(Long id) {
+        return findAccessibleEntity(id).isPresent();
     }
 
     /**
      * Delete the creditAccountDetails by id.
      *
      * @param id the id of the entity.
+     * @return true when the details were deleted.
      */
-    public void delete(Long id) {
+    public boolean delete(Long id) {
         LOG.debug("Request to delete CreditAccountDetails : {}", id);
+        Optional<CreditAccountDetails> creditAccountDetails = findAccessibleEntity(id);
+        if (creditAccountDetails.isEmpty()) {
+            return false;
+        }
         creditAccountDetailsRepository.deleteById(id);
+        return true;
+    }
+
+    private Optional<CreditAccountDetails> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return creditAccountDetailsRepository.findOneWithEagerRelationships(id);
+        }
+        return creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(
+            id,
+            currentUserService.getCurrentUserLogin()
+        );
+    }
+
+    private FinancialAccount resolveAccountForCreate(FinancialAccountDTO accountDTO) {
+        if (accountDTO == null || accountDTO.getId() == null) {
+            throw new IllegalArgumentException("Account is required");
+        }
+        FinancialAccount account = financialAccountService
+            .findAccessibleAccountEntity(accountDTO.getId())
+            .orElseThrow(() -> new IllegalArgumentException("Account is not accessible"));
+        validateCreditCardAccount(account);
+        if (creditAccountDetailsRepository.existsByAccountId(account.getId())) {
+            throw new IllegalArgumentException("Account already has credit account details");
+        }
+        return account;
+    }
+
+    private void rejectAccountChange(CreditAccountDetails existingCreditAccountDetails, FinancialAccountDTO accountDTO) {
+        if (accountDTO == null || accountDTO.getId() == null) {
+            return;
+        }
+        if (!accountDTO.getId().equals(existingCreditAccountDetails.getAccount().getId())) {
+            throw new IllegalArgumentException("Account cannot be changed");
+        }
+    }
+
+    private void validateCreditCardAccount(FinancialAccount account) {
+        if (account.getAccountType() != AccountType.CREDIT_CARD) {
+            throw new IllegalArgumentException("Account must be a credit card account");
+        }
     }
 }

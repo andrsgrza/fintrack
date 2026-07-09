@@ -15,27 +15,37 @@ describe('CreditAccountDetails e2e test', () => {
   const creditAccountDetailsPageUrlPattern = new RegExp('/credit-account-details(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const creditAccountDetailsSample = {"creditLimit":26476.2,"statementDay":12,"paymentDueDay":26,"createdAt":"2026-07-07T16:24:02.688Z","updatedAt":"2026-07-07T15:36:04.632Z"};
 
   let creditAccountDetails;
-  // let financialAccount;
+  let financialAccount;
+
+  const buildCreditCardAccountPayload = (name: string) => {
+    const now = new Date().toISOString();
+    return {
+      name,
+      accountType: 'CREDIT_CARD',
+      currency: 'MXN',
+      initialBalance: 0,
+      initialBalanceDate: '2026-07-08',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
 
-  /* Disabled due to incompatibility
   beforeEach(() => {
-    // create an instance at the required relationship entity:
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/financial-accounts',
-      body: {"name":"fund archaeology","institutionName":"unnaturally finally","accountType":"DEBIT","currency":"EUR","initialBalance":20038.36,"initialBalanceDate":"2026-07-07","lastFourDigits":"1190","description":"drat","color":"#2dcE8f","icon":"expansion good-natured","active":true,"createdAt":"2026-07-06T20:02:57.264Z","updatedAt":"2026-07-07T07:12:17.515Z"},
+      body: buildCreditCardAccountPayload(`credit-card-${Date.now()}`),
     }).then(({ body }) => {
       financialAccount = body;
     });
   });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/credit-account-details+(?*|)').as('entitiesRequest');
@@ -43,16 +53,12 @@ describe('CreditAccountDetails e2e test', () => {
     cy.intercept('DELETE', '/api/credit-account-details/*').as('deleteEntityRequest');
   });
 
-  /* Disabled due to incompatibility
   beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
     cy.intercept('GET', '/api/financial-accounts', {
       statusCode: 200,
       body: [financialAccount],
     });
-
   });
-   */
 
   afterEach(() => {
     if (creditAccountDetails) {
@@ -65,7 +71,6 @@ describe('CreditAccountDetails e2e test', () => {
     }
   });
 
-  /* Disabled due to incompatibility
   afterEach(() => {
     if (financialAccount) {
       cy.authenticatedRequest({
@@ -76,7 +81,6 @@ describe('CreditAccountDetails e2e test', () => {
       });
     }
   });
-   */
 
   it('CreditAccountDetails menu should load CreditAccountDetails page', () => {
     cy.visit('/');
@@ -113,14 +117,17 @@ describe('CreditAccountDetails e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/credit-account-details',
           body: {
-            ...creditAccountDetailsSample,
-            account: financialAccount,
+            creditLimit: 5000,
+            statementDay: 10,
+            paymentDueDay: 20,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            account: { id: financialAccount.id },
           },
         }).then(({ body }) => {
           creditAccountDetails = body;
@@ -134,24 +141,12 @@ describe('CreditAccountDetails e2e test', () => {
             {
               statusCode: 200,
               body: [creditAccountDetails],
-            }
+            },
           ).as('entitiesRequestInternal');
         });
 
         cy.visit(creditAccountDetailsPageUrl);
-
         cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(creditAccountDetailsPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
       });
 
       it('detail button click should load details CreditAccountDetails page', () => {
@@ -185,8 +180,7 @@ describe('CreditAccountDetails e2e test', () => {
         cy.url().should('match', creditAccountDetailsPageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of CreditAccountDetails', () => {
+      it('last delete button click should delete instance of CreditAccountDetails', () => {
         cy.intercept('GET', '/api/credit-account-details/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -212,34 +206,19 @@ describe('CreditAccountDetails e2e test', () => {
       cy.getEntityCreateUpdateHeading('CreditAccountDetails');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of CreditAccountDetails', () => {
-      cy.get(`[data-cy="creditLimit"]`).type('14178.43');
-      cy.get(`[data-cy="creditLimit"]`).should('have.value', '14178.43');
-
-      cy.get(`[data-cy="statementDay"]`).type('30');
-      cy.get(`[data-cy="statementDay"]`).should('have.value', '30');
-
-      cy.get(`[data-cy="paymentDueDay"]`).type('13');
-      cy.get(`[data-cy="paymentDueDay"]`).should('have.value', '13');
-
-      cy.get(`[data-cy="annualInterestRate"]`).type('30435.38');
-      cy.get(`[data-cy="annualInterestRate"]`).should('have.value', '30435.38');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-06T18:22');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-06T18:22');
-
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T00:15');
-      cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T00:15');
-
+    it('should create an instance of CreditAccountDetails', () => {
+      cy.get(`[data-cy="creditLimit"]`).type('5000');
+      cy.get(`[data-cy="statementDay"]`).type('10');
+      cy.get(`[data-cy="paymentDueDay"]`).type('20');
+      cy.get(`[data-cy="createdAt"]`).type('2026-07-08T10:00');
+      cy.get(`[data-cy="updatedAt"]`).type('2026-07-08T10:00');
       cy.get(`[data-cy="account"]`).select(1);
 
       cy.get(entityCreateSaveButtonSelector).click();
 
       cy.wait('@postEntityRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(201);
+        expect(response?.body.account.id).to.equal(financialAccount.id);
         creditAccountDetails = response.body;
       });
       cy.wait('@entitiesRequest').then(({ response }) => {

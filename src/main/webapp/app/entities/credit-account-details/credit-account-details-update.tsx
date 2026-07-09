@@ -197,11 +197,13 @@ export const CreditAccountDetailsUpdate = () => {
               >
                 <option value="" key="0" />
                 {financialAccounts
-                  ? financialAccounts.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.name}
-                      </option>
-                    ))
+                  ? financialAccounts
+                      .filter(otherEntity => otherEntity.accountType === 'CREDIT_CARD')
+                      .map(otherEntity => (
+                        <option value={otherEntity.id} key={otherEntity.id}>
+                          {otherEntity.name}
+                        </option>
+                      ))
                   : null}
               </ValidatedField>
               <FormText>
