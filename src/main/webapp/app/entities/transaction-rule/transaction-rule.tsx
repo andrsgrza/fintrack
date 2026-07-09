@@ -121,9 +121,6 @@ export const TransactionRule = () => {
                   <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
                 </th>
                 <th>
-                  <Translate contentKey="fintrackApp.transactionRule.user">User</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
                   <Translate contentKey="fintrackApp.transactionRule.resultingCategory">Resulting Category</Translate>{' '}
                   <FontAwesomeIcon icon="sort" />
                 </th>
@@ -166,7 +163,6 @@ export const TransactionRule = () => {
                       <TextFormat type="date" value={transactionRule.updatedAt} format={APP_DATE_FORMAT} />
                     ) : null}
                   </td>
-                  <td>{transactionRule.user ? transactionRule.user.login : ''}</td>
                   <td>
                     {transactionRule.resultingCategory ? (
                       <Link to={`/category/${transactionRule.resultingCategory.id}`}>{transactionRule.resultingCategory.name}</Link>

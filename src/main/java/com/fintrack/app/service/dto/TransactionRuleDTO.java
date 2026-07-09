@@ -46,7 +46,6 @@ public class TransactionRuleDTO implements Serializable {
     @NotNull
     private Instant updatedAt;
 
-    @NotNull
     private UserDTO user;
 
     private CategoryDTO resultingCategory;

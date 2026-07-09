@@ -2160,6 +2160,129 @@ class FinancialSubscriptionResourceIT {
         insertedFinancialSubscription = financialSubscriptionMapper.toEntity(returnedFinancialSubscriptionDTO);
     }
 
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithoutAccountFieldPreservesExistingAccount() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        em.flush();
+
+        financialSubscription.setAccount(ownAccount);
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"name\":\"" + UPDATED_NAME + "\"}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.id").value(ownAccount.getId().intValue()));
+
+        FinancialSubscription persistedFinancialSubscription = getPersistedFinancialSubscription(financialSubscription);
+        assertThat(persistedFinancialSubscription.getAccount().getId()).isEqualTo(ownAccount.getId());
+        assertThat(persistedFinancialSubscription.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithNullAccountClearsAccount() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        em.flush();
+
+        financialSubscription.setAccount(ownAccount);
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"account\":null}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account").doesNotExist());
+
+        assertThat(getPersistedFinancialSubscription(financialSubscription).getAccount()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithEmptyTagsClearsTags() throws Exception {
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
+        em.flush();
+
+        Set<Tag> tags = new HashSet<>();
+        tags.add(ownTag);
+        financialSubscription.setTags(tags);
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"tags\":[]}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tags").isEmpty());
+
+        assertThat(getPersistedFinancialSubscription(financialSubscription).getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void updateFinancialSubscriptionWithForeignCategoryOrAccountFails() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        FinancialAccount otherUsersAccount = FinancialAccountResourceIT.createEntity(em);
+        otherUsersAccount.setUser(createOtherUser(em));
+        otherUsersAccount = em.merge(otherUsersAccount);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherUsersAccount.getId());
+        financialSubscriptionDTO.setAccount(accountDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory = em.merge(otherUsersCategory);
+        em.flush();
+
+        financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(otherUsersCategory.getId());
+        financialSubscriptionDTO.setCategory(categoryDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithForeignTagFails() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        Tag otherUsersTag = TagResourceIT.createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag = em.merge(otherUsersTag);
+        em.flush();
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"tags\":[{\"id\":" + otherUsersTag.getId() + "}]}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
     protected long getRepositoryCount() {
         return financialSubscriptionRepository.count();
     }

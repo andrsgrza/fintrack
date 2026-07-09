@@ -15,64 +15,40 @@ describe('TransactionRule e2e test', () => {
   const transactionRulePageUrlPattern = new RegExp('/transaction-rule(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const transactionRuleSample = {"name":"since till ditch","priority":30269,"conditionLogic":"ALL","active":false,"createdAt":"2026-07-06T19:01:26.924Z","updatedAt":"2026-07-07T04:04:48.532Z"};
+  const adminUsername = Cypress.env('E2E_ADMIN_USERNAME') ?? 'admin';
+  const adminPassword = Cypress.env('E2E_ADMIN_PASSWORD') ?? 'admin';
 
   let transactionRule;
-  // let user;
+
+  const buildTransactionRulePayload = (name: string) => {
+    const now = new Date().toISOString();
+    return {
+      name,
+      priority: 1,
+      conditionLogic: 'ALL',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  const fillCreateForm = (name: string) => {
+    cy.get('[data-cy="name"]').clear().type(name);
+    cy.get('[data-cy="priority"]').clear().type('1');
+    cy.get('[data-cy="conditionLogic"]').select('ALL');
+    cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
+    cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // create an instance at the required relationship entity:
-    cy.authenticatedRequest({
-      method: 'POST',
-      url: '/api/users',
-      body: {"login":"41p8@Ke\\`ZzkcD-\\.LrF3YL\\orwq","firstName":"Norma","lastName":"Rosario Solorio","email":"Isabel.VargasDelapaz40@yahoo.com","imageUrl":"yawningly over","langKey":"that zowie"},
-    }).then(({ body }) => {
-      user = body;
-    });
-  });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/transaction-rules+(?*|)').as('entitiesRequest');
     cy.intercept('POST', '/api/transaction-rules').as('postEntityRequest');
     cy.intercept('DELETE', '/api/transaction-rules/*').as('deleteEntityRequest');
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/users', {
-      statusCode: 200,
-      body: [user],
-    });
-
-    cy.intercept('GET', '/api/categories', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/financial-subscriptions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/tags', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/transaction-rule-conditions', {
-      statusCode: 200,
-      body: [],
-    });
-
-  });
-   */
 
   afterEach(() => {
     if (transactionRule) {
@@ -84,19 +60,6 @@ describe('TransactionRule e2e test', () => {
       });
     }
   });
-
-  /* Disabled due to incompatibility
-  afterEach(() => {
-    if (user) {
-      cy.authenticatedRequest({
-        method: 'DELETE',
-        url: `/api/users/${user.id}`,
-      }).then(() => {
-        user = undefined;
-      });
-    }
-  });
-   */
 
   it('TransactionRules menu should load TransactionRules page', () => {
     cy.visit('/');
@@ -133,45 +96,17 @@ describe('TransactionRule e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/transaction-rules',
-          body: {
-            ...transactionRuleSample,
-            user: user,
-          },
+          body: buildTransactionRulePayload(`existing-${Date.now()}`),
         }).then(({ body }) => {
           transactionRule = body;
-
-          cy.intercept(
-            {
-              method: 'GET',
-              url: '/api/transaction-rules+(?*|)',
-              times: 1,
-            },
-            {
-              statusCode: 200,
-              body: [transactionRule],
-            }
-          ).as('entitiesRequestInternal');
         });
 
         cy.visit(transactionRulePageUrl);
-
-        cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(transactionRulePageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
+        cy.wait('@entitiesRequest');
       });
 
       it('detail button click should load details TransactionRule page', () => {
@@ -205,8 +140,7 @@ describe('TransactionRule e2e test', () => {
         cy.url().should('match', transactionRulePageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of TransactionRule', () => {
+      it('last delete button click should delete instance of TransactionRule', () => {
         cy.intercept('GET', '/api/transaction-rules/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -227,51 +161,79 @@ describe('TransactionRule e2e test', () => {
 
   describe('new TransactionRule page', () => {
     beforeEach(() => {
-      cy.visit(`${transactionRulePageUrl}`);
-      cy.get(entityCreateButtonSelector).click();
+      cy.visit(`${transactionRulePageUrl}/new`);
       cy.getEntityCreateUpdateHeading('TransactionRule');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of TransactionRule', () => {
-      cy.get(`[data-cy="name"]`).type('mindless');
-      cy.get(`[data-cy="name"]`).should('have.value', 'mindless');
-
-      cy.get(`[data-cy="description"]`).type('roughly');
-      cy.get(`[data-cy="description"]`).should('have.value', 'roughly');
-
-      cy.get(`[data-cy="priority"]`).type('7062');
-      cy.get(`[data-cy="priority"]`).should('have.value', '7062');
-
-      cy.get(`[data-cy="conditionLogic"]`).select('ANY');
-
-      cy.get(`[data-cy="resultingDescription"]`).type('dilate surge');
-      cy.get(`[data-cy="resultingDescription"]`).should('have.value', 'dilate surge');
-
-      cy.get(`[data-cy="active"]`).should('not.be.checked');
-      cy.get(`[data-cy="active"]`).click();
-      cy.get(`[data-cy="active"]`).should('be.checked');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T13:03');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T13:03');
-
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T15:47');
-      cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T15:47');
-
-      cy.get(`[data-cy="user"]`).select(1);
-
+    it('should create an instance of TransactionRule', () => {
+      const ruleName = `create-${Date.now()}`;
+      fillCreateForm(ruleName);
+      cy.get('[data-cy="user"]').should('not.exist');
       cy.get(entityCreateSaveButtonSelector).click();
 
       cy.wait('@postEntityRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(201);
+        expect(response?.body.user.login).to.equal(username);
         transactionRule = response.body;
       });
-      cy.wait('@entitiesRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-      });
       cy.url().should('match', transactionRulePageUrlPattern);
+    });
+  });
+
+  describe('TransactionRule ownership', () => {
+    it('should not render user selector on create form', () => {
+      cy.visit(`${transactionRulePageUrl}/new`);
+      cy.get('[data-cy="user"]').should('not.exist');
+    });
+
+    it('regular user should not see transaction rules created by admin', () => {
+      const adminRuleName = `admin-only-${Date.now()}`;
+
+      cy.login(adminUsername, adminPassword);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/transaction-rules',
+        body: buildTransactionRulePayload(adminRuleName),
+      }).then(({ body: adminRule }) => {
+        cy.login(username, password);
+        cy.authenticatedRequest({
+          method: 'GET',
+          url: '/api/transaction-rules',
+        }).then(({ body: userRules }) => {
+          expect(userRules.some(r => r.id === adminRule.id)).to.equal(false);
+        });
+
+        cy.login(adminUsername, adminPassword);
+        cy.authenticatedRequest({
+          method: 'DELETE',
+          url: `/api/transaction-rules/${adminRule.id}`,
+        });
+      });
+    });
+
+    it('admin should see transaction rules created by another user', () => {
+      const userRuleName = `user-owned-${Date.now()}`;
+
+      cy.login(username, password);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/transaction-rules',
+        body: buildTransactionRulePayload(userRuleName),
+      }).then(({ body: userRule }) => {
+        cy.login(adminUsername, adminPassword);
+        cy.authenticatedRequest({
+          method: 'GET',
+          url: '/api/transaction-rules',
+        }).then(({ body: adminRules }) => {
+          expect(adminRules.some(r => r.id === userRule.id)).to.equal(true);
+        });
+
+        cy.login(username, password);
+        cy.authenticatedRequest({
+          method: 'DELETE',
+          url: `/api/transaction-rules/${userRule.id}`,
+        });
+      });
     });
   });
 });

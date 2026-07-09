@@ -30,7 +30,24 @@ public interface TransactionRuleMapper extends EntityMapper<TransactionRuleDTO, 
     TransactionRuleDTO toDto(TransactionRule s);
 
     @Mapping(target = "removeResultingTags", ignore = true)
+    @Mapping(target = "removeConditions", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "resultingCategory", ignore = true)
+    @Mapping(target = "resultingFinancialSubscription", ignore = true)
+    @Mapping(target = "resultingTags", ignore = true)
+    @Mapping(target = "conditions", ignore = true)
     TransactionRule toEntity(TransactionRuleDTO transactionRuleDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "removeResultingTags", ignore = true)
+    @Mapping(target = "removeConditions", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "resultingCategory", ignore = true)
+    @Mapping(target = "resultingFinancialSubscription", ignore = true)
+    @Mapping(target = "resultingTags", ignore = true)
+    @Mapping(target = "conditions", ignore = true)
+    void partialUpdate(@MappingTarget TransactionRule entity, TransactionRuleDTO dto);
 
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)

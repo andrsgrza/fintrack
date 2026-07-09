@@ -1,5 +1,6 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
@@ -97,12 +98,23 @@ public class FinancialSubscriptionService {
      * @return the persisted entity.
      */
     public Optional<FinancialSubscriptionDTO> partialUpdate(FinancialSubscriptionDTO financialSubscriptionDTO) {
+        return partialUpdate(financialSubscriptionDTO, null);
+    }
+
+    /**
+     * Partially update a financialSubscription, applying link changes only for JSON fields present in the patch body.
+     *
+     * @param financialSubscriptionDTO the entity to update partially.
+     * @param patchNode the raw patch payload; when null, link fields are updated only if non-null in the DTO.
+     * @return the persisted entity.
+     */
+    public Optional<FinancialSubscriptionDTO> partialUpdate(FinancialSubscriptionDTO financialSubscriptionDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update FinancialSubscription : {}", financialSubscriptionDTO);
 
         return findAccessibleEntity(financialSubscriptionDTO.getId())
             .map(existingFinancialSubscription -> {
                 financialSubscriptionMapper.partialUpdate(existingFinancialSubscription, financialSubscriptionDTO);
-                applyRelationshipsForPartialUpdate(existingFinancialSubscription, financialSubscriptionDTO);
+                applyRelationshipsForPartialUpdate(existingFinancialSubscription, financialSubscriptionDTO, patchNode);
                 return existingFinancialSubscription;
             })
             .map(financialSubscriptionRepository::save)
@@ -177,8 +189,21 @@ public class FinancialSubscriptionService {
 
     private void applyRelationshipsForPartialUpdate(
         FinancialSubscription financialSubscription,
-        FinancialSubscriptionDTO financialSubscriptionDTO
+        FinancialSubscriptionDTO financialSubscriptionDTO,
+        JsonNode patchNode
     ) {
+        if (patchNode != null) {
+            if (patchNode.has("account")) {
+                financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount()));
+            }
+            if (patchNode.has("category")) {
+                financialSubscription.setCategory(resolveOptionalCategory(financialSubscriptionDTO.getCategory()));
+            }
+            if (patchNode.has("tags")) {
+                financialSubscription.setTags(resolveTags(financialSubscriptionDTO.getTags()));
+            }
+            return;
+        }
         if (financialSubscriptionDTO.getAccount() != null) {
             financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount()));
         }

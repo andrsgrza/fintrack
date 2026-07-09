@@ -1,5 +1,7 @@
 package com.fintrack.app.web.rest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FinancialSubscriptionQueryService;
 import com.fintrack.app.service.FinancialSubscriptionService;
 import com.fintrack.app.service.criteria.FinancialSubscriptionCriteria;
@@ -38,12 +40,16 @@ public class FinancialSubscriptionResource {
 
     private final FinancialSubscriptionQueryService financialSubscriptionQueryService;
 
+    private final ObjectMapper objectMapper;
+
     public FinancialSubscriptionResource(
         FinancialSubscriptionService financialSubscriptionService,
-        FinancialSubscriptionQueryService financialSubscriptionQueryService
+        FinancialSubscriptionQueryService financialSubscriptionQueryService,
+        ObjectMapper objectMapper
     ) {
         this.financialSubscriptionService = financialSubscriptionService;
         this.financialSubscriptionQueryService = financialSubscriptionQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -122,11 +128,17 @@ public class FinancialSubscriptionResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<FinancialSubscriptionDTO> partialUpdateFinancialSubscription(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody FinancialSubscriptionDTO financialSubscriptionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update FinancialSubscription partially : {}, {}", id, financialSubscriptionDTO);
+        LOG.debug("REST request to partial update FinancialSubscription partially : {}, {}", id, patchNode);
+        FinancialSubscriptionDTO financialSubscriptionDTO;
+        try {
+            financialSubscriptionDTO = objectMapper.treeToValue(patchNode, FinancialSubscriptionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (financialSubscriptionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            financialSubscriptionDTO.setId(id);
         }
         if (!Objects.equals(id, financialSubscriptionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
@@ -138,7 +150,7 @@ public class FinancialSubscriptionResource {
 
         Optional<FinancialSubscriptionDTO> result;
         try {
-            result = financialSubscriptionService.partialUpdate(financialSubscriptionDTO);
+            result = financialSubscriptionService.partialUpdate(financialSubscriptionDTO, patchNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }

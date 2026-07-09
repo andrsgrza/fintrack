@@ -31,9 +31,16 @@ public class TransactionRuleQueryService extends QueryService<TransactionRule> {
 
     private final TransactionRuleMapper transactionRuleMapper;
 
-    public TransactionRuleQueryService(TransactionRuleRepository transactionRuleRepository, TransactionRuleMapper transactionRuleMapper) {
+    private final CurrentUserService currentUserService;
+
+    public TransactionRuleQueryService(
+        TransactionRuleRepository transactionRuleRepository,
+        TransactionRuleMapper transactionRuleMapper,
+        CurrentUserService currentUserService
+    ) {
         this.transactionRuleRepository = transactionRuleRepository;
         this.transactionRuleMapper = transactionRuleMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -96,6 +103,14 @@ public class TransactionRuleQueryService extends QueryService<TransactionRule> {
                     root.join(TransactionRule_.conditions, JoinType.LEFT).get(TransactionRuleCondition_.id)
                 )
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                        root.join(TransactionRule_.user, JoinType.INNER).get(User_.login),
+                        currentUserService.getCurrentUserLogin()
+                    )
+                );
+            }
         }
         return specification;
     }

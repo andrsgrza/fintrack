@@ -89,10 +89,6 @@ export const TransactionRuleDetail = () => {
             ) : null}
           </dd>
           <dt>
-            <Translate contentKey="fintrackApp.transactionRule.user">User</Translate>
-          </dt>
-          <dd>{transactionRuleEntity.user ? transactionRuleEntity.user.login : ''}</dd>
-          <dt>
             <Translate contentKey="fintrackApp.transactionRule.resultingCategory">Resulting Category</Translate>
           </dt>
           <dd>{transactionRuleEntity.resultingCategory ? transactionRuleEntity.resultingCategory.name : ''}</dd>
