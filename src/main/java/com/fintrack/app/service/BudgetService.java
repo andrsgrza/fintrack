@@ -1,5 +1,6 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
@@ -97,12 +98,23 @@ public class BudgetService {
      * @return the persisted entity.
      */
     public Optional<BudgetDTO> partialUpdate(BudgetDTO budgetDTO) {
+        return partialUpdate(budgetDTO, null);
+    }
+
+    /**
+     * Partially update a budget, applying M2M link changes only for JSON fields present in the patch body.
+     *
+     * @param budgetDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<BudgetDTO> partialUpdate(BudgetDTO budgetDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update Budget : {}", budgetDTO);
 
         return findAccessibleEntity(budgetDTO.getId())
             .map(existingBudget -> {
                 budgetMapper.partialUpdate(existingBudget, budgetDTO);
-                applyRelationshipsForPartialUpdate(existingBudget, budgetDTO);
+                applyRelationshipsForPartialUpdate(existingBudget, budgetDTO, patchNode);
                 return existingBudget;
             })
             .map(budgetRepository::save)
@@ -175,7 +187,19 @@ public class BudgetService {
         budget.setTags(resolveTags(budgetDTO.getTags()));
     }
 
-    private void applyRelationshipsForPartialUpdate(Budget budget, BudgetDTO budgetDTO) {
+    private void applyRelationshipsForPartialUpdate(Budget budget, BudgetDTO budgetDTO, JsonNode patchNode) {
+        if (patchNode != null) {
+            if (patchNode.has("accounts")) {
+                budget.setAccounts(resolveAccounts(budgetDTO.getAccounts()));
+            }
+            if (patchNode.has("categories")) {
+                budget.setCategories(resolveCategories(budgetDTO.getCategories()));
+            }
+            if (patchNode.has("tags")) {
+                budget.setTags(resolveTags(budgetDTO.getTags()));
+            }
+            return;
+        }
         if (budgetDTO.getAccounts() != null) {
             budget.setAccounts(resolveAccounts(budgetDTO.getAccounts()));
         }

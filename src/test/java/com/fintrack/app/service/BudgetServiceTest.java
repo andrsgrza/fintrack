@@ -8,14 +8,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.BudgetDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.BudgetMapper;
 import java.util.HashSet;
 import java.util.Optional;
@@ -231,5 +235,72 @@ class BudgetServiceTest {
         budgetService.update(budgetDTO);
 
         assertThat(mappedEntity.getAccounts()).containsExactly(account);
+    }
+
+    @Test
+    void partialUpdateWithPatchNodeAbsentPreservesLinks() throws Exception {
+        FinancialAccount account = new FinancialAccount();
+        account.setId(99L);
+        budget.setAccounts(new HashSet<>(Set.of(account)));
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode patchNode = objectMapper.readTree("{\"name\":\"Updated\"}");
+        BudgetDTO patchDto = objectMapper.treeToValue(patchNode, BudgetDTO.class);
+        patchDto.setId(10L);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(budgetRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(budget));
+        when(budgetRepository.save(budget)).thenReturn(budget);
+        when(budgetMapper.toDto(budget)).thenReturn(budgetDTO);
+
+        budgetService.partialUpdate(patchDto, patchNode);
+
+        assertThat(budget.getAccounts()).extracting(FinancialAccount::getId).containsExactly(99L);
+        verify(financialAccountService, never()).findAccessibleAccountEntity(any());
+    }
+
+    @Test
+    void partialUpdateWithPatchNodeNullTagsClearsTags() throws Exception {
+        Tag tag = new Tag();
+        tag.setId(5L);
+        budget.setTags(new HashSet<>(Set.of(tag)));
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode patchNode = objectMapper.readTree("{\"tags\":null}");
+        BudgetDTO patchDto = objectMapper.treeToValue(patchNode, BudgetDTO.class);
+        patchDto.setId(10L);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(budgetRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(budget));
+        when(budgetRepository.save(budget)).thenReturn(budget);
+        when(budgetMapper.toDto(budget)).thenReturn(budgetDTO);
+
+        budgetService.partialUpdate(patchDto, patchNode);
+
+        assertThat(budget.getTags()).isEmpty();
+    }
+
+    @Test
+    void partialUpdateWithPatchNodeReplacesAccounts() throws Exception {
+        FinancialAccount account = new FinancialAccount();
+        account.setId(99L);
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode patchNode = objectMapper.readTree("{\"accounts\":[{\"id\":99}]}");
+        BudgetDTO patchDto = objectMapper.treeToValue(patchNode, BudgetDTO.class);
+        patchDto.setId(10L);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(budgetRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(budget));
+        when(financialAccountService.findAccessibleAccountEntity(99L)).thenReturn(Optional.of(account));
+        when(budgetRepository.save(budget)).thenReturn(budget);
+        when(budgetMapper.toDto(budget)).thenReturn(budgetDTO);
+
+        budgetService.partialUpdate(patchDto, patchNode);
+
+        assertThat(budget.getAccounts()).containsExactly(account);
     }
 }
