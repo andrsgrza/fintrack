@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.FinancialSubscriptionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FinancialSubscriptionQueryService;
 import com.fintrack.app.service.FinancialSubscriptionService;
 import com.fintrack.app.service.criteria.FinancialSubscriptionCriteria;
@@ -37,18 +38,18 @@ public class FinancialSubscriptionResource {
 
     private final FinancialSubscriptionService financialSubscriptionService;
 
-    private final FinancialSubscriptionRepository financialSubscriptionRepository;
-
     private final FinancialSubscriptionQueryService financialSubscriptionQueryService;
+
+    private final ObjectMapper objectMapper;
 
     public FinancialSubscriptionResource(
         FinancialSubscriptionService financialSubscriptionService,
-        FinancialSubscriptionRepository financialSubscriptionRepository,
-        FinancialSubscriptionQueryService financialSubscriptionQueryService
+        FinancialSubscriptionQueryService financialSubscriptionQueryService,
+        ObjectMapper objectMapper
     ) {
         this.financialSubscriptionService = financialSubscriptionService;
-        this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.financialSubscriptionQueryService = financialSubscriptionQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -66,7 +67,11 @@ public class FinancialSubscriptionResource {
         if (financialSubscriptionDTO.getId() != null) {
             throw new BadRequestAlertException("A new financialSubscription cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        financialSubscriptionDTO = financialSubscriptionService.save(financialSubscriptionDTO);
+        try {
+            financialSubscriptionDTO = financialSubscriptionService.save(financialSubscriptionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/financial-subscriptions/" + financialSubscriptionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, financialSubscriptionDTO.getId().toString()))
             .body(financialSubscriptionDTO);
@@ -95,11 +100,15 @@ public class FinancialSubscriptionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialSubscriptionRepository.existsById(id)) {
+        if (!financialSubscriptionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        financialSubscriptionDTO = financialSubscriptionService.update(financialSubscriptionDTO);
+        try {
+            financialSubscriptionDTO = financialSubscriptionService.update(financialSubscriptionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, financialSubscriptionDTO.getId().toString()))
             .body(financialSubscriptionDTO);
@@ -119,21 +128,32 @@ public class FinancialSubscriptionResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<FinancialSubscriptionDTO> partialUpdateFinancialSubscription(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody FinancialSubscriptionDTO financialSubscriptionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update FinancialSubscription partially : {}, {}", id, financialSubscriptionDTO);
+        LOG.debug("REST request to partial update FinancialSubscription partially : {}, {}", id, patchNode);
+        FinancialSubscriptionDTO financialSubscriptionDTO;
+        try {
+            financialSubscriptionDTO = objectMapper.treeToValue(patchNode, FinancialSubscriptionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (financialSubscriptionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            financialSubscriptionDTO.setId(id);
         }
         if (!Objects.equals(id, financialSubscriptionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialSubscriptionRepository.existsById(id)) {
+        if (!financialSubscriptionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<FinancialSubscriptionDTO> result = financialSubscriptionService.partialUpdate(financialSubscriptionDTO);
+        Optional<FinancialSubscriptionDTO> result;
+        try {
+            result = financialSubscriptionService.partialUpdate(financialSubscriptionDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -189,7 +209,9 @@ public class FinancialSubscriptionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFinancialSubscription(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete FinancialSubscription : {}", id);
-        financialSubscriptionService.delete(id);
+        if (!financialSubscriptionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

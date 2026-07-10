@@ -1,5 +1,6 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.ApiAccessToken;
 import com.fintrack.app.repository.ApiAccessTokenRepository;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
@@ -28,9 +29,16 @@ public class ApiAccessTokenService {
 
     private final ApiAccessTokenMapper apiAccessTokenMapper;
 
-    public ApiAccessTokenService(ApiAccessTokenRepository apiAccessTokenRepository, ApiAccessTokenMapper apiAccessTokenMapper) {
+    private final CurrentUserService currentUserService;
+
+    public ApiAccessTokenService(
+        ApiAccessTokenRepository apiAccessTokenRepository,
+        ApiAccessTokenMapper apiAccessTokenMapper,
+        CurrentUserService currentUserService
+    ) {
         this.apiAccessTokenRepository = apiAccessTokenRepository;
         this.apiAccessTokenMapper = apiAccessTokenMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -41,7 +49,9 @@ public class ApiAccessTokenService {
      */
     public ApiAccessTokenDTO save(ApiAccessTokenDTO apiAccessTokenDTO) {
         LOG.debug("Request to save ApiAccessToken : {}", apiAccessTokenDTO);
+        validateTokenHashForCreate(apiAccessTokenDTO);
         ApiAccessToken apiAccessToken = apiAccessTokenMapper.toEntity(apiAccessTokenDTO);
+        apiAccessToken.setUser(currentUserService.getCurrentUser());
         apiAccessToken = apiAccessTokenRepository.save(apiAccessToken);
         return apiAccessTokenMapper.toDto(apiAccessToken);
     }
@@ -54,7 +64,12 @@ public class ApiAccessTokenService {
      */
     public ApiAccessTokenDTO update(ApiAccessTokenDTO apiAccessTokenDTO) {
         LOG.debug("Request to update ApiAccessToken : {}", apiAccessTokenDTO);
+        ApiAccessToken existingApiAccessToken = findAccessibleEntity(apiAccessTokenDTO.getId()).orElseThrow();
+        rejectTokenSecretChange(existingApiAccessToken, apiAccessTokenDTO);
         ApiAccessToken apiAccessToken = apiAccessTokenMapper.toEntity(apiAccessTokenDTO);
+        apiAccessToken.setUser(existingApiAccessToken.getUser());
+        apiAccessToken.setTokenHash(existingApiAccessToken.getTokenHash());
+        apiAccessToken.setTokenPrefix(existingApiAccessToken.getTokenPrefix());
         apiAccessToken = apiAccessTokenRepository.save(apiAccessToken);
         return apiAccessTokenMapper.toDto(apiAccessToken);
     }
@@ -66,13 +81,26 @@ public class ApiAccessTokenService {
      * @return the persisted entity.
      */
     public Optional<ApiAccessTokenDTO> partialUpdate(ApiAccessTokenDTO apiAccessTokenDTO) {
+        return partialUpdate(apiAccessTokenDTO, null);
+    }
+
+    /**
+     * Partially update a apiAccessToken, applying owner and token secret changes only when present in the patch body.
+     *
+     * @param apiAccessTokenDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<ApiAccessTokenDTO> partialUpdate(ApiAccessTokenDTO apiAccessTokenDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update ApiAccessToken : {}", apiAccessTokenDTO);
 
-        return apiAccessTokenRepository
-            .findById(apiAccessTokenDTO.getId())
+        return findAccessibleEntity(apiAccessTokenDTO.getId())
             .map(existingApiAccessToken -> {
+                if (patchNode != null && patchNode.has("user") && patchNode.get("user").isNull()) {
+                    throw new IllegalArgumentException("User cannot be null");
+                }
+                rejectTokenSecretChangeForPatch(existingApiAccessToken, apiAccessTokenDTO, patchNode);
                 apiAccessTokenMapper.partialUpdate(existingApiAccessToken, apiAccessTokenDTO);
-
                 return existingApiAccessToken;
             })
             .map(apiAccessTokenRepository::save)
@@ -87,8 +115,15 @@ public class ApiAccessTokenService {
     @Transactional(readOnly = true)
     public List<ApiAccessTokenDTO> findAll() {
         LOG.debug("Request to get all ApiAccessTokens");
+        if (currentUserService.isAdmin()) {
+            return apiAccessTokenRepository
+                .findAllWithEagerRelationships()
+                .stream()
+                .map(apiAccessTokenMapper::toDto)
+                .collect(Collectors.toCollection(LinkedList::new));
+        }
         return apiAccessTokenRepository
-            .findAll()
+            .findAllWithEagerRelationshipsByUserLogin(currentUserService.getCurrentUserLogin())
             .stream()
             .map(apiAccessTokenMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
@@ -100,7 +135,10 @@ public class ApiAccessTokenService {
      * @return the list of entities.
      */
     public Page<ApiAccessTokenDTO> findAllWithEagerRelationships(Pageable pageable) {
-        return apiAccessTokenRepository.findAllWithEagerRelationships(pageable).map(apiAccessTokenMapper::toDto);
+        if (currentUserService.isAdmin()) {
+            return apiAccessTokenRepository.findAllWithEagerRelationships(pageable).map(apiAccessTokenMapper::toDto);
+        }
+        throw new UnsupportedOperationException("Paged access is only supported for admin users");
     }
 
     /**
@@ -112,16 +150,95 @@ public class ApiAccessTokenService {
     @Transactional(readOnly = true)
     public Optional<ApiAccessTokenDTO> findOne(Long id) {
         LOG.debug("Request to get ApiAccessToken : {}", id);
-        return apiAccessTokenRepository.findOneWithEagerRelationships(id).map(apiAccessTokenMapper::toDto);
+        return findAccessibleEntity(id).map(apiAccessTokenMapper::toDto);
+    }
+
+    /**
+     * Returns whether the current user can access the api access token.
+     *
+     * @param id the id of the entity.
+     * @return true when the token exists and is visible to the current user.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAccessible(Long id) {
+        return findAccessibleEntity(id).isPresent();
     }
 
     /**
      * Delete the apiAccessToken by id.
      *
      * @param id the id of the entity.
+     * @return true when the token was deleted.
      */
-    public void delete(Long id) {
+    public boolean delete(Long id) {
         LOG.debug("Request to delete ApiAccessToken : {}", id);
+        Optional<ApiAccessToken> apiAccessToken = findAccessibleEntity(id);
+        if (apiAccessToken.isEmpty()) {
+            return false;
+        }
         apiAccessTokenRepository.deleteById(id);
+        return true;
+    }
+
+    /**
+     * Returns the api access token entity when it is visible to the current user.
+     *
+     * @param id the id of the entity.
+     * @return the entity when accessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ApiAccessToken> findAccessibleApiAccessTokenEntity(Long id) {
+        return findAccessibleEntity(id);
+    }
+
+    private Optional<ApiAccessToken> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return apiAccessTokenRepository.findOneWithEagerRelationships(id);
+        }
+        return apiAccessTokenRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private void validateTokenHashForCreate(ApiAccessTokenDTO apiAccessTokenDTO) {
+        if (apiAccessTokenDTO.getTokenHash() == null || apiAccessTokenDTO.getTokenHash().isBlank()) {
+            throw new IllegalArgumentException("Token hash is required");
+        }
+        if (apiAccessTokenRepository.existsByTokenHash(apiAccessTokenDTO.getTokenHash())) {
+            throw new IllegalArgumentException("Token hash already exists");
+        }
+    }
+
+    private void rejectTokenSecretChange(ApiAccessToken existingApiAccessToken, ApiAccessTokenDTO apiAccessTokenDTO) {
+        if (apiAccessTokenDTO.getTokenHash() != null && !apiAccessTokenDTO.getTokenHash().equals(existingApiAccessToken.getTokenHash())) {
+            throw new IllegalArgumentException("Token hash cannot be changed");
+        }
+        if (
+            apiAccessTokenDTO.getTokenPrefix() != null &&
+            !apiAccessTokenDTO.getTokenPrefix().equals(existingApiAccessToken.getTokenPrefix())
+        ) {
+            throw new IllegalArgumentException("Token prefix cannot be changed");
+        }
+    }
+
+    private void rejectTokenSecretChangeForPatch(
+        ApiAccessToken existingApiAccessToken,
+        ApiAccessTokenDTO apiAccessTokenDTO,
+        JsonNode patchNode
+    ) {
+        if (patchNode == null) {
+            rejectTokenSecretChange(existingApiAccessToken, apiAccessTokenDTO);
+            return;
+        }
+        if (patchNode.has("tokenHash") && !patchNode.get("tokenHash").isNull()) {
+            String tokenHash = apiAccessTokenDTO.getTokenHash();
+            if (tokenHash != null && !tokenHash.equals(existingApiAccessToken.getTokenHash())) {
+                throw new IllegalArgumentException("Token hash cannot be changed");
+            }
+        }
+        if (patchNode.has("tokenPrefix") && !patchNode.get("tokenPrefix").isNull()) {
+            String tokenPrefix = apiAccessTokenDTO.getTokenPrefix();
+            if (tokenPrefix != null && !tokenPrefix.equals(existingApiAccessToken.getTokenPrefix())) {
+                throw new IllegalArgumentException("Token prefix cannot be changed");
+            }
+        }
     }
 }

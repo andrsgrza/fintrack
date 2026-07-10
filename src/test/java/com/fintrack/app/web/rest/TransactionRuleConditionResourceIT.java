@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.TransactionRuleConditionAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -12,11 +13,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
+import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.RuleOperator;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TransactionRuleConditionService;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
+import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleConditionMapper;
 import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
@@ -109,15 +113,9 @@ class TransactionRuleConditionResourceIT {
             .secondValue(DEFAULT_SECOND_VALUE)
             .caseSensitive(DEFAULT_CASE_SENSITIVE)
             .position(DEFAULT_POSITION);
-        // Add required entity
-        TransactionRule transactionRule;
-        if (TestUtil.findAll(em, TransactionRule.class).isEmpty()) {
-            transactionRule = TransactionRuleResourceIT.createEntity(em);
-            em.persist(transactionRule);
-            em.flush();
-        } else {
-            transactionRule = TestUtil.findAll(em, TransactionRule.class).get(0);
-        }
+        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
+        em.persist(transactionRule);
+        em.flush();
         transactionRuleCondition.setTransactionRule(transactionRule);
         return transactionRuleCondition;
     }
@@ -136,17 +134,18 @@ class TransactionRuleConditionResourceIT {
             .secondValue(UPDATED_SECOND_VALUE)
             .caseSensitive(UPDATED_CASE_SENSITIVE)
             .position(UPDATED_POSITION);
-        // Add required entity
-        TransactionRule transactionRule;
-        if (TestUtil.findAll(em, TransactionRule.class).isEmpty()) {
-            transactionRule = TransactionRuleResourceIT.createUpdatedEntity(em);
-            em.persist(transactionRule);
-            em.flush();
-        } else {
-            transactionRule = TestUtil.findAll(em, TransactionRule.class).get(0);
-        }
+        TransactionRule transactionRule = TransactionRuleResourceIT.createUpdatedEntity(em);
+        em.persist(transactionRule);
+        em.flush();
         updatedTransactionRuleCondition.setTransactionRule(transactionRule);
         return updatedTransactionRuleCondition;
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -477,26 +476,34 @@ class TransactionRuleConditionResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the transactionRuleCondition using partial update
-        TransactionRuleCondition partialUpdatedTransactionRuleCondition = new TransactionRuleCondition();
-        partialUpdatedTransactionRuleCondition.setId(transactionRuleCondition.getId());
-
-        partialUpdatedTransactionRuleCondition
-            .field(UPDATED_FIELD)
-            .value(UPDATED_VALUE)
-            .secondValue(UPDATED_SECOND_VALUE)
-            .position(UPDATED_POSITION);
+        String patchJson =
+            "{\"id\":" +
+            transactionRuleCondition.getId() +
+            ",\"field\":\"" +
+            UPDATED_FIELD +
+            "\",\"value\":\"" +
+            UPDATED_VALUE +
+            "\",\"secondValue\":\"" +
+            UPDATED_SECOND_VALUE +
+            "\",\"position\":" +
+            UPDATED_POSITION +
+            "}";
 
         restTransactionRuleConditionMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTransactionRuleCondition.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedTransactionRuleCondition))
+                patch(ENTITY_API_URL_ID, transactionRuleCondition.getId()).contentType("application/merge-patch+json").content(patchJson)
             )
             .andExpect(status().isOk());
 
         // Validate the TransactionRuleCondition in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        TransactionRuleCondition partialUpdatedTransactionRuleCondition = new TransactionRuleCondition()
+            .field(UPDATED_FIELD)
+            .value(UPDATED_VALUE)
+            .secondValue(UPDATED_SECOND_VALUE)
+            .position(UPDATED_POSITION);
+        partialUpdatedTransactionRuleCondition.setId(transactionRuleCondition.getId());
         assertTransactionRuleConditionUpdatableFieldsEquals(
             createUpdateProxyForBean(partialUpdatedTransactionRuleCondition, transactionRuleCondition),
             getPersistedTransactionRuleCondition(transactionRuleCondition)
@@ -512,28 +519,40 @@ class TransactionRuleConditionResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the transactionRuleCondition using partial update
-        TransactionRuleCondition partialUpdatedTransactionRuleCondition = new TransactionRuleCondition();
-        partialUpdatedTransactionRuleCondition.setId(transactionRuleCondition.getId());
-
-        partialUpdatedTransactionRuleCondition
-            .field(UPDATED_FIELD)
-            .operator(UPDATED_OPERATOR)
-            .value(UPDATED_VALUE)
-            .secondValue(UPDATED_SECOND_VALUE)
-            .caseSensitive(UPDATED_CASE_SENSITIVE)
-            .position(UPDATED_POSITION);
+        String patchJson =
+            "{\"id\":" +
+            transactionRuleCondition.getId() +
+            ",\"field\":\"" +
+            UPDATED_FIELD +
+            "\",\"operator\":\"" +
+            UPDATED_OPERATOR +
+            "\",\"value\":\"" +
+            UPDATED_VALUE +
+            "\",\"secondValue\":\"" +
+            UPDATED_SECOND_VALUE +
+            "\",\"caseSensitive\":" +
+            UPDATED_CASE_SENSITIVE +
+            ",\"position\":" +
+            UPDATED_POSITION +
+            "}";
 
         restTransactionRuleConditionMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTransactionRuleCondition.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedTransactionRuleCondition))
+                patch(ENTITY_API_URL_ID, transactionRuleCondition.getId()).contentType("application/merge-patch+json").content(patchJson)
             )
             .andExpect(status().isOk());
 
         // Validate the TransactionRuleCondition in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        TransactionRuleCondition partialUpdatedTransactionRuleCondition = new TransactionRuleCondition()
+            .field(UPDATED_FIELD)
+            .operator(UPDATED_OPERATOR)
+            .value(UPDATED_VALUE)
+            .secondValue(UPDATED_SECOND_VALUE)
+            .caseSensitive(UPDATED_CASE_SENSITIVE)
+            .position(UPDATED_POSITION);
+        partialUpdatedTransactionRuleCondition.setId(transactionRuleCondition.getId());
         assertTransactionRuleConditionUpdatableFieldsEquals(
             partialUpdatedTransactionRuleCondition,
             getPersistedTransactionRuleCondition(partialUpdatedTransactionRuleCondition)
@@ -619,6 +638,289 @@ class TransactionRuleConditionResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void getTransactionRuleConditionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+
+        restTransactionRuleConditionMockMvc.perform(get(ENTITY_API_URL_ID, otherCondition.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllTransactionRuleConditionsDoesNotIncludeAnotherUsersConditions() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+
+        restTransactionRuleConditionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherCondition.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetTransactionRuleConditionOwnedByAnotherUser() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+
+        restTransactionRuleConditionMockMvc
+            .perform(get(ENTITY_API_URL_ID, otherCondition.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(otherCondition.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void putTransactionRuleConditionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(otherCondition);
+        transactionRuleConditionDTO.setValue(UPDATED_VALUE);
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleConditionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleConditionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleConditionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+        String patchJson = "{\"id\":" + otherCondition.getId() + ",\"value\":\"" + UPDATED_VALUE + "\"}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, otherCondition.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteTransactionRuleConditionOwnedByAnotherUserIsNotFound() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+
+        restTransactionRuleConditionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherCondition.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllTransactionRuleConditionsIncludingOtherUsers() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+
+        restTransactionRuleConditionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(transactionRuleCondition.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherCondition.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateTransactionRuleConditionOwnedByAnotherUser() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(otherCondition);
+        transactionRuleConditionDTO.setValue(UPDATED_VALUE);
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleConditionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleConditionDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.value").value(UPDATED_VALUE));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteTransactionRuleConditionOwnedByAnotherUser() throws Exception {
+        TransactionRuleCondition otherCondition = saveConditionOnOtherUsersRule();
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restTransactionRuleConditionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherCondition.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createTransactionRuleConditionWithRuleOwnedByAnotherUserFails() throws Exception {
+        TransactionRule otherUsersRule = createRuleForOtherUser();
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        transactionRuleConditionDTO.setId(null);
+        TransactionRuleDTO transactionRuleDTO = new TransactionRuleDTO();
+        transactionRuleDTO.setId(otherUsersRule.getId());
+        transactionRuleConditionDTO.setTransactionRule(transactionRuleDTO);
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleConditionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateTransactionRuleConditionWithRuleOwnedByAnotherUserFails() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+        TransactionRule otherUsersRule = createRuleForOtherUser();
+
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        TransactionRuleDTO transactionRuleDTO = new TransactionRuleDTO();
+        transactionRuleDTO.setId(otherUsersRule.getId());
+        transactionRuleConditionDTO.setTransactionRule(transactionRuleDTO);
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleConditionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleConditionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleConditionWithForeignRuleFails() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+        TransactionRule otherUsersRule = createRuleForOtherUser();
+
+        String patchJson = "{\"id\":" + transactionRuleCondition.getId() + ",\"transactionRule\":{\"id\":" + otherUsersRule.getId() + "}}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, transactionRuleCondition.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanReparentTransactionRuleConditionWithinSameOwner() throws Exception {
+        User otherUser = createOtherUser(em);
+        TransactionRule rule1 = createRuleForUser(otherUser);
+        TransactionRule rule2 = createRuleForUser(otherUser);
+
+        TransactionRuleCondition condition = new TransactionRuleCondition()
+            .field(DEFAULT_FIELD)
+            .operator(DEFAULT_OPERATOR)
+            .value(DEFAULT_VALUE)
+            .secondValue(DEFAULT_SECOND_VALUE)
+            .caseSensitive(DEFAULT_CASE_SENSITIVE)
+            .position(DEFAULT_POSITION);
+        condition.setTransactionRule(rule1);
+        condition = transactionRuleConditionRepository.saveAndFlush(condition);
+
+        String patchJson = "{\"id\":" + condition.getId() + ",\"transactionRule\":{\"id\":" + rule2.getId() + "}}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, condition.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionRule.id").value(rule2.getId().intValue()));
+
+        assertThat(getPersistedTransactionRuleCondition(condition).getTransactionRule().getId()).isEqualTo(rule2.getId());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCannotReparentTransactionRuleConditionAcrossOwners() throws Exception {
+        User otherUser = createOtherUser(em);
+        TransactionRule otherUsersRule = createRuleForUser(otherUser);
+        TransactionRule ownRule = transactionRuleCondition.getTransactionRule();
+
+        TransactionRuleCondition condition = new TransactionRuleCondition()
+            .field(DEFAULT_FIELD)
+            .operator(DEFAULT_OPERATOR)
+            .value(DEFAULT_VALUE)
+            .secondValue(DEFAULT_SECOND_VALUE)
+            .caseSensitive(DEFAULT_CASE_SENSITIVE)
+            .position(DEFAULT_POSITION);
+        condition.setTransactionRule(otherUsersRule);
+        condition = transactionRuleConditionRepository.saveAndFlush(condition);
+
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(condition);
+        TransactionRuleDTO transactionRuleDTO = new TransactionRuleDTO();
+        transactionRuleDTO.setId(ownRule.getId());
+        transactionRuleConditionDTO.setTransactionRule(transactionRuleDTO);
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleConditionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleConditionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleConditionWithoutTransactionRuleFieldPreservesParent() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+        Long originalRuleId = transactionRuleCondition.getTransactionRule().getId();
+
+        String patchJson = "{\"id\":" + transactionRuleCondition.getId() + ",\"value\":\"" + UPDATED_VALUE + "\"}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, transactionRuleCondition.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionRule.id").value(originalRuleId.intValue()));
+
+        assertThat(getPersistedTransactionRuleCondition(transactionRuleCondition).getTransactionRule().getId()).isEqualTo(originalRuleId);
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleConditionWithNullTransactionRuleFails() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+
+        String patchJson = "{\"id\":" + transactionRuleCondition.getId() + ",\"transactionRule\":null}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, transactionRuleCondition.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    private TransactionRuleCondition saveConditionOnOtherUsersRule() {
+        TransactionRule otherUsersRule = createRuleForOtherUser();
+        TransactionRuleCondition condition = new TransactionRuleCondition()
+            .field(DEFAULT_FIELD)
+            .operator(DEFAULT_OPERATOR)
+            .value(DEFAULT_VALUE)
+            .secondValue(DEFAULT_SECOND_VALUE)
+            .caseSensitive(DEFAULT_CASE_SENSITIVE)
+            .position(DEFAULT_POSITION);
+        condition.setTransactionRule(otherUsersRule);
+        return transactionRuleConditionRepository.saveAndFlush(condition);
+    }
+
+    private TransactionRule createRuleForOtherUser() {
+        return createRuleForUser(createOtherUser(em));
+    }
+
+    private TransactionRule createRuleForUser(User user) {
+        TransactionRule rule = TransactionRuleResourceIT.createEntity(em);
+        rule.setUser(user);
+        em.persist(rule);
+        em.flush();
+        return rule;
     }
 
     protected long getRepositoryCount() {

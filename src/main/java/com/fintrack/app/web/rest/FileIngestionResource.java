@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.FileIngestionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FileIngestionService;
 import com.fintrack.app.service.dto.FileIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,11 +36,11 @@ public class FileIngestionResource {
 
     private final FileIngestionService fileIngestionService;
 
-    private final FileIngestionRepository fileIngestionRepository;
+    private final ObjectMapper objectMapper;
 
-    public FileIngestionResource(FileIngestionService fileIngestionService, FileIngestionRepository fileIngestionRepository) {
+    public FileIngestionResource(FileIngestionService fileIngestionService, ObjectMapper objectMapper) {
         this.fileIngestionService = fileIngestionService;
-        this.fileIngestionRepository = fileIngestionRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -56,7 +57,11 @@ public class FileIngestionResource {
         if (fileIngestionDTO.getId() != null) {
             throw new BadRequestAlertException("A new fileIngestion cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        fileIngestionDTO = fileIngestionService.save(fileIngestionDTO);
+        try {
+            fileIngestionDTO = fileIngestionService.save(fileIngestionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/file-ingestions/" + fileIngestionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, fileIngestionDTO.getId().toString()))
             .body(fileIngestionDTO);
@@ -85,11 +90,15 @@ public class FileIngestionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!fileIngestionRepository.existsById(id)) {
+        if (!fileIngestionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        fileIngestionDTO = fileIngestionService.update(fileIngestionDTO);
+        try {
+            fileIngestionDTO = fileIngestionService.update(fileIngestionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, fileIngestionDTO.getId().toString()))
             .body(fileIngestionDTO);
@@ -99,7 +108,7 @@ public class FileIngestionResource {
      * {@code PATCH  /file-ingestions/:id} : Partial updates given fields of an existing fileIngestion, field will ignore if it is null
      *
      * @param id the id of the fileIngestionDTO to save.
-     * @param fileIngestionDTO the fileIngestionDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated fileIngestionDTO,
      * or with status {@code 400 (Bad Request)} if the fileIngestionDTO is not valid,
      * or with status {@code 404 (Not Found)} if the fileIngestionDTO is not found,
@@ -109,21 +118,35 @@ public class FileIngestionResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<FileIngestionDTO> partialUpdateFileIngestion(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody FileIngestionDTO fileIngestionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update FileIngestion partially : {}, {}", id, fileIngestionDTO);
+        LOG.debug("REST request to partial update FileIngestion partially : {}, {}", id, patchNode);
+        if (patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
+            throw new BadRequestAlertException("Transaction ingestion cannot be null", ENTITY_NAME, "invalid");
+        }
+        FileIngestionDTO fileIngestionDTO;
+        try {
+            fileIngestionDTO = objectMapper.treeToValue(patchNode, FileIngestionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (fileIngestionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            fileIngestionDTO.setId(id);
         }
         if (!Objects.equals(id, fileIngestionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!fileIngestionRepository.existsById(id)) {
+        if (!fileIngestionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<FileIngestionDTO> result = fileIngestionService.partialUpdate(fileIngestionDTO);
+        Optional<FileIngestionDTO> result;
+        try {
+            result = fileIngestionService.partialUpdate(fileIngestionDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -164,7 +187,9 @@ public class FileIngestionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFileIngestion(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete FileIngestion : {}", id);
-        fileIngestionService.delete(id);
+        if (!fileIngestionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.CreditAccountDetailsRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.CreditAccountDetailsService;
 import com.fintrack.app.service.dto.CreditAccountDetailsDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,14 +36,11 @@ public class CreditAccountDetailsResource {
 
     private final CreditAccountDetailsService creditAccountDetailsService;
 
-    private final CreditAccountDetailsRepository creditAccountDetailsRepository;
+    private final ObjectMapper objectMapper;
 
-    public CreditAccountDetailsResource(
-        CreditAccountDetailsService creditAccountDetailsService,
-        CreditAccountDetailsRepository creditAccountDetailsRepository
-    ) {
+    public CreditAccountDetailsResource(CreditAccountDetailsService creditAccountDetailsService, ObjectMapper objectMapper) {
         this.creditAccountDetailsService = creditAccountDetailsService;
-        this.creditAccountDetailsRepository = creditAccountDetailsRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -60,7 +58,11 @@ public class CreditAccountDetailsResource {
         if (creditAccountDetailsDTO.getId() != null) {
             throw new BadRequestAlertException("A new creditAccountDetails cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        creditAccountDetailsDTO = creditAccountDetailsService.save(creditAccountDetailsDTO);
+        try {
+            creditAccountDetailsDTO = creditAccountDetailsService.save(creditAccountDetailsDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/credit-account-details/" + creditAccountDetailsDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, creditAccountDetailsDTO.getId().toString()))
             .body(creditAccountDetailsDTO);
@@ -89,11 +91,15 @@ public class CreditAccountDetailsResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!creditAccountDetailsRepository.existsById(id)) {
+        if (!creditAccountDetailsService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        creditAccountDetailsDTO = creditAccountDetailsService.update(creditAccountDetailsDTO);
+        try {
+            creditAccountDetailsDTO = creditAccountDetailsService.update(creditAccountDetailsDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, creditAccountDetailsDTO.getId().toString()))
             .body(creditAccountDetailsDTO);
@@ -103,7 +109,7 @@ public class CreditAccountDetailsResource {
      * {@code PATCH  /credit-account-details/:id} : Partial updates given fields of an existing creditAccountDetails, field will ignore if it is null
      *
      * @param id the id of the creditAccountDetailsDTO to save.
-     * @param creditAccountDetailsDTO the creditAccountDetailsDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated creditAccountDetailsDTO,
      * or with status {@code 400 (Bad Request)} if the creditAccountDetailsDTO is not valid,
      * or with status {@code 404 (Not Found)} if the creditAccountDetailsDTO is not found,
@@ -113,21 +119,35 @@ public class CreditAccountDetailsResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<CreditAccountDetailsDTO> partialUpdateCreditAccountDetails(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody CreditAccountDetailsDTO creditAccountDetailsDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update CreditAccountDetails partially : {}, {}", id, creditAccountDetailsDTO);
+        LOG.debug("REST request to partial update CreditAccountDetails partially : {}, {}", id, patchNode);
+        if (patchNode.has("account") && patchNode.get("account").isNull()) {
+            throw new BadRequestAlertException("Account cannot be null", ENTITY_NAME, "invalid");
+        }
+        CreditAccountDetailsDTO creditAccountDetailsDTO;
+        try {
+            creditAccountDetailsDTO = objectMapper.treeToValue(patchNode, CreditAccountDetailsDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (creditAccountDetailsDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            creditAccountDetailsDTO.setId(id);
         }
         if (!Objects.equals(id, creditAccountDetailsDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!creditAccountDetailsRepository.existsById(id)) {
+        if (!creditAccountDetailsService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<CreditAccountDetailsDTO> result = creditAccountDetailsService.partialUpdate(creditAccountDetailsDTO);
+        Optional<CreditAccountDetailsDTO> result;
+        try {
+            result = creditAccountDetailsService.partialUpdate(creditAccountDetailsDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -171,7 +191,9 @@ public class CreditAccountDetailsResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCreditAccountDetails(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete CreditAccountDetails : {}", id);
-        creditAccountDetailsService.delete(id);
+        if (!creditAccountDetailsService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

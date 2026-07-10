@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -22,8 +23,13 @@ import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TagMatchMode;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.BudgetService;
 import com.fintrack.app.service.dto.BudgetDTO;
+import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.BudgetMapper;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -32,7 +38,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +106,8 @@ class BudgetResourceIT {
     private static final String ENTITY_API_URL = "/api/budgets";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
 
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
+
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
 
@@ -148,11 +158,7 @@ class BudgetResourceIT {
             .warningPercentage(DEFAULT_WARNING_PERCENTAGE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        budget.setUser(user);
+        budget.setUser(getCurrentMockUser(em));
         return budget;
     }
 
@@ -175,12 +181,23 @@ class BudgetResourceIT {
             .warningPercentage(UPDATED_WARNING_PERCENTAGE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedBudget.setUser(user);
+        updatedBudget.setUser(getCurrentMockUser(em));
         return updatedBudget;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -1007,15 +1024,7 @@ class BudgetResourceIT {
     @Test
     @Transactional
     void getAllBudgetsByUserIsEqualToSomething() throws Exception {
-        User user;
-        if (TestUtil.findAll(em, User.class).isEmpty()) {
-            budgetRepository.saveAndFlush(budget);
-            user = UserResourceIT.createEntity();
-        } else {
-            user = TestUtil.findAll(em, User.class).get(0);
-        }
-        em.persist(user);
-        em.flush();
+        User user = getCurrentMockUser(em);
         budget.setUser(user);
         budgetRepository.saveAndFlush(budget);
         Long userId = user.getId();
@@ -1393,6 +1402,349 @@ class BudgetResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createBudgetAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        budgetDTO.setUser(otherUserDTO);
+
+        BudgetDTO returnedBudgetDTO = om.readValue(
+            restBudgetMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            BudgetDTO.class
+        );
+
+        assertThat(returnedBudgetDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedBudget = budgetMapper.toEntity(returnedBudgetDTO);
+    }
+
+    @Test
+    @Transactional
+    void getBudgetOwnedByAnotherUserIsNotFound() throws Exception {
+        budget.setUser(createOtherUser(em));
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        restBudgetMockMvc.perform(get(ENTITY_API_URL_ID, budget.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllBudgetsDoesNotIncludeAnotherUsersBudgets() throws Exception {
+        budget.setUser(createOtherUser(em));
+        budgetRepository.saveAndFlush(budget);
+
+        restBudgetMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(budget.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetBudgetOwnedByAnotherUser() throws Exception {
+        budget.setUser(createOtherUser(em));
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        restBudgetMockMvc
+            .perform(get(ENTITY_API_URL_ID, budget.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(budget.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithoutUserInPayloadSucceeds() throws Exception {
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        budgetDTO.setUser(null);
+
+        BudgetDTO returnedBudgetDTO = om.readValue(
+            restBudgetMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            BudgetDTO.class
+        );
+
+        assertThat(returnedBudgetDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedBudget = budgetMapper.toEntity(returnedBudgetDTO);
+    }
+
+    @Test
+    @Transactional
+    void putBudgetOwnedByAnotherUserIsNotFound() throws Exception {
+        budget.setUser(createOtherUser(em));
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setName(UPDATED_NAME);
+
+        restBudgetMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, budgetDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetOwnedByAnotherUserIsNotFound() throws Exception {
+        budget.setUser(createOtherUser(em));
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        BudgetDTO budgetDTO = new BudgetDTO();
+        budgetDTO.setId(budget.getId());
+        budgetDTO.setName(UPDATED_NAME);
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budgetDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteBudgetOwnedByAnotherUserIsNotFound() throws Exception {
+        budget.setUser(createOtherUser(em));
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        restBudgetMockMvc
+            .perform(delete(ENTITY_API_URL_ID, budget.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+
+        assertThat(budgetRepository.existsById(budget.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateBudgetCannotChangeOwner() throws Exception {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+        User otherUser = createOtherUser(em);
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        budgetDTO.setUser(otherUserDTO);
+        budgetDTO.setName(UPDATED_NAME);
+
+        restBudgetMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, budgetDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isOk());
+
+        Budget persistedBudget = budgetRepository.findById(budget.getId()).orElseThrow();
+        assertThat(persistedBudget.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedBudget.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetCannotChangeOwner() throws Exception {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+        User otherUser = createOtherUser(em);
+
+        BudgetDTO budgetDTO = new BudgetDTO();
+        budgetDTO.setId(budget.getId());
+        budgetDTO.setName(UPDATED_NAME);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        budgetDTO.setUser(otherUserDTO);
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budgetDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isOk());
+
+        Budget persistedBudget = budgetRepository.findById(budget.getId()).orElseThrow();
+        assertThat(persistedBudget.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedBudget.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void getBudgetCountDoesNotIncludeAnotherUsersBudgets() throws Exception {
+        budget.setUser(createOtherUser(em));
+        budgetRepository.saveAndFlush(budget);
+
+        restBudgetMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllBudgetsIncludingOtherUsers() throws Exception {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+        Budget otherUsersBudget = createEntity(em);
+        otherUsersBudget.setUser(createOtherUser(em));
+        otherUsersBudget.setName("OTHER_USER_BUDGET");
+        otherUsersBudget = budgetRepository.saveAndFlush(otherUsersBudget);
+
+        restBudgetMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(budget.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherUsersBudget.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCountAllBudgetsIncludingOtherUsers() throws Exception {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+        Budget otherUsersBudget = createEntity(em);
+        otherUsersBudget.setUser(createOtherUser(em));
+        budgetRepository.saveAndFlush(otherUsersBudget);
+
+        restBudgetMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("2"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateBudgetOwnedByAnotherUser() throws Exception {
+        budget.setUser(createOtherUser(em));
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setName(UPDATED_NAME);
+
+        restBudgetMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, budgetDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteBudgetOwnedByAnotherUser() throws Exception {
+        budget.setUser(createOtherUser(em));
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restBudgetMockMvc
+            .perform(delete(ENTITY_API_URL_ID, budget.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedBudget = null;
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithAccountOwnedByAnotherUserFails() throws Exception {
+        FinancialAccount otherUsersAccount = FinancialAccountResourceIT.createEntity(em);
+        otherUsersAccount.setUser(createOtherUser(em));
+        otherUsersAccount = em.merge(otherUsersAccount);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        Set<FinancialAccountDTO> accounts = new HashSet<>();
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherUsersAccount.getId());
+        accounts.add(accountDTO);
+        budgetDTO.setAccounts(accounts);
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithCategoryOwnedByAnotherUserFails() throws Exception {
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory = em.merge(otherUsersCategory);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        Set<CategoryDTO> categories = new HashSet<>();
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(otherUsersCategory.getId());
+        categories.add(categoryDTO);
+        budgetDTO.setCategories(categories);
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithTagOwnedByAnotherUserFails() throws Exception {
+        Tag otherUsersTag = TagResourceIT.createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag = em.merge(otherUsersTag);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        Set<TagDTO> tags = new HashSet<>();
+        TagDTO tagDTO = new TagDTO();
+        tagDTO.setId(otherUsersTag.getId());
+        tags.add(tagDTO);
+        budgetDTO.setTags(tags);
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithAccessibleAccountSucceeds() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        Set<FinancialAccountDTO> accounts = new HashSet<>();
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(ownAccount.getId());
+        accounts.add(accountDTO);
+        budgetDTO.setAccounts(accounts);
+
+        BudgetDTO returnedBudgetDTO = om.readValue(
+            restBudgetMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            BudgetDTO.class
+        );
+
+        assertThat(returnedBudgetDTO.getAccounts()).extracting(FinancialAccountDTO::getId).contains(ownAccount.getId());
+        insertedBudget = budgetMapper.toEntity(returnedBudgetDTO);
     }
 
     protected long getRepositoryCount() {

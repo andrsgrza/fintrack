@@ -28,7 +28,22 @@ public interface BudgetMapper extends EntityMapper<BudgetDTO, Budget> {
     @Mapping(target = "removeAccounts", ignore = true)
     @Mapping(target = "removeCategories", ignore = true)
     @Mapping(target = "removeTags", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "accounts", ignore = true)
+    @Mapping(target = "categories", ignore = true)
+    @Mapping(target = "tags", ignore = true)
     Budget toEntity(BudgetDTO budgetDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "removeAccounts", ignore = true)
+    @Mapping(target = "removeCategories", ignore = true)
+    @Mapping(target = "removeTags", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "accounts", ignore = true)
+    @Mapping(target = "categories", ignore = true)
+    @Mapping(target = "tags", ignore = true)
+    void partialUpdate(@MappingTarget Budget entity, BudgetDTO dto);
 
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)

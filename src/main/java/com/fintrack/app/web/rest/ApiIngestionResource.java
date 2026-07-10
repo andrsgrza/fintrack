@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.ApiIngestionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.ApiIngestionService;
 import com.fintrack.app.service.dto.ApiIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,20 +36,13 @@ public class ApiIngestionResource {
 
     private final ApiIngestionService apiIngestionService;
 
-    private final ApiIngestionRepository apiIngestionRepository;
+    private final ObjectMapper objectMapper;
 
-    public ApiIngestionResource(ApiIngestionService apiIngestionService, ApiIngestionRepository apiIngestionRepository) {
+    public ApiIngestionResource(ApiIngestionService apiIngestionService, ObjectMapper objectMapper) {
         this.apiIngestionService = apiIngestionService;
-        this.apiIngestionRepository = apiIngestionRepository;
+        this.objectMapper = objectMapper;
     }
 
-    /**
-     * {@code POST  /api-ingestions} : Create a new apiIngestion.
-     *
-     * @param apiIngestionDTO the apiIngestionDTO to create.
-     * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new apiIngestionDTO, or with status {@code 400 (Bad Request)} if the apiIngestion has already an ID.
-     * @throws URISyntaxException if the Location URI syntax is incorrect.
-     */
     @PostMapping("")
     public ResponseEntity<ApiIngestionDTO> createApiIngestion(@Valid @RequestBody ApiIngestionDTO apiIngestionDTO)
         throws URISyntaxException {
@@ -56,22 +50,16 @@ public class ApiIngestionResource {
         if (apiIngestionDTO.getId() != null) {
             throw new BadRequestAlertException("A new apiIngestion cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        apiIngestionDTO = apiIngestionService.save(apiIngestionDTO);
+        try {
+            apiIngestionDTO = apiIngestionService.save(apiIngestionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/api-ingestions/" + apiIngestionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, apiIngestionDTO.getId().toString()))
             .body(apiIngestionDTO);
     }
 
-    /**
-     * {@code PUT  /api-ingestions/:id} : Updates an existing apiIngestion.
-     *
-     * @param id the id of the apiIngestionDTO to save.
-     * @param apiIngestionDTO the apiIngestionDTO to update.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated apiIngestionDTO,
-     * or with status {@code 400 (Bad Request)} if the apiIngestionDTO is not valid,
-     * or with status {@code 500 (Internal Server Error)} if the apiIngestionDTO couldn't be updated.
-     * @throws URISyntaxException if the Location URI syntax is incorrect.
-     */
     @PutMapping("/{id}")
     public ResponseEntity<ApiIngestionDTO> updateApiIngestion(
         @PathVariable(value = "id", required = false) final Long id,
@@ -85,45 +73,55 @@ public class ApiIngestionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!apiIngestionRepository.existsById(id)) {
+        if (!apiIngestionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        apiIngestionDTO = apiIngestionService.update(apiIngestionDTO);
+        try {
+            apiIngestionDTO = apiIngestionService.update(apiIngestionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, apiIngestionDTO.getId().toString()))
             .body(apiIngestionDTO);
     }
 
-    /**
-     * {@code PATCH  /api-ingestions/:id} : Partial updates given fields of an existing apiIngestion, field will ignore if it is null
-     *
-     * @param id the id of the apiIngestionDTO to save.
-     * @param apiIngestionDTO the apiIngestionDTO to update.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated apiIngestionDTO,
-     * or with status {@code 400 (Bad Request)} if the apiIngestionDTO is not valid,
-     * or with status {@code 404 (Not Found)} if the apiIngestionDTO is not found,
-     * or with status {@code 500 (Internal Server Error)} if the apiIngestionDTO couldn't be updated.
-     * @throws URISyntaxException if the Location URI syntax is incorrect.
-     */
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<ApiIngestionDTO> partialUpdateApiIngestion(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody ApiIngestionDTO apiIngestionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update ApiIngestion partially : {}, {}", id, apiIngestionDTO);
+        LOG.debug("REST request to partial update ApiIngestion partially : {}, {}", id, patchNode);
+        if (patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
+            throw new BadRequestAlertException("Transaction ingestion cannot be changed", ENTITY_NAME, "invalid");
+        }
+        if (patchNode.has("apiAccessToken") && patchNode.get("apiAccessToken").isNull()) {
+            throw new BadRequestAlertException("Api access token cannot be changed", ENTITY_NAME, "invalid");
+        }
+        ApiIngestionDTO apiIngestionDTO;
+        try {
+            apiIngestionDTO = objectMapper.treeToValue(patchNode, ApiIngestionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (apiIngestionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            apiIngestionDTO.setId(id);
         }
         if (!Objects.equals(id, apiIngestionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!apiIngestionRepository.existsById(id)) {
+        if (!apiIngestionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<ApiIngestionDTO> result = apiIngestionService.partialUpdate(apiIngestionDTO);
+        Optional<ApiIngestionDTO> result;
+        try {
+            result = apiIngestionService.partialUpdate(apiIngestionDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -131,26 +129,12 @@ public class ApiIngestionResource {
         );
     }
 
-    /**
-     * {@code GET  /api-ingestions} : get all the apiIngestions.
-     *
-     * @param eagerload flag to eager load entities from relationships (This is applicable for many-to-many).
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of apiIngestions in body.
-     */
     @GetMapping("")
-    public List<ApiIngestionDTO> getAllApiIngestions(
-        @RequestParam(name = "eagerload", required = false, defaultValue = "true") boolean eagerload
-    ) {
+    public List<ApiIngestionDTO> getAllApiIngestions() {
         LOG.debug("REST request to get all ApiIngestions");
         return apiIngestionService.findAll();
     }
 
-    /**
-     * {@code GET  /api-ingestions/:id} : get the "id" apiIngestion.
-     *
-     * @param id the id of the apiIngestionDTO to retrieve.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the apiIngestionDTO, or with status {@code 404 (Not Found)}.
-     */
     @GetMapping("/{id}")
     public ResponseEntity<ApiIngestionDTO> getApiIngestion(@PathVariable("id") Long id) {
         LOG.debug("REST request to get ApiIngestion : {}", id);
@@ -158,16 +142,12 @@ public class ApiIngestionResource {
         return ResponseUtil.wrapOrNotFound(apiIngestionDTO);
     }
 
-    /**
-     * {@code DELETE  /api-ingestions/:id} : delete the "id" apiIngestion.
-     *
-     * @param id the id of the apiIngestionDTO to delete.
-     * @return the {@link ResponseEntity} with status {@code 204 (NO_CONTENT)}.
-     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApiIngestion(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete ApiIngestion : {}", id);
-        apiIngestionService.delete(id);
+        if (!apiIngestionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

@@ -14,6 +14,14 @@ public interface UserDashboardPreferenceMapper extends EntityMapper<UserDashboar
     @Mapping(target = "user", source = "user", qualifiedByName = "userLogin")
     UserDashboardPreferenceDTO toDto(UserDashboardPreference s);
 
+    @Mapping(target = "user", ignore = true)
+    UserDashboardPreference toEntity(UserDashboardPreferenceDTO userDashboardPreferenceDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "user", ignore = true)
+    void partialUpdate(@MappingTarget UserDashboardPreference entity, UserDashboardPreferenceDTO dto);
+
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

@@ -39,6 +39,7 @@ describe('FileIngestion e2e test', () => {
 
   beforeEach(() => {
     cy.intercept('GET', '/api/file-ingestions+(?*|)').as('entitiesRequest');
+    cy.intercept('GET', '/api/transaction-ingestions/file-ingestion-is-null').as('fileIngestionParentCandidatesRequest');
     cy.intercept('POST', '/api/file-ingestions').as('postEntityRequest');
     cy.intercept('DELETE', '/api/file-ingestions/*').as('deleteEntityRequest');
   });
@@ -210,6 +211,12 @@ describe('FileIngestion e2e test', () => {
       cy.visit(`${fileIngestionPageUrl}`);
       cy.get(entityCreateButtonSelector).click();
       cy.getEntityCreateUpdateHeading('FileIngestion');
+      cy.wait('@fileIngestionParentCandidatesRequest');
+    });
+
+    it('should load parent candidates from backend helper endpoint', () => {
+      cy.get('[data-cy="transactionIngestion"]').should('exist');
+      cy.get('@fileIngestionParentCandidatesRequest').its('response.statusCode').should('eq', 200);
     });
 
     // Reason: cannot create a required entity with relationship with required relationships.

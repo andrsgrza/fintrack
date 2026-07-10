@@ -87,7 +87,7 @@ class TransactionIngestionCriteriaTest {
         transactionIngestionCriteria.recordsRejected();
         transactionIngestionCriteria.errorMessage();
         transactionIngestionCriteria.createdAt();
-        transactionIngestionCriteria.accountsId();
+        transactionIngestionCriteria.accountId();
         transactionIngestionCriteria.fileIngestionId();
         transactionIngestionCriteria.apiIngestionId();
         transactionIngestionCriteria.financialTransactionsId();
@@ -110,7 +110,7 @@ class TransactionIngestionCriteriaTest {
                 condition.apply(criteria.getRecordsRejected()) &&
                 condition.apply(criteria.getErrorMessage()) &&
                 condition.apply(criteria.getCreatedAt()) &&
-                condition.apply(criteria.getAccountsId()) &&
+                condition.apply(criteria.getAccountId()) &&
                 condition.apply(criteria.getFileIngestionId()) &&
                 condition.apply(criteria.getApiIngestionId()) &&
                 condition.apply(criteria.getFinancialTransactionsId()) &&
@@ -138,7 +138,7 @@ class TransactionIngestionCriteriaTest {
                 condition.apply(criteria.getRecordsRejected(), copy.getRecordsRejected()) &&
                 condition.apply(criteria.getErrorMessage(), copy.getErrorMessage()) &&
                 condition.apply(criteria.getCreatedAt(), copy.getCreatedAt()) &&
-                condition.apply(criteria.getAccountsId(), copy.getAccountsId()) &&
+                condition.apply(criteria.getAccountId(), copy.getAccountId()) &&
                 condition.apply(criteria.getFileIngestionId(), copy.getFileIngestionId()) &&
                 condition.apply(criteria.getApiIngestionId(), copy.getApiIngestionId()) &&
                 condition.apply(criteria.getFinancialTransactionsId(), copy.getFinancialTransactionsId()) &&

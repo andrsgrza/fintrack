@@ -6,29 +6,56 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
  * Spring Data JPA repository for the TransactionIngestion entity.
- *
- * When extending this class, extend TransactionIngestionRepositoryWithBagRelationships too.
- * For more information refer to https://github.com/jhipster/generator-jhipster/issues/17990.
  */
 @Repository
 public interface TransactionIngestionRepository
-    extends
-        TransactionIngestionRepositoryWithBagRelationships,
-        JpaRepository<TransactionIngestion, Long>,
-        JpaSpecificationExecutor<TransactionIngestion> {
+    extends JpaRepository<TransactionIngestion, Long>, JpaSpecificationExecutor<TransactionIngestion> {
     default Optional<TransactionIngestion> findOneWithEagerRelationships(Long id) {
-        return this.fetchBagRelationships(this.findById(id));
+        return this.findOneWithToOneRelationships(id);
+    }
+
+    default Optional<TransactionIngestion> findOneWithEagerRelationshipsByIdAndAccountUserLogin(Long id, String login) {
+        return this.findOneWithToOneRelationshipsByIdAndAccountUserLogin(id, login);
     }
 
     default List<TransactionIngestion> findAllWithEagerRelationships() {
-        return this.fetchBagRelationships(this.findAll());
+        return this.findAllWithToOneRelationships();
     }
 
     default Page<TransactionIngestion> findAllWithEagerRelationships(Pageable pageable) {
-        return this.fetchBagRelationships(this.findAll(pageable));
+        return this.findAllWithToOneRelationships(pageable);
     }
+
+    default List<TransactionIngestion> findAllWithEagerRelationshipsByAccountUserLogin(String login) {
+        return this.findAllWithToOneRelationshipsByAccountUserLogin(login);
+    }
+
+    @Query(
+        value = "select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account",
+        countQuery = "select count(transactionIngestion) from TransactionIngestion transactionIngestion"
+    )
+    Page<TransactionIngestion> findAllWithToOneRelationships(Pageable pageable);
+
+    @Query("select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account")
+    List<TransactionIngestion> findAllWithToOneRelationships();
+
+    @Query(
+        "select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account where transactionIngestion.id =:id"
+    )
+    Optional<TransactionIngestion> findOneWithToOneRelationships(@Param("id") Long id);
+
+    @Query(
+        "select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where transactionIngestion.id = :id and account.user.login = :login"
+    )
+    Optional<TransactionIngestion> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where account.user.login = :login"
+    )
+    List<TransactionIngestion> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
 }

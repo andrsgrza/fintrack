@@ -4,10 +4,10 @@ import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
+import { convertDateTimeFromServer } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getEntities as getTransactionIngestions } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
+import { getEntitiesWhereApiIngestionIsNull } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
 import { getEntities as getApiAccessTokens } from 'app/entities/api-access-token/api-access-token.reducer';
 import { createEntity, getEntity, reset, updateEntity } from './api-ingestion.reducer';
 
@@ -19,7 +19,7 @@ export const ApiIngestionUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const transactionIngestions = useAppSelector(state => state.transactionIngestion.entities);
+  const apiIngestionParentCandidates = useAppSelector(state => state.transactionIngestion.apiIngestionParentCandidates ?? []);
   const apiAccessTokens = useAppSelector(state => state.apiAccessToken.entities);
   const apiIngestionEntity = useAppSelector(state => state.apiIngestion.entity);
   const loading = useAppSelector(state => state.apiIngestion.loading);
@@ -33,12 +33,11 @@ export const ApiIngestionUpdate = () => {
   useEffect(() => {
     if (isNew) {
       dispatch(reset());
+      dispatch(getEntitiesWhereApiIngestionIsNull());
+      dispatch(getApiAccessTokens({}));
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getTransactionIngestions({}));
-    dispatch(getApiAccessTokens({}));
   }, []);
 
   useEffect(() => {
@@ -51,15 +50,27 @@ export const ApiIngestionUpdate = () => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
-    values.receivedAt = convertDateTimeToServer(values.receivedAt);
-    values.createdAt = convertDateTimeToServer(values.createdAt);
 
-    const entity = {
-      ...apiIngestionEntity,
-      ...values,
-      transactionIngestion: transactionIngestions.find(it => it.id.toString() === values.transactionIngestion?.toString()),
-      apiAccessToken: apiAccessTokens.find(it => it.id.toString() === values.apiAccessToken?.toString()),
-    };
+    const entity = isNew
+      ? {
+          requestId: values.requestId,
+          idempotencyKey: values.idempotencyKey,
+          sourceSystem: values.sourceSystem,
+          apiVersion: values.apiVersion,
+          endpoint: values.endpoint,
+          clientReference: values.clientReference,
+          transactionIngestion: apiIngestionParentCandidates.find(it => it.id.toString() === values.transactionIngestion?.toString()),
+          apiAccessToken: apiAccessTokens.find(it => it.id.toString() === values.apiAccessToken?.toString()),
+        }
+      : {
+          ...apiIngestionEntity,
+          ...values,
+          requestId: apiIngestionEntity?.requestId,
+          transactionIngestion: apiIngestionEntity?.transactionIngestion,
+          apiAccessToken: apiIngestionEntity?.apiAccessToken,
+          createdAt: apiIngestionEntity?.createdAt,
+          receivedAt: apiIngestionEntity?.receivedAt,
+        };
 
     if (isNew) {
       dispatch(createEntity(entity));
@@ -70,10 +81,7 @@ export const ApiIngestionUpdate = () => {
 
   const defaultValues = () =>
     isNew
-      ? {
-          receivedAt: displayDefaultDateTime(),
-          createdAt: displayDefaultDateTime(),
-        }
+      ? {}
       : {
           ...apiIngestionEntity,
           receivedAt: convertDateTimeFromServer(apiIngestionEntity.receivedAt),
@@ -81,6 +89,14 @@ export const ApiIngestionUpdate = () => {
           transactionIngestion: apiIngestionEntity?.transactionIngestion?.id,
           apiAccessToken: apiIngestionEntity?.apiAccessToken?.id,
         };
+
+  const parentOptions = isNew
+    ? apiIngestionParentCandidates
+    : apiIngestionEntity?.transactionIngestion
+      ? [apiIngestionEntity.transactionIngestion]
+      : [];
+
+  const tokenOptions = isNew ? apiAccessTokens : apiIngestionEntity?.apiAccessToken ? [apiIngestionEntity.apiAccessToken] : [];
 
   return (
     <div>
@@ -113,6 +129,7 @@ export const ApiIngestionUpdate = () => {
                 name="requestId"
                 data-cy="requestId"
                 type="text"
+                readOnly={!isNew}
                 validate={{
                   required: { value: true, message: translate('entity.validation.required') },
                   minLength: { value: 1, message: translate('entity.validation.minlength', { min: 1 }) },
@@ -171,39 +188,40 @@ export const ApiIngestionUpdate = () => {
                   maxLength: { value: 150, message: translate('entity.validation.maxlength', { max: 150 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.apiIngestion.receivedAt')}
-                id="api-ingestion-receivedAt"
-                name="receivedAt"
-                data-cy="receivedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.apiIngestion.createdAt')}
-                id="api-ingestion-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
+              {!isNew ? (
+                <>
+                  <ValidatedField
+                    label={translate('fintrackApp.apiIngestion.receivedAt')}
+                    id="api-ingestion-receivedAt"
+                    name="receivedAt"
+                    data-cy="receivedAt"
+                    type="datetime-local"
+                    placeholder="YYYY-MM-DD HH:mm"
+                    readOnly
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.apiIngestion.createdAt')}
+                    id="api-ingestion-createdAt"
+                    name="createdAt"
+                    data-cy="createdAt"
+                    type="datetime-local"
+                    placeholder="YYYY-MM-DD HH:mm"
+                    readOnly
+                  />
+                </>
+              ) : null}
               <ValidatedField
                 id="api-ingestion-transactionIngestion"
                 name="transactionIngestion"
                 data-cy="transactionIngestion"
                 label={translate('fintrackApp.apiIngestion.transactionIngestion')}
                 type="select"
+                disabled={!isNew}
                 required
               >
                 <option value="" key="0" />
-                {transactionIngestions
-                  ? transactionIngestions.map(otherEntity => (
+                {parentOptions
+                  ? parentOptions.map(otherEntity => (
                       <option value={otherEntity.id} key={otherEntity.id}>
                         {otherEntity.id}
                       </option>
@@ -219,11 +237,12 @@ export const ApiIngestionUpdate = () => {
                 data-cy="apiAccessToken"
                 label={translate('fintrackApp.apiIngestion.apiAccessToken')}
                 type="select"
+                disabled={!isNew}
                 required
               >
                 <option value="" key="0" />
-                {apiAccessTokens
-                  ? apiAccessTokens.map(otherEntity => (
+                {tokenOptions
+                  ? tokenOptions.map(otherEntity => (
                       <option value={otherEntity.id} key={otherEntity.id}>
                         {otherEntity.name}
                       </option>

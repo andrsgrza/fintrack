@@ -69,6 +69,6 @@ public class TransactionIngestionAsserts {
     public static void assertTransactionIngestionUpdatableRelationshipsEquals(TransactionIngestion expected, TransactionIngestion actual) {
         assertThat(actual)
             .as("Verify TransactionIngestion relationships")
-            .satisfies(a -> assertThat(a.getAccounts()).as("check accounts").isEqualTo(expected.getAccounts()));
+            .satisfies(a -> assertThat(a.getAccount()).as("check account").isEqualTo(expected.getAccount()));
     }
 }

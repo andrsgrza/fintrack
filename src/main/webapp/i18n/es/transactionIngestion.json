@@ -29,7 +29,7 @@
       "recordsRejected": "Records Rejected",
       "errorMessage": "Error Message",
       "createdAt": "Created At",
-      "accounts": "Accounts",
+      "account": "Account",
       "fileIngestion": "File Ingestion",
       "apiIngestion": "Api Ingestion",
       "financialTransactions": "Financial Transactions",

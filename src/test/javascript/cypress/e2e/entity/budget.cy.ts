@@ -15,59 +15,47 @@ describe('Budget e2e test', () => {
   const budgetPageUrlPattern = new RegExp('/budget(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const budgetSample = {"name":"ah intermarry knottily","amount":5640.18,"currency":"EUR","period":"MONTHLY","startDate":"2026-07-07","status":"COMPLETED","tagMatchMode":"ALL","createdAt":"2026-07-06T19:34:25.746Z","updatedAt":"2026-07-06T23:31:18.196Z"};
+  const adminUsername = Cypress.env('E2E_ADMIN_USERNAME') ?? 'admin';
+  const adminPassword = Cypress.env('E2E_ADMIN_PASSWORD') ?? 'admin';
 
   let budget;
-  // let user;
+
+  const buildBudgetPayload = (name: string) => {
+    const now = new Date().toISOString();
+    return {
+      name,
+      amount: 1000,
+      currency: 'MXN',
+      period: 'MONTHLY',
+      startDate: '2026-07-01',
+      status: 'ACTIVE',
+      tagMatchMode: 'ANY',
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  const fillCreateForm = (name: string) => {
+    cy.get('[data-cy="name"]').clear().type(name);
+    cy.get('[data-cy="amount"]').clear().type('1000');
+    cy.get('[data-cy="currency"]').select('MXN');
+    cy.get('[data-cy="period"]').select('MONTHLY');
+    cy.get('[data-cy="startDate"]').type('2026-07-01');
+    cy.get('[data-cy="status"]').select('ACTIVE');
+    cy.get('[data-cy="tagMatchMode"]').select('ANY');
+    cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
+    cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');
+  };
 
   beforeEach(() => {
     cy.login(username, password);
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // create an instance at the required relationship entity:
-    cy.authenticatedRequest({
-      method: 'POST',
-      url: '/api/users',
-      body: {"login":"I","firstName":"Hernán","lastName":"Carrasco Terrazas","email":"MariaEugenia_CantuMadrigal98@yahoo.com","imageUrl":"brightly psst","langKey":"whose"},
-    }).then(({ body }) => {
-      user = body;
-    });
-  });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/budgets+(?*|)').as('entitiesRequest');
     cy.intercept('POST', '/api/budgets').as('postEntityRequest');
     cy.intercept('DELETE', '/api/budgets/*').as('deleteEntityRequest');
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/users', {
-      statusCode: 200,
-      body: [user],
-    });
-
-    cy.intercept('GET', '/api/financial-accounts', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/categories', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/tags', {
-      statusCode: 200,
-      body: [],
-    });
-
-  });
-   */
 
   afterEach(() => {
     if (budget) {
@@ -79,19 +67,6 @@ describe('Budget e2e test', () => {
       });
     }
   });
-
-  /* Disabled due to incompatibility
-  afterEach(() => {
-    if (user) {
-      cy.authenticatedRequest({
-        method: 'DELETE',
-        url: `/api/users/${user.id}`,
-      }).then(() => {
-        user = undefined;
-      });
-    }
-  });
-   */
 
   it('Budgets menu should load Budgets page', () => {
     cy.visit('/');
@@ -128,45 +103,17 @@ describe('Budget e2e test', () => {
     });
 
     describe('with existing value', () => {
-      /* Disabled due to incompatibility
       beforeEach(() => {
         cy.authenticatedRequest({
           method: 'POST',
           url: '/api/budgets',
-          body: {
-            ...budgetSample,
-            user: user,
-          },
+          body: buildBudgetPayload(`existing-${Date.now()}`),
         }).then(({ body }) => {
           budget = body;
-
-          cy.intercept(
-            {
-              method: 'GET',
-              url: '/api/budgets+(?*|)',
-              times: 1,
-            },
-            {
-              statusCode: 200,
-              body: [budget],
-            }
-          ).as('entitiesRequestInternal');
         });
 
         cy.visit(budgetPageUrl);
-
-        cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(budgetPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
+        cy.wait('@entitiesRequest');
       });
 
       it('detail button click should load details Budget page', () => {
@@ -200,8 +147,7 @@ describe('Budget e2e test', () => {
         cy.url().should('match', budgetPageUrlPattern);
       });
 
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of Budget', () => {
+      it('last delete button click should delete instance of Budget', () => {
         cy.intercept('GET', '/api/budgets/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
@@ -222,58 +168,79 @@ describe('Budget e2e test', () => {
 
   describe('new Budget page', () => {
     beforeEach(() => {
-      cy.visit(`${budgetPageUrl}`);
-      cy.get(entityCreateButtonSelector).click();
+      cy.visit(`${budgetPageUrl}/new`);
       cy.getEntityCreateUpdateHeading('Budget');
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of Budget', () => {
-      cy.get(`[data-cy="name"]`).type('lightly');
-      cy.get(`[data-cy="name"]`).should('have.value', 'lightly');
-
-      cy.get(`[data-cy="amount"]`).type('23650.25');
-      cy.get(`[data-cy="amount"]`).should('have.value', '23650.25');
-
-      cy.get(`[data-cy="currency"]`).select('EUR');
-
-      cy.get(`[data-cy="period"]`).select('CUSTOM');
-
-      cy.get(`[data-cy="startDate"]`).type('2026-07-06');
-      cy.get(`[data-cy="startDate"]`).blur();
-      cy.get(`[data-cy="startDate"]`).should('have.value', '2026-07-06');
-
-      cy.get(`[data-cy="endDate"]`).type('2026-07-06');
-      cy.get(`[data-cy="endDate"]`).blur();
-      cy.get(`[data-cy="endDate"]`).should('have.value', '2026-07-06');
-
-      cy.get(`[data-cy="status"]`).select('ACTIVE');
-
-      cy.get(`[data-cy="tagMatchMode"]`).select('ALL');
-
-      cy.get(`[data-cy="warningPercentage"]`).type('8.31');
-      cy.get(`[data-cy="warningPercentage"]`).should('have.value', '8.31');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-06T21:26');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-06T21:26');
-
-      cy.get(`[data-cy="updatedAt"]`).type('2026-07-07T14:42');
-      cy.get(`[data-cy="updatedAt"]`).blur();
-      cy.get(`[data-cy="updatedAt"]`).should('have.value', '2026-07-07T14:42');
-
-      cy.get(`[data-cy="user"]`).select(1);
-
+    it('should create an instance of Budget', () => {
+      const budgetName = `create-${Date.now()}`;
+      fillCreateForm(budgetName);
+      cy.get('[data-cy="user"]').should('not.exist');
       cy.get(entityCreateSaveButtonSelector).click();
 
       cy.wait('@postEntityRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(201);
+        expect(response?.body.user.login).to.equal(username);
         budget = response.body;
       });
-      cy.wait('@entitiesRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-      });
       cy.url().should('match', budgetPageUrlPattern);
+    });
+  });
+
+  describe('Budget ownership', () => {
+    it('should not render user selector on create form', () => {
+      cy.visit(`${budgetPageUrl}/new`);
+      cy.get('[data-cy="user"]').should('not.exist');
+    });
+
+    it('regular user should not see budgets created by admin', () => {
+      const adminBudgetName = `admin-only-${Date.now()}`;
+
+      cy.login(adminUsername, adminPassword);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/budgets',
+        body: buildBudgetPayload(adminBudgetName),
+      }).then(({ body: adminBudget }) => {
+        cy.login(username, password);
+        cy.authenticatedRequest({
+          method: 'GET',
+          url: '/api/budgets',
+        }).then(({ body: userBudgets }) => {
+          expect(userBudgets.some(b => b.id === adminBudget.id)).to.equal(false);
+        });
+
+        cy.login(adminUsername, adminPassword);
+        cy.authenticatedRequest({
+          method: 'DELETE',
+          url: `/api/budgets/${adminBudget.id}`,
+        });
+      });
+    });
+
+    it('admin should see budgets created by another user', () => {
+      const userBudgetName = `user-owned-${Date.now()}`;
+
+      cy.login(username, password);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/budgets',
+        body: buildBudgetPayload(userBudgetName),
+      }).then(({ body: userBudget }) => {
+        cy.login(adminUsername, adminPassword);
+        cy.authenticatedRequest({
+          method: 'GET',
+          url: '/api/budgets',
+        }).then(({ body: adminBudgets }) => {
+          expect(adminBudgets.some(b => b.id === userBudget.id)).to.equal(true);
+        });
+
+        cy.login(username, password);
+        cy.authenticatedRequest({
+          method: 'DELETE',
+          url: `/api/budgets/${userBudget.id}`,
+        });
+      });
     });
   });
 });

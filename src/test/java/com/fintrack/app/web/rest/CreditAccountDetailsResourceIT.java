@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -13,9 +14,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.CreditAccountDetails;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.CreditAccountDetailsService;
 import com.fintrack.app.service.dto.CreditAccountDetailsDTO;
+import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.CreditAccountDetailsMapper;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -112,14 +117,7 @@ class CreditAccountDetailsResourceIT {
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
         // Add required entity
-        FinancialAccount financialAccount;
-        if (TestUtil.findAll(em, FinancialAccount.class).isEmpty()) {
-            financialAccount = FinancialAccountResourceIT.createEntity(em);
-            em.persist(financialAccount);
-            em.flush();
-        } else {
-            financialAccount = TestUtil.findAll(em, FinancialAccount.class).get(0);
-        }
+        FinancialAccount financialAccount = createCreditCardAccount(em);
         creditAccountDetails.setAccount(financialAccount);
         return creditAccountDetails;
     }
@@ -138,17 +136,36 @@ class CreditAccountDetailsResourceIT {
             .annualInterestRate(UPDATED_ANNUAL_INTEREST_RATE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        FinancialAccount financialAccount;
-        if (TestUtil.findAll(em, FinancialAccount.class).isEmpty()) {
-            financialAccount = FinancialAccountResourceIT.createUpdatedEntity(em);
-            em.persist(financialAccount);
-            em.flush();
-        } else {
-            financialAccount = TestUtil.findAll(em, FinancialAccount.class).get(0);
-        }
+        FinancialAccount financialAccount = FinancialAccountResourceIT.createUpdatedEntity(em);
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        em.persist(financialAccount);
+        em.flush();
         updatedCreditAccountDetails.setAccount(financialAccount);
         return updatedCreditAccountDetails;
+    }
+
+    private static FinancialAccount createCreditCardAccount(EntityManager em) {
+        FinancialAccount financialAccount = FinancialAccountResourceIT.createEntity(em);
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        em.persist(financialAccount);
+        em.flush();
+        return financialAccount;
+    }
+
+    private static FinancialAccount createCreditCardAccountForUser(EntityManager em, User user) {
+        FinancialAccount financialAccount = FinancialAccountResourceIT.createEntity(em);
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        financialAccount.setUser(user);
+        em.persist(financialAccount);
+        em.flush();
+        return financialAccount;
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -467,22 +484,18 @@ class CreditAccountDetailsResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the creditAccountDetails using partial update
-        CreditAccountDetails partialUpdatedCreditAccountDetails = new CreditAccountDetails();
-        partialUpdatedCreditAccountDetails.setId(creditAccountDetails.getId());
-
-        partialUpdatedCreditAccountDetails.annualInterestRate(UPDATED_ANNUAL_INTEREST_RATE);
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"annualInterestRate\":" + UPDATED_ANNUAL_INTEREST_RATE + "}";
 
         restCreditAccountDetailsMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedCreditAccountDetails.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedCreditAccountDetails))
-            )
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
             .andExpect(status().isOk());
 
         // Validate the CreditAccountDetails in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        CreditAccountDetails partialUpdatedCreditAccountDetails = new CreditAccountDetails();
+        partialUpdatedCreditAccountDetails.setId(creditAccountDetails.getId());
+        partialUpdatedCreditAccountDetails.annualInterestRate(UPDATED_ANNUAL_INTEREST_RATE);
         assertCreditAccountDetailsUpdatableFieldsEquals(
             createUpdateProxyForBean(partialUpdatedCreditAccountDetails, creditAccountDetails),
             getPersistedCreditAccountDetails(creditAccountDetails)
@@ -498,28 +511,38 @@ class CreditAccountDetailsResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the creditAccountDetails using partial update
-        CreditAccountDetails partialUpdatedCreditAccountDetails = new CreditAccountDetails();
-        partialUpdatedCreditAccountDetails.setId(creditAccountDetails.getId());
+        String patchJson =
+            "{\"id\":" +
+            creditAccountDetails.getId() +
+            ",\"creditLimit\":" +
+            UPDATED_CREDIT_LIMIT +
+            ",\"statementDay\":" +
+            UPDATED_STATEMENT_DAY +
+            ",\"paymentDueDay\":" +
+            UPDATED_PAYMENT_DUE_DAY +
+            ",\"annualInterestRate\":" +
+            UPDATED_ANNUAL_INTEREST_RATE +
+            ",\"createdAt\":\"" +
+            UPDATED_CREATED_AT +
+            "\",\"updatedAt\":\"" +
+            UPDATED_UPDATED_AT +
+            "\"}";
 
-        partialUpdatedCreditAccountDetails
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk());
+
+        // Validate the CreditAccountDetails in the database
+
+        assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        CreditAccountDetails partialUpdatedCreditAccountDetails = new CreditAccountDetails()
             .creditLimit(UPDATED_CREDIT_LIMIT)
             .statementDay(UPDATED_STATEMENT_DAY)
             .paymentDueDay(UPDATED_PAYMENT_DUE_DAY)
             .annualInterestRate(UPDATED_ANNUAL_INTEREST_RATE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-
-        restCreditAccountDetailsMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedCreditAccountDetails.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedCreditAccountDetails))
-            )
-            .andExpect(status().isOk());
-
-        // Validate the CreditAccountDetails in the database
-
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        partialUpdatedCreditAccountDetails.setId(creditAccountDetails.getId());
         assertCreditAccountDetailsUpdatableFieldsEquals(
             partialUpdatedCreditAccountDetails,
             getPersistedCreditAccountDetails(partialUpdatedCreditAccountDetails)
@@ -605,6 +628,248 @@ class CreditAccountDetailsResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void getCreditAccountDetailsOwnedByAnotherUserIsNotFound() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc.perform(get(ENTITY_API_URL_ID, otherDetails.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllCreditAccountDetailsDoesNotIncludeAnotherUsersDetails() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherDetails.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetCreditAccountDetailsOwnedByAnotherUser() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL_ID, otherDetails.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(otherDetails.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void putCreditAccountDetailsOwnedByAnotherUserIsNotFound() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(otherDetails);
+        creditAccountDetailsDTO.setCreditLimit(UPDATED_CREDIT_LIMIT);
+
+        restCreditAccountDetailsMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(creditAccountDetailsDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsOwnedByAnotherUserIsNotFound() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+        String patchJson = "{\"id\":" + otherDetails.getId() + ",\"creditLimit\":" + UPDATED_CREDIT_LIMIT + "}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, otherDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteCreditAccountDetailsOwnedByAnotherUserIsNotFound() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherDetails.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllCreditAccountDetailsIncludingOtherUsers() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(creditAccountDetails.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherDetails.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateCreditAccountDetailsOwnedByAnotherUser() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(otherDetails);
+        creditAccountDetailsDTO.setCreditLimit(UPDATED_CREDIT_LIMIT);
+
+        restCreditAccountDetailsMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(creditAccountDetailsDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.creditLimit").value(UPDATED_CREDIT_LIMIT.intValue()));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteCreditAccountDetailsOwnedByAnotherUser() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(delete(ENTITY_API_URL_ID, otherDetails.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createCreditAccountDetailsWithAccountOwnedByAnotherUserFails() throws Exception {
+        FinancialAccount otherUsersAccount = createCreditCardAccountForUser(em, createOtherUser(em));
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setId(null);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherUsersAccount.getId());
+        creditAccountDetailsDTO.setAccount(accountDTO);
+
+        restCreditAccountDetailsMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createCreditAccountDetailsWithNonCreditCardAccountFails() throws Exception {
+        FinancialAccount debitAccount = FinancialAccountResourceIT.createEntity(em);
+        em.persist(debitAccount);
+        em.flush();
+
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setId(null);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(debitAccount.getId());
+        creditAccountDetailsDTO.setAccount(accountDTO);
+
+        restCreditAccountDetailsMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createCreditAccountDetailsForAccountThatAlreadyHasDetailsFails() throws Exception {
+        FinancialAccount creditCardAccount = creditAccountDetails.getAccount();
+        creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(createEntity(em));
+        creditAccountDetailsDTO.setId(null);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(creditCardAccount.getId());
+        creditAccountDetailsDTO.setAccount(accountDTO);
+
+        restCreditAccountDetailsMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateCreditAccountDetailsWithDifferentAccountFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        FinancialAccount anotherCreditCardAccount = createCreditCardAccount(em);
+
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(anotherCreditCardAccount.getId());
+        creditAccountDetailsDTO.setAccount(accountDTO);
+
+        restCreditAccountDetailsMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(creditAccountDetailsDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsWithDifferentAccountFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        FinancialAccount anotherCreditCardAccount = createCreditCardAccount(em);
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"account\":{\"id\":" + anotherCreditCardAccount.getId() + "}}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsWithoutAccountFieldPreservesParent() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        Long originalAccountId = creditAccountDetails.getAccount().getId();
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"creditLimit\":" + UPDATED_CREDIT_LIMIT + "}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.id").value(originalAccountId.intValue()));
+
+        assertThat(getPersistedCreditAccountDetails(creditAccountDetails).getAccount().getId()).isEqualTo(originalAccountId);
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsWithNullAccountFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"account\":null}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    private CreditAccountDetails saveDetailsOnOtherUsersAccount() {
+        FinancialAccount otherUsersAccount = createCreditCardAccountForUser(em, createOtherUser(em));
+        return saveDetailsOnAccount(otherUsersAccount);
+    }
+
+    private CreditAccountDetails saveDetailsOnAccount(FinancialAccount account) {
+        CreditAccountDetails details = new CreditAccountDetails()
+            .creditLimit(DEFAULT_CREDIT_LIMIT)
+            .statementDay(DEFAULT_STATEMENT_DAY)
+            .paymentDueDay(DEFAULT_PAYMENT_DUE_DAY)
+            .annualInterestRate(DEFAULT_ANNUAL_INTEREST_RATE)
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT);
+        details.setAccount(account);
+        return creditAccountDetailsRepository.saveAndFlush(details);
     }
 
     protected long getRepositoryCount() {

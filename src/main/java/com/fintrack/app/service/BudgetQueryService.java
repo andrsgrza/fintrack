@@ -31,9 +31,12 @@ public class BudgetQueryService extends QueryService<Budget> {
 
     private final BudgetMapper budgetMapper;
 
-    public BudgetQueryService(BudgetRepository budgetRepository, BudgetMapper budgetMapper) {
+    private final CurrentUserService currentUserService;
+
+    public BudgetQueryService(BudgetRepository budgetRepository, BudgetMapper budgetMapper, CurrentUserService currentUserService) {
         this.budgetRepository = budgetRepository;
         this.budgetMapper = budgetMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -88,6 +91,14 @@ public class BudgetQueryService extends QueryService<Budget> {
                 buildSpecification(criteria.getCategoriesId(), root -> root.join(Budget_.categories, JoinType.LEFT).get(Category_.id)),
                 buildSpecification(criteria.getTagsId(), root -> root.join(Budget_.tags, JoinType.LEFT).get(Tag_.id))
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                        root.join(Budget_.user, JoinType.INNER).get(User_.login),
+                        currentUserService.getCurrentUserLogin()
+                    )
+                );
+            }
         }
         return specification;
     }

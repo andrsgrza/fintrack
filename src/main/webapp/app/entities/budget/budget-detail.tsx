@@ -101,10 +101,6 @@ export const BudgetDetail = () => {
           </dt>
           <dd>{budgetEntity.updatedAt ? <TextFormat value={budgetEntity.updatedAt} type="date" format={APP_DATE_FORMAT} /> : null}</dd>
           <dt>
-            <Translate contentKey="fintrackApp.budget.user">User</Translate>
-          </dt>
-          <dd>{budgetEntity.user ? budgetEntity.user.login : ''}</dd>
-          <dt>
             <Translate contentKey="fintrackApp.budget.accounts">Accounts</Translate>
           </dt>
           <dd>

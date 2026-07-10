@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -8,7 +8,6 @@ import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateT
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getBudgets } from 'app/entities/budget/budget.reducer';
 import { CategoryType } from 'app/shared/model/enumerations/category-type.model';
@@ -22,7 +21,6 @@ export const CategoryUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const users = useAppSelector(state => state.userManagement.users);
   const categories = useAppSelector(state => state.category.entities);
   const budgets = useAppSelector(state => state.budget.entities);
   const categoryEntity = useAppSelector(state => state.category.entity);
@@ -42,7 +40,6 @@ export const CategoryUpdate = () => {
       dispatch(getEntity(id));
     }
 
-    dispatch(getUsers({}));
     dispatch(getCategories({}));
     dispatch(getBudgets({}));
   }, []);
@@ -63,7 +60,6 @@ export const CategoryUpdate = () => {
     const entity = {
       ...categoryEntity,
       ...values,
-      user: users.find(it => it.id.toString() === values.user?.toString()),
       parentCategory: categories.find(it => it.id.toString() === values.parentCategory?.toString()),
       budgets: mapIdList(values.budgets),
     };
@@ -86,7 +82,6 @@ export const CategoryUpdate = () => {
           ...categoryEntity,
           createdAt: convertDateTimeFromServer(categoryEntity.createdAt),
           updatedAt: convertDateTimeFromServer(categoryEntity.updatedAt),
-          user: categoryEntity?.user?.id,
           parentCategory: categoryEntity?.parentCategory?.id,
           budgets: categoryEntity?.budgets?.map(e => e.id.toString()),
         };
@@ -205,26 +200,6 @@ export const CategoryUpdate = () => {
                 }}
               />
               <ValidatedField
-                id="category-user"
-                name="user"
-                data-cy="user"
-                label={translate('fintrackApp.category.user')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {users
-                  ? users.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.login}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
-              <ValidatedField
                 id="category-parentCategory"
                 name="parentCategory"
                 data-cy="parentCategory"
@@ -233,11 +208,13 @@ export const CategoryUpdate = () => {
               >
                 <option value="" key="0" />
                 {categories
-                  ? categories.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.name}
-                      </option>
-                    ))
+                  ? categories
+                      .filter(otherEntity => !categoryEntity?.id || otherEntity.id !== categoryEntity.id)
+                      .map(otherEntity => (
+                        <option value={otherEntity.id} key={otherEntity.id}>
+                          {otherEntity.name}
+                        </option>
+                      ))
                   : null}
               </ValidatedField>
               <ValidatedField

@@ -27,7 +27,6 @@ public class UserDashboardPreferenceDTO implements Serializable {
     @NotNull
     private Instant updatedAt;
 
-    @NotNull
     private UserDTO user;
 
     public Long getId() {

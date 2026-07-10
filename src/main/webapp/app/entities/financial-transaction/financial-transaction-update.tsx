@@ -77,11 +77,12 @@ export const FinancialTransactionUpdate = () => {
       account: financialAccounts.find(it => it.id.toString() === values.account?.toString()),
       category: categories.find(it => it.id.toString() === values.category?.toString()),
       financialSubscription: financialSubscriptions.find(it => it.id.toString() === values.financialSubscription?.toString()),
-      transactionIngestion: transactionIngestions.find(it => it.id.toString() === values.transactionIngestion?.toString()),
       tags: mapIdList(values.tags),
     };
 
     if (isNew) {
+      entity.origin = 'MANUAL';
+      entity.transactionIngestion = null;
       dispatch(createEntity(entity));
     } else {
       dispatch(updateEntity(entity));
@@ -91,6 +92,8 @@ export const FinancialTransactionUpdate = () => {
   const defaultValues = () =>
     isNew
       ? {
+          flow: 'IN',
+          origin: 'MANUAL',
           createdAt: displayDefaultDateTime(),
           updatedAt: displayDefaultDateTime(),
         }
@@ -171,8 +174,8 @@ export const FinancialTransactionUpdate = () => {
                 type="text"
                 validate={{
                   required: { value: true, message: translate('entity.validation.required') },
-                  min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
-                  validate: v => isNumber(v) || translate('entity.validation.number'),
+                  min: { value: 0.01, message: translate('entity.validation.min', { min: 0.01 }) },
+                  validate: v => (isNumber(v) && Number(v) > 0) || translate('entity.validation.min', { min: 0.01 }),
                 }}
               />
               <ValidatedField
@@ -194,6 +197,8 @@ export const FinancialTransactionUpdate = () => {
                 name="origin"
                 data-cy="origin"
                 type="select"
+                readOnly={isNew}
+                disabled={isNew}
               >
                 {transactionOriginValues.map(transactionOrigin => (
                   <option value={transactionOrigin} key={transactionOrigin}>
@@ -295,22 +300,26 @@ export const FinancialTransactionUpdate = () => {
                     ))
                   : null}
               </ValidatedField>
-              <ValidatedField
-                id="financial-transaction-transactionIngestion"
-                name="transactionIngestion"
-                data-cy="transactionIngestion"
-                label={translate('fintrackApp.financialTransaction.transactionIngestion')}
-                type="select"
-              >
-                <option value="" key="0" />
-                {transactionIngestions
-                  ? transactionIngestions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
+              {!isNew ? (
+                <ValidatedField
+                  id="financial-transaction-transactionIngestion"
+                  name="transactionIngestion"
+                  data-cy="transactionIngestion"
+                  label={translate('fintrackApp.financialTransaction.transactionIngestion')}
+                  type="select"
+                  readOnly
+                  disabled
+                >
+                  <option value="" key="0" />
+                  {transactionIngestions
+                    ? transactionIngestions.map(otherEntity => (
+                        <option value={otherEntity.id} key={otherEntity.id}>
+                          {otherEntity.id}
+                        </option>
+                      ))
+                    : null}
+                </ValidatedField>
+              ) : null}
               <ValidatedField
                 label={translate('fintrackApp.financialTransaction.tags')}
                 id="financial-transaction-tags"

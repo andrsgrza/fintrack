@@ -26,7 +26,13 @@ public interface FinancialAccountMapper extends EntityMapper<FinancialAccountDTO
     @Mapping(target = "removeBudgets", ignore = true)
     @Mapping(target = "transactionIngestions", ignore = true)
     @Mapping(target = "removeTransactionIngestions", ignore = true)
+    @Mapping(target = "user", ignore = true)
     FinancialAccount toEntity(FinancialAccountDTO financialAccountDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "user", ignore = true)
+    void partialUpdate(@MappingTarget FinancialAccount entity, FinancialAccountDTO dto);
 
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)

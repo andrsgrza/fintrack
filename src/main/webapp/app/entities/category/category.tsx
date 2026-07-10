@@ -120,9 +120,6 @@ export const Category = () => {
                   <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
                 </th>
                 <th>
-                  <Translate contentKey="fintrackApp.category.user">User</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
                   <Translate contentKey="fintrackApp.category.parentCategory">Parent Category</Translate> <FontAwesomeIcon icon="sort" />
                 </th>
                 <th>
@@ -149,7 +146,6 @@ export const Category = () => {
                   <td>{category.active ? 'true' : 'false'}</td>
                   <td>{category.createdAt ? <TextFormat type="date" value={category.createdAt} format={APP_DATE_FORMAT} /> : null}</td>
                   <td>{category.updatedAt ? <TextFormat type="date" value={category.updatedAt} format={APP_DATE_FORMAT} /> : null}</td>
-                  <td>{category.user ? category.user.login : ''}</td>
                   <td>
                     {category.parentCategory ? (
                       <Link to={`/category/${category.parentCategory.id}`}>{category.parentCategory.name}</Link>

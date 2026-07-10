@@ -29,7 +29,23 @@ public interface FinancialTransactionMapper extends EntityMapper<FinancialTransa
     FinancialTransactionDTO toDto(FinancialTransaction s);
 
     @Mapping(target = "removeTags", ignore = true)
+    @Mapping(target = "account", ignore = true)
+    @Mapping(target = "category", ignore = true)
+    @Mapping(target = "financialSubscription", ignore = true)
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "tags", ignore = true)
     FinancialTransaction toEntity(FinancialTransactionDTO financialTransactionDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "removeTags", ignore = true)
+    @Mapping(target = "account", ignore = true)
+    @Mapping(target = "category", ignore = true)
+    @Mapping(target = "financialSubscription", ignore = true)
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "tags", ignore = true)
+    @Mapping(target = "origin", ignore = true)
+    void partialUpdate(@MappingTarget FinancialTransaction entity, FinancialTransactionDTO dto);
 
     @Named("financialAccountName")
     @BeanMapping(ignoreByDefault = true)

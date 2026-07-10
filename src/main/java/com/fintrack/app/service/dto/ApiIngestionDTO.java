@@ -36,10 +36,8 @@ public class ApiIngestionDTO implements Serializable {
     @Size(max = 150)
     private String clientReference;
 
-    @NotNull
     private Instant receivedAt;
 
-    @NotNull
     private Instant createdAt;
 
     @NotNull

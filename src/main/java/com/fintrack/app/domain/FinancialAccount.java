@@ -121,8 +121,8 @@ public class FinancialAccount implements Serializable {
     @JsonIgnoreProperties(value = { "user", "accounts", "categories", "tags" }, allowSetters = true)
     private Set<Budget> budgets = new HashSet<>();
 
-    @ManyToMany(fetch = FetchType.LAZY, mappedBy = "accounts")
-    @JsonIgnoreProperties(value = { "accounts", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "account")
+    @JsonIgnoreProperties(value = { "account", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
     private Set<TransactionIngestion> transactionIngestions = new HashSet<>();
 
     // jhipster-needle-entity-add-field - JHipster will add fields here
@@ -440,10 +440,10 @@ public class FinancialAccount implements Serializable {
 
     public void setTransactionIngestions(Set<TransactionIngestion> transactionIngestions) {
         if (this.transactionIngestions != null) {
-            this.transactionIngestions.forEach(i -> i.removeAccounts(this));
+            this.transactionIngestions.forEach(i -> i.setAccount(null));
         }
         if (transactionIngestions != null) {
-            transactionIngestions.forEach(i -> i.addAccounts(this));
+            transactionIngestions.forEach(i -> i.setAccount(this));
         }
         this.transactionIngestions = transactionIngestions;
     }
@@ -455,13 +455,13 @@ public class FinancialAccount implements Serializable {
 
     public FinancialAccount addTransactionIngestions(TransactionIngestion transactionIngestion) {
         this.transactionIngestions.add(transactionIngestion);
-        transactionIngestion.getAccounts().add(this);
+        transactionIngestion.setAccount(this);
         return this;
     }
 
     public FinancialAccount removeTransactionIngestions(TransactionIngestion transactionIngestion) {
         this.transactionIngestions.remove(transactionIngestion);
-        transactionIngestion.getAccounts().remove(this);
+        transactionIngestion.setAccount(null);
         return this;
     }
 

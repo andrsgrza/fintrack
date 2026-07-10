@@ -42,4 +42,23 @@ public interface CategoryRepository extends JpaRepository<Category, Long>, JpaSp
         "select category from Category category left join fetch category.user left join fetch category.parentCategory where category.id =:id"
     )
     Optional<Category> findOneWithToOneRelationships(@Param("id") Long id);
+
+    @Query("select category from Category category where category.id = :id and category.user.login = :login")
+    Optional<Category> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select category from Category category left join fetch category.user left join fetch category.parentCategory where category.id = :id and category.user.login = :login"
+    )
+    Optional<Category> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        value = "select category from Category category left join fetch category.user left join fetch category.parentCategory where category.user.login = :login",
+        countQuery = "select count(category) from Category category where category.user.login = :login"
+    )
+    Page<Category> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
+
+    @Query(
+        "select category from Category category left join fetch category.user left join fetch category.parentCategory where category.user.login = :login"
+    )
+    List<Category> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
 }

@@ -110,9 +110,6 @@ export const Tag = () => {
                   <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
                 </th>
                 <th>
-                  <Translate contentKey="fintrackApp.tag.user">User</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
                   <Translate contentKey="fintrackApp.tag.financialTransactions">Financial Transactions</Translate>{' '}
                   <FontAwesomeIcon icon="sort" />
                 </th>
@@ -142,7 +139,6 @@ export const Tag = () => {
                   <td>{tag.active ? 'true' : 'false'}</td>
                   <td>{tag.createdAt ? <TextFormat type="date" value={tag.createdAt} format={APP_DATE_FORMAT} /> : null}</td>
                   <td>{tag.updatedAt ? <TextFormat type="date" value={tag.updatedAt} format={APP_DATE_FORMAT} /> : null}</td>
-                  <td>{tag.user ? tag.user.login : ''}</td>
                   <td>
                     {tag.financialTransactions
                       ? tag.financialTransactions.map((val, j) => (

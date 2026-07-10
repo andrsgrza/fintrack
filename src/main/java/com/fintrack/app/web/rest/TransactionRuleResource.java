@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.TransactionRuleRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionRuleQueryService;
 import com.fintrack.app.service.TransactionRuleService;
 import com.fintrack.app.service.criteria.TransactionRuleCriteria;
@@ -37,18 +38,18 @@ public class TransactionRuleResource {
 
     private final TransactionRuleService transactionRuleService;
 
-    private final TransactionRuleRepository transactionRuleRepository;
-
     private final TransactionRuleQueryService transactionRuleQueryService;
+
+    private final ObjectMapper objectMapper;
 
     public TransactionRuleResource(
         TransactionRuleService transactionRuleService,
-        TransactionRuleRepository transactionRuleRepository,
-        TransactionRuleQueryService transactionRuleQueryService
+        TransactionRuleQueryService transactionRuleQueryService,
+        ObjectMapper objectMapper
     ) {
         this.transactionRuleService = transactionRuleService;
-        this.transactionRuleRepository = transactionRuleRepository;
         this.transactionRuleQueryService = transactionRuleQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -65,7 +66,11 @@ public class TransactionRuleResource {
         if (transactionRuleDTO.getId() != null) {
             throw new BadRequestAlertException("A new transactionRule cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        transactionRuleDTO = transactionRuleService.save(transactionRuleDTO);
+        try {
+            transactionRuleDTO = transactionRuleService.save(transactionRuleDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/transaction-rules/" + transactionRuleDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, transactionRuleDTO.getId().toString()))
             .body(transactionRuleDTO);
@@ -94,11 +99,15 @@ public class TransactionRuleResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!transactionRuleRepository.existsById(id)) {
+        if (!transactionRuleService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        transactionRuleDTO = transactionRuleService.update(transactionRuleDTO);
+        try {
+            transactionRuleDTO = transactionRuleService.update(transactionRuleDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, transactionRuleDTO.getId().toString()))
             .body(transactionRuleDTO);
@@ -108,7 +117,7 @@ public class TransactionRuleResource {
      * {@code PATCH  /transaction-rules/:id} : Partial updates given fields of an existing transactionRule, field will ignore if it is null
      *
      * @param id the id of the transactionRuleDTO to save.
-     * @param transactionRuleDTO the transactionRuleDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated transactionRuleDTO,
      * or with status {@code 400 (Bad Request)} if the transactionRuleDTO is not valid,
      * or with status {@code 404 (Not Found)} if the transactionRuleDTO is not found,
@@ -118,21 +127,32 @@ public class TransactionRuleResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<TransactionRuleDTO> partialUpdateTransactionRule(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody TransactionRuleDTO transactionRuleDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update TransactionRule partially : {}, {}", id, transactionRuleDTO);
+        LOG.debug("REST request to partial update TransactionRule partially : {}, {}", id, patchNode);
+        TransactionRuleDTO transactionRuleDTO;
+        try {
+            transactionRuleDTO = objectMapper.treeToValue(patchNode, TransactionRuleDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (transactionRuleDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            transactionRuleDTO.setId(id);
         }
         if (!Objects.equals(id, transactionRuleDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!transactionRuleRepository.existsById(id)) {
+        if (!transactionRuleService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<TransactionRuleDTO> result = transactionRuleService.partialUpdate(transactionRuleDTO);
+        Optional<TransactionRuleDTO> result;
+        try {
+            result = transactionRuleService.partialUpdate(transactionRuleDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -188,7 +208,9 @@ public class TransactionRuleResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTransactionRule(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete TransactionRule : {}", id);
-        transactionRuleService.delete(id);
+        if (!transactionRuleService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

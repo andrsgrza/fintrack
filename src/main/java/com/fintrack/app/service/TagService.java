@@ -25,9 +25,12 @@ public class TagService {
 
     private final TagMapper tagMapper;
 
-    public TagService(TagRepository tagRepository, TagMapper tagMapper) {
+    private final CurrentUserService currentUserService;
+
+    public TagService(TagRepository tagRepository, TagMapper tagMapper, CurrentUserService currentUserService) {
         this.tagRepository = tagRepository;
         this.tagMapper = tagMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -39,6 +42,7 @@ public class TagService {
     public TagDTO save(TagDTO tagDTO) {
         LOG.debug("Request to save Tag : {}", tagDTO);
         Tag tag = tagMapper.toEntity(tagDTO);
+        tag.setUser(currentUserService.getCurrentUser());
         tag = tagRepository.save(tag);
         return tagMapper.toDto(tag);
     }
@@ -51,7 +55,9 @@ public class TagService {
      */
     public TagDTO update(TagDTO tagDTO) {
         LOG.debug("Request to update Tag : {}", tagDTO);
+        Tag existingTag = findAccessibleEntity(tagDTO.getId()).orElseThrow();
         Tag tag = tagMapper.toEntity(tagDTO);
+        tag.setUser(existingTag.getUser());
         tag = tagRepository.save(tag);
         return tagMapper.toDto(tag);
     }
@@ -65,11 +71,9 @@ public class TagService {
     public Optional<TagDTO> partialUpdate(TagDTO tagDTO) {
         LOG.debug("Request to partially update Tag : {}", tagDTO);
 
-        return tagRepository
-            .findById(tagDTO.getId())
+        return findAccessibleEntity(tagDTO.getId())
             .map(existingTag -> {
                 tagMapper.partialUpdate(existingTag, tagDTO);
-
                 return existingTag;
             })
             .map(tagRepository::save)
@@ -82,7 +86,12 @@ public class TagService {
      * @return the list of entities.
      */
     public Page<TagDTO> findAllWithEagerRelationships(Pageable pageable) {
-        return tagRepository.findAllWithEagerRelationships(pageable).map(tagMapper::toDto);
+        if (currentUserService.isAdmin()) {
+            return tagRepository.findAllWithEagerRelationships(pageable).map(tagMapper::toDto);
+        }
+        return tagRepository
+            .findAllWithToOneRelationshipsByUserLogin(currentUserService.getCurrentUserLogin(), pageable)
+            .map(tagMapper::toDto);
     }
 
     /**
@@ -94,16 +103,40 @@ public class TagService {
     @Transactional(readOnly = true)
     public Optional<TagDTO> findOne(Long id) {
         LOG.debug("Request to get Tag : {}", id);
-        return tagRepository.findOneWithEagerRelationships(id).map(tagMapper::toDto);
+        return findAccessibleEntity(id).map(tagMapper::toDto);
+    }
+
+    /**
+     * Returns whether the current user can access the tag.
+     *
+     * @param id the id of the entity.
+     * @return true when the tag exists and is visible to the current user.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAccessible(Long id) {
+        return findAccessibleEntity(id).isPresent();
     }
 
     /**
      * Delete the tag by id.
      *
      * @param id the id of the entity.
+     * @return true when the tag was deleted.
      */
-    public void delete(Long id) {
+    public boolean delete(Long id) {
         LOG.debug("Request to delete Tag : {}", id);
+        Optional<Tag> tag = findAccessibleEntity(id);
+        if (tag.isEmpty()) {
+            return false;
+        }
         tagRepository.deleteById(id);
+        return true;
+    }
+
+    private Optional<Tag> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return tagRepository.findOneWithEagerRelationships(id);
+        }
+        return tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 }

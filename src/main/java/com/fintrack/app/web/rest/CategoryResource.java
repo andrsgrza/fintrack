@@ -1,6 +1,5 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.service.CategoryQueryService;
 import com.fintrack.app.service.CategoryService;
 import com.fintrack.app.service.criteria.CategoryCriteria;
@@ -37,17 +36,10 @@ public class CategoryResource {
 
     private final CategoryService categoryService;
 
-    private final CategoryRepository categoryRepository;
-
     private final CategoryQueryService categoryQueryService;
 
-    public CategoryResource(
-        CategoryService categoryService,
-        CategoryRepository categoryRepository,
-        CategoryQueryService categoryQueryService
-    ) {
+    public CategoryResource(CategoryService categoryService, CategoryQueryService categoryQueryService) {
         this.categoryService = categoryService;
-        this.categoryRepository = categoryRepository;
         this.categoryQueryService = categoryQueryService;
     }
 
@@ -64,7 +56,11 @@ public class CategoryResource {
         if (categoryDTO.getId() != null) {
             throw new BadRequestAlertException("A new category cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        categoryDTO = categoryService.save(categoryDTO);
+        try {
+            categoryDTO = categoryService.save(categoryDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/categories/" + categoryDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, categoryDTO.getId().toString()))
             .body(categoryDTO);
@@ -93,11 +89,15 @@ public class CategoryResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!categoryRepository.existsById(id)) {
+        if (!categoryService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        categoryDTO = categoryService.update(categoryDTO);
+        try {
+            categoryDTO = categoryService.update(categoryDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, categoryDTO.getId().toString()))
             .body(categoryDTO);
@@ -127,11 +127,16 @@ public class CategoryResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!categoryRepository.existsById(id)) {
+        if (!categoryService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<CategoryDTO> result = categoryService.partialUpdate(categoryDTO);
+        Optional<CategoryDTO> result;
+        try {
+            result = categoryService.partialUpdate(categoryDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -187,7 +192,9 @@ public class CategoryResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCategory(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete Category : {}", id);
-        categoryService.delete(id);
+        if (!categoryService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

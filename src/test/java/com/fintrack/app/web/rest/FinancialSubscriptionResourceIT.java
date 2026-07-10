@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -21,8 +22,13 @@ import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.domain.enumeration.SubscriptionStatus;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialSubscriptionService;
+import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
+import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.FinancialSubscriptionMapper;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -31,7 +37,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -111,6 +119,8 @@ class FinancialSubscriptionResourceIT {
     private static final String ENTITY_API_URL = "/api/financial-subscriptions";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
 
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
+
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
 
@@ -165,11 +175,7 @@ class FinancialSubscriptionResourceIT {
             .notes(DEFAULT_NOTES)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        financialSubscription.setUser(user);
+        financialSubscription.setUser(getCurrentMockUser(em));
         return financialSubscription;
     }
 
@@ -196,12 +202,23 @@ class FinancialSubscriptionResourceIT {
             .notes(UPDATED_NOTES)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedFinancialSubscription.setUser(user);
+        updatedFinancialSubscription.setUser(getCurrentMockUser(em));
         return updatedFinancialSubscription;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -1371,15 +1388,7 @@ class FinancialSubscriptionResourceIT {
     @Test
     @Transactional
     void getAllFinancialSubscriptionsByUserIsEqualToSomething() throws Exception {
-        User user;
-        if (TestUtil.findAll(em, User.class).isEmpty()) {
-            financialSubscriptionRepository.saveAndFlush(financialSubscription);
-            user = UserResourceIT.createEntity();
-        } else {
-            user = TestUtil.findAll(em, User.class).get(0);
-        }
-        em.persist(user);
-        em.flush();
+        User user = getCurrentMockUser(em);
         financialSubscription.setUser(user);
         financialSubscriptionRepository.saveAndFlush(financialSubscription);
         Long userId = user.getId();
@@ -1790,6 +1799,488 @@ class FinancialSubscriptionResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        financialSubscriptionDTO.setUser(otherUserDTO);
+
+        FinancialSubscriptionDTO returnedFinancialSubscriptionDTO = om.readValue(
+            restFinancialSubscriptionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialSubscriptionDTO.class
+        );
+
+        assertThat(returnedFinancialSubscriptionDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedFinancialSubscription = financialSubscriptionMapper.toEntity(returnedFinancialSubscriptionDTO);
+    }
+
+    @Test
+    @Transactional
+    void getFinancialSubscriptionOwnedByAnotherUserIsNotFound() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        restFinancialSubscriptionMockMvc.perform(get(ENTITY_API_URL_ID, financialSubscription.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllFinancialSubscriptionsDoesNotIncludeAnotherUsersSubscriptions() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        restFinancialSubscriptionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(financialSubscription.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetFinancialSubscriptionOwnedByAnotherUser() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        restFinancialSubscriptionMockMvc
+            .perform(get(ENTITY_API_URL_ID, financialSubscription.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(financialSubscription.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionWithoutUserInPayloadSucceeds() throws Exception {
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        financialSubscriptionDTO.setUser(null);
+
+        FinancialSubscriptionDTO returnedFinancialSubscriptionDTO = om.readValue(
+            restFinancialSubscriptionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialSubscriptionDTO.class
+        );
+
+        assertThat(returnedFinancialSubscriptionDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedFinancialSubscription = financialSubscriptionMapper.toEntity(returnedFinancialSubscriptionDTO);
+    }
+
+    @Test
+    @Transactional
+    void putFinancialSubscriptionOwnedByAnotherUserIsNotFound() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setName(UPDATED_NAME);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionOwnedByAnotherUserIsNotFound() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = new FinancialSubscriptionDTO();
+        financialSubscriptionDTO.setId(financialSubscription.getId());
+        financialSubscriptionDTO.setName(UPDATED_NAME);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialSubscriptionOwnedByAnotherUserIsNotFound() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        restFinancialSubscriptionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, financialSubscription.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+
+        assertThat(financialSubscriptionRepository.existsById(financialSubscription.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateFinancialSubscriptionCannotChangeOwner() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        User otherUser = createOtherUser(em);
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        financialSubscriptionDTO.setUser(otherUserDTO);
+        financialSubscriptionDTO.setName(UPDATED_NAME);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isOk());
+
+        FinancialSubscription persistedFinancialSubscription = financialSubscriptionRepository
+            .findById(financialSubscription.getId())
+            .orElseThrow();
+        assertThat(persistedFinancialSubscription.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedFinancialSubscription.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionCannotChangeOwner() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        User otherUser = createOtherUser(em);
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = new FinancialSubscriptionDTO();
+        financialSubscriptionDTO.setId(financialSubscription.getId());
+        financialSubscriptionDTO.setName(UPDATED_NAME);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        financialSubscriptionDTO.setUser(otherUserDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isOk());
+
+        FinancialSubscription persistedFinancialSubscription = financialSubscriptionRepository
+            .findById(financialSubscription.getId())
+            .orElseThrow();
+        assertThat(persistedFinancialSubscription.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedFinancialSubscription.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void getFinancialSubscriptionCountDoesNotIncludeAnotherUsersSubscriptions() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        restFinancialSubscriptionMockMvc
+            .perform(get(ENTITY_API_URL + "/count"))
+            .andExpect(status().isOk())
+            .andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllFinancialSubscriptionsIncludingOtherUsers() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        FinancialSubscription otherUsersSubscription = createEntity(em);
+        otherUsersSubscription.setUser(createOtherUser(em));
+        otherUsersSubscription.setName("OTHER_USER_SUBSCRIPTION");
+        otherUsersSubscription = financialSubscriptionRepository.saveAndFlush(otherUsersSubscription);
+
+        restFinancialSubscriptionMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(financialSubscription.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherUsersSubscription.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCountAllFinancialSubscriptionsIncludingOtherUsers() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        FinancialSubscription otherUsersSubscription = createEntity(em);
+        otherUsersSubscription.setUser(createOtherUser(em));
+        financialSubscriptionRepository.saveAndFlush(otherUsersSubscription);
+
+        restFinancialSubscriptionMockMvc
+            .perform(get(ENTITY_API_URL + "/count"))
+            .andExpect(status().isOk())
+            .andExpect(content().string("2"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateFinancialSubscriptionOwnedByAnotherUser() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setName(UPDATED_NAME);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteFinancialSubscriptionOwnedByAnotherUser() throws Exception {
+        financialSubscription.setUser(createOtherUser(em));
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restFinancialSubscriptionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, financialSubscription.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedFinancialSubscription = null;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionWithAccountOwnedByAnotherUserFails() throws Exception {
+        FinancialAccount otherUsersAccount = FinancialAccountResourceIT.createEntity(em);
+        otherUsersAccount.setUser(createOtherUser(em));
+        otherUsersAccount = em.merge(otherUsersAccount);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherUsersAccount.getId());
+        financialSubscriptionDTO.setAccount(accountDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionWithCategoryOwnedByAnotherUserFails() throws Exception {
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory = em.merge(otherUsersCategory);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(otherUsersCategory.getId());
+        financialSubscriptionDTO.setCategory(categoryDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionWithTagOwnedByAnotherUserFails() throws Exception {
+        Tag otherUsersTag = TagResourceIT.createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag = em.merge(otherUsersTag);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        Set<TagDTO> tags = new HashSet<>();
+        TagDTO tagDTO = new TagDTO();
+        tagDTO.setId(otherUsersTag.getId());
+        tags.add(tagDTO);
+        financialSubscriptionDTO.setTags(tags);
+
+        restFinancialSubscriptionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionWithAccessibleAccountSucceeds() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(ownAccount.getId());
+        financialSubscriptionDTO.setAccount(accountDTO);
+
+        FinancialSubscriptionDTO returnedFinancialSubscriptionDTO = om.readValue(
+            restFinancialSubscriptionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialSubscriptionDTO.class
+        );
+
+        assertThat(returnedFinancialSubscriptionDTO.getAccount().getId()).isEqualTo(ownAccount.getId());
+        insertedFinancialSubscription = financialSubscriptionMapper.toEntity(returnedFinancialSubscriptionDTO);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithoutAccountFieldPreservesExistingAccount() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        em.flush();
+
+        financialSubscription.setAccount(ownAccount);
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"name\":\"" + UPDATED_NAME + "\"}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.id").value(ownAccount.getId().intValue()));
+
+        FinancialSubscription persistedFinancialSubscription = getPersistedFinancialSubscription(financialSubscription);
+        assertThat(persistedFinancialSubscription.getAccount().getId()).isEqualTo(ownAccount.getId());
+        assertThat(persistedFinancialSubscription.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithNullAccountClearsAccount() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        em.flush();
+
+        financialSubscription.setAccount(ownAccount);
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"account\":null}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account").doesNotExist());
+
+        assertThat(getPersistedFinancialSubscription(financialSubscription).getAccount()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithEmptyTagsClearsTags() throws Exception {
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
+        em.flush();
+
+        Set<Tag> tags = new HashSet<>();
+        tags.add(ownTag);
+        financialSubscription.setTags(tags);
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"tags\":[]}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tags").isEmpty());
+
+        assertThat(getPersistedFinancialSubscription(financialSubscription).getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void updateFinancialSubscriptionWithForeignCategoryOrAccountFails() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        FinancialAccount otherUsersAccount = FinancialAccountResourceIT.createEntity(em);
+        otherUsersAccount.setUser(createOtherUser(em));
+        otherUsersAccount = em.merge(otherUsersAccount);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(otherUsersAccount.getId());
+        financialSubscriptionDTO.setAccount(accountDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory = em.merge(otherUsersCategory);
+        em.flush();
+
+        financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(otherUsersCategory.getId());
+        financialSubscriptionDTO.setCategory(categoryDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionWithForeignTagFails() throws Exception {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        Tag otherUsersTag = TagResourceIT.createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag = em.merge(otherUsersTag);
+        em.flush();
+
+        String patchJson = "{\"id\":" + financialSubscription.getId() + ",\"tags\":[{\"id\":" + otherUsersTag.getId() + "}]}";
+
+        restFinancialSubscriptionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
     }
 
     protected long getRepositoryCount() {

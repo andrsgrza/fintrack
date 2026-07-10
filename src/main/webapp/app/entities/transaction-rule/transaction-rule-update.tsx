@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -8,7 +8,6 @@ import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateT
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getFinancialSubscriptions } from 'app/entities/financial-subscription/financial-subscription.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
@@ -23,7 +22,6 @@ export const TransactionRuleUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const users = useAppSelector(state => state.userManagement.users);
   const categories = useAppSelector(state => state.category.entities);
   const financialSubscriptions = useAppSelector(state => state.financialSubscription.entities);
   const tags = useAppSelector(state => state.tag.entities);
@@ -44,7 +42,6 @@ export const TransactionRuleUpdate = () => {
       dispatch(getEntity(id));
     }
 
-    dispatch(getUsers({}));
     dispatch(getCategories({}));
     dispatch(getFinancialSubscriptions({}));
     dispatch(getTags({}));
@@ -69,7 +66,6 @@ export const TransactionRuleUpdate = () => {
     const entity = {
       ...transactionRuleEntity,
       ...values,
-      user: users.find(it => it.id.toString() === values.user?.toString()),
       resultingCategory: categories.find(it => it.id.toString() === values.resultingCategory?.toString()),
       resultingFinancialSubscription: financialSubscriptions.find(
         it => it.id.toString() === values.resultingFinancialSubscription?.toString(),
@@ -95,7 +91,6 @@ export const TransactionRuleUpdate = () => {
           ...transactionRuleEntity,
           createdAt: convertDateTimeFromServer(transactionRuleEntity.createdAt),
           updatedAt: convertDateTimeFromServer(transactionRuleEntity.updatedAt),
-          user: transactionRuleEntity?.user?.id,
           resultingCategory: transactionRuleEntity?.resultingCategory?.id,
           resultingFinancialSubscription: transactionRuleEntity?.resultingFinancialSubscription?.id,
           resultingTags: transactionRuleEntity?.resultingTags?.map(e => e.id.toString()),
@@ -213,26 +208,6 @@ export const TransactionRuleUpdate = () => {
                   required: { value: true, message: translate('entity.validation.required') },
                 }}
               />
-              <ValidatedField
-                id="transaction-rule-user"
-                name="user"
-                data-cy="user"
-                label={translate('fintrackApp.transactionRule.user')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {users
-                  ? users.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.login}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
               <ValidatedField
                 id="transaction-rule-resultingCategory"
                 name="resultingCategory"

@@ -1,5 +1,6 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.UserDashboardPreference;
 import com.fintrack.app.repository.UserDashboardPreferenceRepository;
 import com.fintrack.app.service.dto.UserDashboardPreferenceDTO;
@@ -28,12 +29,16 @@ public class UserDashboardPreferenceService {
 
     private final UserDashboardPreferenceMapper userDashboardPreferenceMapper;
 
+    private final CurrentUserService currentUserService;
+
     public UserDashboardPreferenceService(
         UserDashboardPreferenceRepository userDashboardPreferenceRepository,
-        UserDashboardPreferenceMapper userDashboardPreferenceMapper
+        UserDashboardPreferenceMapper userDashboardPreferenceMapper,
+        CurrentUserService currentUserService
     ) {
         this.userDashboardPreferenceRepository = userDashboardPreferenceRepository;
         this.userDashboardPreferenceMapper = userDashboardPreferenceMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -44,7 +49,11 @@ public class UserDashboardPreferenceService {
      */
     public UserDashboardPreferenceDTO save(UserDashboardPreferenceDTO userDashboardPreferenceDTO) {
         LOG.debug("Request to save UserDashboardPreference : {}", userDashboardPreferenceDTO);
+        if (userDashboardPreferenceRepository.existsByUserId(currentUserService.getCurrentUser().getId())) {
+            throw new IllegalArgumentException("User already has dashboard preferences");
+        }
         UserDashboardPreference userDashboardPreference = userDashboardPreferenceMapper.toEntity(userDashboardPreferenceDTO);
+        userDashboardPreference.setUser(currentUserService.getCurrentUser());
         userDashboardPreference = userDashboardPreferenceRepository.save(userDashboardPreference);
         return userDashboardPreferenceMapper.toDto(userDashboardPreference);
     }
@@ -57,7 +66,9 @@ public class UserDashboardPreferenceService {
      */
     public UserDashboardPreferenceDTO update(UserDashboardPreferenceDTO userDashboardPreferenceDTO) {
         LOG.debug("Request to update UserDashboardPreference : {}", userDashboardPreferenceDTO);
+        UserDashboardPreference existingUserDashboardPreference = findAccessibleEntity(userDashboardPreferenceDTO.getId()).orElseThrow();
         UserDashboardPreference userDashboardPreference = userDashboardPreferenceMapper.toEntity(userDashboardPreferenceDTO);
+        userDashboardPreference.setUser(existingUserDashboardPreference.getUser());
         userDashboardPreference = userDashboardPreferenceRepository.save(userDashboardPreference);
         return userDashboardPreferenceMapper.toDto(userDashboardPreference);
     }
@@ -69,13 +80,25 @@ public class UserDashboardPreferenceService {
      * @return the persisted entity.
      */
     public Optional<UserDashboardPreferenceDTO> partialUpdate(UserDashboardPreferenceDTO userDashboardPreferenceDTO) {
+        return partialUpdate(userDashboardPreferenceDTO, null);
+    }
+
+    /**
+     * Partially update a userDashboardPreference, applying owner changes only when present in the patch body.
+     *
+     * @param userDashboardPreferenceDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<UserDashboardPreferenceDTO> partialUpdate(UserDashboardPreferenceDTO userDashboardPreferenceDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update UserDashboardPreference : {}", userDashboardPreferenceDTO);
 
-        return userDashboardPreferenceRepository
-            .findById(userDashboardPreferenceDTO.getId())
+        return findAccessibleEntity(userDashboardPreferenceDTO.getId())
             .map(existingUserDashboardPreference -> {
+                if (patchNode != null && patchNode.has("user") && patchNode.get("user").isNull()) {
+                    throw new IllegalArgumentException("User cannot be null");
+                }
                 userDashboardPreferenceMapper.partialUpdate(existingUserDashboardPreference, userDashboardPreferenceDTO);
-
                 return existingUserDashboardPreference;
             })
             .map(userDashboardPreferenceRepository::save)
@@ -90,8 +113,15 @@ public class UserDashboardPreferenceService {
     @Transactional(readOnly = true)
     public List<UserDashboardPreferenceDTO> findAll() {
         LOG.debug("Request to get all UserDashboardPreferences");
+        if (currentUserService.isAdmin()) {
+            return userDashboardPreferenceRepository
+                .findAllWithEagerRelationships()
+                .stream()
+                .map(userDashboardPreferenceMapper::toDto)
+                .collect(Collectors.toCollection(LinkedList::new));
+        }
         return userDashboardPreferenceRepository
-            .findAll()
+            .findAllWithEagerRelationshipsByUserLogin(currentUserService.getCurrentUserLogin())
             .stream()
             .map(userDashboardPreferenceMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
@@ -103,7 +133,10 @@ public class UserDashboardPreferenceService {
      * @return the list of entities.
      */
     public Page<UserDashboardPreferenceDTO> findAllWithEagerRelationships(Pageable pageable) {
-        return userDashboardPreferenceRepository.findAllWithEagerRelationships(pageable).map(userDashboardPreferenceMapper::toDto);
+        if (currentUserService.isAdmin()) {
+            return userDashboardPreferenceRepository.findAllWithEagerRelationships(pageable).map(userDashboardPreferenceMapper::toDto);
+        }
+        throw new UnsupportedOperationException("Paged access is only supported for admin users");
     }
 
     /**
@@ -115,16 +148,43 @@ public class UserDashboardPreferenceService {
     @Transactional(readOnly = true)
     public Optional<UserDashboardPreferenceDTO> findOne(Long id) {
         LOG.debug("Request to get UserDashboardPreference : {}", id);
-        return userDashboardPreferenceRepository.findOneWithEagerRelationships(id).map(userDashboardPreferenceMapper::toDto);
+        return findAccessibleEntity(id).map(userDashboardPreferenceMapper::toDto);
+    }
+
+    /**
+     * Returns whether the current user can access the user dashboard preference.
+     *
+     * @param id the id of the entity.
+     * @return true when the preference exists and is visible to the current user.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAccessible(Long id) {
+        return findAccessibleEntity(id).isPresent();
     }
 
     /**
      * Delete the userDashboardPreference by id.
      *
      * @param id the id of the entity.
+     * @return true when the preference was deleted.
      */
-    public void delete(Long id) {
+    public boolean delete(Long id) {
         LOG.debug("Request to delete UserDashboardPreference : {}", id);
+        Optional<UserDashboardPreference> userDashboardPreference = findAccessibleEntity(id);
+        if (userDashboardPreference.isEmpty()) {
+            return false;
+        }
         userDashboardPreferenceRepository.deleteById(id);
+        return true;
+    }
+
+    private Optional<UserDashboardPreference> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return userDashboardPreferenceRepository.findOneWithEagerRelationships(id);
+        }
+        return userDashboardPreferenceRepository.findOneWithEagerRelationshipsByIdAndUserLogin(
+            id,
+            currentUserService.getCurrentUserLogin()
+        );
     }
 }

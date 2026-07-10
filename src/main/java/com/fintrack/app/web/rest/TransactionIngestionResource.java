@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.TransactionIngestionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionIngestionQueryService;
 import com.fintrack.app.service.TransactionIngestionService;
 import com.fintrack.app.service.criteria.TransactionIngestionCriteria;
@@ -42,18 +43,18 @@ public class TransactionIngestionResource {
 
     private final TransactionIngestionService transactionIngestionService;
 
-    private final TransactionIngestionRepository transactionIngestionRepository;
-
     private final TransactionIngestionQueryService transactionIngestionQueryService;
+
+    private final ObjectMapper objectMapper;
 
     public TransactionIngestionResource(
         TransactionIngestionService transactionIngestionService,
-        TransactionIngestionRepository transactionIngestionRepository,
-        TransactionIngestionQueryService transactionIngestionQueryService
+        TransactionIngestionQueryService transactionIngestionQueryService,
+        ObjectMapper objectMapper
     ) {
         this.transactionIngestionService = transactionIngestionService;
-        this.transactionIngestionRepository = transactionIngestionRepository;
         this.transactionIngestionQueryService = transactionIngestionQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -71,7 +72,11 @@ public class TransactionIngestionResource {
         if (transactionIngestionDTO.getId() != null) {
             throw new BadRequestAlertException("A new transactionIngestion cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        transactionIngestionDTO = transactionIngestionService.save(transactionIngestionDTO);
+        try {
+            transactionIngestionDTO = transactionIngestionService.save(transactionIngestionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/transaction-ingestions/" + transactionIngestionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, transactionIngestionDTO.getId().toString()))
             .body(transactionIngestionDTO);
@@ -100,11 +105,15 @@ public class TransactionIngestionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!transactionIngestionRepository.existsById(id)) {
+        if (!transactionIngestionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        transactionIngestionDTO = transactionIngestionService.update(transactionIngestionDTO);
+        try {
+            transactionIngestionDTO = transactionIngestionService.update(transactionIngestionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, transactionIngestionDTO.getId().toString()))
             .body(transactionIngestionDTO);
@@ -114,7 +123,7 @@ public class TransactionIngestionResource {
      * {@code PATCH  /transaction-ingestions/:id} : Partial updates given fields of an existing transactionIngestion, field will ignore if it is null
      *
      * @param id the id of the transactionIngestionDTO to save.
-     * @param transactionIngestionDTO the transactionIngestionDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated transactionIngestionDTO,
      * or with status {@code 400 (Bad Request)} if the transactionIngestionDTO is not valid,
      * or with status {@code 404 (Not Found)} if the transactionIngestionDTO is not found,
@@ -124,21 +133,38 @@ public class TransactionIngestionResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<TransactionIngestionDTO> partialUpdateTransactionIngestion(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody TransactionIngestionDTO transactionIngestionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update TransactionIngestion partially : {}, {}", id, transactionIngestionDTO);
+        LOG.debug("REST request to partial update TransactionIngestion partially : {}, {}", id, patchNode);
+        if (patchNode.has("account") && patchNode.get("account").isNull()) {
+            throw new BadRequestAlertException("Account cannot be null", ENTITY_NAME, "invalid");
+        }
+        if (patchNode.has("ingestionType") && patchNode.get("ingestionType").isNull()) {
+            throw new BadRequestAlertException("Ingestion type cannot be null", ENTITY_NAME, "invalid");
+        }
+        TransactionIngestionDTO transactionIngestionDTO;
+        try {
+            transactionIngestionDTO = objectMapper.treeToValue(patchNode, TransactionIngestionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (transactionIngestionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            transactionIngestionDTO.setId(id);
         }
         if (!Objects.equals(id, transactionIngestionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!transactionIngestionRepository.existsById(id)) {
+        if (!transactionIngestionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<TransactionIngestionDTO> result = transactionIngestionService.partialUpdate(transactionIngestionDTO);
+        Optional<TransactionIngestionDTO> result;
+        try {
+            result = transactionIngestionService.partialUpdate(transactionIngestionDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -178,6 +204,28 @@ public class TransactionIngestionResource {
     }
 
     /**
+     * {@code GET  /transaction-ingestions/file-ingestion-is-null} : get FILE ingestions without file metadata (scoped).
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list in body.
+     */
+    @GetMapping("/file-ingestion-is-null")
+    public List<TransactionIngestionDTO> getAllTransactionIngestionsWhereFileIngestionIsNull() {
+        LOG.debug("REST request to get TransactionIngestions where FileIngestion is null");
+        return transactionIngestionService.findAllWhereFileIngestionIsNull();
+    }
+
+    /**
+     * {@code GET  /transaction-ingestions/api-ingestion-is-null} : get API ingestions without api metadata (scoped).
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list in body.
+     */
+    @GetMapping("/api-ingestion-is-null")
+    public List<TransactionIngestionDTO> getAllTransactionIngestionsWhereApiIngestionIsNull() {
+        LOG.debug("REST request to get TransactionIngestions where ApiIngestion is null");
+        return transactionIngestionService.findAllWhereApiIngestionIsNull();
+    }
+
+    /**
      * {@code GET  /transaction-ingestions/:id} : get the "id" transactionIngestion.
      *
      * @param id the id of the transactionIngestionDTO to retrieve.
@@ -199,7 +247,9 @@ public class TransactionIngestionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTransactionIngestion(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete TransactionIngestion : {}", id);
-        transactionIngestionService.delete(id);
+        if (!transactionIngestionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

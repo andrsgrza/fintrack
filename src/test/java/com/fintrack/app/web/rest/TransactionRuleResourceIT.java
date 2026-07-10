@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.TransactionRuleAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -18,14 +19,21 @@ import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TransactionRuleService;
+import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
+import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
+import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,6 +87,8 @@ class TransactionRuleResourceIT {
     private static final String ENTITY_API_URL = "/api/transaction-rules";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
 
+    private static final String CURRENT_MOCK_USER_LOGIN = "user";
+
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
 
@@ -126,11 +136,7 @@ class TransactionRuleResourceIT {
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        transactionRule.setUser(user);
+        transactionRule.setUser(getCurrentMockUser(em));
         return transactionRule;
     }
 
@@ -150,12 +156,23 @@ class TransactionRuleResourceIT {
             .active(UPDATED_ACTIVE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-        // Add required entity
-        User user = UserResourceIT.createEntity();
-        em.persist(user);
-        em.flush();
-        updatedTransactionRule.setUser(user);
+        updatedTransactionRule.setUser(getCurrentMockUser(em));
         return updatedTransactionRule;
+    }
+
+    private static User getCurrentMockUser(EntityManager em) {
+        return TestUtil.findAll(em, User.class)
+            .stream()
+            .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Current mock user not found"));
+    }
+
+    private static User createOtherUser(EntityManager em) {
+        User otherUser = UserResourceIT.createEntity();
+        em.persist(otherUser);
+        em.flush();
+        return otherUser;
     }
 
     @BeforeEach
@@ -767,15 +784,7 @@ class TransactionRuleResourceIT {
     @Test
     @Transactional
     void getAllTransactionRulesByUserIsEqualToSomething() throws Exception {
-        User user;
-        if (TestUtil.findAll(em, User.class).isEmpty()) {
-            transactionRuleRepository.saveAndFlush(transactionRule);
-            user = UserResourceIT.createEntity();
-        } else {
-            user = TestUtil.findAll(em, User.class).get(0);
-        }
-        em.persist(user);
-        em.flush();
+        User user = getCurrentMockUser(em);
         transactionRule.setUser(user);
         transactionRuleRepository.saveAndFlush(transactionRule);
         Long userId = user.getId();
@@ -1154,6 +1163,496 @@ class TransactionRuleResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void createTransactionRuleAssignsCurrentUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setId(null);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        transactionRuleDTO.setUser(otherUserDTO);
+
+        TransactionRuleDTO returnedTransactionRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
+
+        assertThat(returnedTransactionRuleDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedTransactionRule = transactionRuleMapper.toEntity(returnedTransactionRuleDTO);
+    }
+
+    @Test
+    @Transactional
+    void getTransactionRuleOwnedByAnotherUserIsNotFound() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        restTransactionRuleMockMvc.perform(get(ENTITY_API_URL_ID, transactionRule.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getAllTransactionRulesDoesNotIncludeAnotherUsersRules() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        transactionRuleRepository.saveAndFlush(transactionRule);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(transactionRule.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetTransactionRuleOwnedByAnotherUser() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL_ID, transactionRule.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(transactionRule.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void createTransactionRuleWithoutUserInPayloadSucceeds() throws Exception {
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setId(null);
+        transactionRuleDTO.setUser(null);
+
+        TransactionRuleDTO returnedTransactionRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
+
+        assertThat(returnedTransactionRuleDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        insertedTransactionRule = transactionRuleMapper.toEntity(returnedTransactionRuleDTO);
+    }
+
+    @Test
+    @Transactional
+    void putTransactionRuleOwnedByAnotherUserIsNotFound() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setName(UPDATED_NAME);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleOwnedByAnotherUserIsNotFound() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        TransactionRuleDTO transactionRuleDTO = new TransactionRuleDTO();
+        transactionRuleDTO.setId(transactionRule.getId());
+        transactionRuleDTO.setName(UPDATED_NAME);
+
+        restTransactionRuleMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteTransactionRuleOwnedByAnotherUserIsNotFound() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        restTransactionRuleMockMvc
+            .perform(delete(ENTITY_API_URL_ID, transactionRule.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+
+        assertThat(transactionRuleRepository.existsById(transactionRule.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void updateTransactionRuleCannotChangeOwner() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        User otherUser = createOtherUser(em);
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        transactionRuleDTO.setUser(otherUserDTO);
+        transactionRuleDTO.setName(UPDATED_NAME);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isOk());
+
+        TransactionRule persistedTransactionRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
+        assertThat(persistedTransactionRule.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedTransactionRule.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleCannotChangeOwner() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        User otherUser = createOtherUser(em);
+
+        TransactionRuleDTO transactionRuleDTO = new TransactionRuleDTO();
+        transactionRuleDTO.setId(transactionRule.getId());
+        transactionRuleDTO.setName(UPDATED_NAME);
+        UserDTO otherUserDTO = new UserDTO();
+        otherUserDTO.setId(otherUser.getId());
+        otherUserDTO.setLogin(otherUser.getLogin());
+        transactionRuleDTO.setUser(otherUserDTO);
+
+        restTransactionRuleMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isOk());
+
+        TransactionRule persistedTransactionRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
+        assertThat(persistedTransactionRule.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
+        assertThat(persistedTransactionRule.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void getTransactionRuleCountDoesNotIncludeAnotherUsersRules() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        transactionRuleRepository.saveAndFlush(transactionRule);
+
+        restTransactionRuleMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanListAllTransactionRulesIncludingOtherUsers() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRule otherUsersRule = createEntity(em);
+        otherUsersRule.setUser(createOtherUser(em));
+        otherUsersRule.setName("OTHER_USER_RULE");
+        otherUsersRule = transactionRuleRepository.saveAndFlush(otherUsersRule);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=id,desc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(transactionRule.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(otherUsersRule.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCountAllTransactionRulesIncludingOtherUsers() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRule otherUsersRule = createEntity(em);
+        otherUsersRule.setUser(createOtherUser(em));
+        transactionRuleRepository.saveAndFlush(otherUsersRule);
+
+        restTransactionRuleMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("2"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanUpdateTransactionRuleOwnedByAnotherUser() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setName(UPDATED_NAME);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanDeleteTransactionRuleOwnedByAnotherUser() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restTransactionRuleMockMvc
+            .perform(delete(ENTITY_API_URL_ID, transactionRule.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedTransactionRule = null;
+    }
+
+    @Test
+    @Transactional
+    void createTransactionRuleWithCategoryOwnedByAnotherUserFails() throws Exception {
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory = em.merge(otherUsersCategory);
+        em.flush();
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setId(null);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(otherUsersCategory.getId());
+        transactionRuleDTO.setResultingCategory(categoryDTO);
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createTransactionRuleWithSubscriptionOwnedByAnotherUserFails() throws Exception {
+        FinancialSubscription otherUsersSubscription = FinancialSubscriptionResourceIT.createEntity(em);
+        otherUsersSubscription.setUser(createOtherUser(em));
+        otherUsersSubscription = em.merge(otherUsersSubscription);
+        em.flush();
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setId(null);
+        FinancialSubscriptionDTO subscriptionDTO = new FinancialSubscriptionDTO();
+        subscriptionDTO.setId(otherUsersSubscription.getId());
+        transactionRuleDTO.setResultingFinancialSubscription(subscriptionDTO);
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createTransactionRuleWithTagOwnedByAnotherUserFails() throws Exception {
+        Tag otherUsersTag = TagResourceIT.createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag = em.merge(otherUsersTag);
+        em.flush();
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setId(null);
+        Set<TagDTO> tags = new HashSet<>();
+        TagDTO tagDTO = new TagDTO();
+        tagDTO.setId(otherUsersTag.getId());
+        tags.add(tagDTO);
+        transactionRuleDTO.setResultingTags(tags);
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createTransactionRuleWithAccessibleCategorySucceeds() throws Exception {
+        Category ownCategory = CategoryResourceIT.createEntity(em);
+        ownCategory = em.merge(ownCategory);
+        em.flush();
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setId(null);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(ownCategory.getId());
+        transactionRuleDTO.setResultingCategory(categoryDTO);
+
+        TransactionRuleDTO returnedTransactionRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
+
+        assertThat(returnedTransactionRuleDTO.getResultingCategory().getId()).isEqualTo(ownCategory.getId());
+        insertedTransactionRule = transactionRuleMapper.toEntity(returnedTransactionRuleDTO);
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleWithoutCategoryFieldPreservesExistingCategory() throws Exception {
+        Category ownCategory = CategoryResourceIT.createEntity(em);
+        ownCategory = em.merge(ownCategory);
+        em.flush();
+
+        transactionRule.setResultingCategory(ownCategory);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"name\":\"" + UPDATED_NAME + "\"}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.resultingCategory.id").value(ownCategory.getId().intValue()));
+
+        assertThat(getPersistedTransactionRule(transactionRule).getResultingCategory().getId()).isEqualTo(ownCategory.getId());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleWithNullCategoryClearsCategory() throws Exception {
+        Category ownCategory = CategoryResourceIT.createEntity(em);
+        ownCategory = em.merge(ownCategory);
+        em.flush();
+
+        transactionRule.setResultingCategory(ownCategory);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"resultingCategory\":null}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.resultingCategory").doesNotExist());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getResultingCategory()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleWithEmptyTagsClearsTags() throws Exception {
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
+        em.flush();
+
+        Set<Tag> tags = new HashSet<>();
+        tags.add(ownTag);
+        transactionRule.setResultingTags(tags);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"resultingTags\":[]}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.resultingTags").isEmpty());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getResultingTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void updateTransactionRuleWithForeignCategoryOrSubscriptionFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory = em.merge(otherUsersCategory);
+        em.flush();
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(otherUsersCategory.getId());
+        transactionRuleDTO.setResultingCategory(categoryDTO);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        FinancialSubscription otherUsersSubscription = FinancialSubscriptionResourceIT.createEntity(em);
+        otherUsersSubscription.setUser(createOtherUser(em));
+        otherUsersSubscription = em.merge(otherUsersSubscription);
+        em.flush();
+
+        transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        FinancialSubscriptionDTO subscriptionDTO = new FinancialSubscriptionDTO();
+        subscriptionDTO.setId(otherUsersSubscription.getId());
+        transactionRuleDTO.setResultingFinancialSubscription(subscriptionDTO);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchTransactionRuleWithForeignTagFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        Tag otherUsersTag = TagResourceIT.createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag = em.merge(otherUsersTag);
+        em.flush();
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"resultingTags\":[{\"id\":" + otherUsersTag.getId() + "}]}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCannotAttachCurrentUsersCategoryToAnotherUsersRule() throws Exception {
+        User ruleOwner = createOtherUser(em);
+        transactionRule.setUser(ruleOwner);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        Category currentUsersCategory = CategoryResourceIT.createEntity(em);
+        currentUsersCategory = em.merge(currentUsersCategory);
+        em.flush();
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(currentUsersCategory.getId());
+        transactionRuleDTO.setResultingCategory(categoryDTO);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
     }
 
     protected long getRepositoryCount() {

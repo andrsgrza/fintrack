@@ -31,9 +31,12 @@ public class TagQueryService extends QueryService<Tag> {
 
     private final TagMapper tagMapper;
 
-    public TagQueryService(TagRepository tagRepository, TagMapper tagMapper) {
+    private final CurrentUserService currentUserService;
+
+    public TagQueryService(TagRepository tagRepository, TagMapper tagMapper, CurrentUserService currentUserService) {
         this.tagRepository = tagRepository;
         this.tagMapper = tagMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -90,6 +93,11 @@ public class TagQueryService extends QueryService<Tag> {
                 ),
                 buildSpecification(criteria.getBudgetsId(), root -> root.join(Tag_.budgets, JoinType.LEFT).get(Budget_.id))
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(root.join(Tag_.user, JoinType.INNER).get(User_.login), currentUserService.getCurrentUserLogin())
+                );
+            }
         }
         return specification;
     }

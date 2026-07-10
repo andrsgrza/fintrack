@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <!--
+        TransactionIngestion: replace M2M accounts with ManyToOne account.
+    -->
+    <changeSet id="20260709150500-1-add-account-column" author="fintrack">
+        <addColumn tableName="transaction_ingestion">
+            <column name="account_id" type="bigint"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="20260709150500-2-migrate-account-data" author="fintrack">
+        <sql>
+            UPDATE transaction_ingestion ti
+            SET account_id = rel.accounts_id
+            FROM rel_transaction_ingestion__accounts rel
+            WHERE ti.id = rel.transaction_ingestion_id
+              AND ti.account_id IS NULL;
+        </sql>
+    </changeSet>
+
+    <changeSet id="20260709150500-3-account-not-null" author="fintrack">
+        <addNotNullConstraint tableName="transaction_ingestion" columnName="account_id" columnDataType="bigint"/>
+    </changeSet>
+
+    <changeSet id="20260709150500-4-account-foreign-key" author="fintrack">
+        <addForeignKeyConstraint baseColumnNames="account_id"
+                                 baseTableName="transaction_ingestion"
+                                 constraintName="fk_transaction_ingestion__account_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_account"/>
+    </changeSet>
+
+    <changeSet id="20260709150500-5-drop-m2m" author="fintrack">
+        <dropTable cascadeConstraints="true" tableName="rel_transaction_ingestion__accounts"/>
+    </changeSet>
+
+</databaseChangeLog>

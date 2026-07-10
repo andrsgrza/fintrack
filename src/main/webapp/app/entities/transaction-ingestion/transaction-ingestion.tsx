@@ -163,6 +163,9 @@ export const TransactionIngestion = () => {
                   <Translate contentKey="fintrackApp.transactionIngestion.createdAt">Created At</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('createdAt')} />
                 </th>
+                <th>
+                  <Translate contentKey="fintrackApp.transactionIngestion.account">Account</Translate>
+                </th>
                 <th />
               </tr>
             </thead>
@@ -200,6 +203,13 @@ export const TransactionIngestion = () => {
                     {transactionIngestion.createdAt ? (
                       <TextFormat type="date" value={transactionIngestion.createdAt} format={APP_DATE_FORMAT} />
                     ) : null}
+                  </td>
+                  <td>
+                    {transactionIngestion.account ? (
+                      <Link to={`/financial-account/${transactionIngestion.account.id}`}>{transactionIngestion.account.name}</Link>
+                    ) : (
+                      ''
+                    )}
                   </td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">

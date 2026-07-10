@@ -22,7 +22,16 @@ public interface CategoryMapper extends EntityMapper<CategoryDTO, Category> {
 
     @Mapping(target = "budgets", ignore = true)
     @Mapping(target = "removeBudgets", ignore = true)
+    @Mapping(target = "user", ignore = true)
     Category toEntity(CategoryDTO categoryDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "budgets", ignore = true)
+    @Mapping(target = "removeBudgets", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "parentCategory", ignore = true)
+    void partialUpdate(@MappingTarget Category entity, CategoryDTO dto);
 
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)

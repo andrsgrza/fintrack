@@ -14,8 +14,14 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface CreditAccountDetailsRepository extends JpaRepository<CreditAccountDetails, Long> {
+    boolean existsByAccountId(Long accountId);
+
     default Optional<CreditAccountDetails> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
+    }
+
+    default Optional<CreditAccountDetails> findOneWithEagerRelationshipsByIdAndAccountUserLogin(Long id, String login) {
+        return this.findOneWithToOneRelationshipsByIdAndAccountUserLogin(id, login);
     }
 
     default List<CreditAccountDetails> findAllWithEagerRelationships() {
@@ -26,17 +32,33 @@ public interface CreditAccountDetailsRepository extends JpaRepository<CreditAcco
         return this.findAllWithToOneRelationships(pageable);
     }
 
+    default List<CreditAccountDetails> findAllWithEagerRelationshipsByAccountUserLogin(String login) {
+        return this.findAllWithToOneRelationshipsByAccountUserLogin(login);
+    }
+
     @Query(
-        value = "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account",
+        value = "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user",
         countQuery = "select count(creditAccountDetails) from CreditAccountDetails creditAccountDetails"
     )
     Page<CreditAccountDetails> findAllWithToOneRelationships(Pageable pageable);
 
-    @Query("select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account")
+    @Query(
+        "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user"
+    )
     List<CreditAccountDetails> findAllWithToOneRelationships();
 
     @Query(
-        "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account where creditAccountDetails.id =:id"
+        "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user where creditAccountDetails.id =:id"
     )
     Optional<CreditAccountDetails> findOneWithToOneRelationships(@Param("id") Long id);
+
+    @Query(
+        "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user where creditAccountDetails.id = :id and account.user.login = :login"
+    )
+    Optional<CreditAccountDetails> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user where account.user.login = :login"
+    )
+    List<CreditAccountDetails> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
 }

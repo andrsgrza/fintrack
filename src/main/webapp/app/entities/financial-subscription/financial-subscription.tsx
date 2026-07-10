@@ -156,9 +156,6 @@ export const FinancialSubscription = () => {
                   <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
                 </th>
                 <th>
-                  <Translate contentKey="fintrackApp.financialSubscription.user">User</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
                   <Translate contentKey="fintrackApp.financialSubscription.account">Account</Translate> <FontAwesomeIcon icon="sort" />
                 </th>
                 <th>
@@ -219,7 +216,6 @@ export const FinancialSubscription = () => {
                       <TextFormat type="date" value={financialSubscription.updatedAt} format={APP_DATE_FORMAT} />
                     ) : null}
                   </td>
-                  <td>{financialSubscription.user ? financialSubscription.user.login : ''}</td>
                   <td>
                     {financialSubscription.account ? (
                       <Link to={`/financial-account/${financialSubscription.account.id}`}>{financialSubscription.account.name}</Link>

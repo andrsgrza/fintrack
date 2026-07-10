@@ -1,13 +1,12 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
 import { ApiTokenStatus } from 'app/shared/model/enumerations/api-token-status.model';
 import { createEntity, getEntity, reset, updateEntity } from './api-access-token.reducer';
 
@@ -19,7 +18,6 @@ export const ApiAccessTokenUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const users = useAppSelector(state => state.userManagement.users);
   const apiAccessTokenEntity = useAppSelector(state => state.apiAccessToken.entity);
   const loading = useAppSelector(state => state.apiAccessToken.loading);
   const updating = useAppSelector(state => state.apiAccessToken.updating);
@@ -36,8 +34,6 @@ export const ApiAccessTokenUpdate = () => {
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getUsers({}));
   }, []);
 
   useEffect(() => {
@@ -59,7 +55,6 @@ export const ApiAccessTokenUpdate = () => {
     const entity = {
       ...apiAccessTokenEntity,
       ...values,
-      user: users.find(it => it.id.toString() === values.user?.toString()),
     };
 
     if (isNew) {
@@ -86,7 +81,6 @@ export const ApiAccessTokenUpdate = () => {
           lastUsedAt: convertDateTimeFromServer(apiAccessTokenEntity.lastUsedAt),
           expiresAt: convertDateTimeFromServer(apiAccessTokenEntity.expiresAt),
           revokedAt: convertDateTimeFromServer(apiAccessTokenEntity.revokedAt),
-          user: apiAccessTokenEntity?.user?.id,
         };
 
   return (
@@ -126,27 +120,40 @@ export const ApiAccessTokenUpdate = () => {
                   maxLength: { value: 100, message: translate('entity.validation.maxlength', { max: 100 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.apiAccessToken.tokenPrefix')}
-                id="api-access-token-tokenPrefix"
-                name="tokenPrefix"
-                data-cy="tokenPrefix"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  maxLength: { value: 20, message: translate('entity.validation.maxlength', { max: 20 }) },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.apiAccessToken.tokenHash')}
-                id="api-access-token-tokenHash"
-                name="tokenHash"
-                data-cy="tokenHash"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
+              {isNew ? (
+                <>
+                  <ValidatedField
+                    label={translate('fintrackApp.apiAccessToken.tokenPrefix')}
+                    id="api-access-token-tokenPrefix"
+                    name="tokenPrefix"
+                    data-cy="tokenPrefix"
+                    type="text"
+                    validate={{
+                      required: { value: true, message: translate('entity.validation.required') },
+                      maxLength: { value: 20, message: translate('entity.validation.maxlength', { max: 20 }) },
+                    }}
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.apiAccessToken.tokenHash')}
+                    id="api-access-token-tokenHash"
+                    name="tokenHash"
+                    data-cy="tokenHash"
+                    type="text"
+                    validate={{
+                      required: { value: true, message: translate('entity.validation.required') },
+                    }}
+                  />
+                </>
+              ) : (
+                <ValidatedField
+                  label={translate('fintrackApp.apiAccessToken.tokenPrefix')}
+                  id="api-access-token-tokenPrefix"
+                  name="tokenPrefix"
+                  data-cy="tokenPrefix"
+                  type="text"
+                  readOnly
+                />
+              )}
               <ValidatedField
                 label={translate('fintrackApp.apiAccessToken.status')}
                 id="api-access-token-status"
@@ -206,26 +213,6 @@ export const ApiAccessTokenUpdate = () => {
                 type="datetime-local"
                 placeholder="YYYY-MM-DD HH:mm"
               />
-              <ValidatedField
-                id="api-access-token-user"
-                name="user"
-                data-cy="user"
-                label={translate('fintrackApp.apiAccessToken.user')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {users
-                  ? users.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.login}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/api-access-token" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;

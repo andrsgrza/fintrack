@@ -1,6 +1,5 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.service.FinancialTransactionQueryService;
 import com.fintrack.app.service.FinancialTransactionService;
 import com.fintrack.app.service.criteria.FinancialTransactionCriteria;
@@ -42,17 +41,13 @@ public class FinancialTransactionResource {
 
     private final FinancialTransactionService financialTransactionService;
 
-    private final FinancialTransactionRepository financialTransactionRepository;
-
     private final FinancialTransactionQueryService financialTransactionQueryService;
 
     public FinancialTransactionResource(
         FinancialTransactionService financialTransactionService,
-        FinancialTransactionRepository financialTransactionRepository,
         FinancialTransactionQueryService financialTransactionQueryService
     ) {
         this.financialTransactionService = financialTransactionService;
-        this.financialTransactionRepository = financialTransactionRepository;
         this.financialTransactionQueryService = financialTransactionQueryService;
     }
 
@@ -71,7 +66,11 @@ public class FinancialTransactionResource {
         if (financialTransactionDTO.getId() != null) {
             throw new BadRequestAlertException("A new financialTransaction cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        financialTransactionDTO = financialTransactionService.save(financialTransactionDTO);
+        try {
+            financialTransactionDTO = financialTransactionService.save(financialTransactionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/financial-transactions/" + financialTransactionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, financialTransactionDTO.getId().toString()))
             .body(financialTransactionDTO);
@@ -100,11 +99,15 @@ public class FinancialTransactionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialTransactionRepository.existsById(id)) {
+        if (!financialTransactionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        financialTransactionDTO = financialTransactionService.update(financialTransactionDTO);
+        try {
+            financialTransactionDTO = financialTransactionService.update(financialTransactionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, financialTransactionDTO.getId().toString()))
             .body(financialTransactionDTO);
@@ -134,11 +137,16 @@ public class FinancialTransactionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!financialTransactionRepository.existsById(id)) {
+        if (!financialTransactionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<FinancialTransactionDTO> result = financialTransactionService.partialUpdate(financialTransactionDTO);
+        Optional<FinancialTransactionDTO> result;
+        try {
+            result = financialTransactionService.partialUpdate(financialTransactionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -178,6 +186,39 @@ public class FinancialTransactionResource {
     }
 
     /**
+     * {@code GET  /financial-transactions/outgoing-internal-transfer-candidates} : get manual OUT transactions available for outgoing internal transfers.
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
+     */
+    @GetMapping("/outgoing-internal-transfer-candidates")
+    public List<FinancialTransactionDTO> getOutgoingInternalTransferCandidates() {
+        LOG.debug("REST request to get outgoing internal transfer candidates");
+        return financialTransactionService.findOutgoingInternalTransferCandidates();
+    }
+
+    /**
+     * {@code GET  /financial-transactions/incoming-internal-transfer-candidates} : get manual IN transactions available for incoming internal transfers.
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
+     */
+    @GetMapping("/incoming-internal-transfer-candidates")
+    public List<FinancialTransactionDTO> getIncomingInternalTransferCandidates() {
+        LOG.debug("REST request to get incoming internal transfer candidates");
+        return financialTransactionService.findIncomingInternalTransferCandidates();
+    }
+
+    /**
+     * {@code GET  /financial-transactions/ingestion-record-is-null} : get transactions without ingestion record metadata (scoped).
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list in body.
+     */
+    @GetMapping("/ingestion-record-is-null")
+    public List<FinancialTransactionDTO> getAllFinancialTransactionsWhereIngestionRecordIsNull() {
+        LOG.debug("REST request to get FinancialTransactions where IngestionRecord is null");
+        return financialTransactionService.findAllWhereIngestionRecordIsNull();
+    }
+
+    /**
      * {@code GET  /financial-transactions/:id} : get the "id" financialTransaction.
      *
      * @param id the id of the financialTransactionDTO to retrieve.
@@ -199,7 +240,9 @@ public class FinancialTransactionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFinancialTransaction(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete FinancialTransaction : {}", id);
-        financialTransactionService.delete(id);
+        if (!financialTransactionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

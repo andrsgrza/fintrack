@@ -1,13 +1,12 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
 import { createEntity, getEntity, reset, updateEntity } from './user-dashboard-preference.reducer';
 
 export const UserDashboardPreferenceUpdate = () => {
@@ -18,7 +17,6 @@ export const UserDashboardPreferenceUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const users = useAppSelector(state => state.userManagement.users);
   const userDashboardPreferenceEntity = useAppSelector(state => state.userDashboardPreference.entity);
   const loading = useAppSelector(state => state.userDashboardPreference.loading);
   const updating = useAppSelector(state => state.userDashboardPreference.updating);
@@ -34,8 +32,6 @@ export const UserDashboardPreferenceUpdate = () => {
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getUsers({}));
   }, []);
 
   useEffect(() => {
@@ -54,7 +50,6 @@ export const UserDashboardPreferenceUpdate = () => {
     const entity = {
       ...userDashboardPreferenceEntity,
       ...values,
-      user: users.find(it => it.id.toString() === values.user?.toString()),
     };
 
     if (isNew) {
@@ -74,7 +69,6 @@ export const UserDashboardPreferenceUpdate = () => {
           ...userDashboardPreferenceEntity,
           createdAt: convertDateTimeFromServer(userDashboardPreferenceEntity.createdAt),
           updatedAt: convertDateTimeFromServer(userDashboardPreferenceEntity.updatedAt),
-          user: userDashboardPreferenceEntity?.user?.id,
         };
 
   return (
@@ -136,26 +130,6 @@ export const UserDashboardPreferenceUpdate = () => {
                   required: { value: true, message: translate('entity.validation.required') },
                 }}
               />
-              <ValidatedField
-                id="user-dashboard-preference-user"
-                name="user"
-                data-cy="user"
-                label={translate('fintrackApp.userDashboardPreference.user')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {users
-                  ? users.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.login}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/user-dashboard-preference" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;

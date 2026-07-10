@@ -14,6 +14,14 @@ public interface CreditAccountDetailsMapper extends EntityMapper<CreditAccountDe
     @Mapping(target = "account", source = "account", qualifiedByName = "financialAccountName")
     CreditAccountDetailsDTO toDto(CreditAccountDetails s);
 
+    @Mapping(target = "account", ignore = true)
+    CreditAccountDetails toEntity(CreditAccountDetailsDTO creditAccountDetailsDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "account", ignore = true)
+    void partialUpdate(@MappingTarget CreditAccountDetails entity, CreditAccountDetailsDTO dto);
+
     @Named("financialAccountName")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

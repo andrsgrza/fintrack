@@ -4,7 +4,7 @@ import { cleanEntity } from 'app/shared/util/entity-utils';
 import { EntityState, IQueryParams, createEntitySlice, serializeAxiosError } from 'app/shared/reducers/reducer.utils';
 import { IFinancialTransaction, defaultValue } from 'app/shared/model/financial-transaction.model';
 
-const initialState: EntityState<IFinancialTransaction> = {
+const initialState = {
   loading: false,
   errorMessage: null,
   entities: [],
@@ -12,7 +12,11 @@ const initialState: EntityState<IFinancialTransaction> = {
   updating: false,
   totalItems: 0,
   updateSuccess: false,
+  ingestionRecordParentCandidates: [] as IFinancialTransaction[],
+  loadingIngestionRecordParentCandidates: false,
 };
+
+export type FinancialTransactionState = typeof initialState;
 
 const apiUrl = 'api/financial-transactions';
 
@@ -66,6 +70,12 @@ export const partialUpdateEntity = createAsyncThunk(
   { serializeError: serializeAxiosError },
 );
 
+export const getEntitiesWhereIngestionRecordIsNull = createAsyncThunk(
+  'financialTransaction/fetch_ingestion_record_parent_candidates',
+  async () => axios.get<IFinancialTransaction[]>(`${apiUrl}/ingestion-record-is-null`),
+  { serializeError: serializeAxiosError },
+);
+
 export const deleteEntity = createAsyncThunk(
   'financialTransaction/delete_entity',
   async (id: string | number, thunkAPI) => {
@@ -81,7 +91,7 @@ export const deleteEntity = createAsyncThunk(
 
 export const FinancialTransactionSlice = createEntitySlice({
   name: 'financialTransaction',
-  initialState,
+  initialState: initialState as EntityState<IFinancialTransaction>,
   extraReducers(builder) {
     builder
       .addCase(getEntity.fulfilled, (state, action) => {
@@ -92,6 +102,17 @@ export const FinancialTransactionSlice = createEntitySlice({
         state.updating = false;
         state.updateSuccess = true;
         state.entity = {};
+      })
+      .addCase(getEntitiesWhereIngestionRecordIsNull.pending, state => {
+        (state as FinancialTransactionState).loadingIngestionRecordParentCandidates = true;
+      })
+      .addCase(getEntitiesWhereIngestionRecordIsNull.fulfilled, (state, action) => {
+        const typedState = state as FinancialTransactionState;
+        typedState.loadingIngestionRecordParentCandidates = false;
+        typedState.ingestionRecordParentCandidates = action.payload.data;
+      })
+      .addCase(getEntitiesWhereIngestionRecordIsNull.rejected, state => {
+        (state as FinancialTransactionState).loadingIngestionRecordParentCandidates = false;
       })
       .addMatcher(isFulfilled(getEntities), (state, action) => {
         const { data, headers } = action.payload;

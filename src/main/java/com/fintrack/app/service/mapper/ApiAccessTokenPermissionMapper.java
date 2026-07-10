@@ -14,6 +14,14 @@ public interface ApiAccessTokenPermissionMapper extends EntityMapper<ApiAccessTo
     @Mapping(target = "apiAccessToken", source = "apiAccessToken", qualifiedByName = "apiAccessTokenName")
     ApiAccessTokenPermissionDTO toDto(ApiAccessTokenPermission s);
 
+    @Mapping(target = "apiAccessToken", ignore = true)
+    ApiAccessTokenPermission toEntity(ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "apiAccessToken", ignore = true)
+    void partialUpdate(@MappingTarget ApiAccessTokenPermission entity, ApiAccessTokenPermissionDTO dto);
+
     @Named("apiAccessTokenName")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

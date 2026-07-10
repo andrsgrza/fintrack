@@ -48,4 +48,32 @@ public interface FinancialTransactionRepository
         "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.id =:id"
     )
     Optional<FinancialTransaction> findOneWithToOneRelationships(@Param("id") Long id);
+
+    default Optional<FinancialTransaction> findOneAccessibleByIdAndAccountUserLogin(Long id, String login) {
+        return this.fetchBagRelationships(this.findOneWithToOneRelationshipsByIdAndAccountUserLogin(id, login));
+    }
+
+    default Page<FinancialTransaction> findAllAccessibleWithToOneRelationshipsByAccountUserLogin(String login, Pageable pageable) {
+        return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByAccountUserLogin(login, pageable));
+    }
+
+    default List<FinancialTransaction> findAllAccessibleWithToOneRelationshipsByAccountUserLogin(String login) {
+        return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByAccountUserLogin(login));
+    }
+
+    @Query(
+        value = "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.account.user.login = :login",
+        countQuery = "select count(financialTransaction) from FinancialTransaction financialTransaction where financialTransaction.account.user.login = :login"
+    )
+    Page<FinancialTransaction> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login, Pageable pageable);
+
+    @Query(
+        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.account.user.login = :login"
+    )
+    List<FinancialTransaction> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
+
+    @Query(
+        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.id = :id and financialTransaction.account.user.login = :login"
+    )
+    Optional<FinancialTransaction> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
 }

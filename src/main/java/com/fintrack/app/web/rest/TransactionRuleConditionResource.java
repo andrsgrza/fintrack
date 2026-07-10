@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
-import com.fintrack.app.repository.TransactionRuleConditionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionRuleConditionService;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -35,14 +36,11 @@ public class TransactionRuleConditionResource {
 
     private final TransactionRuleConditionService transactionRuleConditionService;
 
-    private final TransactionRuleConditionRepository transactionRuleConditionRepository;
+    private final ObjectMapper objectMapper;
 
-    public TransactionRuleConditionResource(
-        TransactionRuleConditionService transactionRuleConditionService,
-        TransactionRuleConditionRepository transactionRuleConditionRepository
-    ) {
+    public TransactionRuleConditionResource(TransactionRuleConditionService transactionRuleConditionService, ObjectMapper objectMapper) {
         this.transactionRuleConditionService = transactionRuleConditionService;
-        this.transactionRuleConditionRepository = transactionRuleConditionRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -60,7 +58,11 @@ public class TransactionRuleConditionResource {
         if (transactionRuleConditionDTO.getId() != null) {
             throw new BadRequestAlertException("A new transactionRuleCondition cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        transactionRuleConditionDTO = transactionRuleConditionService.save(transactionRuleConditionDTO);
+        try {
+            transactionRuleConditionDTO = transactionRuleConditionService.save(transactionRuleConditionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/transaction-rule-conditions/" + transactionRuleConditionDTO.getId()))
             .headers(
                 HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, transactionRuleConditionDTO.getId().toString())
@@ -91,11 +93,15 @@ public class TransactionRuleConditionResource {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!transactionRuleConditionRepository.existsById(id)) {
+        if (!transactionRuleConditionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        transactionRuleConditionDTO = transactionRuleConditionService.update(transactionRuleConditionDTO);
+        try {
+            transactionRuleConditionDTO = transactionRuleConditionService.update(transactionRuleConditionDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, transactionRuleConditionDTO.getId().toString()))
             .body(transactionRuleConditionDTO);
@@ -105,7 +111,7 @@ public class TransactionRuleConditionResource {
      * {@code PATCH  /transaction-rule-conditions/:id} : Partial updates given fields of an existing transactionRuleCondition, field will ignore if it is null
      *
      * @param id the id of the transactionRuleConditionDTO to save.
-     * @param transactionRuleConditionDTO the transactionRuleConditionDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated transactionRuleConditionDTO,
      * or with status {@code 400 (Bad Request)} if the transactionRuleConditionDTO is not valid,
      * or with status {@code 404 (Not Found)} if the transactionRuleConditionDTO is not found,
@@ -115,21 +121,35 @@ public class TransactionRuleConditionResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<TransactionRuleConditionDTO> partialUpdateTransactionRuleCondition(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody TransactionRuleConditionDTO transactionRuleConditionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update TransactionRuleCondition partially : {}, {}", id, transactionRuleConditionDTO);
+        LOG.debug("REST request to partial update TransactionRuleCondition partially : {}, {}", id, patchNode);
+        if (patchNode.has("transactionRule") && patchNode.get("transactionRule").isNull()) {
+            throw new BadRequestAlertException("Transaction rule cannot be null", ENTITY_NAME, "invalid");
+        }
+        TransactionRuleConditionDTO transactionRuleConditionDTO;
+        try {
+            transactionRuleConditionDTO = objectMapper.treeToValue(patchNode, TransactionRuleConditionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (transactionRuleConditionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            transactionRuleConditionDTO.setId(id);
         }
         if (!Objects.equals(id, transactionRuleConditionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
         }
 
-        if (!transactionRuleConditionRepository.existsById(id)) {
+        if (!transactionRuleConditionService.isAccessible(id)) {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<TransactionRuleConditionDTO> result = transactionRuleConditionService.partialUpdate(transactionRuleConditionDTO);
+        Optional<TransactionRuleConditionDTO> result;
+        try {
+            result = transactionRuleConditionService.partialUpdate(transactionRuleConditionDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,
@@ -173,7 +193,9 @@ public class TransactionRuleConditionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTransactionRuleCondition(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete TransactionRuleCondition : {}", id);
-        transactionRuleConditionService.delete(id);
+        if (!transactionRuleConditionService.delete(id)) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();

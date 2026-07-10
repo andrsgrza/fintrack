@@ -14,13 +14,14 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface UserDashboardPreferenceRepository extends JpaRepository<UserDashboardPreference, Long> {
-    @Query(
-        "select userDashboardPreference from UserDashboardPreference userDashboardPreference where userDashboardPreference.user.login = ?#{authentication.name}"
-    )
-    List<UserDashboardPreference> findByUserIsCurrentUser();
+    boolean existsByUserId(Long userId);
 
     default Optional<UserDashboardPreference> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
+    }
+
+    default Optional<UserDashboardPreference> findOneWithEagerRelationshipsByIdAndUserLogin(Long id, String login) {
+        return this.findOneWithToOneRelationshipsByIdAndUserLogin(id, login);
     }
 
     default List<UserDashboardPreference> findAllWithEagerRelationships() {
@@ -29,6 +30,10 @@ public interface UserDashboardPreferenceRepository extends JpaRepository<UserDas
 
     default Page<UserDashboardPreference> findAllWithEagerRelationships(Pageable pageable) {
         return this.findAllWithToOneRelationships(pageable);
+    }
+
+    default List<UserDashboardPreference> findAllWithEagerRelationshipsByUserLogin(String login) {
+        return this.findAllWithToOneRelationshipsByUserLogin(login);
     }
 
     @Query(
@@ -46,4 +51,14 @@ public interface UserDashboardPreferenceRepository extends JpaRepository<UserDas
         "select userDashboardPreference from UserDashboardPreference userDashboardPreference left join fetch userDashboardPreference.user where userDashboardPreference.id =:id"
     )
     Optional<UserDashboardPreference> findOneWithToOneRelationships(@Param("id") Long id);
+
+    @Query(
+        "select userDashboardPreference from UserDashboardPreference userDashboardPreference left join fetch userDashboardPreference.user where userDashboardPreference.id = :id and userDashboardPreference.user.login = :login"
+    )
+    Optional<UserDashboardPreference> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select userDashboardPreference from UserDashboardPreference userDashboardPreference left join fetch userDashboardPreference.user where userDashboardPreference.user.login = :login"
+    )
+    List<UserDashboardPreference> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
 }

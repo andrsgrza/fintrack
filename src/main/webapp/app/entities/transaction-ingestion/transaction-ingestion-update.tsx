@@ -4,8 +4,7 @@ import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
-import { mapIdList } from 'app/shared/util/entity-utils';
+import { convertDateTimeFromServer, convertDateTimeToServer } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
@@ -53,27 +52,37 @@ export const TransactionIngestionUpdate = () => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
-    values.startedAt = convertDateTimeToServer(values.startedAt);
-    values.completedAt = convertDateTimeToServer(values.completedAt);
-    if (values.recordsReceived !== undefined && typeof values.recordsReceived !== 'number') {
-      values.recordsReceived = Number(values.recordsReceived);
-    }
-    if (values.recordsCreated !== undefined && typeof values.recordsCreated !== 'number') {
-      values.recordsCreated = Number(values.recordsCreated);
-    }
-    if (values.recordsSkipped !== undefined && typeof values.recordsSkipped !== 'number') {
-      values.recordsSkipped = Number(values.recordsSkipped);
-    }
-    if (values.recordsRejected !== undefined && typeof values.recordsRejected !== 'number') {
-      values.recordsRejected = Number(values.recordsRejected);
-    }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
 
-    const entity = {
-      ...transactionIngestionEntity,
-      ...values,
-      accounts: mapIdList(values.accounts),
-    };
+    const entity = isNew
+      ? {
+          ingestionType: values.ingestionType,
+          sourceLabel: values.sourceLabel,
+          account: financialAccounts.find(it => it.id.toString() === values.account?.toString()),
+        }
+      : {
+          ...transactionIngestionEntity,
+          ...values,
+          account: transactionIngestionEntity?.account,
+          ingestionType: transactionIngestionEntity?.ingestionType,
+          startedAt: transactionIngestionEntity?.startedAt,
+          createdAt: transactionIngestionEntity?.createdAt,
+        };
+
+    if (!isNew) {
+      entity.completedAt = convertDateTimeToServer(values.completedAt);
+      if (values.recordsReceived !== undefined && typeof values.recordsReceived !== 'number') {
+        entity.recordsReceived = Number(values.recordsReceived);
+      }
+      if (values.recordsCreated !== undefined && typeof values.recordsCreated !== 'number') {
+        entity.recordsCreated = Number(values.recordsCreated);
+      }
+      if (values.recordsSkipped !== undefined && typeof values.recordsSkipped !== 'number') {
+        entity.recordsSkipped = Number(values.recordsSkipped);
+      }
+      if (values.recordsRejected !== undefined && typeof values.recordsRejected !== 'number') {
+        entity.recordsRejected = Number(values.recordsRejected);
+      }
+    }
 
     if (isNew) {
       dispatch(createEntity(entity));
@@ -85,18 +94,14 @@ export const TransactionIngestionUpdate = () => {
   const defaultValues = () =>
     isNew
       ? {
-          startedAt: displayDefaultDateTime(),
-          completedAt: displayDefaultDateTime(),
-          createdAt: displayDefaultDateTime(),
+          ingestionType: 'FILE',
         }
       : {
-          ingestionType: 'FILE',
-          status: 'PENDING',
           ...transactionIngestionEntity,
           startedAt: convertDateTimeFromServer(transactionIngestionEntity.startedAt),
           completedAt: convertDateTimeFromServer(transactionIngestionEntity.completedAt),
           createdAt: convertDateTimeFromServer(transactionIngestionEntity.createdAt),
-          accounts: transactionIngestionEntity?.accounts?.map(e => e.id.toString()),
+          account: transactionIngestionEntity?.account?.id,
         };
 
   return (
@@ -132,6 +137,7 @@ export const TransactionIngestionUpdate = () => {
                 name="ingestionType"
                 data-cy="ingestionType"
                 type="select"
+                disabled={!isNew}
               >
                 {ingestionTypeValues.map(ingestionType => (
                   <option value={ingestionType} key={ingestionType}>
@@ -139,19 +145,113 @@ export const TransactionIngestionUpdate = () => {
                   </option>
                 ))}
               </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.status')}
-                id="transaction-ingestion-status"
-                name="status"
-                data-cy="status"
-                type="select"
-              >
-                {ingestionStatusValues.map(ingestionStatus => (
-                  <option value={ingestionStatus} key={ingestionStatus}>
-                    {translate(`fintrackApp.IngestionStatus.${ingestionStatus}`)}
-                  </option>
-                ))}
-              </ValidatedField>
+              {isNew ? (
+                <ValidatedField
+                  label={translate('fintrackApp.transactionIngestion.status')}
+                  id="transaction-ingestion-status"
+                  name="statusDisplay"
+                  data-cy="status"
+                  type="text"
+                  value={translate('fintrackApp.IngestionStatus.PENDING')}
+                  readOnly
+                />
+              ) : (
+                <>
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.status')}
+                    id="transaction-ingestion-status"
+                    name="status"
+                    data-cy="status"
+                    type="select"
+                  >
+                    {ingestionStatusValues.map(ingestionStatus => (
+                      <option value={ingestionStatus} key={ingestionStatus}>
+                        {translate(`fintrackApp.IngestionStatus.${ingestionStatus}`)}
+                      </option>
+                    ))}
+                  </ValidatedField>
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.startedAt')}
+                    id="transaction-ingestion-startedAt"
+                    name="startedAt"
+                    data-cy="startedAt"
+                    type="datetime-local"
+                    placeholder="YYYY-MM-DD HH:mm"
+                    readOnly
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.completedAt')}
+                    id="transaction-ingestion-completedAt"
+                    name="completedAt"
+                    data-cy="completedAt"
+                    type="datetime-local"
+                    placeholder="YYYY-MM-DD HH:mm"
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.recordsReceived')}
+                    id="transaction-ingestion-recordsReceived"
+                    name="recordsReceived"
+                    data-cy="recordsReceived"
+                    type="text"
+                    validate={{
+                      min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
+                      validate: v => isNumber(v) || translate('entity.validation.number'),
+                    }}
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.recordsCreated')}
+                    id="transaction-ingestion-recordsCreated"
+                    name="recordsCreated"
+                    data-cy="recordsCreated"
+                    type="text"
+                    validate={{
+                      min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
+                      validate: v => isNumber(v) || translate('entity.validation.number'),
+                    }}
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.recordsSkipped')}
+                    id="transaction-ingestion-recordsSkipped"
+                    name="recordsSkipped"
+                    data-cy="recordsSkipped"
+                    type="text"
+                    validate={{
+                      min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
+                      validate: v => isNumber(v) || translate('entity.validation.number'),
+                    }}
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.recordsRejected')}
+                    id="transaction-ingestion-recordsRejected"
+                    name="recordsRejected"
+                    data-cy="recordsRejected"
+                    type="text"
+                    validate={{
+                      min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
+                      validate: v => isNumber(v) || translate('entity.validation.number'),
+                    }}
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.errorMessage')}
+                    id="transaction-ingestion-errorMessage"
+                    name="errorMessage"
+                    data-cy="errorMessage"
+                    type="text"
+                    validate={{
+                      maxLength: { value: 2000, message: translate('entity.validation.maxlength', { max: 2000 }) },
+                    }}
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionIngestion.createdAt')}
+                    id="transaction-ingestion-createdAt"
+                    name="createdAt"
+                    data-cy="createdAt"
+                    type="datetime-local"
+                    placeholder="YYYY-MM-DD HH:mm"
+                    readOnly
+                  />
+                </>
+              )}
               <ValidatedField
                 label={translate('fintrackApp.transactionIngestion.sourceLabel')}
                 id="transaction-ingestion-sourceLabel"
@@ -163,100 +263,15 @@ export const TransactionIngestionUpdate = () => {
                 }}
               />
               <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.startedAt')}
-                id="transaction-ingestion-startedAt"
-                name="startedAt"
-                data-cy="startedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.completedAt')}
-                id="transaction-ingestion-completedAt"
-                name="completedAt"
-                data-cy="completedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.recordsReceived')}
-                id="transaction-ingestion-recordsReceived"
-                name="recordsReceived"
-                data-cy="recordsReceived"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
-                  validate: v => isNumber(v) || translate('entity.validation.number'),
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.recordsCreated')}
-                id="transaction-ingestion-recordsCreated"
-                name="recordsCreated"
-                data-cy="recordsCreated"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
-                  validate: v => isNumber(v) || translate('entity.validation.number'),
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.recordsSkipped')}
-                id="transaction-ingestion-recordsSkipped"
-                name="recordsSkipped"
-                data-cy="recordsSkipped"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
-                  validate: v => isNumber(v) || translate('entity.validation.number'),
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.recordsRejected')}
-                id="transaction-ingestion-recordsRejected"
-                name="recordsRejected"
-                data-cy="recordsRejected"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
-                  validate: v => isNumber(v) || translate('entity.validation.number'),
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.errorMessage')}
-                id="transaction-ingestion-errorMessage"
-                name="errorMessage"
-                data-cy="errorMessage"
-                type="text"
-                validate={{
-                  maxLength: { value: 2000, message: translate('entity.validation.maxlength', { max: 2000 }) },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.createdAt')}
-                id="transaction-ingestion-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionIngestion.accounts')}
-                id="transaction-ingestion-accounts"
-                data-cy="accounts"
+                label={translate('fintrackApp.transactionIngestion.account')}
+                id="transaction-ingestion-account"
+                data-cy="account"
                 type="select"
-                multiple
-                name="accounts"
+                name="account"
+                disabled={!isNew}
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                }}
               >
                 <option value="" key="0" />
                 {financialAccounts

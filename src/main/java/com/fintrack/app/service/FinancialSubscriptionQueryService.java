@@ -31,12 +31,16 @@ public class FinancialSubscriptionQueryService extends QueryService<FinancialSub
 
     private final FinancialSubscriptionMapper financialSubscriptionMapper;
 
+    private final CurrentUserService currentUserService;
+
     public FinancialSubscriptionQueryService(
         FinancialSubscriptionRepository financialSubscriptionRepository,
-        FinancialSubscriptionMapper financialSubscriptionMapper
+        FinancialSubscriptionMapper financialSubscriptionMapper,
+        CurrentUserService currentUserService
     ) {
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.financialSubscriptionMapper = financialSubscriptionMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -107,6 +111,14 @@ public class FinancialSubscriptionQueryService extends QueryService<FinancialSub
                     root.join(FinancialSubscription_.transactionRules, JoinType.LEFT).get(TransactionRule_.id)
                 )
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                        root.join(FinancialSubscription_.user, JoinType.INNER).get(User_.login),
+                        currentUserService.getCurrentUserLogin()
+                    )
+                );
+            }
         }
         return specification;
     }

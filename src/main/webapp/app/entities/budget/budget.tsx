@@ -131,9 +131,6 @@ export const Budget = () => {
                   <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
                 </th>
                 <th>
-                  <Translate contentKey="fintrackApp.budget.user">User</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
                   <Translate contentKey="fintrackApp.budget.accounts">Accounts</Translate> <FontAwesomeIcon icon="sort" />
                 </th>
                 <th>
@@ -172,7 +169,6 @@ export const Budget = () => {
                   <td>{budget.warningPercentage}</td>
                   <td>{budget.createdAt ? <TextFormat type="date" value={budget.createdAt} format={APP_DATE_FORMAT} /> : null}</td>
                   <td>{budget.updatedAt ? <TextFormat type="date" value={budget.updatedAt} format={APP_DATE_FORMAT} /> : null}</td>
-                  <td>{budget.user ? budget.user.login : ''}</td>
                   <td>
                     {budget.accounts
                       ? budget.accounts.map((val, j) => (

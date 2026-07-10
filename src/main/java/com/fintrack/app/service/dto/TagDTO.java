@@ -36,7 +36,6 @@ public class TagDTO implements Serializable {
     @NotNull
     private Instant updatedAt;
 
-    @NotNull
     private UserDTO user;
 
     private Set<FinancialTransactionDTO> financialTransactions = new HashSet<>();

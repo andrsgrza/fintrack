@@ -63,7 +63,6 @@ public class FinancialAccountDTO implements Serializable {
     @NotNull
     private Instant updatedAt;
 
-    @NotNull
     private UserDTO user;
 
     private Set<BudgetDTO> budgets = new HashSet<>();

@@ -30,21 +30,15 @@ class TransactionIngestionTest {
     }
 
     @Test
-    void accountsTest() {
+    void accountTest() {
         TransactionIngestion transactionIngestion = getTransactionIngestionRandomSampleGenerator();
         FinancialAccount financialAccountBack = getFinancialAccountRandomSampleGenerator();
 
-        transactionIngestion.addAccounts(financialAccountBack);
-        assertThat(transactionIngestion.getAccounts()).containsOnly(financialAccountBack);
+        transactionIngestion.setAccount(financialAccountBack);
+        assertThat(transactionIngestion.getAccount()).isEqualTo(financialAccountBack);
 
-        transactionIngestion.removeAccounts(financialAccountBack);
-        assertThat(transactionIngestion.getAccounts()).doesNotContain(financialAccountBack);
-
-        transactionIngestion.accounts(new HashSet<>(Set.of(financialAccountBack)));
-        assertThat(transactionIngestion.getAccounts()).containsOnly(financialAccountBack);
-
-        transactionIngestion.setAccounts(new HashSet<>());
-        assertThat(transactionIngestion.getAccounts()).doesNotContain(financialAccountBack);
+        transactionIngestion.account(null);
+        assertThat(transactionIngestion.getAccount()).isNull();
     }
 
     @Test

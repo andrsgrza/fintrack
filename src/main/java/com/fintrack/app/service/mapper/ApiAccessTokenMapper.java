@@ -11,8 +11,19 @@ import org.mapstruct.*;
  */
 @Mapper(componentModel = "spring")
 public interface ApiAccessTokenMapper extends EntityMapper<ApiAccessTokenDTO, ApiAccessToken> {
+    @Mapping(target = "tokenHash", ignore = true)
     @Mapping(target = "user", source = "user", qualifiedByName = "userLogin")
     ApiAccessTokenDTO toDto(ApiAccessToken s);
+
+    @Mapping(target = "user", ignore = true)
+    ApiAccessToken toEntity(ApiAccessTokenDTO apiAccessTokenDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "tokenHash", ignore = true)
+    @Mapping(target = "tokenPrefix", ignore = true)
+    void partialUpdate(@MappingTarget ApiAccessToken entity, ApiAccessTokenDTO dto);
 
     @Named("userLogin")
     @BeanMapping(ignoreByDefault = true)

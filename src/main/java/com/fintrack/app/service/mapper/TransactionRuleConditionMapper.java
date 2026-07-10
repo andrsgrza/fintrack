@@ -14,6 +14,14 @@ public interface TransactionRuleConditionMapper extends EntityMapper<Transaction
     @Mapping(target = "transactionRule", source = "transactionRule", qualifiedByName = "transactionRuleName")
     TransactionRuleConditionDTO toDto(TransactionRuleCondition s);
 
+    @Mapping(target = "transactionRule", ignore = true)
+    TransactionRuleCondition toEntity(TransactionRuleConditionDTO transactionRuleConditionDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "transactionRule", ignore = true)
+    void partialUpdate(@MappingTarget TransactionRuleCondition entity, TransactionRuleConditionDTO dto);
+
     @Named("transactionRuleName")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

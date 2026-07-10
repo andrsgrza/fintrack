@@ -4,10 +4,10 @@ import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
+import { convertDateTimeFromServer } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getEntities as getTransactionIngestions } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
+import { getEntitiesWhereFileIngestionIsNull } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
 import { ImportFileType } from 'app/shared/model/enumerations/import-file-type.model';
 import { createEntity, getEntity, reset, updateEntity } from './file-ingestion.reducer';
 
@@ -19,7 +19,7 @@ export const FileIngestionUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const transactionIngestions = useAppSelector(state => state.transactionIngestion.entities);
+  const fileIngestionParentCandidates = useAppSelector(state => state.transactionIngestion.fileIngestionParentCandidates ?? []);
   const fileIngestionEntity = useAppSelector(state => state.fileIngestion.entity);
   const loading = useAppSelector(state => state.fileIngestion.loading);
   const updating = useAppSelector(state => state.fileIngestion.updating);
@@ -33,11 +33,10 @@ export const FileIngestionUpdate = () => {
   useEffect(() => {
     if (isNew) {
       dispatch(reset());
+      dispatch(getEntitiesWhereFileIngestionIsNull());
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getTransactionIngestions({}));
   }, []);
 
   useEffect(() => {
@@ -53,13 +52,27 @@ export const FileIngestionUpdate = () => {
     if (values.fileSizeBytes !== undefined && typeof values.fileSizeBytes !== 'number') {
       values.fileSizeBytes = Number(values.fileSizeBytes);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
 
-    const entity = {
-      ...fileIngestionEntity,
-      ...values,
-      transactionIngestion: transactionIngestions.find(it => it.id.toString() === values.transactionIngestion?.toString()),
-    };
+    const entity = isNew
+      ? {
+          originalFilename: values.originalFilename,
+          fileType: values.fileType,
+          contentType: values.contentType,
+          fileSizeBytes: values.fileSizeBytes,
+          checksum: values.checksum,
+          storageKey: values.storageKey,
+          parserName: values.parserName,
+          parserVersion: values.parserVersion,
+          statementStartDate: values.statementStartDate,
+          statementEndDate: values.statementEndDate,
+          transactionIngestion: fileIngestionParentCandidates.find(it => it.id.toString() === values.transactionIngestion?.toString()),
+        }
+      : {
+          ...fileIngestionEntity,
+          ...values,
+          transactionIngestion: fileIngestionEntity?.transactionIngestion,
+          createdAt: fileIngestionEntity?.createdAt,
+        };
 
     if (isNew) {
       dispatch(createEntity(entity));
@@ -70,15 +83,19 @@ export const FileIngestionUpdate = () => {
 
   const defaultValues = () =>
     isNew
-      ? {
-          createdAt: displayDefaultDateTime(),
-        }
+      ? {}
       : {
           fileType: 'CSV',
           ...fileIngestionEntity,
           createdAt: convertDateTimeFromServer(fileIngestionEntity.createdAt),
           transactionIngestion: fileIngestionEntity?.transactionIngestion?.id,
         };
+
+  const parentOptions = isNew
+    ? fileIngestionParentCandidates
+    : fileIngestionEntity?.transactionIngestion
+      ? [fileIngestionEntity.transactionIngestion]
+      : [];
 
   return (
     <div>
@@ -205,33 +222,34 @@ export const FileIngestionUpdate = () => {
                 data-cy="statementEndDate"
                 type="date"
               />
-              <ValidatedField
-                label={translate('fintrackApp.fileIngestion.createdAt')}
-                id="file-ingestion-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
+              {!isNew ? (
+                <ValidatedField
+                  label={translate('fintrackApp.fileIngestion.createdAt')}
+                  id="file-ingestion-createdAt"
+                  name="createdAt"
+                  data-cy="createdAt"
+                  type="datetime-local"
+                  placeholder="YYYY-MM-DD HH:mm"
+                  readOnly
+                />
+              ) : null}
               <ValidatedField
                 id="file-ingestion-transactionIngestion"
                 name="transactionIngestion"
                 data-cy="transactionIngestion"
                 label={translate('fintrackApp.fileIngestion.transactionIngestion')}
                 type="select"
-                required
+                disabled={!isNew}
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                }}
               >
                 <option value="" key="0" />
-                {transactionIngestions
-                  ? transactionIngestions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
+                {parentOptions.map(otherEntity => (
+                  <option value={otherEntity.id} key={otherEntity.id}>
+                    {otherEntity.id}
+                  </option>
+                ))}
               </ValidatedField>
               <FormText>
                 <Translate contentKey="entity.validation.required">This field is required.</Translate>
