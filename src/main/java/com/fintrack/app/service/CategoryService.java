@@ -1,6 +1,7 @@
 package com.fintrack.app.service;
 
 import com.fintrack.app.domain.Category;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
@@ -46,6 +47,14 @@ public class CategoryService {
         Category category = categoryMapper.toEntity(categoryDTO);
         category.setUser(currentUserService.getCurrentUser());
         applyParentCategory(category, categoryDTO.getParentCategory(), null);
+        category.setName(normalizeName(category.getName()));
+        validateUniqueSiblingNameForOwner(
+            category.getUser().getId(),
+            category.getCategoryType(),
+            resolveParentCategoryId(category),
+            category.getName(),
+            null
+        );
         category = categoryRepository.save(category);
         return categoryMapper.toDto(category);
     }
@@ -62,6 +71,14 @@ public class CategoryService {
         Category category = categoryMapper.toEntity(categoryDTO);
         category.setUser(existingCategory.getUser());
         applyParentCategory(category, categoryDTO.getParentCategory(), existingCategory.getId());
+        category.setName(normalizeName(category.getName()));
+        validateUniqueSiblingNameForOwner(
+            existingCategory.getUser().getId(),
+            category.getCategoryType(),
+            resolveParentCategoryId(category),
+            category.getName(),
+            existingCategory.getId()
+        );
         category = categoryRepository.save(category);
         return categoryMapper.toDto(category);
     }
@@ -77,9 +94,25 @@ public class CategoryService {
 
         return findAccessibleEntity(categoryDTO.getId())
             .map(existingCategory -> {
+                boolean parentProvided = categoryDTO.getParentCategory() != null;
+                boolean nameProvided = categoryDTO.getName() != null;
+                boolean categoryTypeProvided = categoryDTO.getCategoryType() != null;
+
                 categoryMapper.partialUpdate(existingCategory, categoryDTO);
-                if (categoryDTO.getParentCategory() != null) {
+                if (parentProvided) {
                     applyParentCategory(existingCategory, categoryDTO.getParentCategory(), existingCategory.getId());
+                }
+                if (nameProvided) {
+                    existingCategory.setName(normalizeName(categoryDTO.getName()));
+                }
+                if (nameProvided || parentProvided || categoryTypeProvided) {
+                    validateUniqueSiblingNameForOwner(
+                        existingCategory.getUser().getId(),
+                        existingCategory.getCategoryType(),
+                        resolveParentCategoryId(existingCategory),
+                        existingCategory.getName(),
+                        existingCategory.getId()
+                    );
                 }
                 return existingCategory;
             })
@@ -181,6 +214,35 @@ public class CategoryService {
                 break;
             }
             current = categoryRepository.findOneWithToOneRelationships(parentCategory.getId()).orElse(parentCategory);
+        }
+    }
+
+    private String normalizeName(String name) {
+        if (name == null) {
+            return null;
+        }
+        return name.trim();
+    }
+
+    private Long resolveParentCategoryId(Category category) {
+        if (category.getParentCategory() == null) {
+            return null;
+        }
+        return category.getParentCategory().getId();
+    }
+
+    private void validateUniqueSiblingNameForOwner(
+        Long userId,
+        CategoryType categoryType,
+        Long parentCategoryId,
+        String name,
+        Long excludeCategoryId
+    ) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Name is required");
+        }
+        if (categoryRepository.existsByOwnerTypeParentAndNormalizedName(userId, categoryType, parentCategoryId, name, excludeCategoryId)) {
+            throw new IllegalArgumentException("Category name already exists for this scope");
         }
     }
 }

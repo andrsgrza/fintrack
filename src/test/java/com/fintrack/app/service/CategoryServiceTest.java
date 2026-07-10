@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
@@ -54,22 +55,27 @@ class CategoryServiceTest {
         category = new Category();
         category.setId(10L);
         category.setName("Food");
+        category.setCategoryType(CategoryType.EXPENSE);
         category.setUser(currentUser);
 
         categoryDTO = new CategoryDTO();
         categoryDTO.setId(10L);
         categoryDTO.setName("Food");
+        categoryDTO.setCategoryType(CategoryType.EXPENSE);
     }
 
     @Test
     void saveShouldAssignCurrentUser() {
         Category mappedEntity = new Category();
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.EXPENSE);
         Category savedEntity = new Category();
         savedEntity.setId(10L);
         savedEntity.setUser(currentUser);
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
+        when(categoryRepository.existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, null, "Food", null)).thenReturn(false);
         when(categoryRepository.save(mappedEntity)).thenReturn(savedEntity);
         when(categoryMapper.toDto(savedEntity)).thenReturn(categoryDTO);
 
@@ -83,11 +89,14 @@ class CategoryServiceTest {
     void updateShouldPreserveExistingOwner() {
         Category mappedEntity = new Category();
         mappedEntity.setId(10L);
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.EXPENSE);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
         when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
+        when(categoryRepository.existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, null, "Food", 10L)).thenReturn(false);
         when(categoryRepository.save(mappedEntity)).thenReturn(category);
         when(categoryMapper.toDto(category)).thenReturn(categoryDTO);
 
@@ -182,6 +191,8 @@ class CategoryServiceTest {
 
         Category mappedEntity = new Category();
         mappedEntity.setId(10L);
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.EXPENSE);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -200,6 +211,8 @@ class CategoryServiceTest {
 
         Category mappedEntity = new Category();
         mappedEntity.setId(10L);
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.EXPENSE);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -208,6 +221,81 @@ class CategoryServiceTest {
         when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(20L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> categoryService.update(categoryDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectDuplicateSiblingName() {
+        Category mappedEntity = new Category();
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.EXPENSE);
+        mappedEntity.setUser(currentUser);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
+        when(categoryRepository.existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, null, "Food", null)).thenReturn(true);
+
+        assertThatThrownBy(() -> categoryService.save(categoryDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldAllowSameNameUnderDifferentParent() {
+        Category mappedEntity = new Category();
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.EXPENSE);
+        mappedEntity.setUser(currentUser);
+
+        Category parent = new Category();
+        parent.setId(30L);
+        mappedEntity.setParentCategory(parent);
+
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(30L);
+        categoryDTO.setParentCategory(parentDTO);
+
+        Category savedEntity = new Category();
+        savedEntity.setId(11L);
+        savedEntity.setUser(currentUser);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(30L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(parent));
+        when(categoryRepository.existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, 30L, "Food", null)).thenReturn(false);
+        when(categoryRepository.save(mappedEntity)).thenReturn(savedEntity);
+        when(categoryMapper.toDto(savedEntity)).thenReturn(categoryDTO);
+
+        categoryService.save(categoryDTO);
+
+        verify(categoryRepository).existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, 30L, "Food", null);
+    }
+
+    @Test
+    void partialUpdateShouldRejectDuplicateWhenParentChangesIntoSiblingScope() {
+        Category parent = new Category();
+        parent.setId(20L);
+
+        Category existingCategory = new Category();
+        existingCategory.setId(10L);
+        existingCategory.setName("Food");
+        existingCategory.setCategoryType(CategoryType.EXPENSE);
+        existingCategory.setUser(currentUser);
+
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(20L);
+        categoryDTO.setParentCategory(parentDTO);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(existingCategory)
+        );
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(20L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(parent));
+        when(categoryRepository.existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, 20L, "Food", 10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> categoryService.partialUpdate(categoryDTO)).isInstanceOf(IllegalArgumentException.class);
         verify(categoryRepository, never()).save(any());
     }
 }

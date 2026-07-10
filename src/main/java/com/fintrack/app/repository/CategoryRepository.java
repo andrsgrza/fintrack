@@ -1,6 +1,7 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.Category;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -61,4 +62,20 @@ public interface CategoryRepository extends JpaRepository<Category, Long>, JpaSp
         "select category from Category category left join fetch category.user left join fetch category.parentCategory where category.user.login = :login"
     )
     List<Category> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
+
+    @Query(
+        "select case when count(category) > 0 then true else false end from Category category " +
+        "where category.user.id = :userId " +
+        "and category.categoryType = :categoryType " +
+        "and ((:parentCategoryId is null and category.parentCategory is null) or category.parentCategory.id = :parentCategoryId) " +
+        "and lower(trim(category.name)) = lower(trim(:name)) " +
+        "and (:excludeId is null or category.id <> :excludeId)"
+    )
+    boolean existsByOwnerTypeParentAndNormalizedName(
+        @Param("userId") Long userId,
+        @Param("categoryType") CategoryType categoryType,
+        @Param("parentCategoryId") Long parentCategoryId,
+        @Param("name") String name,
+        @Param("excludeId") Long excludeId
+    );
 }
