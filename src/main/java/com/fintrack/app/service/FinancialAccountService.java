@@ -1,6 +1,9 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.enumeration.AccountType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
@@ -65,8 +68,12 @@ public class FinancialAccountService {
     public FinancialAccountDTO update(FinancialAccountDTO financialAccountDTO) {
         LOG.debug("Request to update FinancialAccount : {}", financialAccountDTO);
         FinancialAccount existingFinancialAccount = findAccessibleEntity(financialAccountDTO.getId()).orElseThrow();
+        rejectCurrencyChange(existingFinancialAccount, financialAccountDTO.getCurrency());
+        rejectAccountTypeChange(existingFinancialAccount, financialAccountDTO.getAccountType());
         FinancialAccount financialAccount = financialAccountMapper.toEntity(financialAccountDTO);
         financialAccount.setUser(existingFinancialAccount.getUser());
+        financialAccount.setCurrency(existingFinancialAccount.getCurrency());
+        financialAccount.setAccountType(existingFinancialAccount.getAccountType());
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
     }
@@ -78,10 +85,22 @@ public class FinancialAccountService {
      * @return the persisted entity.
      */
     public Optional<FinancialAccountDTO> partialUpdate(FinancialAccountDTO financialAccountDTO) {
+        return partialUpdate(financialAccountDTO, null);
+    }
+
+    /**
+     * Partially update a financialAccount, applying immutable field checks only when present in the patch body.
+     *
+     * @param financialAccountDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<FinancialAccountDTO> partialUpdate(FinancialAccountDTO financialAccountDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update FinancialAccount : {}", financialAccountDTO);
 
         return findAccessibleEntity(financialAccountDTO.getId())
             .map(existingFinancialAccount -> {
+                rejectImmutableFieldChanges(existingFinancialAccount, financialAccountDTO, patchNode);
                 financialAccountMapper.partialUpdate(existingFinancialAccount, financialAccountDTO);
                 return existingFinancialAccount;
             })
@@ -179,5 +198,35 @@ public class FinancialAccountService {
             return financialAccountRepository.findOneWithEagerRelationships(id);
         }
         return financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private void rejectImmutableFieldChanges(FinancialAccount existing, FinancialAccountDTO financialAccountDTO, JsonNode patchNode) {
+        if (patchNode == null) {
+            if (financialAccountDTO.getCurrency() != null) {
+                rejectCurrencyChange(existing, financialAccountDTO.getCurrency());
+            }
+            if (financialAccountDTO.getAccountType() != null) {
+                rejectAccountTypeChange(existing, financialAccountDTO.getAccountType());
+            }
+            return;
+        }
+        if (patchNode.has("currency")) {
+            rejectCurrencyChange(existing, financialAccountDTO.getCurrency());
+        }
+        if (patchNode.has("accountType")) {
+            rejectAccountTypeChange(existing, financialAccountDTO.getAccountType());
+        }
+    }
+
+    private void rejectCurrencyChange(FinancialAccount existing, CurrencyCode currency) {
+        if (currency == null || !currency.equals(existing.getCurrency())) {
+            throw new IllegalArgumentException("Currency cannot be changed");
+        }
+    }
+
+    private void rejectAccountTypeChange(FinancialAccount existing, AccountType accountType) {
+        if (accountType == null || !accountType.equals(existing.getAccountType())) {
+            throw new IllegalArgumentException("Account type cannot be changed");
+        }
     }
 }

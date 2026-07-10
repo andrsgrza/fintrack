@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -1220,6 +1221,120 @@ class TagResourceIT {
 
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
         insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void createDuplicateTagSameUserDifferentCaseAndSpacingReturnsBadRequest() throws Exception {
+        Tag existingTag = createEntity(em);
+        existingTag.name("Comida");
+        insertedTag = tagRepository.saveAndFlush(existingTag);
+
+        Tag duplicateTag = createEntity(em);
+        duplicateTag.name(" COMIDA ");
+        TagDTO tagDTO = tagMapper.toDto(duplicateTag);
+
+        restTagMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("tag"));
+    }
+
+    @Test
+    @Transactional
+    void createSameTagNameForDifferentUserSucceeds() throws Exception {
+        Tag existingTag = createEntity(em);
+        existingTag.name("Comida");
+        insertedTag = tagRepository.saveAndFlush(existingTag);
+
+        User otherUser = createOtherUser(em);
+        TagDTO tagDTO = tagMapper.toDto(createEntity(em));
+        tagDTO.setId(null);
+        tagDTO.setName("Comida");
+
+        restTagMockMvc
+            .perform(
+                post(ENTITY_API_URL)
+                    .with(user(otherUser.getLogin()).roles("USER"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(tagDTO))
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Comida"));
+    }
+
+    @Test
+    @Transactional
+    void updateTagNameToDuplicateSameUserReturnsBadRequest() throws Exception {
+        Tag firstTag = createEntity(em);
+        firstTag.name("Comida");
+        tagRepository.saveAndFlush(firstTag);
+
+        Tag secondTag = createEntity(em);
+        secondTag.name("Viajes");
+        insertedTag = tagRepository.saveAndFlush(secondTag);
+
+        TagDTO tagDTO = tagMapper.toDto(secondTag);
+        tagDTO.setName("comida");
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("tag"));
+    }
+
+    @Test
+    @Transactional
+    void patchTagNameToDuplicateSameUserReturnsBadRequest() throws Exception {
+        Tag firstTag = createEntity(em);
+        firstTag.name("Comida");
+        tagRepository.saveAndFlush(firstTag);
+
+        Tag secondTag = createEntity(em);
+        secondTag.name("Viajes");
+        insertedTag = tagRepository.saveAndFlush(secondTag);
+
+        Tag patchPayload = new Tag();
+        patchPayload.setId(secondTag.getId());
+        patchPayload.setName(" COMIDA ");
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, secondTag.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("tag"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminEditingForeignTagCannotDuplicateWithinForeignOwner() throws Exception {
+        User foreignOwner = createOtherUser(em);
+
+        Tag firstTag = createEntity(em);
+        firstTag.setUser(foreignOwner);
+        firstTag.name("Comida");
+        tagRepository.saveAndFlush(firstTag);
+
+        Tag secondTag = createEntity(em);
+        secondTag.setUser(foreignOwner);
+        secondTag.name("Viajes");
+        insertedTag = tagRepository.saveAndFlush(secondTag);
+
+        TagDTO tagDTO = tagMapper.toDto(secondTag);
+        tagDTO.setName("comida");
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("tag"));
     }
 
     protected long getRepositoryCount() {

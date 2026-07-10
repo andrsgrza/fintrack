@@ -43,6 +43,8 @@ public class TagService {
         LOG.debug("Request to save Tag : {}", tagDTO);
         Tag tag = tagMapper.toEntity(tagDTO);
         tag.setUser(currentUserService.getCurrentUser());
+        tag.setName(normalizeName(tag.getName()));
+        validateUniqueNameForOwner(tag.getUser().getId(), tag.getName(), null);
         tag = tagRepository.save(tag);
         return tagMapper.toDto(tag);
     }
@@ -57,6 +59,8 @@ public class TagService {
         LOG.debug("Request to update Tag : {}", tagDTO);
         Tag existingTag = findAccessibleEntity(tagDTO.getId()).orElseThrow();
         Tag tag = tagMapper.toEntity(tagDTO);
+        tag.setName(normalizeName(tag.getName()));
+        validateUniqueNameForOwner(existingTag.getUser().getId(), tag.getName(), existingTag.getId());
         tag.setUser(existingTag.getUser());
         tag = tagRepository.save(tag);
         return tagMapper.toDto(tag);
@@ -74,6 +78,10 @@ public class TagService {
         return findAccessibleEntity(tagDTO.getId())
             .map(existingTag -> {
                 tagMapper.partialUpdate(existingTag, tagDTO);
+                if (tagDTO.getName() != null) {
+                    existingTag.setName(normalizeName(tagDTO.getName()));
+                    validateUniqueNameForOwner(existingTag.getUser().getId(), existingTag.getName(), existingTag.getId());
+                }
                 return existingTag;
             })
             .map(tagRepository::save)
@@ -138,5 +146,21 @@ public class TagService {
             return tagRepository.findOneWithEagerRelationships(id);
         }
         return tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private String normalizeName(String name) {
+        if (name == null) {
+            return null;
+        }
+        return name.trim();
+    }
+
+    private void validateUniqueNameForOwner(Long userId, String name, Long excludeTagId) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Name is required");
+        }
+        if (tagRepository.existsByUserIdAndNormalizedName(userId, name, excludeTagId)) {
+            throw new IllegalArgumentException("Tag name already exists");
+        }
     }
 }

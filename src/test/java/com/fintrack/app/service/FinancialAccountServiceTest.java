@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.AccountType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
@@ -60,10 +62,14 @@ class FinancialAccountServiceTest {
         financialAccount.setId(10L);
         financialAccount.setName("Main account");
         financialAccount.setUser(currentUser);
+        financialAccount.setCurrency(CurrencyCode.MXN);
+        financialAccount.setAccountType(AccountType.DEBIT);
 
         financialAccountDTO = new FinancialAccountDTO();
         financialAccountDTO.setId(10L);
         financialAccountDTO.setName("Main account");
+        financialAccountDTO.setCurrency(CurrencyCode.MXN);
+        financialAccountDTO.setAccountType(AccountType.DEBIT);
     }
 
     @Test
@@ -188,6 +194,38 @@ class FinancialAccountServiceTest {
         );
 
         assertThat(financialAccountService.partialUpdate(financialAccountDTO)).isEmpty();
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectCurrencyChange() {
+        financialAccountDTO.setCurrency(CurrencyCode.USD);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+
+        assertThatThrownBy(() -> financialAccountService.update(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Currency cannot be changed");
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectAccountTypeChange() {
+        financialAccountDTO.setAccountType(AccountType.CASH);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+
+        assertThatThrownBy(() -> financialAccountService.update(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Account type cannot be changed");
         verify(financialAccountRepository, never()).save(any());
     }
 }

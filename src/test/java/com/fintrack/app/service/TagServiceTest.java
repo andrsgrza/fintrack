@@ -64,18 +64,21 @@ class TagServiceTest {
     @Test
     void saveShouldAssignCurrentUser() {
         Tag mappedEntity = new Tag();
+        mappedEntity.setName("Travel");
         Tag savedEntity = new Tag();
         savedEntity.setId(10L);
         savedEntity.setUser(currentUser);
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(tagMapper.toEntity(tagDTO)).thenReturn(mappedEntity);
+        when(tagRepository.existsByUserIdAndNormalizedName(2L, "Travel", null)).thenReturn(false);
         when(tagRepository.save(mappedEntity)).thenReturn(savedEntity);
         when(tagMapper.toDto(savedEntity)).thenReturn(tagDTO);
 
         tagService.save(tagDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getName()).isEqualTo("Travel");
         verify(tagRepository).save(mappedEntity);
     }
 
@@ -83,11 +86,13 @@ class TagServiceTest {
     void updateShouldPreserveExistingOwner() {
         Tag mappedEntity = new Tag();
         mappedEntity.setId(10L);
+        mappedEntity.setName("Travel");
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
         when(tagMapper.toEntity(tagDTO)).thenReturn(mappedEntity);
+        when(tagRepository.existsByUserIdAndNormalizedName(2L, "Travel", 10L)).thenReturn(false);
         when(tagRepository.save(mappedEntity)).thenReturn(tag);
         when(tagMapper.toDto(tag)).thenReturn(tagDTO);
 
@@ -172,5 +177,65 @@ class TagServiceTest {
 
         assertThat(tagService.partialUpdate(tagDTO)).isEmpty();
         verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectDuplicateNameForSameUser() {
+        Tag mappedEntity = new Tag();
+        mappedEntity.setName("Comida");
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(tagMapper.toEntity(tagDTO)).thenReturn(mappedEntity);
+        when(tagRepository.existsByUserIdAndNormalizedName(2L, "Comida", null)).thenReturn(true);
+
+        tagDTO.setName(" COMIDA ");
+
+        assertThatThrownBy(() -> tagService.save(tagDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Tag name already exists");
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectDuplicateNameForOwner() {
+        Tag mappedEntity = new Tag();
+        mappedEntity.setName("Comida");
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+        when(tagMapper.toEntity(tagDTO)).thenReturn(mappedEntity);
+        when(tagRepository.existsByUserIdAndNormalizedName(2L, "Comida", 10L)).thenReturn(true);
+
+        tagDTO.setName("comida");
+
+        assertThatThrownBy(() -> tagService.update(tagDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Tag name already exists");
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldAllowSameNameForDifferentOwner() {
+        User otherUser = new User();
+        otherUser.setId(99L);
+        otherUser.setLogin("other-user");
+
+        Tag mappedEntity = new Tag();
+        mappedEntity.setName("Comida");
+
+        tagDTO.setName("Comida");
+
+        when(currentUserService.getCurrentUser()).thenReturn(otherUser);
+        when(tagMapper.toEntity(tagDTO)).thenReturn(mappedEntity);
+        when(tagRepository.existsByUserIdAndNormalizedName(99L, "Comida", null)).thenReturn(false);
+        when(tagRepository.save(mappedEntity)).thenReturn(mappedEntity);
+        when(tagMapper.toDto(mappedEntity)).thenReturn(tagDTO);
+
+        tagService.save(tagDTO);
+
+        assertThat(mappedEntity.getUser()).isEqualTo(otherUser);
+        assertThat(mappedEntity.getName()).isEqualTo("Comida");
+        verify(tagRepository).existsByUserIdAndNormalizedName(99L, "Comida", null);
     }
 }
