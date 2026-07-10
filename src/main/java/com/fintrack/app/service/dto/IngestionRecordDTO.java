@@ -36,7 +36,6 @@ public class IngestionRecordDTO implements Serializable {
     @Size(max = 1000)
     private String errorMessage;
 
-    @NotNull
     private Instant createdAt;
 
     private FinancialTransactionDTO financialTransaction;

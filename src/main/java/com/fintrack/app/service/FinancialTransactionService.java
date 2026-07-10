@@ -10,6 +10,7 @@ import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
@@ -57,6 +58,8 @@ public class FinancialTransactionService {
 
     private final InternalTransferRepository internalTransferRepository;
 
+    private final IngestionRecordRepository ingestionRecordRepository;
+
     private final CurrentUserService currentUserService;
 
     public FinancialTransactionService(
@@ -67,6 +70,7 @@ public class FinancialTransactionService {
         TagRepository tagRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
         InternalTransferRepository internalTransferRepository,
+        IngestionRecordRepository ingestionRecordRepository,
         CurrentUserService currentUserService
     ) {
         this.financialTransactionRepository = financialTransactionRepository;
@@ -76,6 +80,7 @@ public class FinancialTransactionService {
         this.tagRepository = tagRepository;
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.internalTransferRepository = internalTransferRepository;
+        this.ingestionRecordRepository = ingestionRecordRepository;
         this.currentUserService = currentUserService;
     }
 
@@ -228,7 +233,7 @@ public class FinancialTransactionService {
     public List<FinancialTransactionDTO> findAllWhereIngestionRecordIsNull() {
         LOG.debug("Request to get all financialTransactions where IngestionRecord is null");
         return accessibleTransactionStream()
-            .filter(financialTransaction -> financialTransaction.getIngestionRecord() == null)
+            .filter(financialTransaction -> !ingestionRecordRepository.existsByFinancialTransactionId(financialTransaction.getId()))
             .map(financialTransactionMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
     }

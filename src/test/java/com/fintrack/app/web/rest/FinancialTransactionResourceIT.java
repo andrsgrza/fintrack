@@ -16,6 +16,7 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
@@ -118,6 +119,9 @@ class FinancialTransactionResourceIT {
 
     @Autowired
     private FinancialTransactionMapper financialTransactionMapper;
+
+    @Autowired
+    private FinancialTransactionService financialTransactionService;
 
     @Mock
     private FinancialTransactionService financialTransactionServiceMock;
@@ -1651,6 +1655,36 @@ class FinancialTransactionResourceIT {
             .andExpect(status().isNoContent());
 
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void findAllWhereIngestionRecordIsNullIsScopedAndUnlinkedOnly() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        FinancialTransaction otherUnlinked = saveTransactionOnOtherUsersAccount();
+
+        FinancialTransaction linkedTransaction = createEntity(em);
+        linkedTransaction.setAccount(financialTransaction.getAccount());
+        linkedTransaction = financialTransactionRepository.saveAndFlush(linkedTransaction);
+
+        IngestionRecord ingestionRecord = IngestionRecordResourceIT.createEntity(em);
+        ingestionRecord.setFinancialTransaction(linkedTransaction);
+        ingestionRecord.setRecordIndex((int) (Math.floorMod(longCount.incrementAndGet(), 100000)));
+        em.persist(ingestionRecord);
+        em.flush();
+
+        assertThat(financialTransactionService.findAllWhereIngestionRecordIsNull())
+            .extracting(FinancialTransactionDTO::getId)
+            .contains(financialTransaction.getId())
+            .doesNotContain(otherUnlinked.getId(), linkedTransaction.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(get(ENTITY_API_URL + "/ingestion-record-is-null"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id").value(hasItem(financialTransaction.getId().intValue())))
+            .andExpect(jsonPath("$[*].id").value(not(hasItem(otherUnlinked.getId().intValue()))))
+            .andExpect(jsonPath("$[*].id").value(not(hasItem(linkedTransaction.getId().intValue()))));
     }
 
     @Test

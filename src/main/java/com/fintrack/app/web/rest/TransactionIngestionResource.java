@@ -215,6 +215,17 @@ public class TransactionIngestionResource {
     }
 
     /**
+     * {@code GET  /transaction-ingestions/api-ingestion-is-null} : get API ingestions without api metadata (scoped).
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list in body.
+     */
+    @GetMapping("/api-ingestion-is-null")
+    public List<TransactionIngestionDTO> getAllTransactionIngestionsWhereApiIngestionIsNull() {
+        LOG.debug("REST request to get TransactionIngestions where ApiIngestion is null");
+        return transactionIngestionService.findAllWhereApiIngestionIsNull();
+    }
+
+    /**
      * {@code GET  /transaction-ingestions/:id} : get the "id" transactionIngestion.
      *
      * @param id the id of the transactionIngestionDTO to retrieve.

@@ -14,6 +14,8 @@ const initialState = {
   updateSuccess: false,
   fileIngestionParentCandidates: [] as ITransactionIngestion[],
   loadingFileIngestionParentCandidates: false,
+  apiIngestionParentCandidates: [] as ITransactionIngestion[],
+  loadingApiIngestionParentCandidates: false,
 };
 
 export type TransactionIngestionState = typeof initialState;
@@ -76,6 +78,12 @@ export const getEntitiesWhereFileIngestionIsNull = createAsyncThunk(
   { serializeError: serializeAxiosError },
 );
 
+export const getEntitiesWhereApiIngestionIsNull = createAsyncThunk(
+  'transactionIngestion/fetch_api_ingestion_parent_candidates',
+  async () => axios.get<ITransactionIngestion[]>(`${apiUrl}/api-ingestion-is-null`),
+  { serializeError: serializeAxiosError },
+);
+
 export const deleteEntity = createAsyncThunk(
   'transactionIngestion/delete_entity',
   async (id: string | number, thunkAPI) => {
@@ -113,6 +121,17 @@ export const TransactionIngestionSlice = createEntitySlice({
       })
       .addCase(getEntitiesWhereFileIngestionIsNull.rejected, state => {
         (state as TransactionIngestionState).loadingFileIngestionParentCandidates = false;
+      })
+      .addCase(getEntitiesWhereApiIngestionIsNull.pending, state => {
+        (state as TransactionIngestionState).loadingApiIngestionParentCandidates = true;
+      })
+      .addCase(getEntitiesWhereApiIngestionIsNull.fulfilled, (state, action) => {
+        const typedState = state as TransactionIngestionState;
+        typedState.loadingApiIngestionParentCandidates = false;
+        typedState.apiIngestionParentCandidates = action.payload.data;
+      })
+      .addCase(getEntitiesWhereApiIngestionIsNull.rejected, state => {
+        (state as TransactionIngestionState).loadingApiIngestionParentCandidates = false;
       })
       .addMatcher(isFulfilled(getEntities), (state, action) => {
         const { data, headers } = action.payload;

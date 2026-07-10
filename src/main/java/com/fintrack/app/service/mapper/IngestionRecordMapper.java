@@ -17,6 +17,19 @@ public interface IngestionRecordMapper extends EntityMapper<IngestionRecordDTO, 
     @Mapping(target = "transactionIngestion", source = "transactionIngestion", qualifiedByName = "transactionIngestionId")
     IngestionRecordDTO toDto(IngestionRecord s);
 
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "financialTransaction", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    IngestionRecord toEntity(IngestionRecordDTO ingestionRecordDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "financialTransaction", ignore = true)
+    @Mapping(target = "recordIndex", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void partialUpdate(@MappingTarget IngestionRecord entity, IngestionRecordDTO dto);
+
     @Named("financialTransactionId")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

@@ -39,6 +39,8 @@ describe('IngestionRecord e2e test', () => {
 
   beforeEach(() => {
     cy.intercept('GET', '/api/ingestion-records+(?*|)').as('entitiesRequest');
+    cy.intercept('GET', '/api/transaction-ingestions').as('transactionIngestionCandidatesRequest');
+    cy.intercept('GET', '/api/financial-transactions/ingestion-record-is-null').as('financialTransactionCandidatesRequest');
     cy.intercept('POST', '/api/ingestion-records').as('postEntityRequest');
     cy.intercept('DELETE', '/api/ingestion-records/*').as('deleteEntityRequest');
   });

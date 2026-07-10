@@ -48,6 +48,7 @@ describe('ApiIngestion e2e test', () => {
 
   beforeEach(() => {
     cy.intercept('GET', '/api/api-ingestions+(?*|)').as('entitiesRequest');
+    cy.intercept('GET', '/api/transaction-ingestions/api-ingestion-is-null').as('apiIngestionParentCandidatesRequest');
     cy.intercept('POST', '/api/api-ingestions').as('postEntityRequest');
     cy.intercept('DELETE', '/api/api-ingestions/*').as('deleteEntityRequest');
   });
@@ -125,6 +126,9 @@ describe('ApiIngestion e2e test', () => {
         cy.get(entityCreateButtonSelector).click();
         cy.url().should('match', new RegExp('/api-ingestion/new$'));
         cy.getEntityCreateUpdateHeading('ApiIngestion');
+        cy.wait('@apiIngestionParentCandidatesRequest').then(({ response }) => {
+          expect(response?.statusCode).to.equal(200);
+        });
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {

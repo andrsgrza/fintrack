@@ -1,6 +1,6 @@
 package com.fintrack.app.service;
 
-import com.fintrack.app.domain.*; // for static metamodels
+import com.fintrack.app.domain.*;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.service.criteria.IngestionRecordCriteria;
@@ -32,9 +32,16 @@ public class IngestionRecordQueryService extends QueryService<IngestionRecord> {
 
     private final IngestionRecordMapper ingestionRecordMapper;
 
-    public IngestionRecordQueryService(IngestionRecordRepository ingestionRecordRepository, IngestionRecordMapper ingestionRecordMapper) {
+    private final CurrentUserService currentUserService;
+
+    public IngestionRecordQueryService(
+        IngestionRecordRepository ingestionRecordRepository,
+        IngestionRecordMapper ingestionRecordMapper,
+        CurrentUserService currentUserService
+    ) {
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.ingestionRecordMapper = ingestionRecordMapper;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -87,6 +94,18 @@ public class IngestionRecordQueryService extends QueryService<IngestionRecord> {
                     root.join(IngestionRecord_.transactionIngestion, JoinType.LEFT).get(TransactionIngestion_.id)
                 )
             );
+            if (!currentUserService.isAdmin()) {
+                specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(
+                        root
+                            .join(IngestionRecord_.transactionIngestion, JoinType.INNER)
+                            .join(TransactionIngestion_.account, JoinType.INNER)
+                            .join(FinancialAccount_.user, JoinType.INNER)
+                            .get(User_.login),
+                        currentUserService.getCurrentUserLogin()
+                    )
+                );
+            }
         }
         return specification;
     }

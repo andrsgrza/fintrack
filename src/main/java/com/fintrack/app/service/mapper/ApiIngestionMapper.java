@@ -17,6 +17,21 @@ public interface ApiIngestionMapper extends EntityMapper<ApiIngestionDTO, ApiIng
     @Mapping(target = "apiAccessToken", source = "apiAccessToken", qualifiedByName = "apiAccessTokenName")
     ApiIngestionDTO toDto(ApiIngestion s);
 
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "apiAccessToken", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "receivedAt", ignore = true)
+    ApiIngestion toEntity(ApiIngestionDTO apiIngestionDTO);
+
+    @Named("partialUpdate")
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "transactionIngestion", ignore = true)
+    @Mapping(target = "apiAccessToken", ignore = true)
+    @Mapping(target = "requestId", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "receivedAt", ignore = true)
+    void partialUpdate(@MappingTarget ApiIngestion entity, ApiIngestionDTO dto);
+
     @Named("transactionIngestionId")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")

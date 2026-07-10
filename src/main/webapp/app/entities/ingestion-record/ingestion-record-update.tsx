@@ -4,10 +4,10 @@ import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
+import { convertDateTimeFromServer } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getEntities as getFinancialTransactions } from 'app/entities/financial-transaction/financial-transaction.reducer';
+import { getEntitiesWhereIngestionRecordIsNull } from 'app/entities/financial-transaction/financial-transaction.reducer';
 import { getEntities as getTransactionIngestions } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
 import { IngestionRecordStatus } from 'app/shared/model/enumerations/ingestion-record-status.model';
 import { createEntity, getEntity, reset, updateEntity } from './ingestion-record.reducer';
@@ -20,7 +20,7 @@ export const IngestionRecordUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const financialTransactions = useAppSelector(state => state.financialTransaction.entities);
+  const ingestionRecordParentCandidates = useAppSelector(state => state.financialTransaction.ingestionRecordParentCandidates ?? []);
   const transactionIngestions = useAppSelector(state => state.transactionIngestion.entities);
   const ingestionRecordEntity = useAppSelector(state => state.ingestionRecord.entity);
   const loading = useAppSelector(state => state.ingestionRecord.loading);
@@ -35,12 +35,11 @@ export const IngestionRecordUpdate = () => {
   useEffect(() => {
     if (isNew) {
       dispatch(reset());
+      dispatch(getEntitiesWhereIngestionRecordIsNull());
+      dispatch(getTransactionIngestions({}));
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getFinancialTransactions({}));
-    dispatch(getTransactionIngestions({}));
   }, []);
 
   useEffect(() => {
@@ -56,14 +55,28 @@ export const IngestionRecordUpdate = () => {
     if (values.recordIndex !== undefined && typeof values.recordIndex !== 'number') {
       values.recordIndex = Number(values.recordIndex);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
 
-    const entity = {
-      ...ingestionRecordEntity,
-      ...values,
-      financialTransaction: financialTransactions.find(it => it.id.toString() === values.financialTransaction?.toString()),
-      transactionIngestion: transactionIngestions.find(it => it.id.toString() === values.transactionIngestion?.toString()),
-    };
+    const entity = isNew
+      ? {
+          recordIndex: values.recordIndex,
+          externalRecordId: values.externalRecordId,
+          status: values.status,
+          rawData: values.rawData,
+          errorCode: values.errorCode,
+          errorMessage: values.errorMessage,
+          transactionIngestion: transactionIngestions.find(it => it.id.toString() === values.transactionIngestion?.toString()),
+          financialTransaction: values.financialTransaction
+            ? ingestionRecordParentCandidates.find(it => it.id.toString() === values.financialTransaction?.toString())
+            : undefined,
+        }
+      : {
+          ...ingestionRecordEntity,
+          ...values,
+          recordIndex: ingestionRecordEntity?.recordIndex,
+          transactionIngestion: ingestionRecordEntity?.transactionIngestion,
+          financialTransaction: ingestionRecordEntity?.financialTransaction,
+          createdAt: ingestionRecordEntity?.createdAt,
+        };
 
     if (isNew) {
       dispatch(createEntity(entity));
@@ -75,7 +88,7 @@ export const IngestionRecordUpdate = () => {
   const defaultValues = () =>
     isNew
       ? {
-          createdAt: displayDefaultDateTime(),
+          status: 'CREATED',
         }
       : {
           status: 'CREATED',
@@ -84,6 +97,12 @@ export const IngestionRecordUpdate = () => {
           financialTransaction: ingestionRecordEntity?.financialTransaction?.id,
           transactionIngestion: ingestionRecordEntity?.transactionIngestion?.id,
         };
+
+  const financialTransactionOptions = isNew
+    ? ingestionRecordParentCandidates
+    : ingestionRecordEntity?.financialTransaction
+      ? [ingestionRecordEntity.financialTransaction]
+      : [];
 
   return (
     <div>
@@ -116,6 +135,7 @@ export const IngestionRecordUpdate = () => {
                 name="recordIndex"
                 data-cy="recordIndex"
                 type="text"
+                readOnly={!isNew}
                 validate={{
                   required: { value: true, message: translate('entity.validation.required') },
                   min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
@@ -172,27 +192,28 @@ export const IngestionRecordUpdate = () => {
                   maxLength: { value: 1000, message: translate('entity.validation.maxlength', { max: 1000 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.ingestionRecord.createdAt')}
-                id="ingestion-record-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
+              {!isNew ? (
+                <ValidatedField
+                  label={translate('fintrackApp.ingestionRecord.createdAt')}
+                  id="ingestion-record-createdAt"
+                  name="createdAt"
+                  data-cy="createdAt"
+                  type="datetime-local"
+                  placeholder="YYYY-MM-DD HH:mm"
+                  readOnly
+                />
+              ) : null}
               <ValidatedField
                 id="ingestion-record-financialTransaction"
                 name="financialTransaction"
                 data-cy="financialTransaction"
                 label={translate('fintrackApp.ingestionRecord.financialTransaction')}
                 type="select"
+                disabled={!isNew}
               >
                 <option value="" key="0" />
-                {financialTransactions
-                  ? financialTransactions.map(otherEntity => (
+                {financialTransactionOptions
+                  ? financialTransactionOptions.map(otherEntity => (
                       <option value={otherEntity.id} key={otherEntity.id}>
                         {otherEntity.id}
                       </option>
@@ -205,6 +226,7 @@ export const IngestionRecordUpdate = () => {
                 data-cy="transactionIngestion"
                 label={translate('fintrackApp.ingestionRecord.transactionIngestion')}
                 type="select"
+                disabled={!isNew}
                 required
               >
                 <option value="" key="0" />

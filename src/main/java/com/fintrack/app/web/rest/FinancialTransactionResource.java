@@ -208,6 +208,17 @@ public class FinancialTransactionResource {
     }
 
     /**
+     * {@code GET  /financial-transactions/ingestion-record-is-null} : get transactions without ingestion record metadata (scoped).
+     *
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list in body.
+     */
+    @GetMapping("/ingestion-record-is-null")
+    public List<FinancialTransactionDTO> getAllFinancialTransactionsWhereIngestionRecordIsNull() {
+        LOG.debug("REST request to get FinancialTransactions where IngestionRecord is null");
+        return financialTransactionService.findAllWhereIngestionRecordIsNull();
+    }
+
+    /**
      * {@code GET  /financial-transactions/:id} : get the "id" financialTransaction.
      *
      * @param id the id of the financialTransactionDTO to retrieve.

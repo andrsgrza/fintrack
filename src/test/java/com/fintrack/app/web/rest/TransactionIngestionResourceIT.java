@@ -1672,6 +1672,13 @@ class TransactionIngestionResourceIT {
             .extracting(TransactionIngestionDTO::getId)
             .contains(apiIngestion.getId())
             .doesNotContain(otherApiIngestion.getId(), transactionIngestion.getId());
+
+        restTransactionIngestionMockMvc
+            .perform(get(ENTITY_API_URL + "/api-ingestion-is-null"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id").value(hasItem(apiIngestion.getId().intValue())))
+            .andExpect(jsonPath("$[*].id").value(not(hasItem(otherApiIngestion.getId().intValue()))))
+            .andExpect(jsonPath("$[*].id").value(not(hasItem(transactionIngestion.getId().intValue()))));
     }
 
     private TransactionIngestion saveIngestionOnOtherUsersAccount() {
