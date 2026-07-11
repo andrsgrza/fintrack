@@ -52,4 +52,11 @@ public interface TagRepository extends JpaRepository<Tag, Long>, JpaSpecificatio
 
     @Query("select tag from Tag tag left join fetch tag.user where tag.user.login = :login")
     List<Tag> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
+
+    @Query(
+        "select case when count(tag) > 0 then true else false end from Tag tag " +
+        "where tag.user.id = :userId and lower(trim(tag.name)) = lower(trim(:name)) " +
+        "and (:excludeId is null or tag.id <> :excludeId)"
+    )
+    boolean existsByUserIdAndNormalizedName(@Param("userId") Long userId, @Param("name") String name, @Param("excludeId") Long excludeId);
 }

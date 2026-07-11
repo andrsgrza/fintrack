@@ -1,5 +1,7 @@
 package com.fintrack.app.web.rest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FinancialAccountQueryService;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.criteria.FinancialAccountCriteria;
@@ -38,12 +40,16 @@ public class FinancialAccountResource {
 
     private final FinancialAccountQueryService financialAccountQueryService;
 
+    private final ObjectMapper objectMapper;
+
     public FinancialAccountResource(
         FinancialAccountService financialAccountService,
-        FinancialAccountQueryService financialAccountQueryService
+        FinancialAccountQueryService financialAccountQueryService,
+        ObjectMapper objectMapper
     ) {
         this.financialAccountService = financialAccountService;
         this.financialAccountQueryService = financialAccountQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -60,7 +66,11 @@ public class FinancialAccountResource {
         if (financialAccountDTO.getId() != null) {
             throw new BadRequestAlertException("A new financialAccount cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        financialAccountDTO = financialAccountService.save(financialAccountDTO);
+        try {
+            financialAccountDTO = financialAccountService.save(financialAccountDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.created(new URI("/api/financial-accounts/" + financialAccountDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, financialAccountDTO.getId().toString()))
             .body(financialAccountDTO);
@@ -93,7 +103,11 @@ public class FinancialAccountResource {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        financialAccountDTO = financialAccountService.update(financialAccountDTO);
+        try {
+            financialAccountDTO = financialAccountService.update(financialAccountDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, financialAccountDTO.getId().toString()))
             .body(financialAccountDTO);
@@ -103,7 +117,7 @@ public class FinancialAccountResource {
      * {@code PATCH  /financial-accounts/:id} : Partial updates given fields of an existing financialAccount, field will ignore if it is null
      *
      * @param id the id of the financialAccountDTO to save.
-     * @param financialAccountDTO the financialAccountDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated financialAccountDTO,
      * or with status {@code 400 (Bad Request)} if the financialAccountDTO is not valid,
      * or with status {@code 404 (Not Found)} if the financialAccountDTO is not found,
@@ -113,11 +127,23 @@ public class FinancialAccountResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<FinancialAccountDTO> partialUpdateFinancialAccount(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody FinancialAccountDTO financialAccountDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update FinancialAccount partially : {}, {}", id, financialAccountDTO);
+        LOG.debug("REST request to partial update FinancialAccount partially : {}, {}", id, patchNode);
+        if (patchNode.has("currency") && patchNode.get("currency").isNull()) {
+            throw new BadRequestAlertException("Currency cannot be changed", ENTITY_NAME, "invalid");
+        }
+        if (patchNode.has("accountType") && patchNode.get("accountType").isNull()) {
+            throw new BadRequestAlertException("Account type cannot be changed", ENTITY_NAME, "invalid");
+        }
+        FinancialAccountDTO financialAccountDTO;
+        try {
+            financialAccountDTO = objectMapper.treeToValue(patchNode, FinancialAccountDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (financialAccountDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            financialAccountDTO.setId(id);
         }
         if (!Objects.equals(id, financialAccountDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
@@ -127,7 +153,12 @@ public class FinancialAccountResource {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        Optional<FinancialAccountDTO> result = financialAccountService.partialUpdate(financialAccountDTO);
+        Optional<FinancialAccountDTO> result;
+        try {
+            result = financialAccountService.partialUpdate(financialAccountDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
 
         return ResponseUtil.wrapOrNotFound(
             result,

@@ -1,5 +1,7 @@
 package com.fintrack.app.web.rest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.BudgetQueryService;
 import com.fintrack.app.service.BudgetService;
 import com.fintrack.app.service.criteria.BudgetCriteria;
@@ -38,9 +40,12 @@ public class BudgetResource {
 
     private final BudgetQueryService budgetQueryService;
 
-    public BudgetResource(BudgetService budgetService, BudgetQueryService budgetQueryService) {
+    private final ObjectMapper objectMapper;
+
+    public BudgetResource(BudgetService budgetService, BudgetQueryService budgetQueryService, ObjectMapper objectMapper) {
         this.budgetService = budgetService;
         this.budgetQueryService = budgetQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -107,7 +112,7 @@ public class BudgetResource {
      * {@code PATCH  /budgets/:id} : Partial updates given fields of an existing budget, field will ignore if it is null
      *
      * @param id the id of the budgetDTO to save.
-     * @param budgetDTO the budgetDTO to update.
+     * @param patchNode the fields to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated budgetDTO,
      * or with status {@code 400 (Bad Request)} if the budgetDTO is not valid,
      * or with status {@code 404 (Not Found)} if the budgetDTO is not found,
@@ -117,11 +122,17 @@ public class BudgetResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<BudgetDTO> partialUpdateBudget(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody BudgetDTO budgetDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update Budget partially : {}, {}", id, budgetDTO);
+        LOG.debug("REST request to partial update Budget partially : {}, {}", id, patchNode);
+        BudgetDTO budgetDTO;
+        try {
+            budgetDTO = objectMapper.treeToValue(patchNode, BudgetDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (budgetDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            budgetDTO.setId(id);
         }
         if (!Objects.equals(id, budgetDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
@@ -133,7 +144,7 @@ public class BudgetResource {
 
         Optional<BudgetDTO> result;
         try {
-            result = budgetService.partialUpdate(budgetDTO);
+            result = budgetService.partialUpdate(budgetDTO, patchNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }

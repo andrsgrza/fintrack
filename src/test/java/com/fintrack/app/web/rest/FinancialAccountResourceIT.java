@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
@@ -1286,8 +1287,6 @@ class FinancialAccountResourceIT {
         updatedFinancialAccount
             .name(UPDATED_NAME)
             .institutionName(UPDATED_INSTITUTION_NAME)
-            .accountType(UPDATED_ACCOUNT_TYPE)
-            .currency(UPDATED_CURRENCY)
             .initialBalance(UPDATED_INITIAL_BALANCE)
             .initialBalanceDate(UPDATED_INITIAL_BALANCE_DATE)
             .lastFourDigits(UPDATED_LAST_FOUR_DIGITS)
@@ -1382,23 +1381,25 @@ class FinancialAccountResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the financialAccount using partial update
-        FinancialAccount partialUpdatedFinancialAccount = new FinancialAccount();
-        partialUpdatedFinancialAccount.setId(financialAccount.getId());
-
-        partialUpdatedFinancialAccount.name(UPDATED_NAME).institutionName(UPDATED_INSTITUTION_NAME).active(UPDATED_ACTIVE);
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+        patchJson.put("institutionName", UPDATED_INSTITUTION_NAME);
+        patchJson.put("active", UPDATED_ACTIVE);
 
         restFinancialAccountMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedFinancialAccount.getId())
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedFinancialAccount))
+                    .content(om.writeValueAsBytes(patchJson))
             )
             .andExpect(status().isOk());
 
         // Validate the FinancialAccount in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        FinancialAccount partialUpdatedFinancialAccount = new FinancialAccount();
+        partialUpdatedFinancialAccount.setId(financialAccount.getId());
+        partialUpdatedFinancialAccount.name(UPDATED_NAME).institutionName(UPDATED_INSTITUTION_NAME).active(UPDATED_ACTIVE);
         assertFinancialAccountUpdatableFieldsEquals(
             createUpdateProxyForBean(partialUpdatedFinancialAccount, financialAccount),
             getPersistedFinancialAccount(financialAccount)
@@ -1413,15 +1414,35 @@ class FinancialAccountResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the financialAccount using partial update
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+        patchJson.put("institutionName", UPDATED_INSTITUTION_NAME);
+        patchJson.put("initialBalance", UPDATED_INITIAL_BALANCE);
+        patchJson.put("initialBalanceDate", UPDATED_INITIAL_BALANCE_DATE.toString());
+        patchJson.put("lastFourDigits", UPDATED_LAST_FOUR_DIGITS);
+        patchJson.put("description", UPDATED_DESCRIPTION);
+        patchJson.put("color", UPDATED_COLOR);
+        patchJson.put("icon", UPDATED_ICON);
+        patchJson.put("active", UPDATED_ACTIVE);
+        patchJson.put("createdAt", UPDATED_CREATED_AT.toString());
+        patchJson.put("updatedAt", UPDATED_UPDATED_AT.toString());
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk());
+
+        // Validate the FinancialAccount in the database
+
+        assertSameRepositoryCount(databaseSizeBeforeUpdate);
         FinancialAccount partialUpdatedFinancialAccount = new FinancialAccount();
         partialUpdatedFinancialAccount.setId(financialAccount.getId());
-
         partialUpdatedFinancialAccount
             .name(UPDATED_NAME)
             .institutionName(UPDATED_INSTITUTION_NAME)
-            .accountType(UPDATED_ACCOUNT_TYPE)
-            .currency(UPDATED_CURRENCY)
             .initialBalance(UPDATED_INITIAL_BALANCE)
             .initialBalanceDate(UPDATED_INITIAL_BALANCE_DATE)
             .lastFourDigits(UPDATED_LAST_FOUR_DIGITS)
@@ -1431,20 +1452,8 @@ class FinancialAccountResourceIT {
             .active(UPDATED_ACTIVE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-
-        restFinancialAccountMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedFinancialAccount.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedFinancialAccount))
-            )
-            .andExpect(status().isOk());
-
-        // Validate the FinancialAccount in the database
-
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
         assertFinancialAccountUpdatableFieldsEquals(
-            partialUpdatedFinancialAccount,
+            createUpdateProxyForBean(partialUpdatedFinancialAccount, financialAccount),
             getPersistedFinancialAccount(partialUpdatedFinancialAccount)
         );
     }
@@ -1690,25 +1699,159 @@ class FinancialAccountResourceIT {
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
         User otherUser = createOtherUser(em);
 
-        FinancialAccountDTO financialAccountDTO = new FinancialAccountDTO();
-        financialAccountDTO.setId(financialAccount.getId());
-        financialAccountDTO.setName(UPDATED_NAME);
-        UserDTO otherUserDTO = new UserDTO();
-        otherUserDTO.setId(otherUser.getId());
-        otherUserDTO.setLogin(otherUser.getLogin());
-        financialAccountDTO.setUser(otherUserDTO);
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+        ObjectNode userNode = patchJson.putObject("user");
+        userNode.put("id", otherUser.getId());
+        userNode.put("login", otherUser.getLogin());
 
         restFinancialAccountMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(financialAccountDTO))
+                    .content(om.writeValueAsBytes(patchJson))
             )
             .andExpect(status().isOk());
 
         FinancialAccount persistedFinancialAccount = financialAccountRepository.findById(financialAccount.getId()).orElseThrow();
         assertThat(persistedFinancialAccount.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
         assertThat(persistedFinancialAccount.getName()).isEqualTo(UPDATED_NAME);
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountCannotChangeCurrency() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setCurrency(UPDATED_CURRENCY);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotChangeCurrency() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("currency", UPDATED_CURRENCY.toString());
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountCannotChangeAccountType() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setAccountType(UPDATED_ACCOUNT_TYPE);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotChangeAccountType() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("accountType", UPDATED_ACCOUNT_TYPE.toString());
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCanChangeInitialBalance() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("initialBalance", UPDATED_INITIAL_BALANCE);
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.initialBalance").value(UPDATED_INITIAL_BALANCE.doubleValue()));
+
+        assertThat(getPersistedFinancialAccount(financialAccount).getInitialBalance()).isEqualByComparingTo(UPDATED_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCanChangeInitialBalanceDate() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("initialBalanceDate", UPDATED_INITIAL_BALANCE_DATE.toString());
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.initialBalanceDate").value(UPDATED_INITIAL_BALANCE_DATE.toString()));
+
+        assertThat(getPersistedFinancialAccount(financialAccount).getInitialBalanceDate()).isEqualTo(UPDATED_INITIAL_BALANCE_DATE);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCanChangeActive() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("active", UPDATED_ACTIVE);
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.active").value(UPDATED_ACTIVE));
+
+        assertThat(getPersistedFinancialAccount(financialAccount).getActive()).isEqualTo(UPDATED_ACTIVE);
     }
 
     @Test

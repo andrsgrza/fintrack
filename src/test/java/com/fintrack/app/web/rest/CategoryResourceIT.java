@@ -6,13 +6,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
-import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
@@ -1424,6 +1424,259 @@ class CategoryResourceIT {
 
         assertThat(returnedCategoryDTO.getParentCategory().getId()).isEqualTo(parentCategory.getId());
         insertedCategory = categoryMapper.toEntity(returnedCategoryDTO);
+    }
+
+    @Test
+    @Transactional
+    void createDuplicateRootCategorySameUserSameTypeDifferentCaseAndSpacingReturnsBadRequest() throws Exception {
+        Category existingCategory = createEntity(em);
+        existingCategory.name("Comida");
+        categoryRepository.saveAndFlush(existingCategory);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(createEntity(em));
+        categoryDTO.setId(null);
+        categoryDTO.setName(" COMIDA ");
+
+        restCategoryMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void createSameRootCategoryNameForDifferentUserSucceeds() throws Exception {
+        Category existingCategory = createEntity(em);
+        existingCategory.name("Comida");
+        categoryRepository.saveAndFlush(existingCategory);
+
+        User otherUser = createOtherUser(em);
+        CategoryDTO categoryDTO = categoryMapper.toDto(createEntity(em));
+        categoryDTO.setId(null);
+        categoryDTO.setName("Comida");
+
+        restCategoryMockMvc
+            .perform(
+                post(ENTITY_API_URL)
+                    .with(user(otherUser.getLogin()).roles("USER"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Comida"));
+    }
+
+    @Test
+    @Transactional
+    void createSameRootCategoryNameSameUserDifferentCategoryTypeSucceeds() throws Exception {
+        Category existingCategory = createEntity(em);
+        existingCategory.name("Comida");
+        existingCategory.categoryType(CategoryType.EXPENSE);
+        categoryRepository.saveAndFlush(existingCategory);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(createEntity(em));
+        categoryDTO.setId(null);
+        categoryDTO.setName("Comida");
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+
+        restCategoryMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Comida"))
+            .andExpect(jsonPath("$.categoryType").value(CategoryType.INCOME.toString()));
+    }
+
+    @Test
+    @Transactional
+    void createDuplicateChildCategoryUnderSameParentReturnsBadRequest() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        Category existingChild = createEntity(em);
+        existingChild.setName("Comida");
+        existingChild.setParentCategory(parentCategory);
+        categoryRepository.saveAndFlush(existingChild);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(createEntity(em));
+        categoryDTO.setId(null);
+        categoryDTO.setName(" comida ");
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(parentCategory.getId());
+        categoryDTO.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void createSameChildCategoryNameUnderDifferentParentSucceeds() throws Exception {
+        Category parentOne = createEntity(em);
+        parentOne.setName("PARENT_ONE");
+        parentOne = categoryRepository.saveAndFlush(parentOne);
+
+        Category parentTwo = createEntity(em);
+        parentTwo.setName("PARENT_TWO");
+        parentTwo = categoryRepository.saveAndFlush(parentTwo);
+
+        Category existingChild = createEntity(em);
+        existingChild.setName("Comida");
+        existingChild.setParentCategory(parentOne);
+        categoryRepository.saveAndFlush(existingChild);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(createEntity(em));
+        categoryDTO.setId(null);
+        categoryDTO.setName("Comida");
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(parentTwo.getId());
+        categoryDTO.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Comida"))
+            .andExpect(jsonPath("$.parentCategory.id").value(parentTwo.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryIntoParentWhereSiblingNameExistsReturnsBadRequest() throws Exception {
+        Category targetParent = createEntity(em);
+        targetParent.setName("TARGET_PARENT");
+        targetParent = categoryRepository.saveAndFlush(targetParent);
+
+        Category sibling = createEntity(em);
+        sibling.setName("Comida");
+        sibling.setParentCategory(targetParent);
+        categoryRepository.saveAndFlush(sibling);
+
+        Category otherParent = createEntity(em);
+        otherParent.setName("OTHER_PARENT");
+        otherParent = categoryRepository.saveAndFlush(otherParent);
+
+        Category movingCategory = createEntity(em);
+        movingCategory.setName("Comida");
+        movingCategory.setParentCategory(otherParent);
+        insertedCategory = categoryRepository.saveAndFlush(movingCategory);
+
+        CategoryDTO patchPayload = new CategoryDTO();
+        patchPayload.setId(movingCategory.getId());
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(targetParent.getId());
+        patchPayload.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, movingCategory.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryTypeIntoScopeWhereSiblingNameExistsReturnsBadRequest() throws Exception {
+        Category expenseCategory = createEntity(em);
+        expenseCategory.setName("Comida");
+        expenseCategory.setCategoryType(CategoryType.EXPENSE);
+        categoryRepository.saveAndFlush(expenseCategory);
+
+        Category incomeCategory = createEntity(em);
+        incomeCategory.setName("Comida");
+        incomeCategory.setCategoryType(CategoryType.INCOME);
+        insertedCategory = categoryRepository.saveAndFlush(incomeCategory);
+
+        CategoryDTO patchPayload = new CategoryDTO();
+        patchPayload.setId(incomeCategory.getId());
+        patchPayload.setCategoryType(CategoryType.EXPENSE);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, incomeCategory.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminEditingForeignCategoryCannotDuplicateWithinForeignOwnerSiblingScope() throws Exception {
+        User foreignOwner = createOtherUser(em);
+
+        Category parentCategory = createEntity(em);
+        parentCategory.setUser(foreignOwner);
+        parentCategory.setName("FOREIGN_PARENT");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        Category firstChild = createEntity(em);
+        firstChild.setUser(foreignOwner);
+        firstChild.setName("Comida");
+        firstChild.setParentCategory(parentCategory);
+        categoryRepository.saveAndFlush(firstChild);
+
+        Category secondChild = createEntity(em);
+        secondChild.setUser(foreignOwner);
+        secondChild.setName("Viajes");
+        secondChild.setParentCategory(parentCategory);
+        insertedCategory = categoryRepository.saveAndFlush(secondChild);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(secondChild);
+        categoryDTO.setName("comida");
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void createAndUpdateCategoryNameTrimPersists() throws Exception {
+        CategoryDTO createDTO = categoryMapper.toDto(createEntity(em));
+        createDTO.setId(null);
+        createDTO.setName(" Comida ");
+
+        CategoryDTO createdCategory = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(createDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Comida"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
+
+        insertedCategory = categoryMapper.toEntity(createdCategory);
+
+        CategoryDTO updateDTO = categoryMapper.toDto(getPersistedCategory(insertedCategory));
+        updateDTO.setName(" Viajes ");
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, updateDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(updateDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Viajes"));
+
+        assertThat(getPersistedCategory(insertedCategory).getName()).isEqualTo("Viajes");
     }
 
     protected long getRepositoryCount() {

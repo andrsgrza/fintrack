@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
@@ -1266,23 +1267,25 @@ class BudgetResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the budget using partial update
-        Budget partialUpdatedBudget = new Budget();
-        partialUpdatedBudget.setId(budget.getId());
-
-        partialUpdatedBudget.amount(UPDATED_AMOUNT).period(UPDATED_PERIOD).startDate(UPDATED_START_DATE);
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("amount", UPDATED_AMOUNT);
+        patchJson.put("period", UPDATED_PERIOD.toString());
+        patchJson.put("startDate", UPDATED_START_DATE.toString());
 
         restBudgetMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedBudget.getId())
+                patch(ENTITY_API_URL_ID, budget.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedBudget))
+                    .content(om.writeValueAsBytes(patchJson))
             )
             .andExpect(status().isOk());
 
         // Validate the Budget in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        Budget partialUpdatedBudget = new Budget();
+        partialUpdatedBudget.setId(budget.getId());
+        partialUpdatedBudget.amount(UPDATED_AMOUNT).period(UPDATED_PERIOD).startDate(UPDATED_START_DATE);
         assertBudgetUpdatableFieldsEquals(createUpdateProxyForBean(partialUpdatedBudget, budget), getPersistedBudget(budget));
     }
 
@@ -1294,10 +1297,32 @@ class BudgetResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the budget using partial update
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+        patchJson.put("amount", UPDATED_AMOUNT);
+        patchJson.put("currency", UPDATED_CURRENCY.toString());
+        patchJson.put("period", UPDATED_PERIOD.toString());
+        patchJson.put("startDate", UPDATED_START_DATE.toString());
+        patchJson.put("endDate", UPDATED_END_DATE.toString());
+        patchJson.put("status", UPDATED_STATUS.toString());
+        patchJson.put("tagMatchMode", UPDATED_TAG_MATCH_MODE.toString());
+        patchJson.put("warningPercentage", UPDATED_WARNING_PERCENTAGE);
+        patchJson.put("createdAt", UPDATED_CREATED_AT.toString());
+        patchJson.put("updatedAt", UPDATED_UPDATED_AT.toString());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk());
+
+        // Validate the Budget in the database
+
+        assertSameRepositoryCount(databaseSizeBeforeUpdate);
         Budget partialUpdatedBudget = new Budget();
         partialUpdatedBudget.setId(budget.getId());
-
         partialUpdatedBudget
             .name(UPDATED_NAME)
             .amount(UPDATED_AMOUNT)
@@ -1310,19 +1335,7 @@ class BudgetResourceIT {
             .warningPercentage(UPDATED_WARNING_PERCENTAGE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
-
-        restBudgetMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedBudget.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedBudget))
-            )
-            .andExpect(status().isOk());
-
-        // Validate the Budget in the database
-
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertBudgetUpdatableFieldsEquals(partialUpdatedBudget, getPersistedBudget(partialUpdatedBudget));
+        assertBudgetUpdatableFieldsEquals(createUpdateProxyForBean(partialUpdatedBudget, budget), getPersistedBudget(partialUpdatedBudget));
     }
 
     @Test
@@ -1562,19 +1575,17 @@ class BudgetResourceIT {
         insertedBudget = budgetRepository.saveAndFlush(budget);
         User otherUser = createOtherUser(em);
 
-        BudgetDTO budgetDTO = new BudgetDTO();
-        budgetDTO.setId(budget.getId());
-        budgetDTO.setName(UPDATED_NAME);
-        UserDTO otherUserDTO = new UserDTO();
-        otherUserDTO.setId(otherUser.getId());
-        otherUserDTO.setLogin(otherUser.getLogin());
-        budgetDTO.setUser(otherUserDTO);
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+        ObjectNode userNode = patchJson.putObject("user");
+        userNode.put("id", otherUser.getId());
+        userNode.put("login", otherUser.getLogin());
 
         restBudgetMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, budgetDTO.getId())
+                patch(ENTITY_API_URL_ID, budget.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(budgetDTO))
+                    .content(om.writeValueAsBytes(patchJson))
             )
             .andExpect(status().isOk());
 
@@ -1745,6 +1756,239 @@ class BudgetResourceIT {
 
         assertThat(returnedBudgetDTO.getAccounts()).extracting(FinancialAccountDTO::getId).contains(ownAccount.getId());
         insertedBudget = budgetMapper.toEntity(returnedBudgetDTO);
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetScalarPreservesM2mLinks() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
+        em.flush();
+
+        budget.addAccounts(ownAccount);
+        budget.addTags(ownTag);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME))
+            .andExpect(jsonPath("$.accounts[*].id").value(hasItem(ownAccount.getId().intValue())))
+            .andExpect(jsonPath("$.tags[*].id").value(hasItem(ownTag.getId().intValue())));
+
+        Budget persistedBudget = getPersistedBudget(budget);
+        assertThat(persistedBudget.getAccounts()).extracting(FinancialAccount::getId).contains(ownAccount.getId());
+        assertThat(persistedBudget.getTags()).extracting(Tag::getId).contains(ownTag.getId());
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetNullTagsClearsTags() throws Exception {
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
+        em.flush();
+
+        budget.addTags(ownTag);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putNull("tags");
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tags").isEmpty());
+
+        assertThat(getPersistedBudget(budget).getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetEmptyTagsClearsTags() throws Exception {
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
+        em.flush();
+
+        budget.addTags(ownTag);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putArray("tags");
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tags").isEmpty());
+
+        assertThat(getPersistedBudget(budget).getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetEmptyAccountsClearsAccounts() throws Exception {
+        FinancialAccount ownAccount = FinancialAccountResourceIT.createEntity(em);
+        ownAccount = em.merge(ownAccount);
+        em.flush();
+
+        budget.addAccounts(ownAccount);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putArray("accounts");
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accounts").isEmpty());
+
+        assertThat(getPersistedBudget(budget).getAccounts()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetEmptyCategoriesClearsCategories() throws Exception {
+        Category ownCategory = CategoryResourceIT.createEntity(em);
+        ownCategory = em.merge(ownCategory);
+        em.flush();
+
+        budget.addCategories(ownCategory);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putArray("categories");
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.categories").isEmpty());
+
+        assertThat(getPersistedBudget(budget).getCategories()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetReplacesTags() throws Exception {
+        Tag firstTag = TagResourceIT.createEntity(em);
+        firstTag = em.merge(firstTag);
+        Tag secondTag = TagResourceIT.createEntity(em);
+        secondTag.name("Second tag");
+        secondTag = em.merge(secondTag);
+        em.flush();
+
+        budget.addTags(firstTag);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putArray("tags").addObject().put("id", secondTag.getId());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tags[*].id").value(hasItem(secondTag.getId().intValue())))
+            .andExpect(jsonPath("$.tags[*].id").value(not(hasItem(firstTag.getId().intValue()))));
+
+        assertThat(getPersistedBudget(budget).getTags()).extracting(Tag::getId).containsExactly(secondTag.getId());
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetForeignAccountFails() throws Exception {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        FinancialAccount otherUsersAccount = FinancialAccountResourceIT.createEntity(em);
+        otherUsersAccount.setUser(createOtherUser(em));
+        otherUsersAccount = em.merge(otherUsersAccount);
+        em.flush();
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putArray("accounts").addObject().put("id", otherUsersAccount.getId());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("budget"));
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetForeignCategoryFails() throws Exception {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(createOtherUser(em));
+        otherUsersCategory = em.merge(otherUsersCategory);
+        em.flush();
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putArray("categories").addObject().put("id", otherUsersCategory.getId());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("budget"));
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetForeignTagFails() throws Exception {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        Tag otherUsersTag = TagResourceIT.createEntity(em);
+        otherUsersTag.setUser(createOtherUser(em));
+        otherUsersTag = em.merge(otherUsersTag);
+        em.flush();
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putArray("tags").addObject().put("id", otherUsersTag.getId());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("budget"));
     }
 
     protected long getRepositoryCount() {
