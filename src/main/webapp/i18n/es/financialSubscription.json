@@ -12,7 +12,8 @@
       "updated": "Un Financial Subscription ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Financial Subscription ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Financial Subscription {{ id }}?"
+        "title": "¿Eliminar suscripción?",
+        "message": "Esto eliminará la suscripción. Las transacciones vinculadas a esta suscripción no se eliminarán; simplemente dejarán de estar asociadas a ella. Las reglas que usen esta suscripción como destino se desactivarán. Esta acción no se puede deshacer."
       },
       "detail": {
         "title": "Financial Subscription"

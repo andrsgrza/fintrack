@@ -5,7 +5,10 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.repository.CategoryRepository;
+import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
@@ -13,7 +16,9 @@ import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.FinancialSubscriptionMapper;
+import java.time.LocalDate;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -38,7 +43,7 @@ public class FinancialSubscriptionService {
 
     private final CurrentUserService currentUserService;
 
-    private final FinancialAccountService financialAccountService;
+    private final FinancialAccountRepository financialAccountRepository;
 
     private final CategoryRepository categoryRepository;
 
@@ -48,14 +53,14 @@ public class FinancialSubscriptionService {
         FinancialSubscriptionRepository financialSubscriptionRepository,
         FinancialSubscriptionMapper financialSubscriptionMapper,
         CurrentUserService currentUserService,
-        FinancialAccountService financialAccountService,
+        FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository
     ) {
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.financialSubscriptionMapper = financialSubscriptionMapper;
         this.currentUserService = currentUserService;
-        this.financialAccountService = financialAccountService;
+        this.financialAccountRepository = financialAccountRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
     }
@@ -70,7 +75,9 @@ public class FinancialSubscriptionService {
         LOG.debug("Request to save FinancialSubscription : {}", financialSubscriptionDTO);
         FinancialSubscription financialSubscription = financialSubscriptionMapper.toEntity(financialSubscriptionDTO);
         financialSubscription.setUser(currentUserService.getCurrentUser());
-        applyRelationships(financialSubscription, financialSubscriptionDTO);
+        applyRelationships(financialSubscription, financialSubscriptionDTO, financialSubscription.getUser().getLogin());
+        validateDates(financialSubscription);
+        validateAccountCurrency(financialSubscription);
         financialSubscription = financialSubscriptionRepository.save(financialSubscription);
         return financialSubscriptionMapper.toDto(financialSubscription);
     }
@@ -86,7 +93,10 @@ public class FinancialSubscriptionService {
         FinancialSubscription existingFinancialSubscription = findAccessibleEntity(financialSubscriptionDTO.getId()).orElseThrow();
         FinancialSubscription financialSubscription = financialSubscriptionMapper.toEntity(financialSubscriptionDTO);
         financialSubscription.setUser(existingFinancialSubscription.getUser());
-        applyRelationships(financialSubscription, financialSubscriptionDTO);
+        validateStructuralFieldsImmutable(existingFinancialSubscription, financialSubscription);
+        applyRelationships(financialSubscription, financialSubscriptionDTO, existingFinancialSubscription.getUser().getLogin());
+        validateDates(financialSubscription);
+        validateAccountCurrency(financialSubscription);
         financialSubscription = financialSubscriptionRepository.save(financialSubscription);
         return financialSubscriptionMapper.toDto(financialSubscription);
     }
@@ -113,8 +123,25 @@ public class FinancialSubscriptionService {
 
         return findAccessibleEntity(financialSubscriptionDTO.getId())
             .map(existingFinancialSubscription -> {
+                CurrencyCode previousCurrency = existingFinancialSubscription.getCurrency();
+                RecurrenceUnit previousRecurrenceUnit = existingFinancialSubscription.getRecurrenceUnit();
+                Integer previousIntervalCount = existingFinancialSubscription.getIntervalCount();
+
                 financialSubscriptionMapper.partialUpdate(existingFinancialSubscription, financialSubscriptionDTO);
-                applyRelationshipsForPartialUpdate(existingFinancialSubscription, financialSubscriptionDTO, patchNode);
+                applyRelationshipsForPartialUpdate(
+                    existingFinancialSubscription,
+                    financialSubscriptionDTO,
+                    patchNode,
+                    existingFinancialSubscription.getUser().getLogin()
+                );
+                validateStructuralFieldsImmutableAfterPartialUpdate(
+                    existingFinancialSubscription,
+                    previousCurrency,
+                    previousRecurrenceUnit,
+                    previousIntervalCount
+                );
+                validateDates(existingFinancialSubscription);
+                validateAccountCurrency(existingFinancialSubscription);
                 return existingFinancialSubscription;
             })
             .map(financialSubscriptionRepository::save)
@@ -170,8 +197,16 @@ public class FinancialSubscriptionService {
         if (financialSubscription.isEmpty()) {
             return false;
         }
-        financialSubscriptionRepository.deleteById(id);
+        Long subscriptionId = financialSubscription.orElseThrow().getId();
+        unlinkFinancialSubscriptionFromAllRelationships(subscriptionId);
+        financialSubscriptionRepository.deleteById(subscriptionId);
         return true;
+    }
+
+    private void unlinkFinancialSubscriptionFromAllRelationships(Long subscriptionId) {
+        financialSubscriptionRepository.clearFinancialTransactionSubscriptionReferences(subscriptionId);
+        financialSubscriptionRepository.clearTransactionRuleResultingSubscriptionReferences(subscriptionId);
+        financialSubscriptionRepository.deleteTagLinksByFinancialSubscriptionId(subscriptionId);
     }
 
     private Optional<FinancialSubscription> findAccessibleEntity(Long id) {
@@ -181,57 +216,64 @@ public class FinancialSubscriptionService {
         return financialSubscriptionRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void applyRelationships(FinancialSubscription financialSubscription, FinancialSubscriptionDTO financialSubscriptionDTO) {
-        financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount()));
-        financialSubscription.setCategory(resolveOptionalCategory(financialSubscriptionDTO.getCategory()));
-        financialSubscription.setTags(resolveTags(financialSubscriptionDTO.getTags()));
+    private void applyRelationships(
+        FinancialSubscription financialSubscription,
+        FinancialSubscriptionDTO financialSubscriptionDTO,
+        String ownerLogin
+    ) {
+        financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount(), ownerLogin));
+        financialSubscription.setCategory(resolveOptionalCategory(financialSubscriptionDTO.getCategory(), ownerLogin));
+        financialSubscription.setTags(resolveTags(financialSubscriptionDTO.getTags(), ownerLogin));
     }
 
     private void applyRelationshipsForPartialUpdate(
         FinancialSubscription financialSubscription,
         FinancialSubscriptionDTO financialSubscriptionDTO,
-        JsonNode patchNode
+        JsonNode patchNode,
+        String ownerLogin
     ) {
         if (patchNode != null) {
             if (patchNode.has("account")) {
-                financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount()));
+                financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount(), ownerLogin));
             }
             if (patchNode.has("category")) {
-                financialSubscription.setCategory(resolveOptionalCategory(financialSubscriptionDTO.getCategory()));
+                financialSubscription.setCategory(resolveOptionalCategory(financialSubscriptionDTO.getCategory(), ownerLogin));
             }
             if (patchNode.has("tags")) {
-                financialSubscription.setTags(resolveTags(financialSubscriptionDTO.getTags()));
+                financialSubscription.setTags(resolveTags(financialSubscriptionDTO.getTags(), ownerLogin));
             }
             return;
         }
         if (financialSubscriptionDTO.getAccount() != null) {
-            financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount()));
+            financialSubscription.setAccount(resolveOptionalAccount(financialSubscriptionDTO.getAccount(), ownerLogin));
         }
         if (financialSubscriptionDTO.getCategory() != null) {
-            financialSubscription.setCategory(resolveOptionalCategory(financialSubscriptionDTO.getCategory()));
+            financialSubscription.setCategory(resolveOptionalCategory(financialSubscriptionDTO.getCategory(), ownerLogin));
         }
         if (financialSubscriptionDTO.getTags() != null) {
-            financialSubscription.setTags(resolveTags(financialSubscriptionDTO.getTags()));
+            financialSubscription.setTags(resolveTags(financialSubscriptionDTO.getTags(), ownerLogin));
         }
     }
 
-    private FinancialAccount resolveOptionalAccount(FinancialAccountDTO accountDTO) {
+    private FinancialAccount resolveOptionalAccount(FinancialAccountDTO accountDTO, String ownerLogin) {
         if (accountDTO == null || accountDTO.getId() == null) {
             return null;
         }
-        return financialAccountService
-            .findAccessibleAccountEntity(accountDTO.getId())
+        return financialAccountRepository
+            .findOneWithToOneRelationshipsByIdAndUserLogin(accountDTO.getId(), ownerLogin)
             .orElseThrow(() -> new IllegalArgumentException("Financial account is not accessible"));
     }
 
-    private Category resolveOptionalCategory(CategoryDTO categoryDTO) {
+    private Category resolveOptionalCategory(CategoryDTO categoryDTO, String ownerLogin) {
         if (categoryDTO == null || categoryDTO.getId() == null) {
             return null;
         }
-        return findAccessibleCategory(categoryDTO.getId()).orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
+        return categoryRepository
+            .findOneByIdAndUserLogin(categoryDTO.getId(), ownerLogin)
+            .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
     }
 
-    private Set<Tag> resolveTags(Set<TagDTO> tagDTOs) {
+    private Set<Tag> resolveTags(Set<TagDTO> tagDTOs, String ownerLogin) {
         if (tagDTOs == null || tagDTOs.isEmpty()) {
             return new HashSet<>();
         }
@@ -240,23 +282,82 @@ public class FinancialSubscriptionService {
             if (tagDTO.getId() == null) {
                 continue;
             }
-            Tag tag = findAccessibleTag(tagDTO.getId()).orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
+            Tag tag = tagRepository
+                .findOneByIdAndUserLogin(tagDTO.getId(), ownerLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
             tags.add(tag);
         }
         return tags;
     }
 
-    private Optional<Category> findAccessibleCategory(Long id) {
-        if (currentUserService.isAdmin()) {
-            return categoryRepository.findById(id);
+    private void validateDates(FinancialSubscription financialSubscription) {
+        LocalDate startDate = financialSubscription.getStartDate();
+        if (startDate == null) {
+            return;
         }
-        return categoryRepository.findOneByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+        LocalDate endDate = normalizeOptionalDate(financialSubscription.getEndDate());
+        if (endDate != null && endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("End date must be on or after start date");
+        }
+        LocalDate nextExpectedDate = normalizeOptionalDate(financialSubscription.getNextExpectedDate());
+        if (nextExpectedDate != null && nextExpectedDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("Next expected date must be on or after start date");
+        }
     }
 
-    private Optional<Tag> findAccessibleTag(Long id) {
-        if (currentUserService.isAdmin()) {
-            return tagRepository.findById(id);
+    private LocalDate normalizeOptionalDate(LocalDate date) {
+        if (date == null || date.equals(LocalDate.ofEpochDay(0L))) {
+            return null;
         }
-        return tagRepository.findOneByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+        return date;
+    }
+
+    private void validateAccountCurrency(FinancialSubscription financialSubscription) {
+        FinancialAccount account = financialSubscription.getAccount();
+        if (account == null || account.getCurrency() == null || financialSubscription.getCurrency() == null) {
+            return;
+        }
+        if (!account.getCurrency().equals(financialSubscription.getCurrency())) {
+            throw new IllegalArgumentException("Account currency must match subscription currency");
+        }
+    }
+
+    private void validateStructuralFieldsImmutable(FinancialSubscription existing, FinancialSubscription updated) {
+        if (!hasLinkedFinancialTransactions(existing.getId())) {
+            return;
+        }
+        if (!Objects.equals(existing.getCurrency(), updated.getCurrency())) {
+            throw new IllegalArgumentException("Currency cannot be changed while subscription is linked to transactions");
+        }
+        if (!Objects.equals(existing.getRecurrenceUnit(), updated.getRecurrenceUnit())) {
+            throw new IllegalArgumentException("Recurrence unit cannot be changed while subscription is linked to transactions");
+        }
+        if (!Objects.equals(existing.getIntervalCount(), updated.getIntervalCount())) {
+            throw new IllegalArgumentException("Interval count cannot be changed while subscription is linked to transactions");
+        }
+    }
+
+    private void validateStructuralFieldsImmutableAfterPartialUpdate(
+        FinancialSubscription financialSubscription,
+        CurrencyCode previousCurrency,
+        RecurrenceUnit previousRecurrenceUnit,
+        Integer previousIntervalCount
+    ) {
+        if (!hasLinkedFinancialTransactions(financialSubscription.getId())) {
+            return;
+        }
+        if (!Objects.equals(previousCurrency, financialSubscription.getCurrency())) {
+            throw new IllegalArgumentException("Currency cannot be changed while subscription is linked to transactions");
+        }
+        if (!Objects.equals(previousRecurrenceUnit, financialSubscription.getRecurrenceUnit())) {
+            throw new IllegalArgumentException("Recurrence unit cannot be changed while subscription is linked to transactions");
+        }
+        if (!Objects.equals(previousIntervalCount, financialSubscription.getIntervalCount())) {
+            throw new IllegalArgumentException("Interval count cannot be changed while subscription is linked to transactions");
+        }
+    }
+
+    private boolean hasLinkedFinancialTransactions(Long subscriptionId) {
+        return financialSubscriptionRepository.existsFinancialTransactionByFinancialSubscriptionId(subscriptionId);
     }
 }
