@@ -38,6 +38,9 @@ public interface TransactionRuleConditionRepository extends JpaRepository<Transa
 
     long countByTransactionRuleId(Long transactionRuleId);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    void deleteByTransactionRuleId(Long transactionRuleId);
+
     @Query(
         "select transactionRuleCondition from TransactionRuleCondition transactionRuleCondition " +
         "where transactionRuleCondition.transactionRule.id = :ruleId " +

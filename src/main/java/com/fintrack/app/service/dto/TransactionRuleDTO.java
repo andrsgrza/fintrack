@@ -21,10 +21,8 @@ public class TransactionRuleDTO implements Serializable {
     private Long id;
 
     @NotNull
-    @Size(min = 1, max = 100)
     private String name;
 
-    @Size(max = 500)
     private String description;
 
     @NotNull
@@ -34,16 +32,13 @@ public class TransactionRuleDTO implements Serializable {
     @NotNull
     private RuleConditionLogic conditionLogic;
 
-    @Size(max = 500)
     private String resultingDescription;
 
     @NotNull
     private Boolean active;
 
-    @NotNull
     private Instant createdAt;
 
-    @NotNull
     private Instant updatedAt;
 
     private UserDTO user;

@@ -8,12 +8,14 @@ import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionRuleConditionRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -45,13 +47,16 @@ public class TransactionRuleService {
 
     private final TagRepository tagRepository;
 
+    private final TransactionRuleConditionRepository transactionRuleConditionRepository;
+
     public TransactionRuleService(
         TransactionRuleRepository transactionRuleRepository,
         TransactionRuleMapper transactionRuleMapper,
         CurrentUserService currentUserService,
         CategoryRepository categoryRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
-        TagRepository tagRepository
+        TagRepository tagRepository,
+        TransactionRuleConditionRepository transactionRuleConditionRepository
     ) {
         this.transactionRuleRepository = transactionRuleRepository;
         this.transactionRuleMapper = transactionRuleMapper;
@@ -59,6 +64,7 @@ public class TransactionRuleService {
         this.categoryRepository = categoryRepository;
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.tagRepository = tagRepository;
+        this.transactionRuleConditionRepository = transactionRuleConditionRepository;
     }
 
     /**
@@ -72,6 +78,10 @@ public class TransactionRuleService {
         TransactionRule transactionRule = transactionRuleMapper.toEntity(transactionRuleDTO);
         transactionRule.setUser(currentUserService.getCurrentUser());
         applyRelationships(transactionRule, transactionRuleDTO, transactionRule.getUser().getLogin());
+        Instant now = Instant.now();
+        transactionRule.setCreatedAt(now);
+        transactionRule.setUpdatedAt(now);
+        normalizeAndValidate(transactionRule, null);
         transactionRule = transactionRuleRepository.save(transactionRule);
         return transactionRuleMapper.toDto(transactionRule);
     }
@@ -85,9 +95,13 @@ public class TransactionRuleService {
     public TransactionRuleDTO update(TransactionRuleDTO transactionRuleDTO) {
         LOG.debug("Request to update TransactionRule : {}", transactionRuleDTO);
         TransactionRule existingTransactionRule = findAccessibleEntity(transactionRuleDTO.getId()).orElseThrow();
+        rejectCreatedAtChange(existingTransactionRule, transactionRuleDTO.getCreatedAt());
         TransactionRule transactionRule = transactionRuleMapper.toEntity(transactionRuleDTO);
         transactionRule.setUser(existingTransactionRule.getUser());
         applyRelationships(transactionRule, transactionRuleDTO, existingTransactionRule.getUser().getLogin());
+        transactionRule.setCreatedAt(existingTransactionRule.getCreatedAt());
+        transactionRule.setUpdatedAt(Instant.now());
+        normalizeAndValidate(transactionRule, existingTransactionRule.getId());
         transactionRule = transactionRuleRepository.save(transactionRule);
         return transactionRuleMapper.toDto(transactionRule);
     }
@@ -114,13 +128,28 @@ public class TransactionRuleService {
 
         return findAccessibleEntity(transactionRuleDTO.getId())
             .map(existingTransactionRule -> {
-                transactionRuleMapper.partialUpdate(existingTransactionRule, transactionRuleDTO);
-                applyRelationshipsForPartialUpdate(
-                    existingTransactionRule,
-                    transactionRuleDTO,
-                    patchNode,
-                    existingTransactionRule.getUser().getLogin()
-                );
+                rejectNullRequiredPatchFields(patchNode);
+                if (patchNode != null && patchNode.has("createdAt")) {
+                    rejectCreatedAtChange(existingTransactionRule, transactionRuleDTO.getCreatedAt());
+                }
+                if (patchNode != null && patchNode.has("active") && Boolean.TRUE.equals(transactionRuleDTO.getActive())) {
+                    validateActiveRuleHasConditions(existingTransactionRule);
+                }
+                TransactionRuleSnapshot snapshot = TransactionRuleSnapshot.from(existingTransactionRule);
+                try {
+                    transactionRuleMapper.partialUpdate(existingTransactionRule, transactionRuleDTO);
+                    applyRelationshipsForPartialUpdate(
+                        existingTransactionRule,
+                        transactionRuleDTO,
+                        patchNode,
+                        existingTransactionRule.getUser().getLogin()
+                    );
+                    existingTransactionRule.setUpdatedAt(Instant.now());
+                    normalizeAndValidate(existingTransactionRule, existingTransactionRule.getId());
+                } catch (IllegalArgumentException e) {
+                    snapshot.restore(existingTransactionRule);
+                    throw e;
+                }
                 return existingTransactionRule;
             })
             .map(transactionRuleRepository::save)
@@ -176,6 +205,8 @@ public class TransactionRuleService {
         if (transactionRule.isEmpty()) {
             return false;
         }
+        transactionRuleConditionRepository.deleteByTransactionRuleId(id);
+        transactionRuleRepository.deleteResultingTagsByRuleId(id);
         transactionRuleRepository.deleteById(id);
         return true;
     }
@@ -203,15 +234,27 @@ public class TransactionRuleService {
     ) {
         if (patchNode != null) {
             if (patchNode.has("resultingCategory")) {
-                transactionRule.setResultingCategory(resolveOptionalCategory(transactionRuleDTO.getResultingCategory(), ownerLogin));
+                transactionRule.setResultingCategory(
+                    resolveOptionalCategoryForPatch(
+                        transactionRuleDTO.getResultingCategory(),
+                        patchNode.get("resultingCategory"),
+                        ownerLogin
+                    )
+                );
             }
             if (patchNode.has("resultingFinancialSubscription")) {
                 transactionRule.setResultingFinancialSubscription(
-                    resolveOptionalSubscription(transactionRuleDTO.getResultingFinancialSubscription(), ownerLogin)
+                    resolveOptionalSubscriptionForPatch(
+                        transactionRuleDTO.getResultingFinancialSubscription(),
+                        patchNode.get("resultingFinancialSubscription"),
+                        ownerLogin
+                    )
                 );
             }
             if (patchNode.has("resultingTags")) {
-                transactionRule.setResultingTags(resolveTags(transactionRuleDTO.getResultingTags(), ownerLogin));
+                transactionRule.setResultingTags(
+                    resolveTagsForPatch(transactionRuleDTO.getResultingTags(), patchNode.get("resultingTags"), ownerLogin)
+                );
             }
             return;
         }
@@ -229,21 +272,45 @@ public class TransactionRuleService {
     }
 
     private Category resolveOptionalCategory(CategoryDTO categoryDTO, String ownerLogin) {
-        if (categoryDTO == null || categoryDTO.getId() == null) {
+        if (categoryDTO == null) {
             return null;
+        }
+        if (categoryDTO.getId() == null) {
+            throw new IllegalArgumentException("Category id is required");
         }
         return categoryRepository
             .findOneByIdAndUserLogin(categoryDTO.getId(), ownerLogin)
             .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
     }
 
-    private FinancialSubscription resolveOptionalSubscription(FinancialSubscriptionDTO subscriptionDTO, String ownerLogin) {
-        if (subscriptionDTO == null || subscriptionDTO.getId() == null) {
+    private Category resolveOptionalCategoryForPatch(CategoryDTO categoryDTO, JsonNode categoryNode, String ownerLogin) {
+        if (categoryNode == null || categoryNode.isNull()) {
             return null;
+        }
+        return resolveOptionalCategory(categoryDTO, ownerLogin);
+    }
+
+    private FinancialSubscription resolveOptionalSubscription(FinancialSubscriptionDTO subscriptionDTO, String ownerLogin) {
+        if (subscriptionDTO == null) {
+            return null;
+        }
+        if (subscriptionDTO.getId() == null) {
+            throw new IllegalArgumentException("Financial subscription id is required");
         }
         return financialSubscriptionRepository
             .findOneByIdAndUserLogin(subscriptionDTO.getId(), ownerLogin)
             .orElseThrow(() -> new IllegalArgumentException("Financial subscription is not accessible"));
+    }
+
+    private FinancialSubscription resolveOptionalSubscriptionForPatch(
+        FinancialSubscriptionDTO subscriptionDTO,
+        JsonNode subscriptionNode,
+        String ownerLogin
+    ) {
+        if (subscriptionNode == null || subscriptionNode.isNull()) {
+            return null;
+        }
+        return resolveOptionalSubscription(subscriptionDTO, ownerLogin);
     }
 
     private Set<Tag> resolveTags(Set<TagDTO> tagDTOs, String ownerLogin) {
@@ -252,8 +319,8 @@ public class TransactionRuleService {
         }
         Set<Tag> tags = new HashSet<>();
         for (TagDTO tagDTO : tagDTOs) {
-            if (tagDTO.getId() == null) {
-                continue;
+            if (tagDTO == null || tagDTO.getId() == null) {
+                throw new IllegalArgumentException("Tag id is required");
             }
             Tag tag = tagRepository
                 .findOneByIdAndUserLogin(tagDTO.getId(), ownerLogin)
@@ -261,5 +328,160 @@ public class TransactionRuleService {
             tags.add(tag);
         }
         return tags;
+    }
+
+    private Set<Tag> resolveTagsForPatch(Set<TagDTO> tagDTOs, JsonNode tagsNode, String ownerLogin) {
+        if (tagsNode == null || tagsNode.isNull()) {
+            return new HashSet<>();
+        }
+        return resolveTags(tagDTOs, ownerLogin);
+    }
+
+    private void rejectNullRequiredPatchFields(JsonNode patchNode) {
+        if (patchNode == null) {
+            return;
+        }
+        rejectNullPatchField(patchNode, "name");
+        rejectNullPatchField(patchNode, "priority");
+        rejectNullPatchField(patchNode, "conditionLogic");
+        rejectNullPatchField(patchNode, "active");
+        rejectNullPatchField(patchNode, "createdAt");
+        rejectNullPatchField(patchNode, "updatedAt");
+    }
+
+    private void rejectNullPatchField(JsonNode patchNode, String fieldName) {
+        if (patchNode.has(fieldName) && patchNode.get(fieldName).isNull()) {
+            throw new IllegalArgumentException(fieldName + " cannot be null");
+        }
+    }
+
+    private void rejectCreatedAtChange(TransactionRule existingTransactionRule, Instant requestedCreatedAt) {
+        if (requestedCreatedAt != null && !requestedCreatedAt.equals(existingTransactionRule.getCreatedAt())) {
+            throw new IllegalArgumentException("createdAt cannot be changed");
+        }
+    }
+
+    private void normalizeAndValidate(TransactionRule transactionRule, Long excludeId) {
+        normalizeTextFields(transactionRule);
+        validateRequiredFields(transactionRule);
+        validateUniqueName(transactionRule, excludeId);
+        validateHasOutput(transactionRule);
+        validateActiveRuleHasConditions(transactionRule);
+    }
+
+    private void normalizeTextFields(TransactionRule transactionRule) {
+        transactionRule.setName(trimToNull(transactionRule.getName()));
+        transactionRule.setDescription(trimToNull(transactionRule.getDescription()));
+        transactionRule.setResultingDescription(trimToNull(transactionRule.getResultingDescription()));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void validateRequiredFields(TransactionRule transactionRule) {
+        if (transactionRule.getName() == null) {
+            throw new IllegalArgumentException("Name is required");
+        }
+        if (transactionRule.getName().length() > 100) {
+            throw new IllegalArgumentException("Name must be at most 100 characters");
+        }
+        if (transactionRule.getDescription() != null && transactionRule.getDescription().length() > 500) {
+            throw new IllegalArgumentException("Description must be at most 500 characters");
+        }
+        if (transactionRule.getResultingDescription() != null && transactionRule.getResultingDescription().length() > 500) {
+            throw new IllegalArgumentException("Resulting description must be at most 500 characters");
+        }
+        if (transactionRule.getPriority() == null) {
+            throw new IllegalArgumentException("Priority is required");
+        }
+        if (transactionRule.getPriority() < 0) {
+            throw new IllegalArgumentException("Priority must be greater than or equal to 0");
+        }
+        if (transactionRule.getConditionLogic() == null) {
+            throw new IllegalArgumentException("Condition logic is required");
+        }
+        if (transactionRule.getActive() == null) {
+            throw new IllegalArgumentException("Active is required");
+        }
+    }
+
+    private void validateUniqueName(TransactionRule transactionRule, Long excludeId) {
+        boolean exists = transactionRuleRepository.existsByUserLoginAndNormalizedName(
+            transactionRule.getUser().getLogin(),
+            transactionRule.getName().toLowerCase(),
+            excludeId
+        );
+        if (exists) {
+            throw new IllegalArgumentException("Transaction rule name already exists");
+        }
+    }
+
+    private void validateHasOutput(TransactionRule transactionRule) {
+        boolean hasOutput =
+            transactionRule.getResultingCategory() != null ||
+            transactionRule.getResultingFinancialSubscription() != null ||
+            (transactionRule.getResultingTags() != null && !transactionRule.getResultingTags().isEmpty()) ||
+            transactionRule.getResultingDescription() != null;
+        if (!hasOutput) {
+            throw new IllegalArgumentException("Transaction rule must have at least one output");
+        }
+    }
+
+    private void validateActiveRuleHasConditions(TransactionRule transactionRule) {
+        if (!Boolean.TRUE.equals(transactionRule.getActive())) {
+            return;
+        }
+        if (transactionRule.getId() == null || transactionRuleConditionRepository.countByTransactionRuleId(transactionRule.getId()) == 0) {
+            throw new IllegalArgumentException("Active transaction rule must have at least one condition");
+        }
+    }
+
+    private record TransactionRuleSnapshot(
+        String name,
+        String description,
+        Integer priority,
+        com.fintrack.app.domain.enumeration.RuleConditionLogic conditionLogic,
+        String resultingDescription,
+        Boolean active,
+        Instant createdAt,
+        Instant updatedAt,
+        Category resultingCategory,
+        FinancialSubscription resultingFinancialSubscription,
+        Set<Tag> resultingTags
+    ) {
+        private static TransactionRuleSnapshot from(TransactionRule transactionRule) {
+            return new TransactionRuleSnapshot(
+                transactionRule.getName(),
+                transactionRule.getDescription(),
+                transactionRule.getPriority(),
+                transactionRule.getConditionLogic(),
+                transactionRule.getResultingDescription(),
+                transactionRule.getActive(),
+                transactionRule.getCreatedAt(),
+                transactionRule.getUpdatedAt(),
+                transactionRule.getResultingCategory(),
+                transactionRule.getResultingFinancialSubscription(),
+                new HashSet<>(transactionRule.getResultingTags())
+            );
+        }
+
+        private void restore(TransactionRule transactionRule) {
+            transactionRule.setName(name);
+            transactionRule.setDescription(description);
+            transactionRule.setPriority(priority);
+            transactionRule.setConditionLogic(conditionLogic);
+            transactionRule.setResultingDescription(resultingDescription);
+            transactionRule.setActive(active);
+            transactionRule.setCreatedAt(createdAt);
+            transactionRule.setUpdatedAt(updatedAt);
+            transactionRule.setResultingCategory(resultingCategory);
+            transactionRule.setResultingFinancialSubscription(resultingFinancialSubscription);
+            transactionRule.setResultingTags(new HashSet<>(resultingTags));
+        }
     }
 }

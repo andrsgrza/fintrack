@@ -63,6 +63,22 @@ public interface TransactionRuleRepository
     Optional<TransactionRule> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
     @Query(
+        "select count(transactionRule) > 0 from TransactionRule transactionRule " +
+        "where transactionRule.user.login = :login " +
+        "and lower(trim(transactionRule.name)) = lower(:normalizedName) " +
+        "and (:excludeId is null or transactionRule.id <> :excludeId)"
+    )
+    boolean existsByUserLoginAndNormalizedName(
+        @Param("login") String login,
+        @Param("normalizedName") String normalizedName,
+        @Param("excludeId") Long excludeId
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from rel_transaction_rule__resulting_tags where transaction_rule_id = :ruleId", nativeQuery = true)
+    void deleteResultingTagsByRuleId(@Param("ruleId") Long ruleId);
+
+    @Query(
         "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory left join fetch transactionRule.resultingFinancialSubscription where transactionRule.id = :id and transactionRule.user.login = :login"
     )
     Optional<TransactionRule> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);

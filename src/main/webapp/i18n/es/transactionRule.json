@@ -12,7 +12,7 @@
       "updated": "Un Transaction Rule ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Transaction Rule ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Transaction Rule {{ id }}?"
+        "question": "Esto eliminará Transaction Rule {{ id }} y sus condiciones. Las categorías, suscripciones, etiquetas y transacciones no se eliminarán. Las transacciones futuras ya no serán clasificadas por esta regla. Esta acción no se puede deshacer."
       },
       "detail": {
         "title": "Transaction Rule"
