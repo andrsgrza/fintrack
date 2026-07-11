@@ -148,12 +148,32 @@ class CategoryServiceTest {
     }
 
     @Test
-    void deleteShouldRemoveAccessibleCategory() {
+    void deleteShouldRejectWhenCategoryHasChildren() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(categoryRepository.existsByParentCategoryId(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> categoryService.delete(10L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Category with child categories cannot be deleted");
+        verify(categoryRepository, never()).clearFinancialTransactionCategoryReferences(any());
+        verify(categoryRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteShouldUnlinkRelationshipsBeforeDeletingCategory() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(categoryRepository.existsByParentCategoryId(10L)).thenReturn(false);
 
         assertThat(categoryService.delete(10L)).isTrue();
+
+        verify(categoryRepository).clearFinancialTransactionCategoryReferences(10L);
+        verify(categoryRepository).clearFinancialSubscriptionCategoryReferences(10L);
+        verify(categoryRepository).deleteBudgetCategoryLinksByCategoryId(10L);
+        verify(categoryRepository).clearTransactionRuleResultingCategoryReferences(10L);
         verify(categoryRepository).deleteById(10L);
     }
 
@@ -184,43 +204,45 @@ class CategoryServiceTest {
     }
 
     @Test
-    void updateShouldRejectSelfAsParent() {
-        CategoryDTO parentDTO = new CategoryDTO();
-        parentDTO.setId(10L);
-        categoryDTO.setParentCategory(parentDTO);
-
-        Category mappedEntity = new Category();
-        mappedEntity.setId(10L);
-        mappedEntity.setName("Food");
-        mappedEntity.setCategoryType(CategoryType.EXPENSE);
-
-        when(currentUserService.isAdmin()).thenReturn(false);
-        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
-        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
-        when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
-
-        assertThatThrownBy(() -> categoryService.update(categoryDTO)).isInstanceOf(IllegalArgumentException.class);
-        verify(categoryRepository, never()).save(any());
-    }
-
-    @Test
-    void updateShouldRejectInaccessibleParent() {
+    void updateShouldRejectParentCategoryChange() {
         CategoryDTO parentDTO = new CategoryDTO();
         parentDTO.setId(20L);
         categoryDTO.setParentCategory(parentDTO);
 
-        Category mappedEntity = new Category();
-        mappedEntity.setId(10L);
-        mappedEntity.setName("Food");
-        mappedEntity.setCategoryType(CategoryType.EXPENSE);
-
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
-        when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
-        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(20L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> categoryService.update(categoryDTO)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> categoryService.update(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Parent category cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectParentCategoryChange() {
+        Category parent = new Category();
+        parent.setId(20L);
+
+        Category existingCategory = new Category();
+        existingCategory.setId(10L);
+        existingCategory.setName("Food");
+        existingCategory.setCategoryType(CategoryType.EXPENSE);
+        existingCategory.setUser(currentUser);
+
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(20L);
+        categoryDTO.setParentCategory(parentDTO);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(existingCategory)
+        );
+
+        assertThatThrownBy(() -> categoryService.partialUpdate(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Parent category cannot be changed");
         verify(categoryRepository, never()).save(any());
     }
 
@@ -248,6 +270,7 @@ class CategoryServiceTest {
 
         Category parent = new Category();
         parent.setId(30L);
+        parent.setCategoryType(CategoryType.EXPENSE);
         mappedEntity.setParentCategory(parent);
 
         CategoryDTO parentDTO = new CategoryDTO();
@@ -273,29 +296,52 @@ class CategoryServiceTest {
     }
 
     @Test
-    void partialUpdateShouldRejectDuplicateWhenParentChangesIntoSiblingScope() {
+    void saveShouldRejectChildCategoryTypeMismatchWithParent() {
         Category parent = new Category();
-        parent.setId(20L);
+        parent.setId(30L);
+        parent.setCategoryType(CategoryType.EXPENSE);
 
-        Category existingCategory = new Category();
-        existingCategory.setId(10L);
-        existingCategory.setName("Food");
-        existingCategory.setCategoryType(CategoryType.EXPENSE);
-        existingCategory.setUser(currentUser);
+        Category mappedEntity = new Category();
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.INCOME);
+        mappedEntity.setParentCategory(parent);
 
         CategoryDTO parentDTO = new CategoryDTO();
-        parentDTO.setId(20L);
+        parentDTO.setId(30L);
         categoryDTO.setParentCategory(parentDTO);
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(30L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(parent));
+
+        assertThatThrownBy(() -> categoryService.save(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Child category type must match parent category type");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectCategoryTypeChangeWhenCategoryIsInUse() {
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+
+        Category mappedEntity = new Category();
+        mappedEntity.setId(10L);
+        mappedEntity.setName("Food");
+        mappedEntity.setCategoryType(CategoryType.INCOME);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
-        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
-            Optional.of(existingCategory)
-        );
-        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(20L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(parent));
-        when(categoryRepository.existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, 20L, "Food", 10L)).thenReturn(true);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(categoryMapper.toEntity(categoryDTO)).thenReturn(mappedEntity);
+        when(categoryRepository.existsByParentCategoryId(10L)).thenReturn(false);
+        when(categoryRepository.existsFinancialTransactionByCategoryId(10L)).thenReturn(true);
 
-        assertThatThrownBy(() -> categoryService.partialUpdate(categoryDTO)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> categoryService.update(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Category type cannot be changed while category is in use");
         verify(categoryRepository, never()).save(any());
     }
 }
