@@ -203,8 +203,12 @@ public class BudgetResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteBudget(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete Budget : {}", id);
-        if (!budgetService.delete(id)) {
-            return ResponseEntity.notFound().build();
+        try {
+            if (!budgetService.delete(id)) {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))

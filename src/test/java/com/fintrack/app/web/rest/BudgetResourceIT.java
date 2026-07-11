@@ -20,9 +20,13 @@ import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.BudgetPeriod;
 import com.fintrack.app.domain.enumeration.BudgetStatus;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TagMatchMode;
 import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.CategoryRepository;
+import com.fintrack.app.repository.FinancialAccountRepository;
+import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.BudgetService;
@@ -70,8 +74,8 @@ class BudgetResourceIT {
     private static final String DEFAULT_NAME = "AAAAAAAAAA";
     private static final String UPDATED_NAME = "BBBBBBBBBB";
 
-    private static final BigDecimal DEFAULT_AMOUNT = new BigDecimal(0);
-    private static final BigDecimal UPDATED_AMOUNT = new BigDecimal(1);
+    private static final BigDecimal DEFAULT_AMOUNT = new BigDecimal(100);
+    private static final BigDecimal UPDATED_AMOUNT = new BigDecimal(200);
     private static final BigDecimal SMALLER_AMOUNT = new BigDecimal(0 - 1);
 
     private static final CurrencyCode DEFAULT_CURRENCY = CurrencyCode.MXN;
@@ -117,6 +121,15 @@ class BudgetResourceIT {
 
     @Autowired
     private BudgetRepository budgetRepository;
+
+    @Autowired
+    private FinancialAccountRepository financialAccountRepository;
+
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    @Autowired
+    private TagRepository tagRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -1989,6 +2002,375 @@ class BudgetResourceIT {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("error.invalid"))
             .andExpect(jsonPath("$.params").value("budget"));
+    }
+
+    private Budget persistBudget() {
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+        em.clear();
+        return budgetRepository.findById(insertedBudget.getId()).orElseThrow();
+    }
+
+    private long countJoinRows(String table, Long budgetId) {
+        return (
+            (Number) em
+                .createNativeQuery("select count(*) from " + table + " where budget_id = :budgetId")
+                .setParameter("budgetId", budgetId)
+                .getSingleResult()
+        ).longValue();
+    }
+
+    @Test
+    @Transactional
+    void deleteBudgetWithM2mLinksCleansJoinTablesAndPreservesRelatedEntities() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account = em.merge(account);
+        Category category = CategoryResourceIT.createEntity(em);
+        category = em.merge(category);
+        Tag tag = TagResourceIT.createEntity(em);
+        tag = em.merge(tag);
+        em.flush();
+
+        budget.addAccounts(account);
+        budget.addCategories(category);
+        budget.addTags(tag);
+        Budget persistedBudget = persistBudget();
+
+        restBudgetMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedBudget.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(budgetRepository.existsById(persistedBudget.getId())).isFalse();
+        assertThat(countJoinRows("rel_budget__accounts", persistedBudget.getId())).isZero();
+        assertThat(countJoinRows("rel_budget__categories", persistedBudget.getId())).isZero();
+        assertThat(countJoinRows("rel_budget__tags", persistedBudget.getId())).isZero();
+        assertThat(financialAccountRepository.existsById(account.getId())).isTrue();
+        assertThat(categoryRepository.existsById(category.getId())).isTrue();
+        assertThat(tagRepository.existsById(tag.getId())).isTrue();
+        insertedBudget = null;
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminDeleteForeignBudgetWithM2mLinksSucceeds() throws Exception {
+        User foreignOwner = createOtherUser(em);
+        budget.setUser(foreignOwner);
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account.setUser(foreignOwner);
+        account = em.merge(account);
+        budget.addAccounts(account);
+        Budget persistedBudget = persistBudget();
+
+        restBudgetMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedBudget.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(budgetRepository.existsById(persistedBudget.getId())).isFalse();
+        assertThat(countJoinRows("rel_budget__accounts", persistedBudget.getId())).isZero();
+        insertedBudget = null;
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminUpdateForeignBudgetWithOwnerValidLinksSucceeds() throws Exception {
+        User budgetOwner = createOtherUser(em);
+        budget.setUser(budgetOwner);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        Category ownerCategory = CategoryResourceIT.createEntity(em);
+        ownerCategory.setUser(budgetOwner);
+        ownerCategory = em.merge(ownerCategory);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(ownerCategory.getId());
+        budgetDTO.setCategories(new HashSet<>(Set.of(categoryDTO)));
+
+        restBudgetMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, budgetDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isOk());
+
+        assertThat(getPersistedBudget(budget).getCategories()).extracting(Category::getId).contains(ownerCategory.getId());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminUpdateForeignBudgetWithAdminOwnedCategoryFails() throws Exception {
+        User budgetOwner = createOtherUser(em);
+        budget.setUser(budgetOwner);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        Category adminCategory = CategoryResourceIT.createEntity(em);
+        adminCategory = em.merge(adminCategory);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(adminCategory.getId());
+        budgetDTO.setCategories(new HashSet<>(Set.of(categoryDTO)));
+
+        restBudgetMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, budgetDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithZeroAmountFails() throws Exception {
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        budgetDTO.setAmount(BigDecimal.ZERO);
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithNegativeAmountFails() throws Exception {
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        budgetDTO.setAmount(new BigDecimal("-1"));
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithEndDateBeforeStartDateFails() throws Exception {
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        budgetDTO.setStartDate(LocalDate.of(2026, 6, 1));
+        budgetDTO.setEndDate(LocalDate.of(2026, 1, 1));
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithAccountCurrencyMismatchFails() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account.setCurrency(CurrencyCode.USD);
+        em.persist(account);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(account.getId());
+        budgetDTO.setAccounts(new HashSet<>(Set.of(accountDTO)));
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateBudgetCurrencyWithLinkedAccountMismatchFails() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account = em.merge(account);
+        em.flush();
+
+        budget.addAccounts(account);
+        Budget persistedBudget = persistBudget();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(persistedBudget);
+        budgetDTO.setCurrency(CurrencyCode.USD);
+
+        restBudgetMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, budgetDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetCurrencyWithoutLinkedAccountsSucceeds() throws Exception {
+        Budget persistedBudget = persistBudget();
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("currency", CurrencyCode.USD.toString());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, persistedBudget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.currency").value(CurrencyCode.USD.toString()));
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithExpenseCategorySucceeds() throws Exception {
+        Category expenseCategory = CategoryResourceIT.createEntity(em);
+        expenseCategory.setCategoryType(CategoryType.EXPENSE);
+        expenseCategory = em.merge(expenseCategory);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(expenseCategory.getId());
+        budgetDTO.setCategories(new HashSet<>(Set.of(categoryDTO)));
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithBothCategorySucceeds() throws Exception {
+        Category bothCategory = CategoryResourceIT.createEntity(em);
+        bothCategory.setCategoryType(CategoryType.BOTH);
+        bothCategory = em.merge(bothCategory);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(bothCategory.getId());
+        budgetDTO.setCategories(new HashSet<>(Set.of(categoryDTO)));
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createBudgetWithIncomeCategoryFails() throws Exception {
+        Category incomeCategory = CategoryResourceIT.createEntity(em);
+        incomeCategory.setCategoryType(CategoryType.INCOME);
+        incomeCategory = em.merge(incomeCategory);
+        em.flush();
+
+        BudgetDTO budgetDTO = budgetMapper.toDto(budget);
+        budgetDTO.setId(null);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(incomeCategory.getId());
+        budgetDTO.setCategories(new HashSet<>(Set.of(categoryDTO)));
+
+        restBudgetMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(budgetDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetStatusPausedPreservesM2mLinks() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account = em.merge(account);
+        Tag tag = TagResourceIT.createEntity(em);
+        tag = em.merge(tag);
+        em.flush();
+
+        budget.addAccounts(account);
+        budget.addTags(tag);
+        Budget persistedBudget = persistBudget();
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("status", BudgetStatus.PAUSED.toString());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, persistedBudget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value(BudgetStatus.PAUSED.toString()));
+
+        Budget persisted = getPersistedBudget(persistedBudget);
+        assertThat(persisted.getStatus()).isEqualTo(BudgetStatus.PAUSED);
+        assertThat(persisted.getAccounts()).extracting(FinancialAccount::getId).contains(account.getId());
+        assertThat(persisted.getTags()).extracting(Tag::getId).contains(tag.getId());
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetStatusCompletedPreservesM2mLinks() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account = em.merge(account);
+        budget.addAccounts(account);
+        Budget persistedBudget = persistBudget();
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("status", BudgetStatus.COMPLETED.toString());
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, persistedBudget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk());
+
+        assertThat(getPersistedBudget(persistedBudget).getAccounts()).extracting(FinancialAccount::getId).contains(account.getId());
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetNullAccountsClearsAccounts() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account = em.merge(account);
+        em.flush();
+
+        budget.addAccounts(account);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putNull("accounts");
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk());
+
+        assertThat(getPersistedBudget(budget).getAccounts()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void patchBudgetNullCategoriesClearsCategories() throws Exception {
+        Category category = CategoryResourceIT.createEntity(em);
+        category = em.merge(category);
+        em.flush();
+
+        budget.addCategories(category);
+        insertedBudget = budgetRepository.saveAndFlush(budget);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putNull("categories");
+
+        restBudgetMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, budget.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk());
+
+        assertThat(getPersistedBudget(budget).getCategories()).isEmpty();
     }
 
     protected long getRepositoryCount() {

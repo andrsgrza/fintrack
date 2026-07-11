@@ -5,14 +5,19 @@ import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.enumeration.CategoryType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CategoryRepository;
+import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.BudgetDTO;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.BudgetMapper;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -38,7 +43,7 @@ public class BudgetService {
 
     private final CurrentUserService currentUserService;
 
-    private final FinancialAccountService financialAccountService;
+    private final FinancialAccountRepository financialAccountRepository;
 
     private final CategoryRepository categoryRepository;
 
@@ -48,14 +53,14 @@ public class BudgetService {
         BudgetRepository budgetRepository,
         BudgetMapper budgetMapper,
         CurrentUserService currentUserService,
-        FinancialAccountService financialAccountService,
+        FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository
     ) {
         this.budgetRepository = budgetRepository;
         this.budgetMapper = budgetMapper;
         this.currentUserService = currentUserService;
-        this.financialAccountService = financialAccountService;
+        this.financialAccountRepository = financialAccountRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
     }
@@ -70,7 +75,8 @@ public class BudgetService {
         LOG.debug("Request to save Budget : {}", budgetDTO);
         Budget budget = budgetMapper.toEntity(budgetDTO);
         budget.setUser(currentUserService.getCurrentUser());
-        applyRelationships(budget, budgetDTO);
+        applyRelationships(budget, budgetDTO, budget.getUser().getLogin());
+        validateBudget(budget);
         budget = budgetRepository.save(budget);
         return budgetMapper.toDto(budget);
     }
@@ -86,7 +92,8 @@ public class BudgetService {
         Budget existingBudget = findAccessibleEntity(budgetDTO.getId()).orElseThrow();
         Budget budget = budgetMapper.toEntity(budgetDTO);
         budget.setUser(existingBudget.getUser());
-        applyRelationships(budget, budgetDTO);
+        applyRelationships(budget, budgetDTO, existingBudget.getUser().getLogin());
+        validateBudget(budget);
         budget = budgetRepository.save(budget);
         return budgetMapper.toDto(budget);
     }
@@ -114,7 +121,8 @@ public class BudgetService {
         return findAccessibleEntity(budgetDTO.getId())
             .map(existingBudget -> {
                 budgetMapper.partialUpdate(existingBudget, budgetDTO);
-                applyRelationshipsForPartialUpdate(existingBudget, budgetDTO, patchNode);
+                applyRelationshipsForPartialUpdate(existingBudget, budgetDTO, patchNode, existingBudget.getUser().getLogin());
+                validateBudget(existingBudget);
                 return existingBudget;
             })
             .map(budgetRepository::save)
@@ -170,8 +178,16 @@ public class BudgetService {
         if (budget.isEmpty()) {
             return false;
         }
-        budgetRepository.deleteById(id);
+        Long budgetId = budget.orElseThrow().getId();
+        unlinkBudgetFromAllRelationships(budgetId);
+        budgetRepository.deleteById(budgetId);
         return true;
+    }
+
+    private void unlinkBudgetFromAllRelationships(Long budgetId) {
+        budgetRepository.deleteAccountLinksByBudgetId(budgetId);
+        budgetRepository.deleteCategoryLinksByBudgetId(budgetId);
+        budgetRepository.deleteTagLinksByBudgetId(budgetId);
     }
 
     private Optional<Budget> findAccessibleEntity(Long id) {
@@ -181,37 +197,37 @@ public class BudgetService {
         return budgetRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void applyRelationships(Budget budget, BudgetDTO budgetDTO) {
-        budget.setAccounts(resolveAccounts(budgetDTO.getAccounts()));
-        budget.setCategories(resolveCategories(budgetDTO.getCategories()));
-        budget.setTags(resolveTags(budgetDTO.getTags()));
+    private void applyRelationships(Budget budget, BudgetDTO budgetDTO, String ownerLogin) {
+        budget.setAccounts(resolveAccounts(budgetDTO.getAccounts(), ownerLogin));
+        budget.setCategories(resolveCategories(budgetDTO.getCategories(), ownerLogin));
+        budget.setTags(resolveTags(budgetDTO.getTags(), ownerLogin));
     }
 
-    private void applyRelationshipsForPartialUpdate(Budget budget, BudgetDTO budgetDTO, JsonNode patchNode) {
+    private void applyRelationshipsForPartialUpdate(Budget budget, BudgetDTO budgetDTO, JsonNode patchNode, String ownerLogin) {
         if (patchNode != null) {
             if (patchNode.has("accounts")) {
-                budget.setAccounts(resolveAccounts(budgetDTO.getAccounts()));
+                budget.setAccounts(resolveAccounts(budgetDTO.getAccounts(), ownerLogin));
             }
             if (patchNode.has("categories")) {
-                budget.setCategories(resolveCategories(budgetDTO.getCategories()));
+                budget.setCategories(resolveCategories(budgetDTO.getCategories(), ownerLogin));
             }
             if (patchNode.has("tags")) {
-                budget.setTags(resolveTags(budgetDTO.getTags()));
+                budget.setTags(resolveTags(budgetDTO.getTags(), ownerLogin));
             }
             return;
         }
         if (budgetDTO.getAccounts() != null) {
-            budget.setAccounts(resolveAccounts(budgetDTO.getAccounts()));
+            budget.setAccounts(resolveAccounts(budgetDTO.getAccounts(), ownerLogin));
         }
         if (budgetDTO.getCategories() != null) {
-            budget.setCategories(resolveCategories(budgetDTO.getCategories()));
+            budget.setCategories(resolveCategories(budgetDTO.getCategories(), ownerLogin));
         }
         if (budgetDTO.getTags() != null) {
-            budget.setTags(resolveTags(budgetDTO.getTags()));
+            budget.setTags(resolveTags(budgetDTO.getTags(), ownerLogin));
         }
     }
 
-    private Set<FinancialAccount> resolveAccounts(Set<FinancialAccountDTO> accountDTOs) {
+    private Set<FinancialAccount> resolveAccounts(Set<FinancialAccountDTO> accountDTOs, String ownerLogin) {
         if (accountDTOs == null || accountDTOs.isEmpty()) {
             return new HashSet<>();
         }
@@ -220,15 +236,15 @@ public class BudgetService {
             if (accountDTO.getId() == null) {
                 continue;
             }
-            FinancialAccount account = financialAccountService
-                .findAccessibleAccountEntity(accountDTO.getId())
+            FinancialAccount account = financialAccountRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(accountDTO.getId(), ownerLogin)
                 .orElseThrow(() -> new IllegalArgumentException("Financial account is not accessible"));
             accounts.add(account);
         }
         return accounts;
     }
 
-    private Set<Category> resolveCategories(Set<CategoryDTO> categoryDTOs) {
+    private Set<Category> resolveCategories(Set<CategoryDTO> categoryDTOs, String ownerLogin) {
         if (categoryDTOs == null || categoryDTOs.isEmpty()) {
             return new HashSet<>();
         }
@@ -237,15 +253,16 @@ public class BudgetService {
             if (categoryDTO.getId() == null) {
                 continue;
             }
-            Category category = findAccessibleCategory(categoryDTO.getId()).orElseThrow(() ->
-                new IllegalArgumentException("Category is not accessible")
-            );
+            Category category = categoryRepository
+                .findOneByIdAndUserLogin(categoryDTO.getId(), ownerLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
+            validateCategoryTypeForExpenseBudget(category);
             categories.add(category);
         }
         return categories;
     }
 
-    private Set<Tag> resolveTags(Set<TagDTO> tagDTOs) {
+    private Set<Tag> resolveTags(Set<TagDTO> tagDTOs, String ownerLogin) {
         if (tagDTOs == null || tagDTOs.isEmpty()) {
             return new HashSet<>();
         }
@@ -254,23 +271,66 @@ public class BudgetService {
             if (tagDTO.getId() == null) {
                 continue;
             }
-            Tag tag = findAccessibleTag(tagDTO.getId()).orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
+            Tag tag = tagRepository
+                .findOneByIdAndUserLogin(tagDTO.getId(), ownerLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
             tags.add(tag);
         }
         return tags;
     }
 
-    private Optional<Category> findAccessibleCategory(Long id) {
-        if (currentUserService.isAdmin()) {
-            return categoryRepository.findById(id);
-        }
-        return categoryRepository.findOneByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    private void validateBudget(Budget budget) {
+        validateAmountPositive(budget.getAmount());
+        validateDateRange(budget);
+        validateAccountCurrencyCompatibility(budget);
     }
 
-    private Optional<Tag> findAccessibleTag(Long id) {
-        if (currentUserService.isAdmin()) {
-            return tagRepository.findById(id);
+    private void validateAmountPositive(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero");
         }
-        return tagRepository.findOneByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private void validateDateRange(Budget budget) {
+        LocalDate startDate = budget.getStartDate();
+        if (startDate == null) {
+            return;
+        }
+        LocalDate endDate = normalizeOptionalDate(budget.getEndDate());
+        if (endDate != null && endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("End date must be on or after start date");
+        }
+    }
+
+    private LocalDate normalizeOptionalDate(LocalDate date) {
+        if (date == null || date.equals(LocalDate.ofEpochDay(0L))) {
+            return null;
+        }
+        return date;
+    }
+
+    private void validateAccountCurrencyCompatibility(Budget budget) {
+        CurrencyCode budgetCurrency = budget.getCurrency();
+        if (budgetCurrency == null || budget.getAccounts() == null || budget.getAccounts().isEmpty()) {
+            return;
+        }
+        for (FinancialAccount account : budget.getAccounts()) {
+            if (account.getCurrency() == null || !account.getCurrency().equals(budgetCurrency)) {
+                throw new IllegalArgumentException("Account currency must match budget currency");
+            }
+        }
+    }
+
+    private void validateCategoryTypeForExpenseBudget(Category category) {
+        CategoryType categoryType = category.getCategoryType();
+        if (categoryType == null) {
+            return;
+        }
+        if (categoryType == CategoryType.INCOME) {
+            throw new IllegalArgumentException("Income categories cannot be linked to expense budgets");
+        }
+        if (categoryType != CategoryType.EXPENSE && categoryType != CategoryType.BOTH) {
+            throw new IllegalArgumentException("Category type is not allowed for expense budgets");
+        }
     }
 }
