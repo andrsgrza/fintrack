@@ -15,7 +15,9 @@ import com.fintrack.app.domain.ApiAccessToken;
 import com.fintrack.app.domain.ApiAccessTokenPermission;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.ApiPermission;
+import com.fintrack.app.domain.enumeration.ApiTokenStatus;
 import com.fintrack.app.repository.ApiAccessTokenPermissionRepository;
+import com.fintrack.app.repository.ApiAccessTokenRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.ApiAccessTokenPermissionService;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
@@ -70,6 +72,9 @@ class ApiAccessTokenPermissionResourceIT {
 
     @Autowired
     private ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepository;
+
+    @Autowired
+    private ApiAccessTokenRepository apiAccessTokenRepository;
 
     @Mock
     private ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepositoryMock;
@@ -752,9 +757,139 @@ class ApiAccessTokenPermissionResourceIT {
     }
 
     private ApiAccessTokenPermission savePermissionOnToken(ApiAccessToken apiAccessTokenEntity) {
-        ApiAccessTokenPermission permission = new ApiAccessTokenPermission().permission(DEFAULT_PERMISSION).createdAt(DEFAULT_CREATED_AT);
-        permission.setApiAccessToken(apiAccessTokenEntity);
-        return apiAccessTokenPermissionRepository.saveAndFlush(permission);
+        return savePermissionOnToken(apiAccessTokenEntity, DEFAULT_PERMISSION);
+    }
+
+    private ApiAccessTokenPermission savePermissionOnToken(ApiAccessToken apiAccessTokenEntity, ApiPermission permission) {
+        ApiAccessTokenPermission permissionEntity = new ApiAccessTokenPermission().permission(permission).createdAt(DEFAULT_CREATED_AT);
+        permissionEntity.setApiAccessToken(apiAccessTokenEntity);
+        return apiAccessTokenPermissionRepository.saveAndFlush(permissionEntity);
+    }
+
+    @Test
+    @Transactional
+    void deleteApiAccessTokenPermissionLeavesParentTokenIntact() throws Exception {
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+        Long tokenId = apiAccessTokenPermission.getApiAccessToken().getId();
+        long permissionCountBeforeDelete = getRepositoryCount();
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, apiAccessTokenPermission.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(permissionCountBeforeDelete);
+        assertThat(apiAccessTokenRepository.existsById(tokenId)).isTrue();
+        insertedApiAccessTokenPermission = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteApiAccessTokenPermissionLeavesSiblingPermissionOnSameToken() throws Exception {
+        ApiAccessToken token = apiAccessTokenPermission.getApiAccessToken();
+        ApiAccessTokenPermission permissionToDelete = savePermissionOnToken(token, DEFAULT_PERMISSION);
+        ApiAccessTokenPermission siblingPermission = savePermissionOnToken(token, ApiPermission.READ_TRANSACTIONS);
+        long permissionCountBeforeDelete = getRepositoryCount();
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, permissionToDelete.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(getRepositoryCount()).isEqualTo(permissionCountBeforeDelete - 1);
+        assertThat(apiAccessTokenPermissionRepository.existsById(siblingPermission.getId())).isTrue();
+        assertThat(apiAccessTokenPermissionRepository.existsById(permissionToDelete.getId())).isFalse();
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenPermissionOnRevokedTokenSucceeds() throws Exception {
+        ApiAccessToken revokedToken = apiAccessTokenPermission.getApiAccessToken();
+        revokedToken.setStatus(ApiTokenStatus.REVOKED);
+        revokedToken.setRevokedAt(Instant.now());
+        em.persist(revokedToken);
+        em.flush();
+
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = toCreateDto(apiAccessTokenPermission);
+        apiAccessTokenPermissionDTO.setId(null);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.permission").value(DEFAULT_PERMISSION.toString()));
+
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository
+            .findAll()
+            .stream()
+            .filter(permission -> permission.getApiAccessToken().getId().equals(revokedToken.getId()))
+            .findFirst()
+            .orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenPermissionOnExpiredTokenSucceeds() throws Exception {
+        ApiAccessToken expiredToken = createPersistedUpdatedApiAccessToken(em);
+        expiredToken.setStatus(ApiTokenStatus.EXPIRED);
+        expiredToken.setExpiresAt(Instant.now().minusSeconds(60));
+        em.persist(expiredToken);
+        em.flush();
+
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = new ApiAccessTokenPermissionDTO();
+        apiAccessTokenPermissionDTO.setPermission(DEFAULT_PERMISSION);
+        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
+        apiAccessTokenDTO.setId(expiredToken.getId());
+        apiAccessTokenPermissionDTO.setApiAccessToken(apiAccessTokenDTO);
+
+        restApiAccessTokenPermissionMockMvc
+            .perform(
+                post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.permission").value(DEFAULT_PERMISSION.toString()));
+
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionRepository
+            .findAll()
+            .stream()
+            .filter(permission -> permission.getApiAccessToken().getId().equals(expiredToken.getId()))
+            .findFirst()
+            .orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void createApiAccessTokenPermissionOnDifferentTokenWithSamePermissionSucceeds() throws Exception {
+        ApiAccessToken firstToken = apiAccessTokenPermission.getApiAccessToken();
+        apiAccessTokenPermissionRepository.saveAndFlush(apiAccessTokenPermission);
+
+        ApiAccessToken secondToken = createPersistedUpdatedApiAccessToken(em);
+        ApiAccessTokenPermissionDTO apiAccessTokenPermissionDTO = new ApiAccessTokenPermissionDTO();
+        apiAccessTokenPermissionDTO.setPermission(DEFAULT_PERMISSION);
+        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
+        apiAccessTokenDTO.setId(secondToken.getId());
+        apiAccessTokenPermissionDTO.setApiAccessToken(apiAccessTokenDTO);
+
+        var returnedDto = om.readValue(
+            restApiAccessTokenPermissionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenPermissionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.permission").value(DEFAULT_PERMISSION.toString()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            ApiAccessTokenPermissionDTO.class
+        );
+
+        assertThat(returnedDto.getApiAccessToken().getId()).isEqualTo(secondToken.getId());
+        assertThat(
+            apiAccessTokenPermissionRepository.existsByApiAccessTokenIdAndPermission(firstToken.getId(), DEFAULT_PERMISSION)
+        ).isTrue();
+        assertThat(
+            apiAccessTokenPermissionRepository.existsByApiAccessTokenIdAndPermission(secondToken.getId(), DEFAULT_PERMISSION)
+        ).isTrue();
+        insertedApiAccessTokenPermission = apiAccessTokenPermissionMapper.toEntity(returnedDto);
     }
 
     protected long getRepositoryCount() {

@@ -188,7 +188,8 @@ enum ApiTokenStatus {
 }
 
 enum ApiPermission {
-  CREATE_TRANSACTIONS
+  CREATE_TRANSACTIONS,
+  READ_TRANSACTIONS
 }
 
 /**
