@@ -12,7 +12,9 @@
       "updated": "Un Category ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Category ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Category {{ id }}?"
+        "title": "¿Eliminar categoría?",
+        "leafMessage": "Esto eliminará la categoría y la quitará de todo donde se use actualmente. Las transacciones y suscripciones que usen esta categoría seguirán existiendo, pero se les quitará la categoría. Los presupuestos ya no incluirán esta categoría. Las reglas que usen esta categoría se desactivarán porque se eliminará su categoría objetivo. Esta acción no se puede deshacer.",
+        "blockedMessage": "Esta categoría no se puede eliminar porque tiene subcategorías. Elimina primero sus subcategorías e inténtalo de nuevo."
       },
       "detail": {
         "title": "Category"

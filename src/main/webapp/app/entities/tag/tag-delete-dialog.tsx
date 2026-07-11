@@ -40,11 +40,12 @@ export const TagDeleteDialog = () => {
   return (
     <Modal isOpen toggle={handleClose}>
       <ModalHeader toggle={handleClose} data-cy="tagDeleteDialogHeading">
-        <Translate contentKey="entity.delete.title">Confirm delete operation</Translate>
+        <Translate contentKey="fintrackApp.tag.delete.title">Delete tag?</Translate>
       </ModalHeader>
-      <ModalBody id="fintrackApp.tag.delete.question">
-        <Translate contentKey="fintrackApp.tag.delete.question" interpolate={{ id: tagEntity.id }}>
-          Are you sure you want to delete this Tag?
+      <ModalBody id="fintrackApp.tag.delete.message" data-cy="tagDeleteMessage">
+        <Translate contentKey="fintrackApp.tag.delete.message">
+          This will delete the tag and remove it from everything where it is currently used. Transactions, rules, budgets, and subscriptions
+          that use this tag will not be deleted. They will simply no longer have this tag. This action cannot be undone.
         </Translate>
       </ModalBody>
       <ModalFooter>

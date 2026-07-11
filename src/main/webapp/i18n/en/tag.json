@@ -12,7 +12,8 @@
       "updated": "A Tag is updated with identifier {{ param }}",
       "deleted": "A Tag is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Tag {{ id }}?"
+        "title": "Delete tag?",
+        "message": "This will delete the tag and remove it from everything where it is currently used. Transactions, rules, budgets, and subscriptions that use this tag will not be deleted. They will simply no longer have this tag. This action cannot be undone."
       },
       "detail": {
         "title": "Tag"
