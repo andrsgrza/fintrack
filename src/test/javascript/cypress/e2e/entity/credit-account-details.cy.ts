@@ -180,21 +180,15 @@ describe('CreditAccountDetails e2e test', () => {
         cy.url().should('match', creditAccountDetailsPageUrlPattern);
       });
 
-      it('last delete button click should delete instance of CreditAccountDetails', () => {
+      it('last delete button click should reject direct delete of CreditAccountDetails', () => {
         cy.intercept('GET', '/api/credit-account-details/*').as('dialogDeleteRequest');
         cy.get(entityDeleteButtonSelector).last().click();
         cy.wait('@dialogDeleteRequest');
         cy.getEntityDeleteDialogHeading('creditAccountDetails').should('exist');
         cy.get(entityConfirmDeleteButtonSelector).click();
         cy.wait('@deleteEntityRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(204);
+          expect(response?.statusCode).to.equal(400);
         });
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', creditAccountDetailsPageUrlPattern);
-
-        creditAccountDetails = undefined;
       });
     });
   });
