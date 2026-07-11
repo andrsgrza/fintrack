@@ -1,6 +1,7 @@
 package com.fintrack.app.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.UserDashboardPreference;
 import com.fintrack.app.repository.UserDashboardPreferenceRepository;
 import com.fintrack.app.service.dto.UserDashboardPreferenceDTO;
@@ -31,14 +32,18 @@ public class UserDashboardPreferenceService {
 
     private final CurrentUserService currentUserService;
 
+    private final ObjectMapper objectMapper;
+
     public UserDashboardPreferenceService(
         UserDashboardPreferenceRepository userDashboardPreferenceRepository,
         UserDashboardPreferenceMapper userDashboardPreferenceMapper,
-        CurrentUserService currentUserService
+        CurrentUserService currentUserService,
+        ObjectMapper objectMapper
     ) {
         this.userDashboardPreferenceRepository = userDashboardPreferenceRepository;
         this.userDashboardPreferenceMapper = userDashboardPreferenceMapper;
         this.currentUserService = currentUserService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -52,6 +57,7 @@ public class UserDashboardPreferenceService {
         if (userDashboardPreferenceRepository.existsByUserId(currentUserService.getCurrentUser().getId())) {
             throw new IllegalArgumentException("User already has dashboard preferences");
         }
+        validateConfiguration(userDashboardPreferenceDTO.getConfiguration());
         UserDashboardPreference userDashboardPreference = userDashboardPreferenceMapper.toEntity(userDashboardPreferenceDTO);
         userDashboardPreference.setUser(currentUserService.getCurrentUser());
         userDashboardPreference = userDashboardPreferenceRepository.save(userDashboardPreference);
@@ -67,6 +73,7 @@ public class UserDashboardPreferenceService {
     public UserDashboardPreferenceDTO update(UserDashboardPreferenceDTO userDashboardPreferenceDTO) {
         LOG.debug("Request to update UserDashboardPreference : {}", userDashboardPreferenceDTO);
         UserDashboardPreference existingUserDashboardPreference = findAccessibleEntity(userDashboardPreferenceDTO.getId()).orElseThrow();
+        validateConfiguration(userDashboardPreferenceDTO.getConfiguration());
         UserDashboardPreference userDashboardPreference = userDashboardPreferenceMapper.toEntity(userDashboardPreferenceDTO);
         userDashboardPreference.setUser(existingUserDashboardPreference.getUser());
         userDashboardPreference = userDashboardPreferenceRepository.save(userDashboardPreference);
@@ -97,6 +104,12 @@ public class UserDashboardPreferenceService {
             .map(existingUserDashboardPreference -> {
                 if (patchNode != null && patchNode.has("user") && patchNode.get("user").isNull()) {
                     throw new IllegalArgumentException("User cannot be null");
+                }
+                if (patchNode != null && patchNode.has("configuration")) {
+                    if (patchNode.get("configuration").isNull()) {
+                        throw new IllegalArgumentException("Configuration cannot be null");
+                    }
+                    validateConfiguration(userDashboardPreferenceDTO.getConfiguration());
                 }
                 userDashboardPreferenceMapper.partialUpdate(existingUserDashboardPreference, userDashboardPreferenceDTO);
                 return existingUserDashboardPreference;
@@ -186,5 +199,20 @@ public class UserDashboardPreferenceService {
             id,
             currentUserService.getCurrentUserLogin()
         );
+    }
+
+    private void validateConfiguration(String configuration) {
+        if (configuration == null || configuration.isBlank()) {
+            throw new IllegalArgumentException("Configuration is required");
+        }
+        JsonNode configurationNode;
+        try {
+            configurationNode = objectMapper.readTree(configuration);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Configuration must be valid JSON");
+        }
+        if (!configurationNode.isObject() && !configurationNode.isArray()) {
+            throw new IllegalArgumentException("Configuration must be a JSON object or array");
+        }
     }
 }

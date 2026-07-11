@@ -20,7 +20,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -38,7 +37,8 @@ class UserDashboardPreferenceServiceTest {
     @Mock
     private CurrentUserService currentUserService;
 
-    @InjectMocks
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private UserDashboardPreferenceService userDashboardPreferenceService;
 
     private User currentUser;
@@ -48,6 +48,13 @@ class UserDashboardPreferenceServiceTest {
 
     @BeforeEach
     void setUp() {
+        userDashboardPreferenceService = new UserDashboardPreferenceService(
+            userDashboardPreferenceRepository,
+            userDashboardPreferenceMapper,
+            currentUserService,
+            objectMapper
+        );
+
         currentUser = new User();
         currentUser.setId(2L);
         currentUser.setLogin(CURRENT_USER_LOGIN);
@@ -173,6 +180,101 @@ class UserDashboardPreferenceServiceTest {
 
         assertThat(userDashboardPreferenceService.delete(100L)).isFalse();
         verify(userDashboardPreferenceRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void saveShouldRejectNullConfiguration() {
+        userDashboardPreferenceDTO.setConfiguration(null);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(userDashboardPreferenceRepository.existsByUserId(2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> userDashboardPreferenceService.save(userDashboardPreferenceDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Configuration is required");
+
+        verify(userDashboardPreferenceRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectBlankConfiguration() {
+        userDashboardPreferenceDTO.setConfiguration("   ");
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(userDashboardPreferenceRepository.existsByUserId(2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> userDashboardPreferenceService.save(userDashboardPreferenceDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Configuration is required");
+
+        verify(userDashboardPreferenceRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectInvalidJsonConfiguration() {
+        userDashboardPreferenceDTO.setConfiguration("not-json");
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(userDashboardPreferenceRepository.existsByUserId(2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> userDashboardPreferenceService.save(userDashboardPreferenceDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Configuration must be valid JSON");
+
+        verify(userDashboardPreferenceRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectJsonPrimitiveConfiguration() {
+        userDashboardPreferenceDTO.setConfiguration("\"hello\"");
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(userDashboardPreferenceRepository.existsByUserId(2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> userDashboardPreferenceService.save(userDashboardPreferenceDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Configuration must be a JSON object or array");
+
+        verify(userDashboardPreferenceRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectNullConfiguration() throws Exception {
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 100L);
+        patchNode.putNull("configuration");
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(userDashboardPreferenceRepository.findOneWithEagerRelationshipsByIdAndUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(userDashboardPreference)
+        );
+
+        assertThatThrownBy(() -> userDashboardPreferenceService.partialUpdate(userDashboardPreferenceDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Configuration cannot be null");
+
+        verify(userDashboardPreferenceRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldSkipConfigurationValidationWhenFieldAbsent() throws Exception {
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 100L);
+        patchNode.put("updatedAt", Instant.now().toString());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(userDashboardPreferenceRepository.findOneWithEagerRelationshipsByIdAndUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(userDashboardPreference)
+        );
+        when(userDashboardPreferenceRepository.save(userDashboardPreference)).thenReturn(userDashboardPreference);
+        when(userDashboardPreferenceMapper.toDto(userDashboardPreference)).thenReturn(userDashboardPreferenceDTO);
+
+        Optional<UserDashboardPreferenceDTO> result = userDashboardPreferenceService.partialUpdate(userDashboardPreferenceDTO, patchNode);
+
+        assertThat(result).isPresent();
+        verify(userDashboardPreferenceRepository).save(userDashboardPreference);
     }
 
     @Test
