@@ -40,10 +40,20 @@ public class ApiIngestionDTO implements Serializable {
 
     private Instant createdAt;
 
+    private Long apiTokenIdSnapshot;
+
+    @Size(max = 20)
+    private String apiTokenPrefixSnapshot;
+
+    @Size(max = 100)
+    private String apiTokenNameSnapshot;
+
     @NotNull
     private TransactionIngestionDTO transactionIngestion;
 
-    @NotNull
+    /**
+     * Create-only: used to resolve an accessible token and copy snapshot fields. Not persisted as FK.
+     */
     private ApiAccessTokenDTO apiAccessToken;
 
     public Long getId() {
@@ -118,6 +128,30 @@ public class ApiIngestionDTO implements Serializable {
         this.createdAt = createdAt;
     }
 
+    public Long getApiTokenIdSnapshot() {
+        return apiTokenIdSnapshot;
+    }
+
+    public void setApiTokenIdSnapshot(Long apiTokenIdSnapshot) {
+        this.apiTokenIdSnapshot = apiTokenIdSnapshot;
+    }
+
+    public String getApiTokenPrefixSnapshot() {
+        return apiTokenPrefixSnapshot;
+    }
+
+    public void setApiTokenPrefixSnapshot(String apiTokenPrefixSnapshot) {
+        this.apiTokenPrefixSnapshot = apiTokenPrefixSnapshot;
+    }
+
+    public String getApiTokenNameSnapshot() {
+        return apiTokenNameSnapshot;
+    }
+
+    public void setApiTokenNameSnapshot(String apiTokenNameSnapshot) {
+        this.apiTokenNameSnapshot = apiTokenNameSnapshot;
+    }
+
     public TransactionIngestionDTO getTransactionIngestion() {
         return transactionIngestion;
     }
@@ -168,6 +202,9 @@ public class ApiIngestionDTO implements Serializable {
             ", clientReference='" + getClientReference() + "'" +
             ", receivedAt='" + getReceivedAt() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
+            ", apiTokenIdSnapshot=" + getApiTokenIdSnapshot() +
+            ", apiTokenPrefixSnapshot='" + getApiTokenPrefixSnapshot() + "'" +
+            ", apiTokenNameSnapshot='" + getApiTokenNameSnapshot() + "'" +
             ", transactionIngestion=" + getTransactionIngestion() +
             ", apiAccessToken=" + getApiAccessToken() +
             "}";

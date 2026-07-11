@@ -178,7 +178,8 @@ export const ApiAccessToken = () => {
                         </span>
                       </Button>
                       <Button
-                        onClick={() => (window.location.href = `/api-access-token/${apiAccessToken.id}/delete`)}
+                        tag={Link}
+                        to={`/api-access-token/${apiAccessToken.id}/delete`}
                         color="danger"
                         size="sm"
                         data-cy="entityDeleteButton"

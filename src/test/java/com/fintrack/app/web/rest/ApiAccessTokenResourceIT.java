@@ -12,9 +12,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.ApiAccessToken;
+import com.fintrack.app.domain.ApiAccessTokenPermission;
+import com.fintrack.app.domain.ApiIngestion;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.ApiPermission;
 import com.fintrack.app.domain.enumeration.ApiTokenStatus;
+import com.fintrack.app.repository.ApiAccessTokenPermissionRepository;
 import com.fintrack.app.repository.ApiAccessTokenRepository;
+import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.ApiAccessTokenService;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
@@ -90,6 +95,12 @@ class ApiAccessTokenResourceIT {
 
     @Autowired
     private ApiAccessTokenRepository apiAccessTokenRepository;
+
+    @Autowired
+    private ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepository;
+
+    @Autowired
+    private ApiIngestionRepository apiIngestionRepository;
 
     @Mock
     private ApiAccessTokenRepository apiAccessTokenRepositoryMock;
@@ -251,87 +262,32 @@ class ApiAccessTokenResourceIT {
 
     @Test
     @Transactional
-    void checkTokenPrefixIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        apiAccessToken.setTokenPrefix(null);
+    void createApiAccessTokenWithNameOnlyGeneratesSecrets() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
+        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
+        apiAccessTokenDTO.setName("Import token");
 
-        // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
+        var returnedApiAccessTokenDTO = om.readValue(
+            restApiAccessTokenMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tokenHash").doesNotExist())
+                .andExpect(jsonPath("$.tokenPrefix").isNotEmpty())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.rawToken").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            ApiAccessTokenDTO.class
+        );
 
-        restApiAccessTokenMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkTokenHashIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        apiAccessToken.setTokenHash(null);
-
-        // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
-
-        restApiAccessTokenMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkStatusIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        apiAccessToken.setStatus(null);
-
-        // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
-
-        restApiAccessTokenMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        apiAccessToken.setCreatedAt(null);
-
-        // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
-
-        restApiAccessTokenMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void checkUpdatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        apiAccessToken.setUpdatedAt(null);
-
-        // Create the ApiAccessToken, which fails.
-        ApiAccessTokenDTO apiAccessTokenDTO = toCreateDto(apiAccessToken);
-
-        restApiAccessTokenMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiAccessTokenDTO)))
-            .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        insertedApiAccessToken = apiAccessTokenRepository.findById(returnedApiAccessTokenDTO.getId()).orElseThrow();
+        assertThat(insertedApiAccessToken.getTokenHash()).isNotBlank();
+        assertThat(insertedApiAccessToken.getTokenPrefix()).startsWith("ftk_");
+        assertThat(insertedApiAccessToken.getStatus()).isEqualTo(DEFAULT_STATUS);
+        apiAccessTokenRepository.delete(insertedApiAccessToken);
+        insertedApiAccessToken = null;
     }
 
     @Test
@@ -806,6 +762,42 @@ class ApiAccessTokenResourceIT {
             .andExpect(status().isNoContent());
 
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedApiAccessToken = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteApiAccessTokenDoesNotDeleteApiIngestions() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+        ApiIngestion apiIngestion = ApiIngestionResourceIT.createEntity(em);
+        apiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
+        Long ingestionId = apiIngestion.getId();
+
+        restApiAccessTokenMockMvc
+            .perform(delete(ENTITY_API_URL_ID, apiAccessToken.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(apiIngestionRepository.findById(ingestionId)).isPresent();
+        insertedApiAccessToken = null;
+        apiIngestionRepository.deleteById(ingestionId);
+    }
+
+    @Test
+    @Transactional
+    void deleteApiAccessTokenDeletesPermissionChildren() throws Exception {
+        insertedApiAccessToken = apiAccessTokenRepository.saveAndFlush(apiAccessToken);
+        ApiAccessTokenPermission permission = new ApiAccessTokenPermission();
+        permission.setPermission(ApiPermission.READ_TRANSACTIONS);
+        permission.setCreatedAt(DEFAULT_CREATED_AT);
+        permission.setApiAccessToken(insertedApiAccessToken);
+        permission = apiAccessTokenPermissionRepository.saveAndFlush(permission);
+        Long permissionId = permission.getId();
+
+        restApiAccessTokenMockMvc
+            .perform(delete(ENTITY_API_URL_ID, apiAccessToken.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(apiAccessTokenPermissionRepository.findById(permissionId)).isEmpty();
         insertedApiAccessToken = null;
     }
 

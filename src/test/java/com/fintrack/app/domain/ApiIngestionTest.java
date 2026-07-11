@@ -1,6 +1,5 @@
 package com.fintrack.app.domain;
 
-import static com.fintrack.app.domain.ApiAccessTokenTestSamples.*;
 import static com.fintrack.app.domain.ApiIngestionTestSamples.*;
 import static com.fintrack.app.domain.TransactionIngestionTestSamples.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,14 +36,14 @@ class ApiIngestionTest {
     }
 
     @Test
-    void apiAccessTokenTest() {
+    void tokenSnapshotFieldsTest() {
         ApiIngestion apiIngestion = getApiIngestionRandomSampleGenerator();
-        ApiAccessToken apiAccessTokenBack = getApiAccessTokenRandomSampleGenerator();
+        apiIngestion.setApiTokenIdSnapshot(99L);
+        apiIngestion.setApiTokenPrefixSnapshot("ftk_abc");
+        apiIngestion.setApiTokenNameSnapshot("My Token");
 
-        apiIngestion.setApiAccessToken(apiAccessTokenBack);
-        assertThat(apiIngestion.getApiAccessToken()).isEqualTo(apiAccessTokenBack);
-
-        apiIngestion.apiAccessToken(null);
-        assertThat(apiIngestion.getApiAccessToken()).isNull();
+        assertThat(apiIngestion.getApiTokenIdSnapshot()).isEqualTo(99L);
+        assertThat(apiIngestion.getApiTokenPrefixSnapshot()).isEqualTo("ftk_abc");
+        assertThat(apiIngestion.getApiTokenNameSnapshot()).isEqualTo("My Token");
     }
 }

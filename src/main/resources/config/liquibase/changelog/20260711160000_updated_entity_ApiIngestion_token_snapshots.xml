@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Decision 11C: replace ApiIngestion -> ApiAccessToken FK with immutable token snapshot fields.
+    -->
+    <changeSet id="20260711160000-1" author="fintrack">
+        <addColumn tableName="api_ingestion">
+            <column name="api_token_id_snapshot" type="bigint">
+                <constraints nullable="true"/>
+            </column>
+            <column name="api_token_prefix_snapshot" type="varchar(20)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="api_token_name_snapshot" type="varchar(100)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="20260711160000-2" author="fintrack">
+        <sql>
+            UPDATE api_ingestion ai
+            SET api_token_id_snapshot = t.id,
+                api_token_prefix_snapshot = t.token_prefix,
+                api_token_name_snapshot = t.name
+            FROM api_access_token t
+            WHERE ai.api_access_token_id = t.id;
+        </sql>
+    </changeSet>
+
+    <changeSet id="20260711160000-3" author="fintrack">
+        <dropForeignKeyConstraint baseTableName="api_ingestion" constraintName="fk_api_ingestion__api_access_token_id"/>
+        <dropColumn tableName="api_ingestion" columnName="api_access_token_id"/>
+    </changeSet>
+
+    <changeSet id="20260711160000-4" author="fintrack">
+        <addNotNullConstraint tableName="api_ingestion" columnName="api_token_id_snapshot" columnDataType="bigint"/>
+        <addNotNullConstraint tableName="api_ingestion" columnName="api_token_prefix_snapshot" columnDataType="varchar(20)"/>
+        <addNotNullConstraint tableName="api_ingestion" columnName="api_token_name_snapshot" columnDataType="varchar(100)"/>
+    </changeSet>
+</databaseChangeLog>

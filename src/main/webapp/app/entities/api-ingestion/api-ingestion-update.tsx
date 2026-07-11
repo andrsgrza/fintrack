@@ -70,6 +70,9 @@ export const ApiIngestionUpdate = () => {
           apiAccessToken: apiIngestionEntity?.apiAccessToken,
           createdAt: apiIngestionEntity?.createdAt,
           receivedAt: apiIngestionEntity?.receivedAt,
+          apiTokenIdSnapshot: apiIngestionEntity?.apiTokenIdSnapshot,
+          apiTokenPrefixSnapshot: apiIngestionEntity?.apiTokenPrefixSnapshot,
+          apiTokenNameSnapshot: apiIngestionEntity?.apiTokenNameSnapshot,
         };
 
     if (isNew) {
@@ -87,7 +90,6 @@ export const ApiIngestionUpdate = () => {
           receivedAt: convertDateTimeFromServer(apiIngestionEntity.receivedAt),
           createdAt: convertDateTimeFromServer(apiIngestionEntity.createdAt),
           transactionIngestion: apiIngestionEntity?.transactionIngestion?.id,
-          apiAccessToken: apiIngestionEntity?.apiAccessToken?.id,
         };
 
   const parentOptions = isNew
@@ -96,7 +98,7 @@ export const ApiIngestionUpdate = () => {
       ? [apiIngestionEntity.transactionIngestion]
       : [];
 
-  const tokenOptions = isNew ? apiAccessTokens : apiIngestionEntity?.apiAccessToken ? [apiIngestionEntity.apiAccessToken] : [];
+  const tokenOptions = isNew ? apiAccessTokens : [];
 
   return (
     <div>
@@ -231,27 +233,57 @@ export const ApiIngestionUpdate = () => {
               <FormText>
                 <Translate contentKey="entity.validation.required">This field is required.</Translate>
               </FormText>
-              <ValidatedField
-                id="api-ingestion-apiAccessToken"
-                name="apiAccessToken"
-                data-cy="apiAccessToken"
-                label={translate('fintrackApp.apiIngestion.apiAccessToken')}
-                type="select"
-                disabled={!isNew}
-                required
-              >
-                <option value="" key="0" />
-                {tokenOptions
-                  ? tokenOptions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.name}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <FormText>
-                <Translate contentKey="entity.validation.required">This field is required.</Translate>
-              </FormText>
+              {!isNew ? (
+                <>
+                  <ValidatedField
+                    label={translate('fintrackApp.apiIngestion.apiTokenIdSnapshot')}
+                    id="api-ingestion-apiTokenIdSnapshot"
+                    name="apiTokenIdSnapshot"
+                    data-cy="apiTokenIdSnapshot"
+                    type="text"
+                    readOnly
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.apiIngestion.apiTokenPrefixSnapshot')}
+                    id="api-ingestion-apiTokenPrefixSnapshot"
+                    name="apiTokenPrefixSnapshot"
+                    data-cy="apiTokenPrefixSnapshot"
+                    type="text"
+                    readOnly
+                  />
+                  <ValidatedField
+                    label={translate('fintrackApp.apiIngestion.apiTokenNameSnapshot')}
+                    id="api-ingestion-apiTokenNameSnapshot"
+                    name="apiTokenNameSnapshot"
+                    data-cy="apiTokenNameSnapshot"
+                    type="text"
+                    readOnly
+                  />
+                </>
+              ) : (
+                <>
+                  <ValidatedField
+                    id="api-ingestion-apiAccessToken"
+                    name="apiAccessToken"
+                    data-cy="apiAccessToken"
+                    label={translate('fintrackApp.apiIngestion.apiAccessToken')}
+                    type="select"
+                    required
+                  >
+                    <option value="" key="0" />
+                    {tokenOptions
+                      ? tokenOptions.map(otherEntity => (
+                          <option value={otherEntity.id} key={otherEntity.id}>
+                            {otherEntity.name}
+                          </option>
+                        ))
+                      : null}
+                  </ValidatedField>
+                  <FormText>
+                    <Translate contentKey="entity.validation.required">This field is required.</Translate>
+                  </FormText>
+                </>
+              )}
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/api-ingestion" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;

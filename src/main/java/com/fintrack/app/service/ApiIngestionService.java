@@ -84,17 +84,20 @@ public class ApiIngestionService {
                 if (patchNode != null && patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
                     throw new IllegalArgumentException("Transaction ingestion cannot be changed");
                 }
-                if (patchNode != null && patchNode.has("apiAccessToken") && patchNode.get("apiAccessToken").isNull()) {
-                    throw new IllegalArgumentException("Api access token cannot be changed");
-                }
                 if (patchNode != null && patchNode.has("requestId")) {
                     rejectRequestIdChange(existing, apiIngestionDTO);
                 }
                 if (patchNode != null && patchNode.has("transactionIngestion")) {
                     rejectTransactionIngestionChange(existing, apiIngestionDTO);
                 }
-                if (patchNode != null && patchNode.has("apiAccessToken")) {
-                    rejectApiAccessTokenChange(existing, apiIngestionDTO);
+                if (patchNode != null && patchNode.has("apiTokenIdSnapshot")) {
+                    rejectApiTokenIdSnapshotChange(existing, apiIngestionDTO);
+                }
+                if (patchNode != null && patchNode.has("apiTokenPrefixSnapshot")) {
+                    rejectApiTokenPrefixSnapshotChange(existing, apiIngestionDTO);
+                }
+                if (patchNode != null && patchNode.has("apiTokenNameSnapshot")) {
+                    rejectApiTokenNameSnapshotChange(existing, apiIngestionDTO);
                 }
                 if (patchNode != null && patchNode.has("createdAt")) {
                     rejectTimestampChange(existing.getCreatedAt(), apiIngestionDTO.getCreatedAt(), "createdAt");
@@ -162,7 +165,13 @@ public class ApiIngestionService {
         validateApiTransactionIngestion(transactionIngestion);
         validateTransactionIngestionNotAlreadyLinked(transactionIngestion);
         apiIngestion.setTransactionIngestion(transactionIngestion);
-        apiIngestion.setApiAccessToken(apiAccessToken);
+        applyTokenSnapshots(apiIngestion, apiAccessToken);
+    }
+
+    private void applyTokenSnapshots(ApiIngestion apiIngestion, ApiAccessToken apiAccessToken) {
+        apiIngestion.setApiTokenIdSnapshot(apiAccessToken.getId());
+        apiIngestion.setApiTokenPrefixSnapshot(apiAccessToken.getTokenPrefix());
+        apiIngestion.setApiTokenNameSnapshot(apiAccessToken.getName());
     }
 
     private TransactionIngestion resolveTransactionIngestion(TransactionIngestionDTO transactionIngestionDTO) {
@@ -229,7 +238,9 @@ public class ApiIngestionService {
 
     private void rejectImmutableFieldChanges(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
         rejectTransactionIngestionChange(existing, apiIngestionDTO);
-        rejectApiAccessTokenChange(existing, apiIngestionDTO);
+        rejectApiTokenIdSnapshotChange(existing, apiIngestionDTO);
+        rejectApiTokenPrefixSnapshotChange(existing, apiIngestionDTO);
+        rejectApiTokenNameSnapshotChange(existing, apiIngestionDTO);
         rejectRequestIdChange(existing, apiIngestionDTO);
         rejectTimestampChange(existing.getCreatedAt(), apiIngestionDTO.getCreatedAt(), "createdAt");
         rejectTimestampChange(existing.getReceivedAt(), apiIngestionDTO.getReceivedAt(), "receivedAt");
@@ -245,13 +256,30 @@ public class ApiIngestionService {
         }
     }
 
-    private void rejectApiAccessTokenChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
-        if (apiIngestionDTO.getApiAccessToken() == null) {
-            throw new IllegalArgumentException("Api access token cannot be changed");
+    private void rejectApiTokenIdSnapshotChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
+        if (apiIngestionDTO.getApiTokenIdSnapshot() == null) {
+            throw new IllegalArgumentException("Api token id snapshot cannot be changed");
         }
-        Long incomingId = apiIngestionDTO.getApiAccessToken().getId();
-        if (incomingId == null || !incomingId.equals(existing.getApiAccessToken().getId())) {
-            throw new IllegalArgumentException("Api access token cannot be changed");
+        if (!apiIngestionDTO.getApiTokenIdSnapshot().equals(existing.getApiTokenIdSnapshot())) {
+            throw new IllegalArgumentException("Api token id snapshot cannot be changed");
+        }
+    }
+
+    private void rejectApiTokenPrefixSnapshotChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
+        if (apiIngestionDTO.getApiTokenPrefixSnapshot() == null) {
+            throw new IllegalArgumentException("Api token prefix snapshot cannot be changed");
+        }
+        if (!apiIngestionDTO.getApiTokenPrefixSnapshot().equals(existing.getApiTokenPrefixSnapshot())) {
+            throw new IllegalArgumentException("Api token prefix snapshot cannot be changed");
+        }
+    }
+
+    private void rejectApiTokenNameSnapshotChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
+        if (apiIngestionDTO.getApiTokenNameSnapshot() == null) {
+            throw new IllegalArgumentException("Api token name snapshot cannot be changed");
+        }
+        if (!apiIngestionDTO.getApiTokenNameSnapshot().equals(existing.getApiTokenNameSnapshot())) {
+            throw new IllegalArgumentException("Api token name snapshot cannot be changed");
         }
     }
 

@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.ApiAccessToken;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.ApiTokenStatus;
+import com.fintrack.app.repository.ApiAccessTokenPermissionRepository;
 import com.fintrack.app.repository.ApiAccessTokenRepository;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
 import com.fintrack.app.service.mapper.ApiAccessTokenMapper;
@@ -31,6 +32,9 @@ class ApiAccessTokenServiceTest {
 
     @Mock
     private ApiAccessTokenRepository apiAccessTokenRepository;
+
+    @Mock
+    private ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepository;
 
     @Mock
     private ApiAccessTokenMapper apiAccessTokenMapper;
@@ -69,6 +73,35 @@ class ApiAccessTokenServiceTest {
         apiAccessTokenDTO.setStatus(ApiTokenStatus.ACTIVE);
         apiAccessTokenDTO.setCreatedAt(Instant.now());
         apiAccessTokenDTO.setUpdatedAt(Instant.now());
+    }
+
+    @Test
+    void saveShouldGenerateTokenSecretsWhenHashOmitted() {
+        ApiAccessTokenDTO dto = new ApiAccessTokenDTO();
+        dto.setName("Generated token");
+
+        ApiAccessToken mappedEntity = new ApiAccessToken();
+        when(apiAccessTokenMapper.toEntity(dto)).thenReturn(mappedEntity);
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(apiAccessTokenRepository.save(mappedEntity)).thenAnswer(invocation -> {
+            ApiAccessToken saved = invocation.getArgument(0);
+            saved.setId(10L);
+            saved.setTokenHash(dto.getTokenHash());
+            saved.setTokenPrefix(dto.getTokenPrefix());
+            saved.setStatus(dto.getStatus());
+            return saved;
+        });
+        when(apiAccessTokenMapper.toDto(mappedEntity)).thenReturn(dto);
+
+        ApiAccessTokenDTO result = apiAccessTokenService.save(dto);
+
+        assertThat(dto.getTokenHash()).isNotBlank();
+        assertThat(dto.getTokenPrefix()).startsWith("ftk_");
+        assertThat(dto.getStatus()).isEqualTo(ApiTokenStatus.ACTIVE);
+        assertThat(dto.getCreatedAt()).isNotNull();
+        assertThat(dto.getUpdatedAt()).isNotNull();
+        assertThat(result.getRawToken()).isNotBlank();
+        verify(apiAccessTokenRepository).save(mappedEntity);
     }
 
     @Test
@@ -154,6 +187,19 @@ class ApiAccessTokenServiceTest {
             .hasMessage("Token prefix cannot be changed");
 
         verify(apiAccessTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteShouldCascadePermissionChildren() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(apiAccessTokenRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(apiAccessToken)
+        );
+
+        assertThat(apiAccessTokenService.delete(10L)).isTrue();
+        verify(apiAccessTokenPermissionRepository).deleteByApiAccessTokenId(10L);
+        verify(apiAccessTokenRepository).deleteById(10L);
     }
 
     @Test

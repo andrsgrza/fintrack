@@ -67,10 +67,6 @@ public class ApiAccessToken implements Serializable {
     private User user;
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "apiAccessToken")
-    @JsonIgnoreProperties(value = { "transactionIngestion", "apiAccessToken" }, allowSetters = true)
-    private Set<ApiIngestion> apiIngestions = new HashSet<>();
-
-    @OneToMany(fetch = FetchType.LAZY, mappedBy = "apiAccessToken")
     @JsonIgnoreProperties(value = { "apiAccessToken" }, allowSetters = true)
     private Set<ApiAccessTokenPermission> permissions = new HashSet<>();
 
@@ -216,37 +212,6 @@ public class ApiAccessToken implements Serializable {
 
     public ApiAccessToken user(User user) {
         this.setUser(user);
-        return this;
-    }
-
-    public Set<ApiIngestion> getApiIngestions() {
-        return this.apiIngestions;
-    }
-
-    public void setApiIngestions(Set<ApiIngestion> apiIngestions) {
-        if (this.apiIngestions != null) {
-            this.apiIngestions.forEach(i -> i.setApiAccessToken(null));
-        }
-        if (apiIngestions != null) {
-            apiIngestions.forEach(i -> i.setApiAccessToken(this));
-        }
-        this.apiIngestions = apiIngestions;
-    }
-
-    public ApiAccessToken apiIngestions(Set<ApiIngestion> apiIngestions) {
-        this.setApiIngestions(apiIngestions);
-        return this;
-    }
-
-    public ApiAccessToken addApiIngestions(ApiIngestion apiIngestion) {
-        this.apiIngestions.add(apiIngestion);
-        apiIngestion.setApiAccessToken(this);
-        return this;
-    }
-
-    public ApiAccessToken removeApiIngestions(ApiIngestion apiIngestion) {
-        this.apiIngestions.remove(apiIngestion);
-        apiIngestion.setApiAccessToken(null);
         return this;
     }
 

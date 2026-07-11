@@ -13,6 +13,7 @@ export interface IApiAccessToken {
   lastUsedAt?: dayjs.Dayjs | null;
   expiresAt?: dayjs.Dayjs | null;
   revokedAt?: dayjs.Dayjs | null;
+  rawToken?: string;
   user?: IUser;
 }
 

@@ -21,20 +21,22 @@ public class ApiAccessTokenDTO implements Serializable {
     @Size(min = 1, max = 100)
     private String name;
 
-    @NotNull
     @Size(max = 20)
     private String tokenPrefix;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String tokenHash;
 
-    @NotNull
+    /**
+     * Write-only on create: full secret returned once when the server generates credentials.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String rawToken;
+
     private ApiTokenStatus status;
 
-    @NotNull
     private Instant createdAt;
 
-    @NotNull
     private Instant updatedAt;
 
     private Instant lastUsedAt;
@@ -75,6 +77,14 @@ public class ApiAccessTokenDTO implements Serializable {
 
     public void setTokenHash(String tokenHash) {
         this.tokenHash = tokenHash;
+    }
+
+    public String getRawToken() {
+        return rawToken;
+    }
+
+    public void setRawToken(String rawToken) {
+        this.rawToken = rawToken;
     }
 
     public ApiTokenStatus getStatus() {

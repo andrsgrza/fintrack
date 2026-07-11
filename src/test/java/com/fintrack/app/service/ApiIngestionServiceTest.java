@@ -61,7 +61,6 @@ class ApiIngestionServiceTest {
     private TransactionIngestion transactionIngestion;
     private TransactionIngestion fileTransactionIngestion;
     private ApiAccessToken apiAccessToken;
-    private ApiAccessToken otherUserToken;
     private ApiIngestion apiIngestion;
     private ApiIngestionDTO apiIngestionDTO;
 
@@ -92,10 +91,8 @@ class ApiIngestionServiceTest {
         apiAccessToken = new ApiAccessToken();
         apiAccessToken.setId(70L);
         apiAccessToken.setUser(currentUser);
-
-        otherUserToken = new ApiAccessToken();
-        otherUserToken.setId(71L);
-        otherUserToken.setUser(otherUser);
+        apiAccessToken.setTokenPrefix("ftk_prefix");
+        apiAccessToken.setName("Import Token");
 
         apiIngestion = new ApiIngestion();
         apiIngestion.setId(100L);
@@ -105,7 +102,9 @@ class ApiIngestionServiceTest {
         apiIngestion.setCreatedAt(Instant.parse("2026-01-01T00:00:00Z"));
         apiIngestion.setReceivedAt(Instant.parse("2026-01-01T00:00:00Z"));
         apiIngestion.setTransactionIngestion(transactionIngestion);
-        apiIngestion.setApiAccessToken(apiAccessToken);
+        apiIngestion.setApiTokenIdSnapshot(70L);
+        apiIngestion.setApiTokenPrefixSnapshot("ftk_prefix");
+        apiIngestion.setApiTokenNameSnapshot("Import Token");
 
         apiIngestionDTO = new ApiIngestionDTO();
         apiIngestionDTO.setRequestId("req-1");
@@ -146,7 +145,9 @@ class ApiIngestionServiceTest {
         verify(apiIngestionRepository).save(captor.capture());
         ApiIngestion saved = captor.getValue();
         assertThat(saved.getTransactionIngestion()).isEqualTo(transactionIngestion);
-        assertThat(saved.getApiAccessToken()).isEqualTo(apiAccessToken);
+        assertThat(saved.getApiTokenIdSnapshot()).isEqualTo(70L);
+        assertThat(saved.getApiTokenPrefixSnapshot()).isEqualTo("ftk_prefix");
+        assertThat(saved.getApiTokenNameSnapshot()).isEqualTo("Import Token");
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getReceivedAt()).isNotNull();
 
@@ -234,6 +235,9 @@ class ApiIngestionServiceTest {
         apiIngestionDTO.setId(100L);
         apiIngestionDTO.setCreatedAt(apiIngestion.getCreatedAt());
         apiIngestionDTO.setReceivedAt(apiIngestion.getReceivedAt());
+        apiIngestionDTO.setApiTokenIdSnapshot(70L);
+        apiIngestionDTO.setApiTokenPrefixSnapshot("ftk_prefix");
+        apiIngestionDTO.setApiTokenNameSnapshot("Import Token");
 
         TransactionIngestionDTO otherParentDTO = new TransactionIngestionDTO();
         otherParentDTO.setId(99L);
@@ -242,13 +246,10 @@ class ApiIngestionServiceTest {
 
         apiIngestionDTO.setTransactionIngestion(new TransactionIngestionDTO());
         apiIngestionDTO.getTransactionIngestion().setId(50L);
-        ApiAccessTokenDTO otherTokenDTO = new ApiAccessTokenDTO();
-        otherTokenDTO.setId(99L);
-        apiIngestionDTO.setApiAccessToken(otherTokenDTO);
+        apiIngestionDTO.setApiTokenNameSnapshot("renamed");
         assertThatThrownBy(() -> apiIngestionService.update(apiIngestionDTO)).isInstanceOf(IllegalArgumentException.class);
 
-        apiIngestionDTO.setApiAccessToken(new ApiAccessTokenDTO());
-        apiIngestionDTO.getApiAccessToken().setId(70L);
+        apiIngestionDTO.setApiTokenNameSnapshot("Import Token");
         apiIngestionDTO.setRequestId("req-2");
         assertThatThrownBy(() -> apiIngestionService.update(apiIngestionDTO)).isInstanceOf(IllegalArgumentException.class);
     }
@@ -270,7 +271,7 @@ class ApiIngestionServiceTest {
     }
 
     @Test
-    void partialUpdateShouldRejectNullApiAccessToken() {
+    void partialUpdateShouldRejectNullApiTokenNameSnapshot() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(apiIngestionRepository.findOneWithToOneRelationshipsByUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
@@ -279,7 +280,7 @@ class ApiIngestionServiceTest {
 
         apiIngestionDTO.setId(100L);
         ObjectNode patchNode = new ObjectMapper().createObjectNode();
-        patchNode.putNull("apiAccessToken");
+        patchNode.putNull("apiTokenNameSnapshot");
         assertThatThrownBy(() -> apiIngestionService.partialUpdate(apiIngestionDTO, patchNode)).isInstanceOf(
             IllegalArgumentException.class
         );

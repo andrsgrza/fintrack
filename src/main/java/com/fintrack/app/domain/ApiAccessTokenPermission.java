@@ -34,7 +34,7 @@ public class ApiAccessTokenPermission implements Serializable {
 
     @ManyToOne(optional = false)
     @NotNull
-    @JsonIgnoreProperties(value = { "user", "apiIngestions", "permissions" }, allowSetters = true)
+    @JsonIgnoreProperties(value = { "user", "permissions" }, allowSetters = true)
     private ApiAccessToken apiAccessToken;
 
     // jhipster-needle-entity-add-field - JHipster will add fields here

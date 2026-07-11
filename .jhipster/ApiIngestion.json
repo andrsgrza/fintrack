@@ -52,6 +52,23 @@
       "fieldName": "createdAt",
       "fieldType": "Instant",
       "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "apiTokenIdSnapshot",
+      "fieldType": "Long",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "apiTokenPrefixSnapshot",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "20"
+    },
+    {
+      "fieldName": "apiTokenNameSnapshot",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "100"
     }
   ],
   "incrementalChangelog": false,
@@ -64,15 +81,6 @@
       "relationshipName": "transactionIngestion",
       "relationshipSide": "left",
       "relationshipType": "one-to-one",
-      "relationshipValidateRules": "required"
-    },
-    {
-      "otherEntityField": "name",
-      "otherEntityName": "apiAccessToken",
-      "otherEntityRelationshipName": "apiIngestions",
-      "relationshipName": "apiAccessToken",
-      "relationshipSide": "left",
-      "relationshipType": "many-to-one",
       "relationshipValidateRules": "required"
     }
   ],

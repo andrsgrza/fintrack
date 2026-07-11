@@ -27,7 +27,10 @@
       "receivedAt": "Received At",
       "createdAt": "Created At",
       "transactionIngestion": "Transaction Ingestion",
-      "apiAccessToken": "Api Access Token"
+      "apiAccessToken": "Api Access Token",
+      "apiTokenIdSnapshot": "Token Id (snapshot)",
+      "apiTokenPrefixSnapshot": "Token Prefix (snapshot)",
+      "apiTokenNameSnapshot": "Token Name (snapshot)"
     }
   }
 }

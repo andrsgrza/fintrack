@@ -12,7 +12,11 @@ export interface IApiIngestion {
   clientReference?: string | null;
   receivedAt?: dayjs.Dayjs;
   createdAt?: dayjs.Dayjs;
+  apiTokenIdSnapshot?: number;
+  apiTokenPrefixSnapshot?: string;
+  apiTokenNameSnapshot?: string;
   transactionIngestion?: ITransactionIngestion;
+  /** Create-only: resolved server-side into snapshot fields. */
   apiAccessToken?: IApiAccessToken;
 }
 

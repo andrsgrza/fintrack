@@ -124,7 +124,7 @@ export const ApiIngestion = () => {
                   <FontAwesomeIcon icon="sort" />
                 </th>
                 <th>
-                  <Translate contentKey="fintrackApp.apiIngestion.apiAccessToken">Api Access Token</Translate>{' '}
+                  <Translate contentKey="fintrackApp.apiIngestion.apiTokenNameSnapshot">Token Name (snapshot)</Translate>{' '}
                   <FontAwesomeIcon icon="sort" />
                 </th>
                 <th />
@@ -159,13 +159,7 @@ export const ApiIngestion = () => {
                       ''
                     )}
                   </td>
-                  <td>
-                    {apiIngestion.apiAccessToken ? (
-                      <Link to={`/api-access-token/${apiIngestion.apiAccessToken.id}`}>{apiIngestion.apiAccessToken.name}</Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
+                  <td>{apiIngestion.apiTokenNameSnapshot}</td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">
                       <Button tag={Link} to={`/api-ingestion/${apiIngestion.id}`} color="info" size="sm" data-cy="entityDetailsButton">

@@ -2,7 +2,6 @@ package com.fintrack.app.domain;
 
 import static com.fintrack.app.domain.ApiAccessTokenPermissionTestSamples.*;
 import static com.fintrack.app.domain.ApiAccessTokenTestSamples.*;
-import static com.fintrack.app.domain.ApiIngestionTestSamples.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fintrack.app.web.rest.TestUtil;
@@ -24,28 +23,6 @@ class ApiAccessTokenTest {
 
         apiAccessToken2 = getApiAccessTokenSample2();
         assertThat(apiAccessToken1).isNotEqualTo(apiAccessToken2);
-    }
-
-    @Test
-    void apiIngestionsTest() {
-        ApiAccessToken apiAccessToken = getApiAccessTokenRandomSampleGenerator();
-        ApiIngestion apiIngestionBack = getApiIngestionRandomSampleGenerator();
-
-        apiAccessToken.addApiIngestions(apiIngestionBack);
-        assertThat(apiAccessToken.getApiIngestions()).containsOnly(apiIngestionBack);
-        assertThat(apiIngestionBack.getApiAccessToken()).isEqualTo(apiAccessToken);
-
-        apiAccessToken.removeApiIngestions(apiIngestionBack);
-        assertThat(apiAccessToken.getApiIngestions()).doesNotContain(apiIngestionBack);
-        assertThat(apiIngestionBack.getApiAccessToken()).isNull();
-
-        apiAccessToken.apiIngestions(new HashSet<>(Set.of(apiIngestionBack)));
-        assertThat(apiAccessToken.getApiIngestions()).containsOnly(apiIngestionBack);
-        assertThat(apiIngestionBack.getApiAccessToken()).isEqualTo(apiAccessToken);
-
-        apiAccessToken.setApiIngestions(new HashSet<>());
-        assertThat(apiAccessToken.getApiIngestions()).doesNotContain(apiIngestionBack);
-        assertThat(apiIngestionBack.getApiAccessToken()).isNull();
     }
 
     @Test

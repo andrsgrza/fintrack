@@ -402,6 +402,9 @@ entity ApiIngestion {
   clientReference String maxlength(150)
   receivedAt Instant required
   createdAt Instant required
+  apiTokenIdSnapshot Long required
+  apiTokenPrefixSnapshot String required maxlength(20)
+  apiTokenNameSnapshot String required maxlength(100)
 }
 
 /**
@@ -555,7 +558,6 @@ relationship OneToOne {
 
 relationship ManyToOne {
   IngestionRecord{transactionIngestion(id) required} to TransactionIngestion{records}
-  ApiIngestion{apiAccessToken(name) required} to ApiAccessToken{apiIngestions}
 }
 
 /**

@@ -54,7 +54,15 @@ public class ApiIngestionAsserts {
             .satisfies(a -> assertThat(a.getEndpoint()).as("check endpoint").isEqualTo(expected.getEndpoint()))
             .satisfies(a -> assertThat(a.getClientReference()).as("check clientReference").isEqualTo(expected.getClientReference()))
             .satisfies(a -> assertThat(a.getReceivedAt()).as("check receivedAt").isEqualTo(expected.getReceivedAt()))
-            .satisfies(a -> assertThat(a.getCreatedAt()).as("check createdAt").isEqualTo(expected.getCreatedAt()));
+            .satisfies(a -> assertThat(a.getCreatedAt()).as("check createdAt").isEqualTo(expected.getCreatedAt()))
+            .satisfies(a -> assertThat(a.getApiTokenIdSnapshot()).as("check apiTokenIdSnapshot").isEqualTo(expected.getApiTokenIdSnapshot())
+            )
+            .satisfies(a ->
+                assertThat(a.getApiTokenPrefixSnapshot()).as("check apiTokenPrefixSnapshot").isEqualTo(expected.getApiTokenPrefixSnapshot())
+            )
+            .satisfies(a ->
+                assertThat(a.getApiTokenNameSnapshot()).as("check apiTokenNameSnapshot").isEqualTo(expected.getApiTokenNameSnapshot())
+            );
     }
 
     /**
@@ -69,6 +77,13 @@ public class ApiIngestionAsserts {
             .satisfies(a ->
                 assertThat(a.getTransactionIngestion()).as("check transactionIngestion").isEqualTo(expected.getTransactionIngestion())
             )
-            .satisfies(a -> assertThat(a.getApiAccessToken()).as("check apiAccessToken").isEqualTo(expected.getApiAccessToken()));
+            .satisfies(a -> assertThat(a.getApiTokenIdSnapshot()).as("check apiTokenIdSnapshot").isEqualTo(expected.getApiTokenIdSnapshot())
+            )
+            .satisfies(a ->
+                assertThat(a.getApiTokenPrefixSnapshot()).as("check apiTokenPrefixSnapshot").isEqualTo(expected.getApiTokenPrefixSnapshot())
+            )
+            .satisfies(a ->
+                assertThat(a.getApiTokenNameSnapshot()).as("check apiTokenNameSnapshot").isEqualTo(expected.getApiTokenNameSnapshot())
+            );
     }
 }

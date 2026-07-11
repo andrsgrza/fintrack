@@ -2,9 +2,18 @@ package com.fintrack.app.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.ApiAccessToken;
+import com.fintrack.app.domain.enumeration.ApiTokenStatus;
+import com.fintrack.app.repository.ApiAccessTokenPermissionRepository;
 import com.fintrack.app.repository.ApiAccessTokenRepository;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
 import com.fintrack.app.service.mapper.ApiAccessTokenMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.HexFormat;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
@@ -25,7 +34,15 @@ public class ApiAccessTokenService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ApiAccessTokenService.class);
 
+    private static final String TOKEN_PREFIX_LABEL = "ftk_";
+
+    private static final int TOKEN_RANDOM_BYTES = 32;
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final ApiAccessTokenRepository apiAccessTokenRepository;
+
+    private final ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepository;
 
     private final ApiAccessTokenMapper apiAccessTokenMapper;
 
@@ -33,10 +50,12 @@ public class ApiAccessTokenService {
 
     public ApiAccessTokenService(
         ApiAccessTokenRepository apiAccessTokenRepository,
+        ApiAccessTokenPermissionRepository apiAccessTokenPermissionRepository,
         ApiAccessTokenMapper apiAccessTokenMapper,
         CurrentUserService currentUserService
     ) {
         this.apiAccessTokenRepository = apiAccessTokenRepository;
+        this.apiAccessTokenPermissionRepository = apiAccessTokenPermissionRepository;
         this.apiAccessTokenMapper = apiAccessTokenMapper;
         this.currentUserService = currentUserService;
     }
@@ -49,11 +68,15 @@ public class ApiAccessTokenService {
      */
     public ApiAccessTokenDTO save(ApiAccessTokenDTO apiAccessTokenDTO) {
         LOG.debug("Request to save ApiAccessToken : {}", apiAccessTokenDTO);
-        validateTokenHashForCreate(apiAccessTokenDTO);
+        String rawToken = applyCreateDefaults(apiAccessTokenDTO);
         ApiAccessToken apiAccessToken = apiAccessTokenMapper.toEntity(apiAccessTokenDTO);
         apiAccessToken.setUser(currentUserService.getCurrentUser());
         apiAccessToken = apiAccessTokenRepository.save(apiAccessToken);
-        return apiAccessTokenMapper.toDto(apiAccessToken);
+        ApiAccessTokenDTO result = apiAccessTokenMapper.toDto(apiAccessToken);
+        if (rawToken != null) {
+            result.setRawToken(rawToken);
+        }
+        return result;
     }
 
     /**
@@ -176,6 +199,7 @@ public class ApiAccessTokenService {
         if (apiAccessToken.isEmpty()) {
             return false;
         }
+        apiAccessTokenPermissionRepository.deleteByApiAccessTokenId(id);
         apiAccessTokenRepository.deleteById(id);
         return true;
     }
@@ -198,10 +222,48 @@ public class ApiAccessTokenService {
         return apiAccessTokenRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void validateTokenHashForCreate(ApiAccessTokenDTO apiAccessTokenDTO) {
+    private String applyCreateDefaults(ApiAccessTokenDTO apiAccessTokenDTO) {
+        String rawToken = null;
         if (apiAccessTokenDTO.getTokenHash() == null || apiAccessTokenDTO.getTokenHash().isBlank()) {
-            throw new IllegalArgumentException("Token hash is required");
+            rawToken = generateRawToken();
+            apiAccessTokenDTO.setTokenHash(hashToken(rawToken));
+            apiAccessTokenDTO.setTokenPrefix(extractTokenPrefix(rawToken));
+        } else {
+            validateTokenHashForCreate(apiAccessTokenDTO);
+            if (apiAccessTokenDTO.getTokenPrefix() == null || apiAccessTokenDTO.getTokenPrefix().isBlank()) {
+                throw new IllegalArgumentException("Token prefix is required when token hash is provided");
+            }
         }
+        if (apiAccessTokenDTO.getStatus() == null) {
+            apiAccessTokenDTO.setStatus(ApiTokenStatus.ACTIVE);
+        }
+        Instant now = Instant.now();
+        apiAccessTokenDTO.setCreatedAt(now);
+        apiAccessTokenDTO.setUpdatedAt(now);
+        return rawToken;
+    }
+
+    private String generateRawToken() {
+        byte[] randomBytes = new byte[TOKEN_RANDOM_BYTES];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return TOKEN_PREFIX_LABEL + Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private String extractTokenPrefix(String rawToken) {
+        return rawToken.length() <= 20 ? rawToken : rawToken.substring(0, 20);
+    }
+
+    private String hashToken(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
+    }
+
+    private void validateTokenHashForCreate(ApiAccessTokenDTO apiAccessTokenDTO) {
         if (apiAccessTokenRepository.existsByTokenHash(apiAccessTokenDTO.getTokenHash())) {
             throw new IllegalArgumentException("Token hash already exists");
         }
