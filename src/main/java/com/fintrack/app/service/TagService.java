@@ -137,8 +137,17 @@ public class TagService {
         if (tag.isEmpty()) {
             return false;
         }
-        tagRepository.deleteById(id);
+        Long tagId = tag.orElseThrow().getId();
+        unlinkTagFromAllRelationships(tagId);
+        tagRepository.deleteById(tagId);
         return true;
+    }
+
+    private void unlinkTagFromAllRelationships(Long tagId) {
+        tagRepository.deleteFinancialTransactionTagLinksByTagId(tagId);
+        tagRepository.deleteTransactionRuleResultingTagLinksByTagId(tagId);
+        tagRepository.deleteFinancialSubscriptionTagLinksByTagId(tagId);
+        tagRepository.deleteBudgetTagLinksByTagId(tagId);
     }
 
     private Optional<Tag> findAccessibleEntity(Long id) {

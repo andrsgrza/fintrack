@@ -59,4 +59,20 @@ public interface TagRepository extends JpaRepository<Tag, Long>, JpaSpecificatio
         "and (:excludeId is null or tag.id <> :excludeId)"
     )
     boolean existsByUserIdAndNormalizedName(@Param("userId") Long userId, @Param("name") String name, @Param("excludeId") Long excludeId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from rel_financial_transaction__tags where tags_id = :tagId", nativeQuery = true)
+    void deleteFinancialTransactionTagLinksByTagId(@Param("tagId") Long tagId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from rel_transaction_rule__resulting_tags where resulting_tags_id = :tagId", nativeQuery = true)
+    void deleteTransactionRuleResultingTagLinksByTagId(@Param("tagId") Long tagId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from rel_financial_subscription__tags where tags_id = :tagId", nativeQuery = true)
+    void deleteFinancialSubscriptionTagLinksByTagId(@Param("tagId") Long tagId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from rel_budget__tags where tags_id = :tagId", nativeQuery = true)
+    void deleteBudgetTagLinksByTagId(@Param("tagId") Long tagId);
 }

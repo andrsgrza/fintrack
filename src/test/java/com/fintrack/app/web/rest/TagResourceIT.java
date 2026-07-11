@@ -18,7 +18,11 @@ import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.FinancialSubscriptionRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TagService;
@@ -87,6 +91,18 @@ class TagResourceIT {
 
     @Autowired
     private TagRepository tagRepository;
+
+    @Autowired
+    private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private TransactionRuleRepository transactionRuleRepository;
+
+    @Autowired
+    private FinancialSubscriptionRepository financialSubscriptionRepository;
+
+    @Autowired
+    private BudgetRepository budgetRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -1332,6 +1348,222 @@ class TagResourceIT {
 
         restTagMockMvc
             .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("tag"));
+    }
+
+    private Tag persistTag() {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        em.clear();
+        return tagRepository.findById(insertedTag.getId()).orElseThrow();
+    }
+
+    private Tag managedTagReference(Tag savedTag) {
+        return em.getReference(Tag.class, savedTag.getId());
+    }
+
+    @Test
+    @Transactional
+    void deleteUnusedTagSucceeds() throws Exception {
+        persistTag();
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restTagMockMvc.perform(delete(ENTITY_API_URL_ID, tag.getId()).accept(MediaType.APPLICATION_JSON)).andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteTagUsedByFinancialTransactionUnlinksAndPreservesTransaction() throws Exception {
+        Tag persistedTag = persistTag();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.addTags(managedTagReference(persistedTag));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+        em.detach(financialTransaction);
+
+        restTagMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(tagRepository.existsById(persistedTag.getId())).isFalse();
+        em.clear();
+        FinancialTransaction persistedTransaction = financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow();
+        assertThat(persistedTransaction.getTags()).isEmpty();
+        insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteTagUsedByTransactionRuleUnlinksAndPreservesRule() throws Exception {
+        Tag persistedTag = persistTag();
+        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
+        transactionRule.addResultingTags(managedTagReference(persistedTag));
+        transactionRuleRepository.saveAndFlush(transactionRule);
+        em.detach(transactionRule);
+
+        restTagMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(tagRepository.existsById(persistedTag.getId())).isFalse();
+        em.clear();
+        TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
+        assertThat(persistedRule.getResultingTags()).isEmpty();
+        insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteTagUsedByFinancialSubscriptionUnlinksAndPreservesSubscription() throws Exception {
+        Tag persistedTag = persistTag();
+        FinancialSubscription financialSubscription = FinancialSubscriptionResourceIT.createEntity(em);
+        financialSubscription.addTags(managedTagReference(persistedTag));
+        financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        em.detach(financialSubscription);
+
+        restTagMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(tagRepository.existsById(persistedTag.getId())).isFalse();
+        em.clear();
+        FinancialSubscription persistedSubscription = financialSubscriptionRepository.findById(financialSubscription.getId()).orElseThrow();
+        assertThat(persistedSubscription.getTags()).isEmpty();
+        insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteTagUsedByBudgetUnlinksAndPreservesBudget() throws Exception {
+        Tag persistedTag = persistTag();
+        Budget budget = BudgetResourceIT.createEntity(em);
+        budget.addTags(managedTagReference(persistedTag));
+        budgetRepository.saveAndFlush(budget);
+        em.detach(budget);
+
+        restTagMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(tagRepository.existsById(persistedTag.getId())).isFalse();
+        em.clear();
+        Budget persistedBudget = budgetRepository.findById(budget.getId()).orElseThrow();
+        assertThat(persistedBudget.getTags()).isEmpty();
+        insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteTagUsedInMultipleEntityTypesCleansAllRelationships() throws Exception {
+        Tag persistedTag = persistTag();
+
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.addTags(managedTagReference(persistedTag));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
+        transactionRule.addResultingTags(managedTagReference(persistedTag));
+        transactionRuleRepository.saveAndFlush(transactionRule);
+
+        FinancialSubscription financialSubscription = FinancialSubscriptionResourceIT.createEntity(em);
+        financialSubscription.addTags(managedTagReference(persistedTag));
+        financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        Budget budget = BudgetResourceIT.createEntity(em);
+        budget.addTags(managedTagReference(persistedTag));
+        budgetRepository.saveAndFlush(budget);
+        em.detach(financialTransaction);
+        em.detach(transactionRule);
+        em.detach(financialSubscription);
+        em.detach(budget);
+
+        restTagMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(tagRepository.existsById(persistedTag.getId())).isFalse();
+        em.clear();
+
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getTags()).isEmpty();
+        assertThat(transactionRuleRepository.findById(transactionRule.getId()).orElseThrow().getResultingTags()).isEmpty();
+        assertThat(financialSubscriptionRepository.findById(financialSubscription.getId()).orElseThrow().getTags()).isEmpty();
+        assertThat(budgetRepository.findById(budget.getId()).orElseThrow().getTags()).isEmpty();
+        insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminDeleteForeignUsedTagSucceedsAndCleansRelationships() throws Exception {
+        User foreignOwner = createOtherUser(em);
+        tag.setUser(foreignOwner);
+        Tag persistedTag = tagRepository.saveAndFlush(tag);
+        insertedTag = persistedTag;
+        em.clear();
+        persistedTag = tagRepository.findById(persistedTag.getId()).orElseThrow();
+
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(FinancialAccountResourceIT.createEntity(em));
+        financialTransaction.getAccount().setUser(foreignOwner);
+        em.persist(financialTransaction.getAccount());
+        financialTransaction.addTags(managedTagReference(persistedTag));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+        em.detach(financialTransaction);
+
+        restTagMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(tagRepository.existsById(persistedTag.getId())).isFalse();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getTags()).isEmpty();
+        insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void updateUsedTagFieldsAllowedWhenUniquenessValid() throws Exception {
+        Tag persistedTag = persistTag();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.addTags(managedTagReference(persistedTag));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        TagDTO tagDTO = tagMapper.toDto(persistedTag);
+        tagDTO.setDescription(UPDATED_DESCRIPTION);
+        tagDTO.setColor(UPDATED_COLOR);
+        tagDTO.setActive(UPDATED_ACTIVE);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.description").value(UPDATED_DESCRIPTION))
+            .andExpect(jsonPath("$.color").value(UPDATED_COLOR))
+            .andExpect(jsonPath("$.active").value(UPDATED_ACTIVE));
+
+        em.flush();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getTags())
+            .extracting(Tag::getId)
+            .containsExactly(persistedTag.getId());
+    }
+
+    @Test
+    @Transactional
+    void inactiveTagStillBlocksDuplicateNormalizedName() throws Exception {
+        Tag inactiveTag = createEntity(em);
+        inactiveTag.name("Comida");
+        inactiveTag.active(false);
+        insertedTag = tagRepository.saveAndFlush(inactiveTag);
+
+        Tag duplicateTag = createEntity(em);
+        duplicateTag.name(" COMIDA ");
+        TagDTO tagDTO = tagMapper.toDto(duplicateTag);
+
+        restTagMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("error.invalid"))
             .andExpect(jsonPath("$.params").value("tag"));

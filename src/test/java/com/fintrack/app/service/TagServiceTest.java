@@ -134,23 +134,29 @@ class TagServiceTest {
     }
 
     @Test
+    void deleteShouldUnlinkRelationshipsBeforeDeletingTag() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThat(tagService.delete(10L)).isTrue();
+
+        verify(tagRepository).deleteFinancialTransactionTagLinksByTagId(10L);
+        verify(tagRepository).deleteTransactionRuleResultingTagLinksByTagId(10L);
+        verify(tagRepository).deleteFinancialSubscriptionTagLinksByTagId(10L);
+        verify(tagRepository).deleteBudgetTagLinksByTagId(10L);
+        verify(tagRepository).deleteById(10L);
+    }
+
+    @Test
     void deleteShouldReturnFalseWhenTagIsNotAccessible() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
 
         assertThat(tagService.delete(10L)).isFalse();
+        verify(tagRepository, never()).deleteFinancialTransactionTagLinksByTagId(any());
         verify(tagRepository, never()).deleteById(any());
-    }
-
-    @Test
-    void deleteShouldRemoveAccessibleTag() {
-        when(currentUserService.isAdmin()).thenReturn(false);
-        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
-        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
-
-        assertThat(tagService.delete(10L)).isTrue();
-        verify(tagRepository).deleteById(10L);
     }
 
     @Test
