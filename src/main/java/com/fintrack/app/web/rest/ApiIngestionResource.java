@@ -6,6 +6,7 @@ import com.fintrack.app.service.ApiIngestionService;
 import com.fintrack.app.service.dto.ApiIngestionCreateRequestDTO;
 import com.fintrack.app.service.dto.ApiIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -44,7 +45,7 @@ public class ApiIngestionResource {
     }
 
     @PostMapping("")
-    public ResponseEntity<ApiIngestionDTO> createApiIngestion(@RequestBody ApiIngestionCreateRequestDTO createRequest)
+    public ResponseEntity<ApiIngestionDTO> createApiIngestion(@Valid @RequestBody ApiIngestionCreateRequestDTO createRequest)
         throws URISyntaxException {
         LOG.debug("REST request to save ApiIngestion : {}", createRequest);
         if (createRequest.getId() != null) {

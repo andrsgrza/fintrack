@@ -36,4 +36,14 @@ public interface IngestionRecordRepository extends JpaRepository<IngestionRecord
     boolean existsByFinancialTransactionId(Long financialTransactionId);
 
     boolean existsByTransactionIngestionIdAndRecordIndex(Long transactionIngestionId, Integer recordIndex);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "update IngestionRecord ingestionRecord set ingestionRecord.financialTransaction = null where ingestionRecord.financialTransaction.id in (select financialTransaction.id from FinancialTransaction financialTransaction where financialTransaction.transactionIngestion.id = :transactionIngestionId)"
+    )
+    void clearFinancialTransactionByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from IngestionRecord ingestionRecord where ingestionRecord.transactionIngestion.id = :transactionIngestionId")
+    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
 }

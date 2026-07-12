@@ -27,6 +27,12 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
     )
     void deleteByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.transactionIngestion.id = :transactionIngestionId or internalTransfer.incomingTransaction.transactionIngestion.id = :transactionIngestionId"
+    )
+    void deleteByTransactionIngestionIdInEitherRole(@Param("transactionIngestionId") Long transactionIngestionId);
+
     default Optional<InternalTransfer> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
     }

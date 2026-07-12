@@ -1155,6 +1155,8 @@ class TransactionIngestionResourceIT {
     @Transactional
     void putExistingTransactionIngestion() throws Exception {
         // Initialize the database
+        transactionIngestion.setCompletedAt(null);
+        transactionIngestion.setErrorMessage(null);
         insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
@@ -1168,12 +1170,12 @@ class TransactionIngestionResourceIT {
         updatedTransactionIngestion
             .status(UPDATED_STATUS)
             .sourceLabel(UPDATED_SOURCE_LABEL)
-            .completedAt(UPDATED_COMPLETED_AT)
-            .recordsReceived(UPDATED_RECORDS_RECEIVED)
+            .completedAt(null)
+            .recordsReceived(3)
             .recordsCreated(UPDATED_RECORDS_CREATED)
             .recordsSkipped(UPDATED_RECORDS_SKIPPED)
             .recordsRejected(UPDATED_RECORDS_REJECTED)
-            .errorMessage(UPDATED_ERROR_MESSAGE);
+            .errorMessage(null);
         TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(updatedTransactionIngestion);
 
         restTransactionIngestionMockMvc
@@ -1192,7 +1194,9 @@ class TransactionIngestionResourceIT {
         assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
         assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
         assertThat(persisted.getSourceLabel()).isEqualTo(UPDATED_SOURCE_LABEL);
-        assertThat(persisted.getRecordsReceived()).isEqualTo(UPDATED_RECORDS_RECEIVED);
+        assertThat(persisted.getCompletedAt()).isNull();
+        assertThat(persisted.getErrorMessage()).isNull();
+        assertThat(persisted.getRecordsReceived()).isEqualTo(3);
     }
 
     @Test
@@ -1261,6 +1265,8 @@ class TransactionIngestionResourceIT {
     @Transactional
     void partialUpdateTransactionIngestionWithPatch() throws Exception {
         // Initialize the database
+        transactionIngestion.setCompletedAt(null);
+        transactionIngestion.setErrorMessage(null);
         insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
@@ -1274,11 +1280,11 @@ class TransactionIngestionResourceIT {
             transactionIngestion.getId() +
             ",\"status\":\"" +
             UPDATED_STATUS +
-            "\",\"recordsCreated\":" +
+            "\",\"recordsReceived\":" +
             UPDATED_RECORDS_CREATED +
-            ",\"errorMessage\":\"" +
-            UPDATED_ERROR_MESSAGE +
-            "\"}";
+            ",\"recordsCreated\":" +
+            UPDATED_RECORDS_CREATED +
+            "}";
 
         restTransactionIngestionMockMvc
             .perform(patch(ENTITY_API_URL_ID, transactionIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
@@ -1289,8 +1295,9 @@ class TransactionIngestionResourceIT {
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         TransactionIngestion persisted = getPersistedTransactionIngestion(transactionIngestion);
         assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
+        assertThat(persisted.getRecordsReceived()).isEqualTo(UPDATED_RECORDS_CREATED);
         assertThat(persisted.getRecordsCreated()).isEqualTo(UPDATED_RECORDS_CREATED);
-        assertThat(persisted.getErrorMessage()).isEqualTo(UPDATED_ERROR_MESSAGE);
+        assertThat(persisted.getErrorMessage()).isNull();
         assertThat(persisted.getStartedAt()).isEqualTo(DEFAULT_STARTED_AT);
         assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
     }
@@ -1299,6 +1306,8 @@ class TransactionIngestionResourceIT {
     @Transactional
     void fullUpdateTransactionIngestionWithPatch() throws Exception {
         // Initialize the database
+        transactionIngestion.setCompletedAt(null);
+        transactionIngestion.setErrorMessage(null);
         insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
@@ -1314,19 +1323,15 @@ class TransactionIngestionResourceIT {
             UPDATED_STATUS +
             "\",\"sourceLabel\":\"" +
             UPDATED_SOURCE_LABEL +
-            "\",\"completedAt\":\"" +
-            UPDATED_COMPLETED_AT +
             "\",\"recordsReceived\":" +
-            UPDATED_RECORDS_RECEIVED +
+            3 +
             ",\"recordsCreated\":" +
             UPDATED_RECORDS_CREATED +
             ",\"recordsSkipped\":" +
             UPDATED_RECORDS_SKIPPED +
             ",\"recordsRejected\":" +
             UPDATED_RECORDS_REJECTED +
-            ",\"errorMessage\":\"" +
-            UPDATED_ERROR_MESSAGE +
-            "\"}";
+            "}";
 
         restTransactionIngestionMockMvc
             .perform(patch(ENTITY_API_URL_ID, transactionIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
@@ -1341,6 +1346,8 @@ class TransactionIngestionResourceIT {
         assertThat(persisted.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
         assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
         assertThat(persisted.getSourceLabel()).isEqualTo(UPDATED_SOURCE_LABEL);
+        assertThat(persisted.getCompletedAt()).isNull();
+        assertThat(persisted.getErrorMessage()).isNull();
     }
 
     @Test
@@ -1513,8 +1520,13 @@ class TransactionIngestionResourceIT {
     @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
     void adminCanUpdateTransactionIngestionOwnedByAnotherUser() throws Exception {
         TransactionIngestion otherIngestion = saveIngestionOnOtherUsersAccount();
+        otherIngestion.setCompletedAt(null);
+        otherIngestion.setErrorMessage(null);
+        otherIngestion = transactionIngestionRepository.saveAndFlush(otherIngestion);
         TransactionIngestionDTO transactionIngestionDTO = transactionIngestionMapper.toDto(otherIngestion);
         transactionIngestionDTO.setStatus(UPDATED_STATUS);
+        transactionIngestionDTO.setCompletedAt(null);
+        transactionIngestionDTO.setErrorMessage(null);
 
         restTransactionIngestionMockMvc
             .perform(

@@ -76,4 +76,17 @@ public interface FinancialTransactionRepository
         "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.id = :id and financialTransaction.account.user.login = :login"
     )
     Optional<FinancialTransaction> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_financial_transaction__tags where financial_transaction_id in (select id from financial_transaction where transaction_ingestion_id = :transactionIngestionId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from FinancialTransaction financialTransaction where financialTransaction.transactionIngestion.id = :transactionIngestionId"
+    )
+    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
 }

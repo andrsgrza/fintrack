@@ -1,6 +1,7 @@
 package com.fintrack.app.service.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
@@ -14,16 +15,22 @@ public class ApiIngestionDTO implements Serializable {
 
     private Long id;
 
+    @Size(min = 1, max = 100)
     private String requestId;
 
+    @Size(max = 150)
     private String idempotencyKey;
 
+    @Size(max = 100)
     private String sourceSystem;
 
+    @Size(max = 20)
     private String apiVersion;
 
+    @Size(max = 150)
     private String endpoint;
 
+    @Size(max = 150)
     private String clientReference;
 
     private Instant receivedAt;
@@ -32,8 +39,10 @@ public class ApiIngestionDTO implements Serializable {
 
     private Long apiTokenIdSnapshot;
 
+    @Size(max = 20)
     private String apiTokenPrefixSnapshot;
 
+    @Size(max = 100)
     private String apiTokenNameSnapshot;
 
     private TransactionIngestionDTO transactionIngestion;

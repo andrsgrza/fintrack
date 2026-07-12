@@ -1,5 +1,6 @@
 package com.fintrack.app.service.dto;
 
+import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
 
@@ -14,24 +15,35 @@ public class ApiIngestionCreateRequestDTO implements Serializable {
 
     private Long id;
 
+    @NotNull
+    @Size(min = 1, max = 100)
     private String requestId;
 
+    @Size(max = 150)
     private String idempotencyKey;
 
+    @Size(max = 100)
     private String sourceSystem;
 
+    @NotNull
+    @Size(max = 20)
     private String apiVersion;
 
+    @NotNull
+    @Size(max = 150)
     private String endpoint;
 
+    @Size(max = 150)
     private String clientReference;
 
     private Instant receivedAt;
 
     private Instant createdAt;
 
+    @NotNull
     private TransactionIngestionDTO transactionIngestion;
 
+    @NotNull
     private Long apiAccessTokenId;
 
     public Long getId() {
