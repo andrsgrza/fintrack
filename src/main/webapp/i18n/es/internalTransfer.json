@@ -12,7 +12,7 @@
       "updated": "Un Internal Transfer ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Internal Transfer ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Internal Transfer {{ id }}?"
+        "question": "¿Eliminar Internal Transfer {{ id }}? Esto sólo elimina el vínculo de transferencia; las transacciones de salida y entrada se conservan."
       },
       "detail": {
         "title": "Internal Transfer"

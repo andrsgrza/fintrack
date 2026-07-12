@@ -170,7 +170,7 @@ public class FinancialTransactionService {
     }
 
     /**
-     * Get manual OUT transactions that can be linked as the outgoing leg of an internal transfer.
+     * Get OUT transactions that can be linked as the outgoing leg of an internal transfer.
      *
      * @return the list of entities.
      */
@@ -178,15 +178,14 @@ public class FinancialTransactionService {
     public List<FinancialTransactionDTO> findOutgoingInternalTransferCandidates() {
         LOG.debug("Request to get outgoing internal transfer candidates");
         return accessibleTransactionStream()
-            .filter(financialTransaction -> !internalTransferRepository.existsByOutgoingTransactionId(financialTransaction.getId()))
+            .filter(financialTransaction -> !internalTransferRepository.existsByTransactionIdInEitherRole(financialTransaction.getId()))
             .filter(financialTransaction -> financialTransaction.getFlow() == TransactionFlow.OUT)
-            .filter(financialTransaction -> financialTransaction.getOrigin() == TransactionOrigin.MANUAL)
             .map(financialTransactionMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
     }
 
     /**
-     * Get manual IN transactions that can be linked as the incoming leg of an internal transfer.
+     * Get IN transactions that can be linked as the incoming leg of an internal transfer.
      *
      * @return the list of entities.
      */
@@ -194,9 +193,8 @@ public class FinancialTransactionService {
     public List<FinancialTransactionDTO> findIncomingInternalTransferCandidates() {
         LOG.debug("Request to get incoming internal transfer candidates");
         return accessibleTransactionStream()
-            .filter(financialTransaction -> !internalTransferRepository.existsByIncomingTransactionId(financialTransaction.getId()))
+            .filter(financialTransaction -> !internalTransferRepository.existsByTransactionIdInEitherRole(financialTransaction.getId()))
             .filter(financialTransaction -> financialTransaction.getFlow() == TransactionFlow.IN)
-            .filter(financialTransaction -> financialTransaction.getOrigin() == TransactionOrigin.MANUAL)
             .map(financialTransactionMapper::toDto)
             .collect(Collectors.toCollection(LinkedList::new));
     }
@@ -273,6 +271,7 @@ public class FinancialTransactionService {
         if (financialTransaction.isEmpty()) {
             return false;
         }
+        internalTransferRepository.deleteByTransactionIdInEitherRole(id);
         financialTransactionRepository.deleteById(id);
         return true;
     }

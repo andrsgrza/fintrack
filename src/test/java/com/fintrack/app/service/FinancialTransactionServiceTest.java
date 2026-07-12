@@ -15,6 +15,7 @@ import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
@@ -57,6 +58,9 @@ class FinancialTransactionServiceTest {
 
     @Mock
     private InternalTransferRepository internalTransferRepository;
+
+    @Mock
+    private IngestionRecordRepository ingestionRecordRepository;
 
     @Mock
     private CurrentUserService currentUserService;
@@ -197,6 +201,7 @@ class FinancialTransactionServiceTest {
         );
 
         assertThat(financialTransactionService.delete(30L)).isTrue();
+        verify(internalTransferRepository).deleteByTransactionIdInEitherRole(30L);
         verify(financialTransactionRepository).deleteById(30L);
     }
 

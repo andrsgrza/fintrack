@@ -186,7 +186,7 @@ public class FinancialTransactionResource {
     }
 
     /**
-     * {@code GET  /financial-transactions/outgoing-internal-transfer-candidates} : get manual OUT transactions available for outgoing internal transfers.
+     * {@code GET  /financial-transactions/outgoing-internal-transfer-candidates} : get OUT transactions available for outgoing internal transfers.
      *
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
      */
@@ -197,7 +197,7 @@ public class FinancialTransactionResource {
     }
 
     /**
-     * {@code GET  /financial-transactions/incoming-internal-transfer-candidates} : get manual IN transactions available for incoming internal transfers.
+     * {@code GET  /financial-transactions/incoming-internal-transfer-candidates} : get IN transactions available for incoming internal transfers.
      *
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
      */

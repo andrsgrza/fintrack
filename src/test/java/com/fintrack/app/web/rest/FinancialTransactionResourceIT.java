@@ -1710,7 +1710,7 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void getOutgoingInternalTransferCandidatesIncludeOnlyOutManualUnlinked() throws Exception {
+    void getOutgoingInternalTransferCandidatesIncludeOnlyOutUnlinked() throws Exception {
         FinancialAccount account = financialTransaction.getAccount();
 
         FinancialTransaction eligibleOutgoing = createEntity(em);
@@ -1741,8 +1741,8 @@ class FinancialTransactionResourceIT {
             .perform(get(OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleOutgoing.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(importedOutgoing.getId().intValue())))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(inFlowTransaction.getId().intValue()))))
-            .andExpect(jsonPath("$.[*].id").value(not(hasItem(importedOutgoing.getId().intValue()))))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(linkedOutgoingId.intValue()))));
     }
 
@@ -1769,7 +1769,7 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void getIncomingInternalTransferCandidatesIncludeOnlyInManualUnlinked() throws Exception {
+    void getIncomingInternalTransferCandidatesIncludeOnlyInUnlinked() throws Exception {
         FinancialAccount account = financialTransaction.getAccount();
 
         FinancialTransaction eligibleIncoming = createEntity(em);
@@ -1800,8 +1800,8 @@ class FinancialTransactionResourceIT {
             .perform(get(INCOMING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleIncoming.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(importedIncoming.getId().intValue())))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(outFlowTransaction.getId().intValue()))))
-            .andExpect(jsonPath("$.[*].id").value(not(hasItem(importedIncoming.getId().intValue()))))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(linkedIncomingId.intValue()))));
     }
 

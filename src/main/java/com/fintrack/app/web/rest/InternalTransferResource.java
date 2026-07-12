@@ -80,8 +80,14 @@ public class InternalTransferResource {
     @PutMapping("/{id}")
     public ResponseEntity<InternalTransferDTO> updateInternalTransfer(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody InternalTransferDTO internalTransferDTO
+        @NotNull @RequestBody JsonNode updateNode
     ) throws URISyntaxException {
+        InternalTransferDTO internalTransferDTO;
+        try {
+            internalTransferDTO = objectMapper.treeToValue(updateNode, InternalTransferDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid update payload", ENTITY_NAME, "invalid");
+        }
         LOG.debug("REST request to update InternalTransfer : {}, {}", id, internalTransferDTO);
         if (internalTransferDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
@@ -95,7 +101,7 @@ public class InternalTransferResource {
         }
 
         try {
-            internalTransferDTO = internalTransferService.update(internalTransferDTO);
+            internalTransferDTO = internalTransferService.update(internalTransferDTO, updateNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -126,6 +132,9 @@ public class InternalTransferResource {
         }
         if (patchNode.has("incomingTransaction") && patchNode.get("incomingTransaction").isNull()) {
             throw new BadRequestAlertException("Incoming transaction cannot be null", ENTITY_NAME, "invalid");
+        }
+        if (patchNode.has("createdAt") && patchNode.get("createdAt").isNull()) {
+            throw new BadRequestAlertException("Created at cannot be null", ENTITY_NAME, "invalid");
         }
         InternalTransferDTO internalTransferDTO;
         try {

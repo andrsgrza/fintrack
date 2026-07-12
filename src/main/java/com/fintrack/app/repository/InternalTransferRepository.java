@@ -16,6 +16,17 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
 
     boolean existsByIncomingTransactionId(Long incomingTransactionId);
 
+    @Query(
+        "select count(internalTransfer) > 0 from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.id = :transactionId or internalTransfer.incomingTransaction.id = :transactionId"
+    )
+    boolean existsByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
+
+    @Modifying
+    @Query(
+        "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.id = :transactionId or internalTransfer.incomingTransaction.id = :transactionId"
+    )
+    void deleteByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
+
     default Optional<InternalTransfer> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
     }
