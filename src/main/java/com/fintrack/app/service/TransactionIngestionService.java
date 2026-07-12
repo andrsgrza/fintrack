@@ -5,6 +5,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
@@ -39,16 +40,20 @@ public class TransactionIngestionService {
 
     private final FinancialAccountService financialAccountService;
 
+    private final FileIngestionRepository fileIngestionRepository;
+
     public TransactionIngestionService(
         TransactionIngestionRepository transactionIngestionRepository,
         TransactionIngestionMapper transactionIngestionMapper,
         CurrentUserService currentUserService,
-        FinancialAccountService financialAccountService
+        FinancialAccountService financialAccountService,
+        FileIngestionRepository fileIngestionRepository
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.transactionIngestionMapper = transactionIngestionMapper;
         this.currentUserService = currentUserService;
         this.financialAccountService = financialAccountService;
+        this.fileIngestionRepository = fileIngestionRepository;
     }
 
     /**
@@ -203,6 +208,7 @@ public class TransactionIngestionService {
         if (transactionIngestion.isEmpty()) {
             return false;
         }
+        fileIngestionRepository.deleteByTransactionIngestionId(id);
         transactionIngestionRepository.deleteById(id);
         return true;
     }

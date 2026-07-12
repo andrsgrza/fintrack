@@ -2,7 +2,6 @@ package com.fintrack.app.service.dto;
 
 import com.fintrack.app.domain.enumeration.ImportFileType;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -17,29 +16,20 @@ public class FileIngestionDTO implements Serializable {
 
     private Long id;
 
-    @NotNull
-    @Size(min = 1, max = 255)
     private String originalFilename;
 
-    @NotNull
     private ImportFileType fileType;
 
-    @Size(max = 100)
     private String contentType;
 
-    @Min(value = 0L)
     private Long fileSizeBytes;
 
-    @Size(max = 128)
     private String checksum;
 
-    @Size(max = 500)
     private String storageKey;
 
-    @Size(max = 100)
     private String parserName;
 
-    @Size(max = 50)
     private String parserVersion;
 
     private LocalDate statementStartDate;
@@ -48,7 +38,6 @@ public class FileIngestionDTO implements Serializable {
 
     private Instant createdAt;
 
-    @NotNull
     private TransactionIngestionDTO transactionIngestion;
 
     public Long getId() {

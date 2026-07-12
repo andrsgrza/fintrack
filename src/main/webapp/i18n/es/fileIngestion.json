@@ -12,7 +12,7 @@
       "updated": "Un File Ingestion ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un File Ingestion ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar File Ingestion {{ id }}?"
+        "question": "File Ingestion {{ id }} no se puede eliminar directamente. Elimina el flujo padre Transaction Ingestion para limpiar esta metadata de archivo."
       },
       "detail": {
         "title": "File Ingestion"

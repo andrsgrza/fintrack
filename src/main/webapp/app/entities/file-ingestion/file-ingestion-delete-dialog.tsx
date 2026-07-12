@@ -44,7 +44,7 @@ export const FileIngestionDeleteDialog = () => {
       </ModalHeader>
       <ModalBody id="fintrackApp.fileIngestion.delete.question">
         <Translate contentKey="fintrackApp.fileIngestion.delete.question" interpolate={{ id: fileIngestionEntity.id }}>
-          Are you sure you want to delete this FileIngestion?
+          File Ingestion cannot be deleted directly.
         </Translate>
       </ModalBody>
       <ModalFooter>
