@@ -5,6 +5,10 @@ import { cleanEntity } from 'app/shared/util/entity-utils';
 import { EntityState, IQueryParams, createEntitySlice, serializeAxiosError } from 'app/shared/reducers/reducer.utils';
 import { IApiIngestion, defaultValue } from 'app/shared/model/api-ingestion.model';
 
+export interface IApiIngestionCreateRequest extends IApiIngestion {
+  apiAccessTokenId?: number;
+}
+
 const initialState: EntityState<IApiIngestion> = {
   loading: false,
   errorMessage: null,
@@ -38,7 +42,7 @@ export const getEntity = createAsyncThunk(
 
 export const createEntity = createAsyncThunk(
   'apiIngestion/create_entity',
-  async (entity: IApiIngestion, thunkAPI) => {
+  async (entity: IApiIngestionCreateRequest, thunkAPI) => {
     const result = await axios.post<IApiIngestion>(apiUrl, cleanEntity(entity));
     thunkAPI.dispatch(getEntities({}));
     return result;

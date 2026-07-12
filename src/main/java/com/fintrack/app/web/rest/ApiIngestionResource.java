@@ -3,9 +3,9 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.ApiIngestionService;
+import com.fintrack.app.service.dto.ApiIngestionCreateRequestDTO;
 import com.fintrack.app.service.dto.ApiIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -44,14 +44,15 @@ public class ApiIngestionResource {
     }
 
     @PostMapping("")
-    public ResponseEntity<ApiIngestionDTO> createApiIngestion(@Valid @RequestBody ApiIngestionDTO apiIngestionDTO)
+    public ResponseEntity<ApiIngestionDTO> createApiIngestion(@RequestBody ApiIngestionCreateRequestDTO createRequest)
         throws URISyntaxException {
-        LOG.debug("REST request to save ApiIngestion : {}", apiIngestionDTO);
-        if (apiIngestionDTO.getId() != null) {
+        LOG.debug("REST request to save ApiIngestion : {}", createRequest);
+        if (createRequest.getId() != null) {
             throw new BadRequestAlertException("A new apiIngestion cannot already have an ID", ENTITY_NAME, "idexists");
         }
+        ApiIngestionDTO apiIngestionDTO;
         try {
-            apiIngestionDTO = apiIngestionService.save(apiIngestionDTO);
+            apiIngestionDTO = apiIngestionService.save(createRequest);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -63,9 +64,15 @@ public class ApiIngestionResource {
     @PutMapping("/{id}")
     public ResponseEntity<ApiIngestionDTO> updateApiIngestion(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody ApiIngestionDTO apiIngestionDTO
+        @RequestBody JsonNode updateNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to update ApiIngestion : {}, {}", id, apiIngestionDTO);
+        LOG.debug("REST request to update ApiIngestion : {}, {}", id, updateNode);
+        ApiIngestionDTO apiIngestionDTO;
+        try {
+            apiIngestionDTO = objectMapper.treeToValue(updateNode, ApiIngestionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid update payload", ENTITY_NAME, "invalid");
+        }
         if (apiIngestionDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
@@ -78,7 +85,7 @@ public class ApiIngestionResource {
         }
 
         try {
-            apiIngestionDTO = apiIngestionService.update(apiIngestionDTO);
+            apiIngestionDTO = apiIngestionService.update(apiIngestionDTO, updateNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -93,12 +100,6 @@ public class ApiIngestionResource {
         @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
         LOG.debug("REST request to partial update ApiIngestion partially : {}, {}", id, patchNode);
-        if (patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
-            throw new BadRequestAlertException("Transaction ingestion cannot be changed", ENTITY_NAME, "invalid");
-        }
-        if (patchNode.has("apiAccessToken") && patchNode.get("apiAccessToken").isNull()) {
-            throw new BadRequestAlertException("Api access token cannot be changed", ENTITY_NAME, "invalid");
-        }
         ApiIngestionDTO apiIngestionDTO;
         try {
             apiIngestionDTO = objectMapper.treeToValue(patchNode, ApiIngestionDTO.class);
@@ -145,8 +146,12 @@ public class ApiIngestionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApiIngestion(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete ApiIngestion : {}", id);
-        if (!apiIngestionService.delete(id)) {
-            return ResponseEntity.notFound().build();
+        try {
+            if (!apiIngestionService.delete(id)) {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))

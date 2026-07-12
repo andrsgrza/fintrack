@@ -62,4 +62,8 @@ public interface ApiIngestionRepository extends JpaRepository<ApiIngestion, Long
     boolean existsByTransactionIngestionId(Long transactionIngestionId);
 
     boolean existsByRequestId(String requestId);
+
+    @Modifying
+    @Query("delete from ApiIngestion apiIngestion where apiIngestion.transactionIngestion.id = :transactionIngestionId")
+    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
 }

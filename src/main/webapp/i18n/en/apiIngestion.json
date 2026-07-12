@@ -12,7 +12,7 @@
       "updated": "A Api Ingestion is updated with identifier {{ param }}",
       "deleted": "A Api Ingestion is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Api Ingestion {{ id }}?"
+        "question": "Api Ingestion {{ id }} cannot be deleted directly. Delete the parent Transaction Ingestion flow to clean up this API metadata."
       },
       "detail": {
         "title": "Api Ingestion"
@@ -27,7 +27,7 @@
       "receivedAt": "Received At",
       "createdAt": "Created At",
       "transactionIngestion": "Transaction Ingestion",
-      "apiAccessToken": "Api Access Token",
+      "apiAccessTokenId": "API token for snapshot",
       "apiTokenIdSnapshot": "Token Id (snapshot)",
       "apiTokenPrefixSnapshot": "Token Prefix (snapshot)",
       "apiTokenNameSnapshot": "Token Name (snapshot)"

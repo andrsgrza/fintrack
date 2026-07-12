@@ -1,7 +1,6 @@
 package com.fintrack.app.service.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
@@ -15,25 +14,16 @@ public class ApiIngestionDTO implements Serializable {
 
     private Long id;
 
-    @NotNull
-    @Size(min = 1, max = 100)
     private String requestId;
 
-    @Size(max = 150)
     private String idempotencyKey;
 
-    @Size(max = 100)
     private String sourceSystem;
 
-    @NotNull
-    @Size(max = 20)
     private String apiVersion;
 
-    @NotNull
-    @Size(max = 150)
     private String endpoint;
 
-    @Size(max = 150)
     private String clientReference;
 
     private Instant receivedAt;
@@ -42,19 +32,11 @@ public class ApiIngestionDTO implements Serializable {
 
     private Long apiTokenIdSnapshot;
 
-    @Size(max = 20)
     private String apiTokenPrefixSnapshot;
 
-    @Size(max = 100)
     private String apiTokenNameSnapshot;
 
-    @NotNull
     private TransactionIngestionDTO transactionIngestion;
-
-    /**
-     * Create-only: used to resolve an accessible token and copy snapshot fields. Not persisted as FK.
-     */
-    private ApiAccessTokenDTO apiAccessToken;
 
     public Long getId() {
         return id;
@@ -160,14 +142,6 @@ public class ApiIngestionDTO implements Serializable {
         this.transactionIngestion = transactionIngestion;
     }
 
-    public ApiAccessTokenDTO getApiAccessToken() {
-        return apiAccessToken;
-    }
-
-    public void setApiAccessToken(ApiAccessTokenDTO apiAccessToken) {
-        this.apiAccessToken = apiAccessToken;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -206,7 +180,6 @@ public class ApiIngestionDTO implements Serializable {
             ", apiTokenPrefixSnapshot='" + getApiTokenPrefixSnapshot() + "'" +
             ", apiTokenNameSnapshot='" + getApiTokenNameSnapshot() + "'" +
             ", transactionIngestion=" + getTransactionIngestion() +
-            ", apiAccessToken=" + getApiAccessToken() +
             "}";
     }
 }

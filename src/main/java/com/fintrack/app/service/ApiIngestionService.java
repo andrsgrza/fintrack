@@ -7,13 +7,14 @@ import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
-import com.fintrack.app.service.dto.ApiAccessTokenDTO;
+import com.fintrack.app.service.dto.ApiIngestionCreateRequestDTO;
 import com.fintrack.app.service.dto.ApiIngestionDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.ApiIngestionMapper;
 import java.time.Instant;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -50,25 +51,31 @@ public class ApiIngestionService {
         this.currentUserService = currentUserService;
     }
 
-    public ApiIngestionDTO save(ApiIngestionDTO apiIngestionDTO) {
-        LOG.debug("Request to save ApiIngestion : {}", apiIngestionDTO);
-        ApiIngestion apiIngestion = apiIngestionMapper.toEntity(apiIngestionDTO);
+    public ApiIngestionDTO save(ApiIngestionCreateRequestDTO createRequest) {
+        LOG.debug("Request to save ApiIngestion : {}", createRequest);
+        ApiIngestion apiIngestion = toCreateEntity(createRequest);
+        normalizeCreateFields(apiIngestion);
+        resolveParentsForCreate(apiIngestion, createRequest);
+        validateRequestIdForCreate(apiIngestion);
+
         Instant now = Instant.now();
         apiIngestion.setCreatedAt(now);
         apiIngestion.setReceivedAt(now);
-        resolveParentsForCreate(apiIngestion, apiIngestionDTO);
-        validateRequestIdForCreate(apiIngestion);
+
         apiIngestion = apiIngestionRepository.save(apiIngestion);
         return apiIngestionMapper.toDto(apiIngestion);
     }
 
     public ApiIngestionDTO update(ApiIngestionDTO apiIngestionDTO) {
+        return update(apiIngestionDTO, null);
+    }
+
+    public ApiIngestionDTO update(ApiIngestionDTO apiIngestionDTO, JsonNode updateNode) {
         LOG.debug("Request to update ApiIngestion : {}", apiIngestionDTO);
         ApiIngestion existing = findAccessibleApiIngestionEntity(apiIngestionDTO.getId()).orElseThrow(() ->
             new IllegalArgumentException("Entity not found")
         );
-        rejectImmutableFieldChanges(existing, apiIngestionDTO);
-        apiIngestionMapper.partialUpdate(existing, apiIngestionDTO);
+        rejectImmutableFieldChanges(existing, apiIngestionDTO, updateNode);
         existing = apiIngestionRepository.save(existing);
         return apiIngestionMapper.toDto(existing);
     }
@@ -81,31 +88,7 @@ public class ApiIngestionService {
         LOG.debug("Request to partially update ApiIngestion : {}", apiIngestionDTO);
         return findAccessibleApiIngestionEntity(apiIngestionDTO.getId())
             .map(existing -> {
-                if (patchNode != null && patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
-                    throw new IllegalArgumentException("Transaction ingestion cannot be changed");
-                }
-                if (patchNode != null && patchNode.has("requestId")) {
-                    rejectRequestIdChange(existing, apiIngestionDTO);
-                }
-                if (patchNode != null && patchNode.has("transactionIngestion")) {
-                    rejectTransactionIngestionChange(existing, apiIngestionDTO);
-                }
-                if (patchNode != null && patchNode.has("apiTokenIdSnapshot")) {
-                    rejectApiTokenIdSnapshotChange(existing, apiIngestionDTO);
-                }
-                if (patchNode != null && patchNode.has("apiTokenPrefixSnapshot")) {
-                    rejectApiTokenPrefixSnapshotChange(existing, apiIngestionDTO);
-                }
-                if (patchNode != null && patchNode.has("apiTokenNameSnapshot")) {
-                    rejectApiTokenNameSnapshotChange(existing, apiIngestionDTO);
-                }
-                if (patchNode != null && patchNode.has("createdAt")) {
-                    rejectTimestampChange(existing.getCreatedAt(), apiIngestionDTO.getCreatedAt(), "createdAt");
-                }
-                if (patchNode != null && patchNode.has("receivedAt")) {
-                    rejectTimestampChange(existing.getReceivedAt(), apiIngestionDTO.getReceivedAt(), "receivedAt");
-                }
-                apiIngestionMapper.partialUpdate(existing, apiIngestionDTO);
+                rejectImmutableFieldChanges(existing, apiIngestionDTO, patchNode);
                 return existing;
             })
             .map(apiIngestionRepository::save)
@@ -141,8 +124,7 @@ public class ApiIngestionService {
         if (apiIngestion.isEmpty()) {
             return false;
         }
-        apiIngestionRepository.deleteById(id);
-        return true;
+        throw new IllegalArgumentException("Api ingestion cannot be deleted directly");
     }
 
     @Transactional(readOnly = true)
@@ -158,9 +140,20 @@ public class ApiIngestionService {
         return apiIngestionRepository.findOneWithToOneRelationshipsByUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void resolveParentsForCreate(ApiIngestion apiIngestion, ApiIngestionDTO apiIngestionDTO) {
-        TransactionIngestion transactionIngestion = resolveTransactionIngestion(apiIngestionDTO.getTransactionIngestion());
-        ApiAccessToken apiAccessToken = resolveApiAccessToken(apiIngestionDTO.getApiAccessToken());
+    private ApiIngestion toCreateEntity(ApiIngestionCreateRequestDTO createRequest) {
+        ApiIngestion apiIngestion = new ApiIngestion();
+        apiIngestion.setRequestId(createRequest.getRequestId());
+        apiIngestion.setIdempotencyKey(createRequest.getIdempotencyKey());
+        apiIngestion.setSourceSystem(createRequest.getSourceSystem());
+        apiIngestion.setApiVersion(createRequest.getApiVersion());
+        apiIngestion.setEndpoint(createRequest.getEndpoint());
+        apiIngestion.setClientReference(createRequest.getClientReference());
+        return apiIngestion;
+    }
+
+    private void resolveParentsForCreate(ApiIngestion apiIngestion, ApiIngestionCreateRequestDTO createRequest) {
+        TransactionIngestion transactionIngestion = resolveTransactionIngestion(createRequest.getTransactionIngestion());
+        ApiAccessToken apiAccessToken = resolveApiAccessToken(createRequest.getApiAccessTokenId());
         validateSameOwner(transactionIngestion, apiAccessToken);
         validateApiTransactionIngestion(transactionIngestion);
         validateTransactionIngestionNotAlreadyLinked(transactionIngestion);
@@ -170,8 +163,8 @@ public class ApiIngestionService {
 
     private void applyTokenSnapshots(ApiIngestion apiIngestion, ApiAccessToken apiAccessToken) {
         apiIngestion.setApiTokenIdSnapshot(apiAccessToken.getId());
-        apiIngestion.setApiTokenPrefixSnapshot(apiAccessToken.getTokenPrefix());
-        apiIngestion.setApiTokenNameSnapshot(apiAccessToken.getName());
+        apiIngestion.setApiTokenPrefixSnapshot(normalizeOptionalString(apiAccessToken.getTokenPrefix(), "Api token prefix snapshot", 20));
+        apiIngestion.setApiTokenNameSnapshot(normalizeOptionalString(apiAccessToken.getName(), "Api token name snapshot", 100));
     }
 
     private TransactionIngestion resolveTransactionIngestion(TransactionIngestionDTO transactionIngestionDTO) {
@@ -183,12 +176,12 @@ public class ApiIngestionService {
         );
     }
 
-    private ApiAccessToken resolveApiAccessToken(ApiAccessTokenDTO apiAccessTokenDTO) {
-        if (apiAccessTokenDTO == null || apiAccessTokenDTO.getId() == null) {
+    private ApiAccessToken resolveApiAccessToken(Long apiAccessTokenId) {
+        if (apiAccessTokenId == null) {
             throw new IllegalArgumentException("Api access token is required");
         }
         return apiAccessTokenService
-            .findAccessibleApiAccessTokenEntity(apiAccessTokenDTO.getId())
+            .findAccessibleApiAccessTokenEntity(apiAccessTokenId)
             .orElseThrow(() -> new IllegalArgumentException("Api access token not found"));
     }
 
@@ -228,76 +221,177 @@ public class ApiIngestionService {
     }
 
     private void validateRequestIdForCreate(ApiIngestion apiIngestion) {
-        if (apiIngestion.getRequestId() == null || apiIngestion.getRequestId().isBlank()) {
-            throw new IllegalArgumentException("Request id is required");
-        }
         if (apiIngestionRepository.existsByRequestId(apiIngestion.getRequestId())) {
             throw new IllegalArgumentException("Request id already exists");
         }
     }
 
-    private void rejectImmutableFieldChanges(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
-        rejectTransactionIngestionChange(existing, apiIngestionDTO);
-        rejectApiTokenIdSnapshotChange(existing, apiIngestionDTO);
-        rejectApiTokenPrefixSnapshotChange(existing, apiIngestionDTO);
-        rejectApiTokenNameSnapshotChange(existing, apiIngestionDTO);
-        rejectRequestIdChange(existing, apiIngestionDTO);
-        rejectTimestampChange(existing.getCreatedAt(), apiIngestionDTO.getCreatedAt(), "createdAt");
-        rejectTimestampChange(existing.getReceivedAt(), apiIngestionDTO.getReceivedAt(), "receivedAt");
+    private void normalizeCreateFields(ApiIngestion apiIngestion) {
+        apiIngestion.setRequestId(normalizeRequiredString(apiIngestion.getRequestId(), "Request id", 100));
+        apiIngestion.setIdempotencyKey(normalizeOptionalString(apiIngestion.getIdempotencyKey(), "Idempotency key", 150));
+        apiIngestion.setSourceSystem(normalizeOptionalString(apiIngestion.getSourceSystem(), "Source system", 100));
+        apiIngestion.setApiVersion(normalizeRequiredString(apiIngestion.getApiVersion(), "Api version", 20));
+        apiIngestion.setEndpoint(normalizeRequiredString(apiIngestion.getEndpoint(), "Endpoint", 150));
+        apiIngestion.setClientReference(normalizeOptionalString(apiIngestion.getClientReference(), "Client reference", 150));
     }
 
-    private void rejectTransactionIngestionChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
-        if (apiIngestionDTO.getTransactionIngestion() == null) {
+    private void rejectImmutableFieldChanges(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO, JsonNode updateNode) {
+        rejectTransactionIngestionChange(existing, apiIngestionDTO, updateNode);
+        rejectRequiredStringChange(existing.getRequestId(), apiIngestionDTO.getRequestId(), "requestId", "Request id", 100, updateNode);
+        rejectOptionalStringChange(
+            existing.getIdempotencyKey(),
+            apiIngestionDTO.getIdempotencyKey(),
+            "idempotencyKey",
+            "Idempotency key",
+            150,
+            updateNode
+        );
+        rejectOptionalStringChange(
+            existing.getSourceSystem(),
+            apiIngestionDTO.getSourceSystem(),
+            "sourceSystem",
+            "Source system",
+            100,
+            updateNode
+        );
+        rejectRequiredStringChange(existing.getApiVersion(), apiIngestionDTO.getApiVersion(), "apiVersion", "Api version", 20, updateNode);
+        rejectRequiredStringChange(existing.getEndpoint(), apiIngestionDTO.getEndpoint(), "endpoint", "Endpoint", 150, updateNode);
+        rejectOptionalStringChange(
+            existing.getClientReference(),
+            apiIngestionDTO.getClientReference(),
+            "clientReference",
+            "Client reference",
+            150,
+            updateNode
+        );
+        rejectTimestampChange(existing.getReceivedAt(), apiIngestionDTO.getReceivedAt(), "receivedAt", updateNode);
+        rejectTimestampChange(existing.getCreatedAt(), apiIngestionDTO.getCreatedAt(), "createdAt", updateNode);
+        rejectLongChange(
+            existing.getApiTokenIdSnapshot(),
+            apiIngestionDTO.getApiTokenIdSnapshot(),
+            "apiTokenIdSnapshot",
+            "Api token id snapshot",
+            updateNode
+        );
+        rejectOptionalStringChange(
+            existing.getApiTokenPrefixSnapshot(),
+            apiIngestionDTO.getApiTokenPrefixSnapshot(),
+            "apiTokenPrefixSnapshot",
+            "Api token prefix snapshot",
+            20,
+            updateNode
+        );
+        rejectOptionalStringChange(
+            existing.getApiTokenNameSnapshot(),
+            apiIngestionDTO.getApiTokenNameSnapshot(),
+            "apiTokenNameSnapshot",
+            "Api token name snapshot",
+            100,
+            updateNode
+        );
+    }
+
+    private void rejectTransactionIngestionChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO, JsonNode updateNode) {
+        if (!shouldValidateField(updateNode, "transactionIngestion")) {
+            return;
+        }
+        if (updateNode != null && updateNode.has("transactionIngestion") && updateNode.get("transactionIngestion").isNull()) {
+            throw new IllegalArgumentException("Transaction ingestion cannot be changed");
+        }
+        if (apiIngestionDTO.getTransactionIngestion() == null || apiIngestionDTO.getTransactionIngestion().getId() == null) {
             throw new IllegalArgumentException("Transaction ingestion cannot be changed");
         }
         Long incomingId = apiIngestionDTO.getTransactionIngestion().getId();
-        if (incomingId == null || !incomingId.equals(existing.getTransactionIngestion().getId())) {
+        if (!incomingId.equals(existing.getTransactionIngestion().getId())) {
             throw new IllegalArgumentException("Transaction ingestion cannot be changed");
         }
     }
 
-    private void rejectApiTokenIdSnapshotChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
-        if (apiIngestionDTO.getApiTokenIdSnapshot() == null) {
-            throw new IllegalArgumentException("Api token id snapshot cannot be changed");
+    private void rejectRequiredStringChange(
+        String existingValue,
+        String incomingValue,
+        String jsonFieldName,
+        String label,
+        int maxLength,
+        JsonNode updateNode
+    ) {
+        if (!shouldValidateField(updateNode, jsonFieldName)) {
+            return;
         }
-        if (!apiIngestionDTO.getApiTokenIdSnapshot().equals(existing.getApiTokenIdSnapshot())) {
-            throw new IllegalArgumentException("Api token id snapshot cannot be changed");
-        }
-    }
-
-    private void rejectApiTokenPrefixSnapshotChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
-        if (apiIngestionDTO.getApiTokenPrefixSnapshot() == null) {
-            throw new IllegalArgumentException("Api token prefix snapshot cannot be changed");
-        }
-        if (!apiIngestionDTO.getApiTokenPrefixSnapshot().equals(existing.getApiTokenPrefixSnapshot())) {
-            throw new IllegalArgumentException("Api token prefix snapshot cannot be changed");
-        }
-    }
-
-    private void rejectApiTokenNameSnapshotChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
-        if (apiIngestionDTO.getApiTokenNameSnapshot() == null) {
-            throw new IllegalArgumentException("Api token name snapshot cannot be changed");
-        }
-        if (!apiIngestionDTO.getApiTokenNameSnapshot().equals(existing.getApiTokenNameSnapshot())) {
-            throw new IllegalArgumentException("Api token name snapshot cannot be changed");
+        String normalizedIncoming = normalizeRequiredString(incomingValue, label, maxLength);
+        String normalizedExisting = normalizeRequiredString(existingValue, label, maxLength);
+        if (!normalizedIncoming.equals(normalizedExisting)) {
+            throw new IllegalArgumentException(label + " cannot be changed");
         }
     }
 
-    private void rejectRequestIdChange(ApiIngestion existing, ApiIngestionDTO apiIngestionDTO) {
-        if (apiIngestionDTO.getRequestId() == null) {
-            throw new IllegalArgumentException("Request id cannot be changed");
+    private void rejectOptionalStringChange(
+        String existingValue,
+        String incomingValue,
+        String jsonFieldName,
+        String label,
+        int maxLength,
+        JsonNode updateNode
+    ) {
+        if (!shouldValidateField(updateNode, jsonFieldName)) {
+            return;
         }
-        if (!apiIngestionDTO.getRequestId().equals(existing.getRequestId())) {
-            throw new IllegalArgumentException("Request id cannot be changed");
+        String normalizedIncoming = normalizeOptionalString(incomingValue, label, maxLength);
+        String normalizedExisting = normalizeOptionalString(existingValue, label, maxLength);
+        if (!Objects.equals(normalizedIncoming, normalizedExisting)) {
+            throw new IllegalArgumentException(label + " cannot be changed");
         }
     }
 
-    private void rejectTimestampChange(Instant existingValue, Instant incomingValue, String fieldName) {
-        if (incomingValue == null) {
-            throw new IllegalArgumentException(fieldName + " cannot be changed");
+    private void rejectLongChange(Long existingValue, Long incomingValue, String jsonFieldName, String label, JsonNode updateNode) {
+        if (!shouldValidateField(updateNode, jsonFieldName)) {
+            return;
         }
-        if (!incomingValue.equals(existingValue)) {
-            throw new IllegalArgumentException(fieldName + " cannot be changed");
+        if (!Objects.equals(incomingValue, existingValue)) {
+            throw new IllegalArgumentException(label + " cannot be changed");
+        }
+    }
+
+    private void rejectTimestampChange(Instant existingValue, Instant incomingValue, String jsonFieldName, JsonNode updateNode) {
+        if (!shouldValidateField(updateNode, jsonFieldName)) {
+            return;
+        }
+        if (incomingValue == null || !incomingValue.equals(existingValue)) {
+            throw new IllegalArgumentException(jsonFieldName + " cannot be changed");
+        }
+    }
+
+    private boolean shouldValidateField(JsonNode updateNode, String fieldName) {
+        return updateNode == null || updateNode.has(fieldName);
+    }
+
+    private String normalizeRequiredString(String value, String label, int maxLength) {
+        if (value == null) {
+            throw new IllegalArgumentException(label + " is required");
+        }
+        String normalized = value.trim();
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException(label + " is required");
+        }
+        validateMaxLength(normalized, label, maxLength);
+        return normalized;
+    }
+
+    private String normalizeOptionalString(String value, String label, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.isBlank()) {
+            return null;
+        }
+        validateMaxLength(normalized, label, maxLength);
+        return normalized;
+    }
+
+    private void validateMaxLength(String value, String label, int maxLength) {
+        if (value.length() > maxLength) {
+            throw new IllegalArgumentException(label + " must be at most " + maxLength + " characters");
         }
     }
 }

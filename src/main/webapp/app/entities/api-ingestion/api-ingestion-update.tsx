@@ -60,14 +60,13 @@ export const ApiIngestionUpdate = () => {
           endpoint: values.endpoint,
           clientReference: values.clientReference,
           transactionIngestion: apiIngestionParentCandidates.find(it => it.id.toString() === values.transactionIngestion?.toString()),
-          apiAccessToken: apiAccessTokens.find(it => it.id.toString() === values.apiAccessToken?.toString()),
+          apiAccessTokenId: values.apiAccessTokenId ? Number(values.apiAccessTokenId) : undefined,
         }
       : {
           ...apiIngestionEntity,
           ...values,
           requestId: apiIngestionEntity?.requestId,
           transactionIngestion: apiIngestionEntity?.transactionIngestion,
-          apiAccessToken: apiIngestionEntity?.apiAccessToken,
           createdAt: apiIngestionEntity?.createdAt,
           receivedAt: apiIngestionEntity?.receivedAt,
           apiTokenIdSnapshot: apiIngestionEntity?.apiTokenIdSnapshot,
@@ -263,10 +262,10 @@ export const ApiIngestionUpdate = () => {
               ) : (
                 <>
                   <ValidatedField
-                    id="api-ingestion-apiAccessToken"
-                    name="apiAccessToken"
-                    data-cy="apiAccessToken"
-                    label={translate('fintrackApp.apiIngestion.apiAccessToken')}
+                    id="api-ingestion-apiAccessTokenId"
+                    name="apiAccessTokenId"
+                    data-cy="apiAccessTokenId"
+                    label={translate('fintrackApp.apiIngestion.apiAccessTokenId')}
                     type="select"
                     required
                   >

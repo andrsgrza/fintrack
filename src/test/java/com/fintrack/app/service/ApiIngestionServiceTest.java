@@ -17,7 +17,7 @@ import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
-import com.fintrack.app.service.dto.ApiAccessTokenDTO;
+import com.fintrack.app.service.dto.ApiIngestionCreateRequestDTO;
 import com.fintrack.app.service.dto.ApiIngestionDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.ApiIngestionMapper;
@@ -62,6 +62,7 @@ class ApiIngestionServiceTest {
     private TransactionIngestion fileTransactionIngestion;
     private ApiAccessToken apiAccessToken;
     private ApiIngestion apiIngestion;
+    private ApiIngestionCreateRequestDTO createRequest;
     private ApiIngestionDTO apiIngestionDTO;
 
     @BeforeEach
@@ -106,40 +107,37 @@ class ApiIngestionServiceTest {
         apiIngestion.setApiTokenPrefixSnapshot("ftk_prefix");
         apiIngestion.setApiTokenNameSnapshot("Import Token");
 
+        createRequest = new ApiIngestionCreateRequestDTO();
+        createRequest.setRequestId("req-1");
+        createRequest.setApiVersion("v1");
+        createRequest.setEndpoint("/transactions");
+        createRequest.setApiAccessTokenId(70L);
+
+        TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
+        transactionIngestionDTO.setId(50L);
+        createRequest.setTransactionIngestion(transactionIngestionDTO);
+
         apiIngestionDTO = new ApiIngestionDTO();
         apiIngestionDTO.setRequestId("req-1");
         apiIngestionDTO.setApiVersion("v1");
         apiIngestionDTO.setEndpoint("/transactions");
-
-        TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
-        transactionIngestionDTO.setId(50L);
         apiIngestionDTO.setTransactionIngestion(transactionIngestionDTO);
-
-        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
-        apiAccessTokenDTO.setId(70L);
-        apiIngestionDTO.setApiAccessToken(apiAccessTokenDTO);
     }
 
     @Test
     void saveShouldResolveParentsValidateSameOwnerApplyTimestampsAndRejectFileParent() {
-        ApiIngestion mappedEntity = new ApiIngestion();
-        mappedEntity.setRequestId("req-1");
-        mappedEntity.setApiVersion("v1");
-        mappedEntity.setEndpoint("/transactions");
-
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
-        when(apiIngestionMapper.toEntity(apiIngestionDTO)).thenReturn(mappedEntity);
         when(transactionIngestionRepository.findOneWithToOneRelationshipsByIdAndAccountUserLogin(50L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(transactionIngestion)
         );
         when(apiAccessTokenService.findAccessibleApiAccessTokenEntity(70L)).thenReturn(Optional.of(apiAccessToken));
         when(apiIngestionRepository.existsByTransactionIngestionId(50L)).thenReturn(false);
         when(apiIngestionRepository.existsByRequestId("req-1")).thenReturn(false);
-        when(apiIngestionRepository.save(mappedEntity)).thenReturn(apiIngestion);
+        when(apiIngestionRepository.save(any(ApiIngestion.class))).thenReturn(apiIngestion);
         when(apiIngestionMapper.toDto(apiIngestion)).thenReturn(apiIngestionDTO);
 
-        apiIngestionService.save(apiIngestionDTO);
+        apiIngestionService.save(createRequest);
 
         ArgumentCaptor<ApiIngestion> captor = ArgumentCaptor.forClass(ApiIngestion.class);
         verify(apiIngestionRepository).save(captor.capture());
@@ -153,19 +151,17 @@ class ApiIngestionServiceTest {
 
         TransactionIngestionDTO fileParentDTO = new TransactionIngestionDTO();
         fileParentDTO.setId(51L);
-        apiIngestionDTO.setTransactionIngestion(fileParentDTO);
+        createRequest.setTransactionIngestion(fileParentDTO);
         when(transactionIngestionRepository.findOneWithToOneRelationshipsByIdAndAccountUserLogin(51L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(fileTransactionIngestion)
         );
 
-        assertThatThrownBy(() -> apiIngestionService.save(apiIngestionDTO)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> apiIngestionService.save(createRequest)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void saveShouldRejectCrossOwnerParentsEvenForAdmin() {
-        ApiIngestion mappedEntity = new ApiIngestion();
-        mappedEntity.setRequestId("req-2");
-        apiIngestionDTO.setRequestId("req-2");
+        createRequest.setRequestId("req-2");
 
         User userA = new User();
         userA.setId(4L);
@@ -188,40 +184,32 @@ class ApiIngestionServiceTest {
 
         TransactionIngestionDTO ingestionUserADTO = new TransactionIngestionDTO();
         ingestionUserADTO.setId(52L);
-        apiIngestionDTO.setTransactionIngestion(ingestionUserADTO);
-
-        ApiAccessTokenDTO tokenUserBDTO = new ApiAccessTokenDTO();
-        tokenUserBDTO.setId(71L);
-        apiIngestionDTO.setApiAccessToken(tokenUserBDTO);
+        createRequest.setTransactionIngestion(ingestionUserADTO);
+        createRequest.setApiAccessTokenId(71L);
 
         when(currentUserService.isAdmin()).thenReturn(true);
-        when(apiIngestionMapper.toEntity(apiIngestionDTO)).thenReturn(mappedEntity);
         when(transactionIngestionRepository.findOneWithToOneRelationships(52L)).thenReturn(Optional.of(ingestionUserA));
         when(apiAccessTokenService.findAccessibleApiAccessTokenEntity(71L)).thenReturn(Optional.of(tokenUserB));
 
-        assertThatThrownBy(() -> apiIngestionService.save(apiIngestionDTO)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> apiIngestionService.save(createRequest)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void saveShouldRejectDuplicateParentAndDuplicateRequestId() {
-        ApiIngestion mappedEntity = new ApiIngestion();
-        mappedEntity.setRequestId("req-1");
-
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
-        when(apiIngestionMapper.toEntity(apiIngestionDTO)).thenReturn(mappedEntity);
         when(transactionIngestionRepository.findOneWithToOneRelationshipsByIdAndAccountUserLogin(50L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(transactionIngestion)
         );
         when(apiAccessTokenService.findAccessibleApiAccessTokenEntity(70L)).thenReturn(Optional.of(apiAccessToken));
         when(apiIngestionRepository.existsByTransactionIngestionId(50L)).thenReturn(true);
 
-        assertThatThrownBy(() -> apiIngestionService.save(apiIngestionDTO)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> apiIngestionService.save(createRequest)).isInstanceOf(IllegalArgumentException.class);
 
         when(apiIngestionRepository.existsByTransactionIngestionId(50L)).thenReturn(false);
         when(apiIngestionRepository.existsByRequestId("req-1")).thenReturn(true);
 
-        assertThatThrownBy(() -> apiIngestionService.save(apiIngestionDTO)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> apiIngestionService.save(createRequest)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -310,6 +298,20 @@ class ApiIngestionServiceTest {
         when(apiIngestionRepository.findOneWithToOneRelationshipsByUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
 
         assertThat(apiIngestionService.delete(100L)).isFalse();
+        verify(apiIngestionRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteShouldRejectAccessibleApiIngestion() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(apiIngestionRepository.findOneWithToOneRelationshipsByUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(apiIngestion)
+        );
+
+        assertThatThrownBy(() -> apiIngestionService.delete(100L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("cannot be deleted directly");
         verify(apiIngestionRepository, never()).deleteById(any());
     }
 

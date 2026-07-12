@@ -12,7 +12,6 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface ApiIngestionMapper extends EntityMapper<ApiIngestionDTO, ApiIngestion> {
     @Mapping(target = "transactionIngestion", source = "transactionIngestion", qualifiedByName = "transactionIngestionId")
-    @Mapping(target = "apiAccessToken", ignore = true)
     ApiIngestionDTO toDto(ApiIngestion s);
 
     @Mapping(target = "transactionIngestion", ignore = true)

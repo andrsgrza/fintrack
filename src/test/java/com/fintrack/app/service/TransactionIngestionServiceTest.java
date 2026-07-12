@@ -14,6 +14,7 @@ import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
@@ -49,6 +50,9 @@ class TransactionIngestionServiceTest {
 
     @Mock
     private FileIngestionRepository fileIngestionRepository;
+
+    @Mock
+    private ApiIngestionRepository apiIngestionRepository;
 
     @InjectMocks
     private TransactionIngestionService transactionIngestionService;
@@ -254,7 +258,7 @@ class TransactionIngestionServiceTest {
     }
 
     @Test
-    void deleteShouldCleanupFileIngestionBeforeDeletingParent() {
+    void deleteShouldCleanupChildIngestionsBeforeDeletingParent() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(transactionIngestionRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
@@ -264,6 +268,7 @@ class TransactionIngestionServiceTest {
         assertThat(transactionIngestionService.delete(100L)).isTrue();
 
         verify(fileIngestionRepository).deleteByTransactionIngestionId(100L);
+        verify(apiIngestionRepository).deleteByTransactionIngestionId(100L);
         verify(transactionIngestionRepository).deleteById(100L);
     }
 }

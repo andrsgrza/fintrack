@@ -87,7 +87,7 @@ public class TransactionIngestion implements Serializable {
     @OneToOne(fetch = FetchType.LAZY, mappedBy = "transactionIngestion")
     private FileIngestion fileIngestion;
 
-    @JsonIgnoreProperties(value = { "transactionIngestion", "apiAccessToken" }, allowSetters = true)
+    @JsonIgnoreProperties(value = { "transactionIngestion" }, allowSetters = true)
     @OneToOne(fetch = FetchType.LAZY, mappedBy = "transactionIngestion")
     private ApiIngestion apiIngestion;
 
