@@ -6,7 +6,6 @@ export interface IApiAccessToken {
   id?: number;
   name?: string;
   tokenPrefix?: string;
-  tokenHash?: string;
   status?: keyof typeof ApiTokenStatus;
   createdAt?: dayjs.Dayjs;
   updatedAt?: dayjs.Dayjs;
@@ -15,6 +14,21 @@ export interface IApiAccessToken {
   revokedAt?: dayjs.Dayjs | null;
   rawToken?: string;
   user?: IUser;
+}
+
+export interface IApiAccessTokenCreateRequest {
+  name: string;
+}
+
+export interface IApiAccessTokenCreateResponse extends IApiAccessToken {
+  rawToken?: string;
+}
+
+export interface IApiAccessTokenUpdateRequest {
+  id: number;
+  name: string;
+  status?: keyof typeof ApiTokenStatus;
+  expiresAt?: dayjs.Dayjs | null;
 }
 
 export const defaultValue: Readonly<IApiAccessToken> = {};

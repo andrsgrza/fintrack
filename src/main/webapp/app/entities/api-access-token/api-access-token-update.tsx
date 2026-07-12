@@ -64,15 +64,13 @@ export const ApiAccessTokenUpdate = () => {
       return;
     }
 
-    values.createdAt = convertDateTimeToServer(values.createdAt);
-    values.updatedAt = convertDateTimeToServer(values.updatedAt);
-    values.lastUsedAt = convertDateTimeToServer(values.lastUsedAt);
     values.expiresAt = convertDateTimeToServer(values.expiresAt);
-    values.revokedAt = convertDateTimeToServer(values.revokedAt);
 
     const entity = {
-      ...apiAccessTokenEntity,
-      ...values,
+      id: values.id,
+      name: values.name,
+      status: values.status,
+      expiresAt: values.expiresAt,
     };
 
     dispatch(updateEntity(entity));

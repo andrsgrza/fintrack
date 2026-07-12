@@ -3,7 +3,12 @@ import { createAsyncThunk, isFulfilled, isPending } from '@reduxjs/toolkit';
 import { ASC } from 'app/shared/util/pagination.constants';
 import { cleanEntity } from 'app/shared/util/entity-utils';
 import { EntityState, IQueryParams, createEntitySlice, serializeAxiosError } from 'app/shared/reducers/reducer.utils';
-import { IApiAccessToken, defaultValue } from 'app/shared/model/api-access-token.model';
+import {
+  IApiAccessToken,
+  IApiAccessTokenCreateRequest,
+  IApiAccessTokenUpdateRequest,
+  defaultValue,
+} from 'app/shared/model/api-access-token.model';
 
 const initialState: EntityState<IApiAccessToken> = {
   loading: false,
@@ -38,7 +43,7 @@ export const getEntity = createAsyncThunk(
 
 export const createEntity = createAsyncThunk(
   'apiAccessToken/create_entity',
-  async (entity: IApiAccessToken, thunkAPI) => {
+  async (entity: IApiAccessTokenCreateRequest, thunkAPI) => {
     const result = await axios.post<IApiAccessToken>(apiUrl, cleanEntity(entity));
     thunkAPI.dispatch(getEntities({}));
     return result;
@@ -48,7 +53,7 @@ export const createEntity = createAsyncThunk(
 
 export const updateEntity = createAsyncThunk(
   'apiAccessToken/update_entity',
-  async (entity: IApiAccessToken, thunkAPI) => {
+  async (entity: IApiAccessTokenUpdateRequest, thunkAPI) => {
     const result = await axios.put<IApiAccessToken>(`${apiUrl}/${entity.id}`, cleanEntity(entity));
     thunkAPI.dispatch(getEntities({}));
     return result;

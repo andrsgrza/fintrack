@@ -28,7 +28,7 @@ public class ApiAccessTokenDTO implements Serializable {
     private String tokenHash;
 
     /**
-     * Write-only on create: full secret returned once when the server generates credentials.
+     * Response-only on create: full secret returned once when the server generates credentials.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String rawToken;
