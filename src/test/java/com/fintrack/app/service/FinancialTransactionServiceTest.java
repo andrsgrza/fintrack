@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
@@ -18,10 +19,13 @@ import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,6 +61,9 @@ class FinancialTransactionServiceTest {
     private FinancialSubscriptionRepository financialSubscriptionRepository;
 
     @Mock
+    private TransactionIngestionRepository transactionIngestionRepository;
+
+    @Mock
     private InternalTransferRepository internalTransferRepository;
 
     @Mock
@@ -86,22 +93,42 @@ class FinancialTransactionServiceTest {
         financialTransaction = new FinancialTransaction();
         financialTransaction.setId(30L);
         financialTransaction.setAmount(new BigDecimal("10.00"));
+        financialTransaction.setTransactionDate(LocalDate.parse("2024-01-01"));
+        financialTransaction.setDescription("Coffee");
+        financialTransaction.setFlow(TransactionFlow.OUT);
         financialTransaction.setOrigin(TransactionOrigin.MANUAL);
+        financialTransaction.setCreatedAt(Instant.parse("2024-01-01T00:00:00Z"));
+        financialTransaction.setUpdatedAt(Instant.parse("2024-01-01T00:00:00Z"));
         financialTransaction.setAccount(financialAccount);
 
         financialTransactionDTO = new FinancialTransactionDTO();
         financialTransactionDTO.setId(30L);
         financialTransactionDTO.setAmount(new BigDecimal("10.00"));
+        financialTransactionDTO.setTransactionDate(LocalDate.parse("2024-01-01"));
+        financialTransactionDTO.setDescription("Coffee");
+        financialTransactionDTO.setFlow(TransactionFlow.OUT);
+        financialTransactionDTO.setOrigin(TransactionOrigin.MANUAL);
+        financialTransactionDTO.setCreatedAt(Instant.parse("2024-01-01T00:00:00Z"));
+        financialTransactionDTO.setUpdatedAt(Instant.parse("2024-01-01T00:00:00Z"));
         FinancialAccountDTO accountDTO = new FinancialAccountDTO();
         accountDTO.setId(20L);
         financialTransactionDTO.setAccount(accountDTO);
     }
 
     @Test
-    void saveShouldAssignManualOriginAndResolveAccessibleAccount() {
+    void saveShouldPreserveOriginResolveAccessibleAccountAndSetServerTimestamps() {
         FinancialTransaction mappedEntity = new FinancialTransaction();
+        mappedEntity.setAmount(new BigDecimal("10.00"));
+        mappedEntity.setTransactionDate(LocalDate.parse("2024-01-01"));
+        mappedEntity.setDescription("Coffee");
+        mappedEntity.setFlow(TransactionFlow.OUT);
+        mappedEntity.setOrigin(TransactionOrigin.MANUAL);
         FinancialTransaction savedEntity = new FinancialTransaction();
         savedEntity.setId(30L);
+        savedEntity.setAmount(new BigDecimal("10.00"));
+        savedEntity.setTransactionDate(LocalDate.parse("2024-01-01"));
+        savedEntity.setDescription("Coffee");
+        savedEntity.setFlow(TransactionFlow.OUT);
         savedEntity.setOrigin(TransactionOrigin.MANUAL);
         savedEntity.setAccount(financialAccount);
 
@@ -115,6 +142,8 @@ class FinancialTransactionServiceTest {
         assertThat(mappedEntity.getAccount()).isEqualTo(financialAccount);
         assertThat(mappedEntity.getOrigin()).isEqualTo(TransactionOrigin.MANUAL);
         assertThat(mappedEntity.getTransactionIngestion()).isNull();
+        assertThat(mappedEntity.getCreatedAt()).isNotNull();
+        assertThat(mappedEntity.getUpdatedAt()).isNotNull();
         verify(financialTransactionRepository).save(mappedEntity);
     }
 
@@ -136,29 +165,28 @@ class FinancialTransactionServiceTest {
     }
 
     @Test
-    void updateShouldPreserveOriginAndIngestion() {
+    void updateShouldRejectOriginChange() {
         FinancialTransaction existing = new FinancialTransaction();
         existing.setId(30L);
-        existing.setOrigin(TransactionOrigin.FILE_IMPORT);
+        existing.setAmount(new BigDecimal("10.00"));
+        existing.setTransactionDate(LocalDate.parse("2024-01-01"));
+        existing.setDescription("Coffee");
+        existing.setFlow(TransactionFlow.OUT);
+        existing.setOrigin(TransactionOrigin.MANUAL);
+        existing.setCreatedAt(Instant.parse("2024-01-01T00:00:00Z"));
+        existing.setUpdatedAt(Instant.parse("2024-01-01T00:00:00Z"));
         existing.setAccount(financialAccount);
 
-        FinancialTransaction mappedEntity = new FinancialTransaction();
-        mappedEntity.setId(30L);
-        mappedEntity.setOrigin(TransactionOrigin.API);
+        financialTransactionDTO.setOrigin(TransactionOrigin.API);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(financialTransactionRepository.findOneAccessibleByIdAndAccountUserLogin(30L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(existing)
         );
-        when(financialTransactionMapper.toEntity(financialTransactionDTO)).thenReturn(mappedEntity);
-        when(financialAccountService.findAccessibleAccountEntity(20L)).thenReturn(Optional.of(financialAccount));
-        when(financialTransactionRepository.save(mappedEntity)).thenReturn(mappedEntity);
-        when(financialTransactionMapper.toDto(mappedEntity)).thenReturn(financialTransactionDTO);
 
-        financialTransactionService.update(financialTransactionDTO);
-
-        assertThat(mappedEntity.getOrigin()).isEqualTo(TransactionOrigin.FILE_IMPORT);
+        assertThatThrownBy(() -> financialTransactionService.update(financialTransactionDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(financialTransactionRepository, never()).save(any());
     }
 
     @Test
@@ -167,9 +195,7 @@ class FinancialTransactionServiceTest {
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(financialTransactionRepository.findOneAccessibleByIdAndAccountUserLogin(30L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> financialTransactionService.update(financialTransactionDTO)).isInstanceOf(
-            java.util.NoSuchElementException.class
-        );
+        assertThatThrownBy(() -> financialTransactionService.update(financialTransactionDTO)).isInstanceOf(IllegalArgumentException.class);
         verify(financialTransactionRepository, never()).save(any());
     }
 
@@ -201,7 +227,14 @@ class FinancialTransactionServiceTest {
         );
 
         assertThat(financialTransactionService.delete(30L)).isTrue();
+        verify(ingestionRecordRepository).markFinancialTransactionDeleted(
+            eq(30L),
+            any(),
+            eq("FINANCIAL_TRANSACTION_DELETED"),
+            eq("Financial transaction was deleted manually.")
+        );
         verify(internalTransferRepository).deleteByTransactionIdInEitherRole(30L);
+        verify(financialTransactionRepository).deleteTagLinksByFinancialTransactionId(30L);
         verify(financialTransactionRepository).deleteById(30L);
     }
 

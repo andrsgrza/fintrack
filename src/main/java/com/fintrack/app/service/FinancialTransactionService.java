@@ -1,10 +1,15 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.enumeration.CategoryType;
+import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
+import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
@@ -13,16 +18,21 @@ import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -44,6 +54,10 @@ public class FinancialTransactionService {
 
     private static final Logger LOG = LoggerFactory.getLogger(FinancialTransactionService.class);
 
+    private static final String FINANCIAL_TRANSACTION_DELETED = "FINANCIAL_TRANSACTION_DELETED";
+
+    private static final String FINANCIAL_TRANSACTION_DELETED_MESSAGE = "Financial transaction was deleted manually.";
+
     private final FinancialTransactionRepository financialTransactionRepository;
 
     private final FinancialTransactionMapper financialTransactionMapper;
@@ -55,6 +69,8 @@ public class FinancialTransactionService {
     private final TagRepository tagRepository;
 
     private final FinancialSubscriptionRepository financialSubscriptionRepository;
+
+    private final TransactionIngestionRepository transactionIngestionRepository;
 
     private final InternalTransferRepository internalTransferRepository;
 
@@ -69,6 +85,7 @@ public class FinancialTransactionService {
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
+        TransactionIngestionRepository transactionIngestionRepository,
         InternalTransferRepository internalTransferRepository,
         IngestionRecordRepository ingestionRecordRepository,
         CurrentUserService currentUserService
@@ -79,6 +96,7 @@ public class FinancialTransactionService {
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
         this.financialSubscriptionRepository = financialSubscriptionRepository;
+        this.transactionIngestionRepository = transactionIngestionRepository;
         this.internalTransferRepository = internalTransferRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.currentUserService = currentUserService;
@@ -91,10 +109,23 @@ public class FinancialTransactionService {
      * @return the persisted entity.
      */
     public FinancialTransactionDTO save(FinancialTransactionDTO financialTransactionDTO) {
-        LOG.debug("Request to save FinancialTransaction : {}", financialTransactionDTO);
-        validateAmount(financialTransactionDTO.getAmount());
+        LOG.debug("Request to save FinancialTransaction");
         FinancialTransaction financialTransaction = financialTransactionMapper.toEntity(financialTransactionDTO);
-        applyRelationshipsForCreate(financialTransaction, financialTransactionDTO);
+        FinancialAccount account = resolveAccountForCreate(financialTransactionDTO.getAccount());
+        financialTransaction.setAccount(account);
+        financialTransaction.setCategory(resolveOptionalCategoryForOwner(financialTransactionDTO.getCategory(), ownerLogin(account)));
+        financialTransaction.setFinancialSubscription(
+            resolveOptionalSubscriptionForOwner(financialTransactionDTO.getFinancialSubscription(), account)
+        );
+        financialTransaction.setTags(resolveTagsForOwner(financialTransactionDTO.getTags(), ownerLogin(account)));
+        financialTransaction.setTransactionIngestion(
+            resolveOptionalTransactionIngestionForCreate(financialTransactionDTO.getTransactionIngestion(), account)
+        );
+        normalizeFields(financialTransaction);
+        Instant now = Instant.now();
+        financialTransaction.setCreatedAt(now);
+        financialTransaction.setUpdatedAt(now);
+        validateMergedState(financialTransaction);
         financialTransaction = financialTransactionRepository.save(financialTransaction);
         return financialTransactionMapper.toDto(financialTransaction);
     }
@@ -106,14 +137,17 @@ public class FinancialTransactionService {
      * @return the persisted entity.
      */
     public FinancialTransactionDTO update(FinancialTransactionDTO financialTransactionDTO) {
-        LOG.debug("Request to update FinancialTransaction : {}", financialTransactionDTO);
-        FinancialTransaction existingFinancialTransaction = findAccessibleEntity(financialTransactionDTO.getId()).orElseThrow();
-        validateAmount(financialTransactionDTO.getAmount());
-        FinancialTransaction financialTransaction = financialTransactionMapper.toEntity(financialTransactionDTO);
-        applyRelationshipsForUpdate(financialTransaction, financialTransactionDTO);
-        preserveImmutableFields(financialTransaction, existingFinancialTransaction);
-        financialTransaction = financialTransactionRepository.save(financialTransaction);
-        return financialTransactionMapper.toDto(financialTransaction);
+        return update(financialTransactionDTO, null);
+    }
+
+    public FinancialTransactionDTO update(FinancialTransactionDTO financialTransactionDTO, JsonNode updateNode) {
+        LOG.debug("Request to update FinancialTransaction : {}", financialTransactionDTO.getId());
+        FinancialTransaction existing = findAccessibleEntity(financialTransactionDTO.getId()).orElseThrow(() ->
+            new IllegalArgumentException("Entity not found")
+        );
+        applyUpdate(existing, financialTransactionDTO, updateNode);
+        existing = financialTransactionRepository.save(existing);
+        return financialTransactionMapper.toDto(existing);
     }
 
     /**
@@ -123,20 +157,15 @@ public class FinancialTransactionService {
      * @return the persisted entity.
      */
     public Optional<FinancialTransactionDTO> partialUpdate(FinancialTransactionDTO financialTransactionDTO) {
-        LOG.debug("Request to partially update FinancialTransaction : {}", financialTransactionDTO);
+        return partialUpdate(financialTransactionDTO, null);
+    }
 
+    public Optional<FinancialTransactionDTO> partialUpdate(FinancialTransactionDTO financialTransactionDTO, JsonNode patchNode) {
+        LOG.debug("Request to partially update FinancialTransaction : {}", financialTransactionDTO.getId());
         return findAccessibleEntity(financialTransactionDTO.getId())
-            .map(existingFinancialTransaction -> {
-                TransactionOrigin origin = existingFinancialTransaction.getOrigin();
-                var transactionIngestion = existingFinancialTransaction.getTransactionIngestion();
-                if (financialTransactionDTO.getAmount() != null) {
-                    validateAmount(financialTransactionDTO.getAmount());
-                }
-                financialTransactionMapper.partialUpdate(existingFinancialTransaction, financialTransactionDTO);
-                applyRelationshipsForPartialUpdate(existingFinancialTransaction, financialTransactionDTO);
-                existingFinancialTransaction.setOrigin(origin);
-                existingFinancialTransaction.setTransactionIngestion(transactionIngestion);
-                return existingFinancialTransaction;
+            .map(existing -> {
+                applyUpdate(existing, financialTransactionDTO, patchNode);
+                return existing;
             })
             .map(financialTransactionRepository::save)
             .map(financialTransactionMapper::toDto);
@@ -271,7 +300,14 @@ public class FinancialTransactionService {
         if (financialTransaction.isEmpty()) {
             return false;
         }
+        ingestionRecordRepository.markFinancialTransactionDeleted(
+            id,
+            IngestionRecordStatus.REJECTED,
+            FINANCIAL_TRANSACTION_DELETED,
+            FINANCIAL_TRANSACTION_DELETED_MESSAGE
+        );
         internalTransferRepository.deleteByTransactionIdInEitherRole(id);
+        financialTransactionRepository.deleteTagLinksByFinancialTransactionId(id);
         financialTransactionRepository.deleteById(id);
         return true;
     }
@@ -292,49 +328,147 @@ public class FinancialTransactionService {
         return financialTransactionRepository.findOneAccessibleByIdAndAccountUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void validateAmount(BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+    private void applyUpdate(FinancialTransaction existing, FinancialTransactionDTO dto, JsonNode updateNode) {
+        rejectAccountChange(existing, dto, updateNode);
+        rejectOriginChange(existing, dto, updateNode);
+        rejectCreatedAtChange(existing, dto, updateNode);
+        rejectUpdatedAtChange(existing, dto, updateNode);
+        rejectTransactionIngestionChange(existing, dto, updateNode);
+
+        boolean linkedToInternalTransfer = internalTransferRepository.existsByTransactionIdInEitherRole(existing.getId());
+        if (fieldPresent(updateNode, "amount")) {
+            if (dto.getAmount() == null) {
+                throw new IllegalArgumentException("Amount is required");
+            }
+            BigDecimal normalizedAmount = normalizeAmount(dto.getAmount());
+            if (linkedToInternalTransfer && !sameAmount(existing.getAmount(), normalizedAmount)) {
+                throw new IllegalArgumentException("Amount cannot be changed while transaction is linked to an internal transfer");
+            }
+            existing.setAmount(normalizedAmount);
+        }
+        if (fieldPresent(updateNode, "flow")) {
+            if (dto.getFlow() == null) {
+                throw new IllegalArgumentException("Flow is required");
+            }
+            if (linkedToInternalTransfer && existing.getFlow() != dto.getFlow()) {
+                throw new IllegalArgumentException("Flow cannot be changed while transaction is linked to an internal transfer");
+            }
+            existing.setFlow(dto.getFlow());
+        }
+        if (fieldPresent(updateNode, "transactionDate")) {
+            if (dto.getTransactionDate() == null) {
+                throw new IllegalArgumentException("Transaction date is required");
+            }
+            existing.setTransactionDate(dto.getTransactionDate());
+        }
+        if (fieldPresent(updateNode, "postingDate")) {
+            existing.setPostingDate(dto.getPostingDate());
+        }
+        if (fieldPresent(updateNode, "description")) {
+            existing.setDescription(dto.getDescription());
+        }
+        if (fieldPresent(updateNode, "externalReference")) {
+            String externalReference = normalizeOptionalText(dto.getExternalReference(), 150, "External reference");
+            if (existing.getTransactionIngestion() != null && !Objects.equals(existing.getExternalReference(), externalReference)) {
+                throw new IllegalArgumentException("External reference cannot be changed once transaction ingestion is set");
+            }
+            existing.setExternalReference(externalReference);
+        }
+        if (fieldPresent(updateNode, "notes")) {
+            existing.setNotes(dto.getNotes());
+        }
+        if (fieldPresent(updateNode, "category")) {
+            existing.setCategory(resolveOptionalCategoryPatch(dto.getCategory(), ownerLogin(existing.getAccount()), updateNode));
+        }
+        if (fieldPresent(updateNode, "financialSubscription")) {
+            existing.setFinancialSubscription(
+                resolveOptionalSubscriptionPatch(dto.getFinancialSubscription(), existing.getAccount(), updateNode)
+            );
+        }
+        if (fieldPresent(updateNode, "tags")) {
+            existing.setTags(resolveTagsPatch(dto.getTags(), ownerLogin(existing.getAccount()), updateNode));
+        }
+
+        normalizeFields(existing);
+        validateMergedState(existing);
+        existing.setUpdatedAt(Instant.now());
+    }
+
+    private void validateMergedState(FinancialTransaction entity) {
+        if (entity.getAccount() == null || entity.getAccount().getId() == null) {
+            throw new IllegalArgumentException("Financial account is required");
+        }
+        if (entity.getTransactionDate() == null) {
+            throw new IllegalArgumentException("Transaction date is required");
+        }
+        if (entity.getFlow() == null) {
+            throw new IllegalArgumentException("Flow is required");
+        }
+        if (entity.getOrigin() == null) {
+            throw new IllegalArgumentException("Origin is required");
+        }
+        entity.setAmount(normalizeAmount(entity.getAmount()));
+        validateDescription(entity.getDescription());
+        validateCategoryCompatibility(entity.getCategory(), entity.getFlow());
+        validateTransactionIngestionMatchesAccountAndOrigin(entity.getTransactionIngestion(), entity.getAccount(), entity.getOrigin());
+    }
+
+    private void normalizeFields(FinancialTransaction entity) {
+        entity.setDescription(normalizeRequiredText(entity.getDescription(), 500, "Description"));
+        entity.setExternalReference(normalizeOptionalText(entity.getExternalReference(), 150, "External reference"));
+        entity.setNotes(normalizeOptionalText(entity.getNotes(), 1000, "Notes"));
+        if (entity.getAmount() != null) {
+            entity.setAmount(normalizeAmount(entity.getAmount()));
+        }
+    }
+
+    private String normalizeRequiredText(String value, int maxLength, String fieldName) {
+        if (value == null) {
+            throw new IllegalArgumentException(fieldName + " is required");
+        }
+        String trimmed = value.trim();
+        if (trimmed.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " is required");
+        }
+        if (trimmed.length() > maxLength) {
+            throw new IllegalArgumentException(fieldName + " cannot exceed " + maxLength + " characters");
+        }
+        return trimmed;
+    }
+
+    private String normalizeOptionalText(String value, int maxLength, String fieldName) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isBlank()) {
+            return null;
+        }
+        if (trimmed.length() > maxLength) {
+            throw new IllegalArgumentException(fieldName + " cannot exceed " + maxLength + " characters");
+        }
+        return trimmed;
+    }
+
+    private BigDecimal normalizeAmount(BigDecimal amount) {
+        if (amount == null) {
+            throw new IllegalArgumentException("Amount is required");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Transaction amount must be greater than zero");
         }
-    }
-
-    private void applyRelationshipsForCreate(FinancialTransaction entity, FinancialTransactionDTO dto) {
-        entity.setAccount(resolveAccount(dto.getAccount()));
-        entity.setCategory(resolveOptionalCategory(dto.getCategory()));
-        entity.setFinancialSubscription(resolveOptionalSubscription(dto.getFinancialSubscription()));
-        entity.setTags(resolveTags(dto.getTags()));
-        entity.setOrigin(TransactionOrigin.MANUAL);
-        entity.setTransactionIngestion(null);
-    }
-
-    private void applyRelationshipsForUpdate(FinancialTransaction entity, FinancialTransactionDTO dto) {
-        entity.setAccount(resolveAccount(dto.getAccount()));
-        entity.setCategory(resolveOptionalCategory(dto.getCategory()));
-        entity.setFinancialSubscription(resolveOptionalSubscription(dto.getFinancialSubscription()));
-        entity.setTags(resolveTags(dto.getTags()));
-    }
-
-    private void applyRelationshipsForPartialUpdate(FinancialTransaction entity, FinancialTransactionDTO dto) {
-        if (dto.getAccount() != null) {
-            entity.setAccount(resolveAccount(dto.getAccount()));
-        }
-        if (dto.getCategory() != null) {
-            entity.setCategory(resolveOptionalCategory(dto.getCategory()));
-        }
-        if (dto.getFinancialSubscription() != null) {
-            entity.setFinancialSubscription(resolveOptionalSubscription(dto.getFinancialSubscription()));
-        }
-        if (dto.getTags() != null) {
-            entity.setTags(resolveTags(dto.getTags()));
+        try {
+            return amount.setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("Transaction amount must have at most 2 decimal places");
         }
     }
 
-    private void preserveImmutableFields(FinancialTransaction entity, FinancialTransaction existing) {
-        entity.setOrigin(existing.getOrigin());
-        entity.setTransactionIngestion(existing.getTransactionIngestion());
+    private void validateDescription(String description) {
+        normalizeRequiredText(description, 500, "Description");
     }
 
-    private FinancialAccount resolveAccount(FinancialAccountDTO accountDTO) {
+    private FinancialAccount resolveAccountForCreate(FinancialAccountDTO accountDTO) {
         if (accountDTO == null || accountDTO.getId() == null) {
             throw new IllegalArgumentException("Financial account is required");
         }
@@ -343,55 +477,238 @@ public class FinancialTransactionService {
             .orElseThrow(() -> new IllegalArgumentException("Financial account is not accessible"));
     }
 
-    private Category resolveOptionalCategory(CategoryDTO categoryDTO) {
-        if (categoryDTO == null || categoryDTO.getId() == null) {
+    private Category resolveOptionalCategoryForOwner(CategoryDTO categoryDTO, String ownerLogin) {
+        if (categoryDTO == null) {
             return null;
         }
-        return findAccessibleCategory(categoryDTO.getId()).orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
+        if (categoryDTO.getId() == null) {
+            throw new IllegalArgumentException("Category id is required");
+        }
+        return categoryRepository
+            .findOneWithToOneRelationshipsByIdAndUserLogin(categoryDTO.getId(), ownerLogin)
+            .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
     }
 
-    private FinancialSubscription resolveOptionalSubscription(FinancialSubscriptionDTO subscriptionDTO) {
-        if (subscriptionDTO == null || subscriptionDTO.getId() == null) {
+    private Category resolveOptionalCategoryPatch(CategoryDTO categoryDTO, String ownerLogin, JsonNode updateNode) {
+        if (relationshipExplicitNull(updateNode, "category")) {
             return null;
         }
-        return findAccessibleSubscription(subscriptionDTO.getId()).orElseThrow(() ->
-            new IllegalArgumentException("Financial subscription is not accessible")
-        );
+        return resolveOptionalCategoryForOwner(categoryDTO, ownerLogin);
     }
 
-    private Set<Tag> resolveTags(Set<TagDTO> tagDTOs) {
-        if (tagDTOs == null || tagDTOs.isEmpty()) {
-            return new HashSet<>();
-        }
+    private Set<Tag> resolveTagsForOwner(Set<TagDTO> tagDTOs, String ownerLogin) {
         Set<Tag> tags = new HashSet<>();
+        if (tagDTOs == null || tagDTOs.isEmpty()) {
+            return tags;
+        }
         for (TagDTO tagDTO : tagDTOs) {
-            if (tagDTO.getId() == null) {
-                continue;
+            if (tagDTO == null || tagDTO.getId() == null) {
+                throw new IllegalArgumentException("Tag id is required");
             }
-            Tag tag = findAccessibleTag(tagDTO.getId()).orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
+            Tag tag = tagRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(tagDTO.getId(), ownerLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
             tags.add(tag);
         }
         return tags;
     }
 
-    private Optional<Category> findAccessibleCategory(Long id) {
-        if (currentUserService.isAdmin()) {
-            return categoryRepository.findById(id);
+    private Set<Tag> resolveTagsPatch(Set<TagDTO> tagDTOs, String ownerLogin, JsonNode updateNode) {
+        if (relationshipExplicitNull(updateNode, "tags")) {
+            return new HashSet<>();
         }
-        return categoryRepository.findOneByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+        return resolveTagsForOwner(tagDTOs, ownerLogin);
     }
 
-    private Optional<Tag> findAccessibleTag(Long id) {
-        if (currentUserService.isAdmin()) {
-            return tagRepository.findById(id);
+    private FinancialSubscription resolveOptionalSubscriptionForOwner(FinancialSubscriptionDTO subscriptionDTO, FinancialAccount account) {
+        if (subscriptionDTO == null) {
+            return null;
         }
-        return tagRepository.findOneByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+        if (subscriptionDTO.getId() == null) {
+            throw new IllegalArgumentException("Financial subscription id is required");
+        }
+        FinancialSubscription subscription = financialSubscriptionRepository
+            .findOneWithToOneRelationshipsByIdAndUserLogin(subscriptionDTO.getId(), ownerLogin(account))
+            .orElseThrow(() -> new IllegalArgumentException("Financial subscription is not accessible"));
+        validateSubscriptionMatchesAccount(subscription, account);
+        return subscription;
     }
 
-    private Optional<FinancialSubscription> findAccessibleSubscription(Long id) {
-        if (currentUserService.isAdmin()) {
-            return financialSubscriptionRepository.findById(id);
+    private FinancialSubscription resolveOptionalSubscriptionPatch(
+        FinancialSubscriptionDTO subscriptionDTO,
+        FinancialAccount account,
+        JsonNode updateNode
+    ) {
+        if (relationshipExplicitNull(updateNode, "financialSubscription")) {
+            return null;
         }
-        return financialSubscriptionRepository.findOneByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+        return resolveOptionalSubscriptionForOwner(subscriptionDTO, account);
+    }
+
+    private void validateSubscriptionMatchesAccount(FinancialSubscription subscription, FinancialAccount account) {
+        if (!Objects.equals(subscription.getCurrency(), account.getCurrency())) {
+            throw new IllegalArgumentException("Financial subscription currency must match transaction account currency");
+        }
+        if (subscription.getAccount() != null && !Objects.equals(subscription.getAccount().getId(), account.getId())) {
+            throw new IllegalArgumentException("Financial subscription account must match transaction account");
+        }
+    }
+
+    private TransactionIngestion resolveOptionalTransactionIngestionForCreate(
+        TransactionIngestionDTO transactionIngestionDTO,
+        FinancialAccount account
+    ) {
+        if (transactionIngestionDTO == null) {
+            return null;
+        }
+        if (transactionIngestionDTO.getId() == null) {
+            throw new IllegalArgumentException("Transaction ingestion id is required");
+        }
+        TransactionIngestion transactionIngestion;
+        if (currentUserService.isAdmin()) {
+            transactionIngestion = transactionIngestionRepository
+                .findOneWithToOneRelationships(transactionIngestionDTO.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Transaction ingestion is not accessible"));
+        } else {
+            transactionIngestion = transactionIngestionRepository
+                .findOneWithToOneRelationshipsByIdAndAccountUserLogin(
+                    transactionIngestionDTO.getId(),
+                    currentUserService.getCurrentUserLogin()
+                )
+                .orElseThrow(() -> new IllegalArgumentException("Transaction ingestion is not accessible"));
+        }
+        if (
+            transactionIngestion.getAccount() == null ||
+            transactionIngestion.getAccount().getId() == null ||
+            !Objects.equals(transactionIngestion.getAccount().getId(), account.getId())
+        ) {
+            throw new IllegalArgumentException("Transaction ingestion account must match transaction account");
+        }
+        return transactionIngestion;
+    }
+
+    private void validateTransactionIngestionMatchesAccountAndOrigin(
+        TransactionIngestion transactionIngestion,
+        FinancialAccount account,
+        TransactionOrigin origin
+    ) {
+        if (transactionIngestion == null) {
+            return;
+        }
+        if (
+            transactionIngestion.getAccount() == null ||
+            transactionIngestion.getAccount().getId() == null ||
+            !Objects.equals(transactionIngestion.getAccount().getId(), account.getId())
+        ) {
+            throw new IllegalArgumentException("Transaction ingestion account must match transaction account");
+        }
+        TransactionOrigin requiredOrigin = requiredOriginFor(transactionIngestion.getIngestionType());
+        if (origin != requiredOrigin) {
+            throw new IllegalArgumentException("Transaction origin must match transaction ingestion type");
+        }
+    }
+
+    private TransactionOrigin requiredOriginFor(IngestionType ingestionType) {
+        if (ingestionType == IngestionType.FILE) {
+            return TransactionOrigin.FILE_IMPORT;
+        }
+        if (ingestionType == IngestionType.API) {
+            return TransactionOrigin.API;
+        }
+        throw new IllegalArgumentException("Unsupported transaction ingestion type");
+    }
+
+    private void validateCategoryCompatibility(Category category, TransactionFlow flow) {
+        if (category == null || flow == null) {
+            return;
+        }
+        CategoryType categoryType = category.getCategoryType();
+        if (flow == TransactionFlow.OUT && categoryType != CategoryType.EXPENSE && categoryType != CategoryType.BOTH) {
+            throw new IllegalArgumentException("Category type is not compatible with transaction flow");
+        }
+        if (flow == TransactionFlow.IN && categoryType != CategoryType.INCOME && categoryType != CategoryType.BOTH) {
+            throw new IllegalArgumentException("Category type is not compatible with transaction flow");
+        }
+    }
+
+    private void rejectAccountChange(FinancialTransaction existing, FinancialTransactionDTO dto, JsonNode updateNode) {
+        if (!fieldPresent(updateNode, "account")) {
+            return;
+        }
+        if (dto.getAccount() == null || dto.getAccount().getId() == null) {
+            throw new IllegalArgumentException("Financial account cannot be changed");
+        }
+        if (!Objects.equals(existing.getAccount().getId(), dto.getAccount().getId())) {
+            throw new IllegalArgumentException("Financial account cannot be changed");
+        }
+    }
+
+    private void rejectOriginChange(FinancialTransaction existing, FinancialTransactionDTO dto, JsonNode updateNode) {
+        if (!fieldPresent(updateNode, "origin")) {
+            return;
+        }
+        if (dto.getOrigin() == null || existing.getOrigin() != dto.getOrigin()) {
+            throw new IllegalArgumentException("Origin cannot be changed");
+        }
+    }
+
+    private void rejectCreatedAtChange(FinancialTransaction existing, FinancialTransactionDTO dto, JsonNode updateNode) {
+        if (!fieldPresent(updateNode, "createdAt")) {
+            return;
+        }
+        if (dto.getCreatedAt() == null || !Objects.equals(existing.getCreatedAt(), dto.getCreatedAt())) {
+            throw new IllegalArgumentException("Created at cannot be changed");
+        }
+    }
+
+    private void rejectUpdatedAtChange(FinancialTransaction existing, FinancialTransactionDTO dto, JsonNode updateNode) {
+        if (!fieldPresent(updateNode, "updatedAt")) {
+            return;
+        }
+        if (dto.getUpdatedAt() == null || !Objects.equals(existing.getUpdatedAt(), dto.getUpdatedAt())) {
+            throw new IllegalArgumentException("Updated at cannot be changed");
+        }
+    }
+
+    private void rejectTransactionIngestionChange(FinancialTransaction existing, FinancialTransactionDTO dto, JsonNode updateNode) {
+        if (!fieldPresent(updateNode, "transactionIngestion")) {
+            return;
+        }
+        Long existingId = existing.getTransactionIngestion() == null ? null : existing.getTransactionIngestion().getId();
+        TransactionIngestionDTO transactionIngestionDTO = dto.getTransactionIngestion();
+        if (transactionIngestionDTO == null) {
+            if (existingId == null) {
+                return;
+            }
+            throw new IllegalArgumentException("Transaction ingestion cannot be changed");
+        }
+        if (transactionIngestionDTO.getId() == null) {
+            throw new IllegalArgumentException("Transaction ingestion id is required");
+        }
+        if (existingId == null || !Objects.equals(existingId, transactionIngestionDTO.getId())) {
+            throw new IllegalArgumentException("Transaction ingestion cannot be changed");
+        }
+    }
+
+    private String ownerLogin(FinancialAccount account) {
+        if (account == null || account.getUser() == null || account.getUser().getLogin() == null) {
+            throw new IllegalArgumentException("Financial account owner is required");
+        }
+        return account.getUser().getLogin();
+    }
+
+    private boolean sameAmount(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.compareTo(right) == 0;
+    }
+
+    private boolean fieldPresent(JsonNode node, String fieldName) {
+        return node == null || node.has(fieldName);
+    }
+
+    private boolean relationshipExplicitNull(JsonNode node, String fieldName) {
+        return node != null && node.has(fieldName) && node.get(fieldName).isNull();
     }
 }

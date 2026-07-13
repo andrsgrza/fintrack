@@ -34,18 +34,18 @@ public interface FinancialTransactionRepository
     }
 
     @Query(
-        value = "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription",
+        value = "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount",
         countQuery = "select count(financialTransaction) from FinancialTransaction financialTransaction"
     )
     Page<FinancialTransaction> findAllWithToOneRelationships(Pageable pageable);
 
     @Query(
-        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription"
+        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount"
     )
     List<FinancialTransaction> findAllWithToOneRelationships();
 
     @Query(
-        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.id =:id"
+        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.id =:id"
     )
     Optional<FinancialTransaction> findOneWithToOneRelationships(@Param("id") Long id);
 
@@ -62,20 +62,27 @@ public interface FinancialTransactionRepository
     }
 
     @Query(
-        value = "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.account.user.login = :login",
+        value = "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.account.user.login = :login",
         countQuery = "select count(financialTransaction) from FinancialTransaction financialTransaction where financialTransaction.account.user.login = :login"
     )
     Page<FinancialTransaction> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login, Pageable pageable);
 
     @Query(
-        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.account.user.login = :login"
+        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.account.user.login = :login"
     )
     List<FinancialTransaction> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
 
     @Query(
-        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription where financialTransaction.id = :id and financialTransaction.account.user.login = :login"
+        "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.id = :id and financialTransaction.account.user.login = :login"
     )
     Optional<FinancialTransaction> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_financial_transaction__tags where financial_transaction_id = :financialTransactionId",
+        nativeQuery = true
+    )
+    void deleteTagLinksByFinancialTransactionId(@Param("financialTransactionId") Long financialTransactionId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(

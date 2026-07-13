@@ -1,6 +1,7 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.IngestionRecord;
+import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
@@ -44,6 +45,17 @@ public interface IngestionRecordRepository extends JpaRepository<IngestionRecord
         "update IngestionRecord ingestionRecord set ingestionRecord.financialTransaction = null where ingestionRecord.financialTransaction.id in (select financialTransaction.id from FinancialTransaction financialTransaction where financialTransaction.transactionIngestion.id = :transactionIngestionId)"
     )
     void clearFinancialTransactionByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "update IngestionRecord ingestionRecord set ingestionRecord.financialTransaction = null, ingestionRecord.status = :status, ingestionRecord.errorCode = :errorCode, ingestionRecord.errorMessage = :errorMessage where ingestionRecord.financialTransaction.id = :financialTransactionId"
+    )
+    void markFinancialTransactionDeleted(
+        @Param("financialTransactionId") Long financialTransactionId,
+        @Param("status") IngestionRecordStatus status,
+        @Param("errorCode") String errorCode,
+        @Param("errorMessage") String errorMessage
+    );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from IngestionRecord ingestionRecord where ingestionRecord.transactionIngestion.id = :transactionIngestionId")
