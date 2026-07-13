@@ -16,6 +16,10 @@ import org.springframework.stereotype.Repository;
 public interface CreditAccountDetailsRepository extends JpaRepository<CreditAccountDetails, Long> {
     boolean existsByAccountId(Long accountId);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from CreditAccountDetails creditAccountDetails where creditAccountDetails.account.id = :accountId")
+    void deleteByAccountId(@Param("accountId") Long accountId);
+
     default Optional<CreditAccountDetails> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
     }

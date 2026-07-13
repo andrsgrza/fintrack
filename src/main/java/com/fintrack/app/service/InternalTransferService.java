@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
-import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.InternalTransferDTO;
@@ -62,6 +61,7 @@ public class InternalTransferService {
         validateTransferPair(outgoingTransaction, incomingTransaction);
         internalTransfer.setOutgoingTransaction(outgoingTransaction);
         internalTransfer.setIncomingTransaction(incomingTransaction);
+        internalTransfer.setNotes(normalizeNotes(internalTransfer.getNotes()));
         internalTransfer.setCreatedAt(Instant.now());
         internalTransfer = internalTransferRepository.save(internalTransfer);
         return internalTransferMapper.toDto(internalTransfer);
@@ -74,13 +74,30 @@ public class InternalTransferService {
      * @return the persisted entity.
      */
     public InternalTransferDTO update(InternalTransferDTO internalTransferDTO) {
+        return update(internalTransferDTO, null);
+    }
+
+    /**
+     * Update a internalTransfer.
+     *
+     * @param internalTransferDTO the entity to save.
+     * @param updateNode the raw update payload.
+     * @return the persisted entity.
+     */
+    public InternalTransferDTO update(InternalTransferDTO internalTransferDTO, JsonNode updateNode) {
         LOG.debug("Request to update InternalTransfer : {}", internalTransferDTO);
         InternalTransfer existingInternalTransfer = findAccessibleEntity(internalTransferDTO.getId()).orElseThrow();
-        rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getOutgoingTransaction(), "Outgoing transaction");
-        rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getIncomingTransaction(), "Incoming transaction");
+        if (updateNode == null || updateNode.has("outgoingTransaction")) {
+            rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getOutgoingTransaction(), "Outgoing transaction");
+        }
+        if (updateNode == null || updateNode.has("incomingTransaction")) {
+            rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getIncomingTransaction(), "Incoming transaction");
+        }
+        rejectCreatedAtChange(existingInternalTransfer, internalTransferDTO.getCreatedAt());
         InternalTransfer internalTransfer = internalTransferMapper.toEntity(internalTransferDTO);
         internalTransfer.setOutgoingTransaction(existingInternalTransfer.getOutgoingTransaction());
         internalTransfer.setIncomingTransaction(existingInternalTransfer.getIncomingTransaction());
+        internalTransfer.setNotes(normalizeNotes(internalTransfer.getNotes()));
         internalTransfer.setCreatedAt(existingInternalTransfer.getCreatedAt());
         internalTransfer = internalTransferRepository.save(internalTransfer);
         return internalTransferMapper.toDto(internalTransfer);
@@ -114,13 +131,24 @@ public class InternalTransferService {
                 if (patchNode != null && patchNode.has("incomingTransaction") && patchNode.get("incomingTransaction").isNull()) {
                     throw new IllegalArgumentException("Incoming transaction cannot be null");
                 }
+                if (patchNode != null && patchNode.has("createdAt") && patchNode.get("createdAt").isNull()) {
+                    throw new IllegalArgumentException("Created at cannot be null");
+                }
                 if (patchNode != null && patchNode.has("outgoingTransaction")) {
                     rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getOutgoingTransaction(), "Outgoing transaction");
                 }
                 if (patchNode != null && patchNode.has("incomingTransaction")) {
                     rejectTransactionChange(existingInternalTransfer, internalTransferDTO.getIncomingTransaction(), "Incoming transaction");
                 }
+                if (patchNode != null && patchNode.has("createdAt")) {
+                    rejectCreatedAtChange(existingInternalTransfer, internalTransferDTO.getCreatedAt());
+                }
                 internalTransferMapper.partialUpdate(existingInternalTransfer, internalTransferDTO);
+                if (patchNode != null && patchNode.has("notes")) {
+                    existingInternalTransfer.setNotes(normalizeNotes(internalTransferDTO.getNotes()));
+                } else {
+                    existingInternalTransfer.setNotes(normalizeNotes(existingInternalTransfer.getNotes()));
+                }
                 return existingInternalTransfer;
             })
             .map(internalTransferRepository::save)
@@ -220,9 +248,6 @@ public class InternalTransferService {
         if (outgoingTransaction.getId().equals(incomingTransaction.getId())) {
             throw new IllegalArgumentException("Outgoing and incoming transactions must be different");
         }
-        if (outgoingTransaction.getOrigin() != TransactionOrigin.MANUAL || incomingTransaction.getOrigin() != TransactionOrigin.MANUAL) {
-            throw new IllegalArgumentException("Only manual transactions can be linked");
-        }
         if (outgoingTransaction.getFlow() != TransactionFlow.OUT) {
             throw new IllegalArgumentException("Outgoing transaction must have OUT flow");
         }
@@ -245,10 +270,10 @@ public class InternalTransferService {
         ) {
             throw new IllegalArgumentException("Transactions must belong to the same user");
         }
-        if (internalTransferRepository.existsByOutgoingTransactionId(outgoingTransaction.getId())) {
+        if (internalTransferRepository.existsByTransactionIdInEitherRole(outgoingTransaction.getId())) {
             throw new IllegalArgumentException("Outgoing transaction is already linked to an internal transfer");
         }
-        if (internalTransferRepository.existsByIncomingTransactionId(incomingTransaction.getId())) {
+        if (internalTransferRepository.existsByTransactionIdInEitherRole(incomingTransaction.getId())) {
             throw new IllegalArgumentException("Incoming transaction is already linked to an internal transfer");
         }
     }
@@ -259,7 +284,7 @@ public class InternalTransferService {
         String fieldLabel
     ) {
         if (transactionDTO == null || transactionDTO.getId() == null) {
-            return;
+            throw new IllegalArgumentException(fieldLabel + " is required");
         }
         FinancialTransaction existingTransaction = fieldLabel.startsWith("Outgoing")
             ? existingInternalTransfer.getOutgoingTransaction()
@@ -267,5 +292,25 @@ public class InternalTransferService {
         if (!transactionDTO.getId().equals(existingTransaction.getId())) {
             throw new IllegalArgumentException(fieldLabel + " cannot be changed");
         }
+    }
+
+    private void rejectCreatedAtChange(InternalTransfer existingInternalTransfer, Instant requestedCreatedAt) {
+        if (requestedCreatedAt != null && !requestedCreatedAt.equals(existingInternalTransfer.getCreatedAt())) {
+            throw new IllegalArgumentException("Created at cannot be changed");
+        }
+    }
+
+    private String normalizeNotes(String notes) {
+        if (notes == null) {
+            return null;
+        }
+        String trimmed = notes.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.length() > 500) {
+            throw new IllegalArgumentException("Notes cannot exceed 500 characters");
+        }
+        return trimmed;
     }
 }

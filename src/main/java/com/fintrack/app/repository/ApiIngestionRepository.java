@@ -28,33 +28,33 @@ public interface ApiIngestionRepository extends JpaRepository<ApiIngestion, Long
     }
 
     @Query(
-        value = "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user left join fetch apiIngestion.apiAccessToken apiAccessToken",
+        value = "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user",
         countQuery = "select count(apiIngestion) from ApiIngestion apiIngestion"
     )
     Page<ApiIngestion> findAllWithToOneRelationships(Pageable pageable);
 
     @Query(
-        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user left join fetch apiIngestion.apiAccessToken apiAccessToken"
+        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user"
     )
     List<ApiIngestion> findAllWithToOneRelationships();
 
     @Query(
-        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user left join fetch apiIngestion.apiAccessToken apiAccessToken where apiIngestion.id =:id"
+        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where apiIngestion.id =:id"
     )
     Optional<ApiIngestion> findOneWithToOneRelationships(@Param("id") Long id);
 
     @Query(
-        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user left join fetch apiIngestion.apiAccessToken apiAccessToken where apiIngestion.id = :id and account.user.login = :login"
+        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where apiIngestion.id = :id and account.user.login = :login"
     )
     Optional<ApiIngestion> findOneWithToOneRelationshipsByUserLogin(@Param("id") Long id, @Param("login") String login);
 
     @Query(
-        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user left join fetch apiIngestion.apiAccessToken apiAccessToken where account.user.login = :login"
+        "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where account.user.login = :login"
     )
     List<ApiIngestion> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
 
     @Query(
-        value = "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user left join fetch apiIngestion.apiAccessToken apiAccessToken where account.user.login = :login",
+        value = "select apiIngestion from ApiIngestion apiIngestion left join fetch apiIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where account.user.login = :login",
         countQuery = "select count(apiIngestion) from ApiIngestion apiIngestion join apiIngestion.transactionIngestion transactionIngestion join transactionIngestion.account account join account.user user where user.login = :login"
     )
     Page<ApiIngestion> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
@@ -62,4 +62,12 @@ public interface ApiIngestionRepository extends JpaRepository<ApiIngestion, Long
     boolean existsByTransactionIngestionId(Long transactionIngestionId);
 
     boolean existsByRequestId(String requestId);
+
+    @Modifying
+    @Query("delete from ApiIngestion apiIngestion where apiIngestion.transactionIngestion.id = :transactionIngestionId")
+    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from ApiIngestion apiIngestion where apiIngestion.transactionIngestion.account.id = :accountId")
+    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
 }

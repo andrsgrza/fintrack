@@ -51,8 +51,8 @@ class UserDashboardPreferenceResourceIT {
 
     private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
-    private static final String DEFAULT_CONFIGURATION = "AAAAAAAAAA";
-    private static final String UPDATED_CONFIGURATION = "BBBBBBBBBB";
+    private static final String DEFAULT_CONFIGURATION = "{}";
+    private static final String UPDATED_CONFIGURATION = "{\"version\":2}";
 
     private static final Instant DEFAULT_CREATED_AT = Instant.ofEpochMilli(0L);
     private static final Instant UPDATED_CREATED_AT = Instant.now().truncatedTo(ChronoUnit.MILLIS);
@@ -389,7 +389,7 @@ class UserDashboardPreferenceResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the userDashboardPreference using partial update
-        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"configuration\":\"" + UPDATED_CONFIGURATION + "\"}";
+        String patchJson = patchJsonWithConfiguration(userDashboardPreference.getId(), UPDATED_CONFIGURATION);
 
         restUserDashboardPreferenceMockMvc
             .perform(
@@ -411,16 +411,18 @@ class UserDashboardPreferenceResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        String patchJson =
-            "{\"id\":" +
-            userDashboardPreference.getId() +
-            ",\"configuration\":\"" +
-            UPDATED_CONFIGURATION +
-            "\",\"createdAt\":\"" +
-            UPDATED_CREATED_AT +
-            "\",\"updatedAt\":\"" +
-            UPDATED_UPDATED_AT +
-            "\"}";
+        String patchJson = om.writeValueAsString(
+            java.util.Map.of(
+                "id",
+                userDashboardPreference.getId(),
+                "configuration",
+                UPDATED_CONFIGURATION,
+                "createdAt",
+                UPDATED_CREATED_AT.toString(),
+                "updatedAt",
+                UPDATED_UPDATED_AT.toString()
+            )
+        );
 
         restUserDashboardPreferenceMockMvc
             .perform(
@@ -642,7 +644,7 @@ class UserDashboardPreferenceResourceIT {
         userDashboardPreference.setUser(createOtherUser(em));
         insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
 
-        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"configuration\":\"" + UPDATED_CONFIGURATION + "\"}";
+        String patchJson = patchJsonWithConfiguration(userDashboardPreference.getId(), UPDATED_CONFIGURATION);
 
         restUserDashboardPreferenceMockMvc
             .perform(
@@ -696,16 +698,11 @@ class UserDashboardPreferenceResourceIT {
         insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
         User otherUser = createOtherUser(em);
 
-        String patchJson =
-            "{\"id\":" +
-            userDashboardPreference.getId() +
-            ",\"configuration\":\"" +
-            UPDATED_CONFIGURATION +
-            "\",\"user\":{\"id\":" +
-            otherUser.getId() +
-            ",\"login\":\"" +
-            otherUser.getLogin() +
-            "\"}}";
+        com.fasterxml.jackson.databind.node.ObjectNode patchNode = om.createObjectNode();
+        patchNode.put("id", userDashboardPreference.getId());
+        patchNode.put("configuration", UPDATED_CONFIGURATION);
+        patchNode.set("user", om.createObjectNode().put("id", otherUser.getId()).put("login", otherUser.getLogin()));
+        String patchJson = om.writeValueAsString(patchNode);
 
         restUserDashboardPreferenceMockMvc
             .perform(
@@ -723,7 +720,7 @@ class UserDashboardPreferenceResourceIT {
     void patchUserDashboardPreferenceWithoutUserFieldPreservesOwner() throws Exception {
         insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
 
-        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"configuration\":\"" + UPDATED_CONFIGURATION + "\"}";
+        String patchJson = patchJsonWithConfiguration(userDashboardPreference.getId(), UPDATED_CONFIGURATION);
 
         restUserDashboardPreferenceMockMvc
             .perform(
@@ -797,6 +794,116 @@ class UserDashboardPreferenceResourceIT {
 
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
         insertedUserDashboardPreference = null;
+    }
+
+    @Test
+    @Transactional
+    void createUserDashboardPreferenceWithNullConfigurationFails() throws Exception {
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setId(null);
+        userDashboardPreferenceDTO.setConfiguration(null);
+
+        restUserDashboardPreferenceMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(userDashboardPreferenceDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("userDashboardPreference"));
+    }
+
+    @Test
+    @Transactional
+    void createUserDashboardPreferenceWithBlankConfigurationFails() throws Exception {
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setId(null);
+        userDashboardPreferenceDTO.setConfiguration("   ");
+
+        restUserDashboardPreferenceMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(userDashboardPreferenceDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("userDashboardPreference"));
+    }
+
+    @Test
+    @Transactional
+    void createUserDashboardPreferenceWithInvalidJsonConfigurationFails() throws Exception {
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setId(null);
+        userDashboardPreferenceDTO.setConfiguration("not-json");
+
+        restUserDashboardPreferenceMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(userDashboardPreferenceDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("userDashboardPreference"));
+    }
+
+    @Test
+    @Transactional
+    void createUserDashboardPreferenceWithJsonPrimitiveConfigurationFails() throws Exception {
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setId(null);
+        userDashboardPreferenceDTO.setConfiguration("42");
+
+        restUserDashboardPreferenceMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(userDashboardPreferenceDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("userDashboardPreference"));
+    }
+
+    @Test
+    @Transactional
+    void updateUserDashboardPreferenceWithInvalidConfigurationFails() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        UserDashboardPreferenceDTO userDashboardPreferenceDTO = userDashboardPreferenceMapper.toDto(userDashboardPreference);
+        userDashboardPreferenceDTO.setConfiguration("not-json");
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, userDashboardPreferenceDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(userDashboardPreferenceDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("userDashboardPreference"));
+    }
+
+    @Test
+    @Transactional
+    void patchUserDashboardPreferenceWithNullConfigurationFails() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        String patchJson = "{\"id\":" + userDashboardPreference.getId() + ",\"configuration\":null}";
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("userDashboardPreference"));
+    }
+
+    @Test
+    @Transactional
+    void patchUserDashboardPreferenceWithJsonArrayConfigurationIsAllowed() throws Exception {
+        insertedUserDashboardPreference = userDashboardPreferenceRepository.saveAndFlush(userDashboardPreference);
+
+        String patchJson = patchJsonWithConfiguration(userDashboardPreference.getId(), "[]");
+
+        restUserDashboardPreferenceMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, userDashboardPreference.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.configuration").value("[]"));
+    }
+
+    private String patchJsonWithConfiguration(Long id, String configuration) throws Exception {
+        return om.writeValueAsString(java.util.Map.of("id", id, "configuration", configuration));
     }
 
     protected long getRepositoryCount() {

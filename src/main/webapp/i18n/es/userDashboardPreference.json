@@ -12,7 +12,8 @@
       "updated": "Un User Dashboard Preference ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un User Dashboard Preference ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar User Dashboard Preference {{ id }}?"
+        "title": "¿Restablecer preferencias del panel?",
+        "message": "Esto restablecerá tus preferencias del panel. Se eliminará el diseño del panel y la configuración de visualización guardada. Tus cuentas, transacciones, categorías, etiquetas, presupuestos y suscripciones no se verán afectados. Podrás configurar tu panel de nuevo más adelante."
       },
       "detail": {
         "title": "User Dashboard Preference"

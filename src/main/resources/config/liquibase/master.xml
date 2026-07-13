@@ -51,5 +51,6 @@
     <include file="config/liquibase/changelog/20260707201522_updated_entity_ApiAccessToken.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707204535_updated_entity_FinancialAccount.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260709150500_updated_entity_TransactionIngestion.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20260711160000_updated_entity_ApiIngestion_token_snapshots.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

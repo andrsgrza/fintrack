@@ -114,7 +114,8 @@ public class TransactionRuleResource {
     }
 
     /**
-     * {@code PATCH  /transaction-rules/:id} : Partial updates given fields of an existing transactionRule, field will ignore if it is null
+     * {@code PATCH  /transaction-rules/:id} : Partial updates given fields of an existing transactionRule.
+     * Field presence is significant: absent fields are preserved, while explicit null is accepted only for nullable fields.
      *
      * @param id the id of the transactionRuleDTO to save.
      * @param patchNode the fields to update.

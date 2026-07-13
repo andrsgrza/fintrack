@@ -12,7 +12,8 @@
       "updated": "Un Transaction Rule Condition ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Transaction Rule Condition ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Transaction Rule Condition {{ id }}?"
+        "title": "¿Eliminar condición de regla?",
+        "message": "Esto eliminará esta condición de regla. La regla en sí no se eliminará. Si era la última condición, la regla se desactivará para evitar que coincida con todas las transacciones. Esta acción no se puede deshacer."
       },
       "detail": {
         "title": "Transaction Rule Condition"

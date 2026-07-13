@@ -14,9 +14,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
+import com.fintrack.app.domain.FinancialSubscription;
+import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
+import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CategoryRepository;
+import com.fintrack.app.repository.FinancialSubscriptionRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.CategoryService;
@@ -91,6 +98,18 @@ class CategoryResourceIT {
 
     @Autowired
     private CategoryRepository categoryRepository;
+
+    @Autowired
+    private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private FinancialSubscriptionRepository financialSubscriptionRepository;
+
+    @Autowired
+    private BudgetRepository budgetRepository;
+
+    @Autowired
+    private TransactionRuleRepository transactionRuleRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -1372,23 +1391,24 @@ class CategoryResourceIT {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(om.writeValueAsBytes(categoryDTO))
             )
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
     }
 
     @Test
     @Transactional
-    void updateCategoryCreatingCycleFails() throws Exception {
+    void putSettingParentCategoryFromNullFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
         Category parentCategory = createEntity(em);
         parentCategory.setName("PARENT_CATEGORY");
         parentCategory = categoryRepository.saveAndFlush(parentCategory);
 
-        category.setParentCategory(parentCategory);
-        insertedCategory = categoryRepository.saveAndFlush(category);
-
-        CategoryDTO categoryDTO = categoryMapper.toDto(parentCategory);
-        CategoryDTO childDTO = new CategoryDTO();
-        childDTO.setId(category.getId());
-        categoryDTO.setParentCategory(childDTO);
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(parentCategory.getId());
+        categoryDTO.setParentCategory(parentDTO);
 
         restCategoryMockMvc
             .perform(
@@ -1396,7 +1416,63 @@ class CategoryResourceIT {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(om.writeValueAsBytes(categoryDTO))
             )
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void putClearingParentCategoryFails() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT_CATEGORY");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        category.setParentCategory(parentCategory);
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setParentCategory(null);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void putChangingParentCategoryFails() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT_CATEGORY");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        Category otherParent = createEntity(em);
+        otherParent.setName("OTHER_PARENT");
+        otherParent = categoryRepository.saveAndFlush(otherParent);
+
+        category.setParentCategory(parentCategory);
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(otherParent.getId());
+        categoryDTO.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
     }
 
     @Test
@@ -1545,15 +1621,10 @@ class CategoryResourceIT {
 
     @Test
     @Transactional
-    void patchCategoryIntoParentWhereSiblingNameExistsReturnsBadRequest() throws Exception {
+    void patchChangingParentCategoryFails() throws Exception {
         Category targetParent = createEntity(em);
         targetParent.setName("TARGET_PARENT");
         targetParent = categoryRepository.saveAndFlush(targetParent);
-
-        Category sibling = createEntity(em);
-        sibling.setName("Comida");
-        sibling.setParentCategory(targetParent);
-        categoryRepository.saveAndFlush(sibling);
 
         Category otherParent = createEntity(em);
         otherParent.setName("OTHER_PARENT");
@@ -1677,6 +1748,412 @@ class CategoryResourceIT {
             .andExpect(jsonPath("$.name").value("Viajes"));
 
         assertThat(getPersistedCategory(insertedCategory).getName()).isEqualTo("Viajes");
+    }
+
+    private Category persistCategory() {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        em.clear();
+        return categoryRepository.findById(insertedCategory.getId()).orElseThrow();
+    }
+
+    private Category managedCategoryReference(Category savedCategory) {
+        return em.getReference(Category.class, savedCategory.getId());
+    }
+
+    @Test
+    @Transactional
+    void deleteCategoryWithDirectActiveChildFails() throws Exception {
+        Category persistedParent = persistCategory();
+
+        Category child = createEntity(em);
+        child.setName("CHILD_CATEGORY");
+        child.setParentCategory(managedCategoryReference(persistedParent));
+        categoryRepository.saveAndFlush(child);
+        em.detach(child);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedParent.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+
+        assertThat(categoryRepository.existsById(persistedParent.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void deleteCategoryWithDirectInactiveChildFails() throws Exception {
+        Category persistedParent = persistCategory();
+
+        Category child = createEntity(em);
+        child.setName("CHILD_CATEGORY");
+        child.setActive(false);
+        child.setParentCategory(managedCategoryReference(persistedParent));
+        categoryRepository.saveAndFlush(child);
+        em.detach(child);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedParent.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+
+        assertThat(categoryRepository.existsById(persistedParent.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void deleteUnusedLeafCategorySucceeds() throws Exception {
+        persistCategory();
+        long databaseSizeBeforeDelete = getRepositoryCount();
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, category.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteLeafCategoryUsedByFinancialTransactionUnlinksAndPreservesTransaction() throws Exception {
+        Category persistedCategory = persistCategory();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setCategory(managedCategoryReference(persistedCategory));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+        em.detach(financialTransaction);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedCategory.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(categoryRepository.existsById(persistedCategory.getId())).isFalse();
+        em.clear();
+        FinancialTransaction persistedTransaction = financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow();
+        assertThat(persistedTransaction.getCategory()).isNull();
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteLeafCategoryUsedByFinancialSubscriptionUnlinksAndPreservesSubscription() throws Exception {
+        Category persistedCategory = persistCategory();
+        FinancialSubscription financialSubscription = FinancialSubscriptionResourceIT.createEntity(em);
+        financialSubscription.setCategory(managedCategoryReference(persistedCategory));
+        financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        em.detach(financialSubscription);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedCategory.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(categoryRepository.existsById(persistedCategory.getId())).isFalse();
+        em.clear();
+        FinancialSubscription persistedSubscription = financialSubscriptionRepository.findById(financialSubscription.getId()).orElseThrow();
+        assertThat(persistedSubscription.getCategory()).isNull();
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteLeafCategoryUsedByBudgetUnlinksAndPreservesBudget() throws Exception {
+        Category persistedCategory = persistCategory();
+        Budget budget = BudgetResourceIT.createEntity(em);
+        budget.addCategories(managedCategoryReference(persistedCategory));
+        budgetRepository.saveAndFlush(budget);
+        em.detach(budget);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedCategory.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(categoryRepository.existsById(persistedCategory.getId())).isFalse();
+        em.clear();
+        Budget persistedBudget = budgetRepository.findById(budget.getId()).orElseThrow();
+        assertThat(persistedBudget.getCategories()).isEmpty();
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteLeafCategoryUsedByTransactionRuleUnlinksAndDeactivatesRule() throws Exception {
+        Category persistedCategory = persistCategory();
+        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
+        transactionRule.setResultingCategory(managedCategoryReference(persistedCategory));
+        transactionRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(transactionRule);
+        em.detach(transactionRule);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedCategory.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(categoryRepository.existsById(persistedCategory.getId())).isFalse();
+        em.clear();
+        TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
+        assertThat(persistedRule.getResultingCategory()).isNull();
+        assertThat(persistedRule.getActive()).isFalse();
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteLeafCategoryUsedInMultipleEntityTypesCleansAllReferences() throws Exception {
+        Category persistedCategory = persistCategory();
+
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setCategory(managedCategoryReference(persistedCategory));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        FinancialSubscription financialSubscription = FinancialSubscriptionResourceIT.createEntity(em);
+        financialSubscription.setCategory(managedCategoryReference(persistedCategory));
+        financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        Budget budget = BudgetResourceIT.createEntity(em);
+        budget.addCategories(managedCategoryReference(persistedCategory));
+        budgetRepository.saveAndFlush(budget);
+
+        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
+        transactionRule.setResultingCategory(managedCategoryReference(persistedCategory));
+        transactionRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(transactionRule);
+
+        em.detach(financialTransaction);
+        em.detach(financialSubscription);
+        em.detach(budget);
+        em.detach(transactionRule);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedCategory.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(categoryRepository.existsById(persistedCategory.getId())).isFalse();
+        em.clear();
+
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getCategory()).isNull();
+        assertThat(financialSubscriptionRepository.findById(financialSubscription.getId()).orElseThrow().getCategory()).isNull();
+        assertThat(budgetRepository.findById(budget.getId()).orElseThrow().getCategories()).isEmpty();
+        TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
+        assertThat(persistedRule.getResultingCategory()).isNull();
+        assertThat(persistedRule.getActive()).isFalse();
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminDeleteForeignUsedLeafCategorySucceedsAndCleansReferences() throws Exception {
+        User foreignOwner = createOtherUser(em);
+        category.setUser(foreignOwner);
+        Category persistedCategory = categoryRepository.saveAndFlush(category);
+        insertedCategory = persistedCategory;
+        em.clear();
+        persistedCategory = categoryRepository.findById(persistedCategory.getId()).orElseThrow();
+
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(FinancialAccountResourceIT.createEntity(em));
+        financialTransaction.getAccount().setUser(foreignOwner);
+        em.persist(financialTransaction.getAccount());
+        financialTransaction.setCategory(managedCategoryReference(persistedCategory));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+        em.detach(financialTransaction);
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedCategory.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(categoryRepository.existsById(persistedCategory.getId())).isFalse();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getCategory()).isNull();
+        insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void patchOmittingParentCategoryPreservesExistingParentAndSucceeds() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT_CATEGORY");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        category.setParentCategory(parentCategory);
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO patchPayload = new CategoryDTO();
+        patchPayload.setId(category.getId());
+        patchPayload.setDescription(UPDATED_DESCRIPTION);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, category.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.description").value(UPDATED_DESCRIPTION));
+
+        assertThat(getPersistedCategory(category).getParentCategory().getId()).isEqualTo(parentCategory.getId());
+    }
+
+    @Test
+    @Transactional
+    void patchSameParentCategorySucceeds() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT_CATEGORY");
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        category.setParentCategory(parentCategory);
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO patchPayload = new CategoryDTO();
+        patchPayload.setId(category.getId());
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(parentCategory.getId());
+        patchPayload.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, category.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isOk());
+
+        assertThat(getPersistedCategory(category).getParentCategory().getId()).isEqualTo(parentCategory.getId());
+    }
+
+    @Test
+    @Transactional
+    void changeCategoryTypeOfCategoryWithChildrenFails() throws Exception {
+        Category persistedParent = persistCategory();
+
+        Category child = createEntity(em);
+        child.setName("CHILD_CATEGORY");
+        child.setParentCategory(managedCategoryReference(persistedParent));
+        categoryRepository.saveAndFlush(child);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(persistedParent);
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void changeCategoryTypeOfCategoryUsedByFinancialTransactionFails() throws Exception {
+        Category persistedCategory = persistCategory();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setCategory(managedCategoryReference(persistedCategory));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(persistedCategory);
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void changeCategoryTypeOfUnusedLeafCategorySucceedsWhenUniquenessAndParentCompatibilityHold() throws Exception {
+        Category persistedCategory = persistCategory();
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(persistedCategory);
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.categoryType").value(CategoryType.INCOME.toString()));
+
+        assertThat(getPersistedCategory(persistedCategory).getCategoryType()).isEqualTo(CategoryType.INCOME);
+    }
+
+    @Test
+    @Transactional
+    void createChildWithDifferentCategoryTypeFromParentFails() throws Exception {
+        Category parentCategory = createEntity(em);
+        parentCategory.setName("PARENT");
+        parentCategory.setCategoryType(CategoryType.EXPENSE);
+        parentCategory = categoryRepository.saveAndFlush(parentCategory);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(createEntity(em));
+        categoryDTO.setId(null);
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+        CategoryDTO parentDTO = new CategoryDTO();
+        parentDTO.setId(parentCategory.getId());
+        categoryDTO.setParentCategory(parentDTO);
+
+        restCategoryMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void inactiveCategoryStillBlocksDuplicateNormalizedSiblingName() throws Exception {
+        Category inactiveCategory = createEntity(em);
+        inactiveCategory.setName("Comida");
+        inactiveCategory.setActive(false);
+        categoryRepository.saveAndFlush(inactiveCategory);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(createEntity(em));
+        categoryDTO.setId(null);
+        categoryDTO.setName(" comida ");
+
+        restCategoryMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void renameUsedCategorySucceedsWhenUniquenessPreserved() throws Exception {
+        Category persistedCategory = persistCategory();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setCategory(managedCategoryReference(persistedCategory));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(persistedCategory);
+        categoryDTO.setName(UPDATED_NAME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(UPDATED_NAME));
+
+        assertThat(getPersistedCategory(persistedCategory).getName()).isEqualTo(UPDATED_NAME);
+        em.clear();
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getCategory().getId()).isEqualTo(
+            persistedCategory.getId()
+        );
     }
 
     protected long getRepositoryCount() {

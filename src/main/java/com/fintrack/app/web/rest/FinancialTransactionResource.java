@@ -1,11 +1,12 @@
 package com.fintrack.app.web.rest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FinancialTransactionQueryService;
 import com.fintrack.app.service.FinancialTransactionService;
 import com.fintrack.app.service.criteria.FinancialTransactionCriteria;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -42,13 +43,16 @@ public class FinancialTransactionResource {
     private final FinancialTransactionService financialTransactionService;
 
     private final FinancialTransactionQueryService financialTransactionQueryService;
+    private final ObjectMapper objectMapper;
 
     public FinancialTransactionResource(
         FinancialTransactionService financialTransactionService,
-        FinancialTransactionQueryService financialTransactionQueryService
+        FinancialTransactionQueryService financialTransactionQueryService,
+        ObjectMapper objectMapper
     ) {
         this.financialTransactionService = financialTransactionService;
         this.financialTransactionQueryService = financialTransactionQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -59,10 +63,15 @@ public class FinancialTransactionResource {
      * @throws URISyntaxException if the Location URI syntax is incorrect.
      */
     @PostMapping("")
-    public ResponseEntity<FinancialTransactionDTO> createFinancialTransaction(
-        @Valid @RequestBody FinancialTransactionDTO financialTransactionDTO
-    ) throws URISyntaxException {
-        LOG.debug("REST request to save FinancialTransaction : {}", financialTransactionDTO);
+    public ResponseEntity<FinancialTransactionDTO> createFinancialTransaction(@NotNull @RequestBody JsonNode createNode)
+        throws URISyntaxException {
+        LOG.debug("REST request to save FinancialTransaction : {}", createNode);
+        FinancialTransactionDTO financialTransactionDTO;
+        try {
+            financialTransactionDTO = objectMapper.treeToValue(createNode, FinancialTransactionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid create payload", ENTITY_NAME, "invalid");
+        }
         if (financialTransactionDTO.getId() != null) {
             throw new BadRequestAlertException("A new financialTransaction cannot already have an ID", ENTITY_NAME, "idexists");
         }
@@ -89,9 +98,15 @@ public class FinancialTransactionResource {
     @PutMapping("/{id}")
     public ResponseEntity<FinancialTransactionDTO> updateFinancialTransaction(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody FinancialTransactionDTO financialTransactionDTO
+        @NotNull @RequestBody JsonNode updateNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to update FinancialTransaction : {}, {}", id, financialTransactionDTO);
+        LOG.debug("REST request to update FinancialTransaction : {}, {}", id, updateNode);
+        FinancialTransactionDTO financialTransactionDTO;
+        try {
+            financialTransactionDTO = objectMapper.treeToValue(updateNode, FinancialTransactionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid update payload", ENTITY_NAME, "invalid");
+        }
         if (financialTransactionDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
@@ -104,7 +119,7 @@ public class FinancialTransactionResource {
         }
 
         try {
-            financialTransactionDTO = financialTransactionService.update(financialTransactionDTO);
+            financialTransactionDTO = financialTransactionService.update(financialTransactionDTO, updateNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -127,11 +142,17 @@ public class FinancialTransactionResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<FinancialTransactionDTO> partialUpdateFinancialTransaction(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody FinancialTransactionDTO financialTransactionDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update FinancialTransaction partially : {}, {}", id, financialTransactionDTO);
+        LOG.debug("REST request to partial update FinancialTransaction partially : {}, {}", id, patchNode);
+        FinancialTransactionDTO financialTransactionDTO;
+        try {
+            financialTransactionDTO = objectMapper.treeToValue(patchNode, FinancialTransactionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
         if (financialTransactionDTO.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+            financialTransactionDTO.setId(id);
         }
         if (!Objects.equals(id, financialTransactionDTO.getId())) {
             throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
@@ -143,7 +164,7 @@ public class FinancialTransactionResource {
 
         Optional<FinancialTransactionDTO> result;
         try {
-            result = financialTransactionService.partialUpdate(financialTransactionDTO);
+            result = financialTransactionService.partialUpdate(financialTransactionDTO, patchNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -186,7 +207,7 @@ public class FinancialTransactionResource {
     }
 
     /**
-     * {@code GET  /financial-transactions/outgoing-internal-transfer-candidates} : get manual OUT transactions available for outgoing internal transfers.
+     * {@code GET  /financial-transactions/outgoing-internal-transfer-candidates} : get OUT transactions available for outgoing internal transfers.
      *
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
      */
@@ -197,7 +218,7 @@ public class FinancialTransactionResource {
     }
 
     /**
-     * {@code GET  /financial-transactions/incoming-internal-transfer-candidates} : get manual IN transactions available for incoming internal transfers.
+     * {@code GET  /financial-transactions/incoming-internal-transfer-candidates} : get IN transactions available for incoming internal transfers.
      *
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of financialTransactions in body.
      */

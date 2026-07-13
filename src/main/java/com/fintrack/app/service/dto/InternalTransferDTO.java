@@ -1,7 +1,6 @@
 package com.fintrack.app.service.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
@@ -17,15 +16,12 @@ public class InternalTransferDTO implements Serializable {
 
     private Long id;
 
-    @Size(max = 500)
     private String notes;
 
     private Instant createdAt;
 
-    @NotNull
     private FinancialTransactionDTO outgoingTransaction;
 
-    @NotNull
     private FinancialTransactionDTO incomingTransaction;
 
     public Long getId() {

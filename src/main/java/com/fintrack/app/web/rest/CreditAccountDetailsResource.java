@@ -191,8 +191,12 @@ public class CreditAccountDetailsResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCreditAccountDetails(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete CreditAccountDetails : {}", id);
-        if (!creditAccountDetailsService.delete(id)) {
-            return ResponseEntity.notFound().build();
+        try {
+            if (!creditAccountDetailsService.delete(id)) {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))

@@ -12,7 +12,8 @@
       "updated": "Un Credit Account Details ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Credit Account Details ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Credit Account Details {{ id }}?"
+        "title": "No se pueden eliminar los detalles de tarjeta de crédito",
+        "message": "Los detalles de tarjeta de crédito no se pueden eliminar directamente. Estos detalles son necesarios para las cuentas de tarjeta de crédito. Para eliminarlos, debes eliminar la cuenta financiera."
       },
       "detail": {
         "title": "Credit Account Details"

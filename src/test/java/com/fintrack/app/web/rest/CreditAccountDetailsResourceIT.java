@@ -615,19 +615,17 @@ class CreditAccountDetailsResourceIT {
 
     @Test
     @Transactional
-    void deleteCreditAccountDetails() throws Exception {
-        // Initialize the database
+    void deleteCreditAccountDetailsIsNotAllowed() throws Exception {
         insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
-
         long databaseSizeBeforeDelete = getRepositoryCount();
 
-        // Delete the creditAccountDetails
         restCreditAccountDetailsMockMvc
             .perform(delete(ENTITY_API_URL_ID, creditAccountDetails.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("creditAccountDetails"));
 
-        // Validate the database contains one less item
-        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        assertSameRepositoryCount(databaseSizeBeforeDelete);
     }
 
     @Test
@@ -733,15 +731,17 @@ class CreditAccountDetailsResourceIT {
     @Test
     @Transactional
     @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
-    void adminCanDeleteCreditAccountDetailsOwnedByAnotherUser() throws Exception {
+    void adminDeleteCreditAccountDetailsOwnedByAnotherUserIsNotAllowed() throws Exception {
         CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
         long databaseSizeBeforeDelete = getRepositoryCount();
 
         restCreditAccountDetailsMockMvc
             .perform(delete(ENTITY_API_URL_ID, otherDetails.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("creditAccountDetails"));
 
-        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        assertSameRepositoryCount(databaseSizeBeforeDelete);
     }
 
     @Test
@@ -853,6 +853,72 @@ class CreditAccountDetailsResourceIT {
         restCreditAccountDetailsMockMvc
             .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCreditLimitIsAllowed() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"creditLimit\":" + UPDATED_CREDIT_LIMIT + "}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.creditLimit").value(UPDATED_CREDIT_LIMIT.intValue()));
+    }
+
+    @Test
+    @Transactional
+    void patchStatementDayIsAllowed() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"statementDay\":" + UPDATED_STATEMENT_DAY + "}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.statementDay").value(UPDATED_STATEMENT_DAY));
+    }
+
+    @Test
+    @Transactional
+    void patchPaymentDueDayIsAllowed() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"paymentDueDay\":" + UPDATED_PAYMENT_DUE_DAY + "}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.paymentDueDay").value(UPDATED_PAYMENT_DUE_DAY));
+    }
+
+    @Test
+    @Transactional
+    void patchAnnualInterestRateIsAllowed() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"annualInterestRate\":" + UPDATED_ANNUAL_INTEREST_RATE + "}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.annualInterestRate").value(UPDATED_ANNUAL_INTEREST_RATE.intValue()));
+    }
+
+    @Test
+    @Transactional
+    void loweringCreditLimitBelowOutstandingBalanceIsAllowed() throws Exception {
+        creditAccountDetails.creditLimit(new BigDecimal("10000"));
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"creditLimit\":1}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.creditLimit").value(1));
     }
 
     private CreditAccountDetails saveDetailsOnOtherUsersAccount() {

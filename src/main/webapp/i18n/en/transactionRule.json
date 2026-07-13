@@ -12,7 +12,7 @@
       "updated": "A Transaction Rule is updated with identifier {{ param }}",
       "deleted": "A Transaction Rule is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Transaction Rule {{ id }}?"
+        "question": "This will delete Transaction Rule {{ id }} and its conditions. Categories, subscriptions, tags, and transactions will not be deleted. Future transactions will no longer be classified by this rule. This action cannot be undone."
       },
       "detail": {
         "title": "Transaction Rule"

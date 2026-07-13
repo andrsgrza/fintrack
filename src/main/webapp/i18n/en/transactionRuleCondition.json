@@ -12,7 +12,8 @@
       "updated": "A Transaction Rule Condition is updated with identifier {{ param }}",
       "deleted": "A Transaction Rule Condition is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Transaction Rule Condition {{ id }}?"
+        "title": "Delete rule condition?",
+        "message": "This will delete this rule condition. The rule itself will not be deleted. If this was the last condition, the rule will be disabled to prevent it from matching every transaction. This action cannot be undone."
       },
       "detail": {
         "title": "Transaction Rule Condition"

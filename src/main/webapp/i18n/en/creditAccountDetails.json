@@ -12,7 +12,8 @@
       "updated": "A Credit Account Details is updated with identifier {{ param }}",
       "deleted": "A Credit Account Details is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Credit Account Details {{ id }}?"
+        "title": "Cannot delete credit card details",
+        "message": "Credit card details cannot be deleted directly. These details are required for credit card accounts. To remove them, you must delete the financial account itself."
       },
       "detail": {
         "title": "Credit Account Details"

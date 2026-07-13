@@ -12,9 +12,14 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
+import com.fintrack.app.repository.FinancialSubscriptionRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
+import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +44,24 @@ class FinancialAccountServiceTest {
 
     @Mock
     private CurrentUserService currentUserService;
+
+    @Mock
+    private TransactionIngestionService transactionIngestionService;
+
+    @Mock
+    private FinancialTransactionService financialTransactionService;
+
+    @Mock
+    private BudgetRepository budgetRepository;
+
+    @Mock
+    private FinancialSubscriptionRepository financialSubscriptionRepository;
+
+    @Mock
+    private CreditAccountDetailsRepository creditAccountDetailsRepository;
+
+    @Mock
+    private FinancialTransactionRepository financialTransactionRepository;
 
     @InjectMocks
     private FinancialAccountService financialAccountService;
@@ -166,6 +189,11 @@ class FinancialAccountServiceTest {
         );
 
         assertThat(financialAccountService.delete(10L)).isTrue();
+        verify(transactionIngestionService).deleteAllForAccount(financialAccount);
+        verify(financialTransactionService).deleteAllForAccount(financialAccount);
+        verify(budgetRepository).deleteAccountLinksByAccountId(10L);
+        verify(financialSubscriptionRepository).clearAccountByAccountId(10L);
+        verify(creditAccountDetailsRepository).deleteByAccountId(10L);
         verify(financialAccountRepository).deleteById(10L);
     }
 
@@ -226,6 +254,32 @@ class FinancialAccountServiceTest {
         assertThatThrownBy(() -> financialAccountService.update(financialAccountDTO))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Account type cannot be changed");
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectInitialBalanceDateAfterEarliestTransactionDate() {
+        financialAccount.setInitialBalanceDate(LocalDate.parse("2026-01-01"));
+        financialAccountDTO.setInitialBalanceDate(LocalDate.parse("2026-02-01"));
+        FinancialAccount mappedEntity = new FinancialAccount();
+        mappedEntity.setId(10L);
+        mappedEntity.setCurrency(CurrencyCode.MXN);
+        mappedEntity.setAccountType(AccountType.DEBIT);
+        mappedEntity.setInitialBalanceDate(LocalDate.parse("2026-02-01"));
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+        when(financialAccountMapper.toEntity(financialAccountDTO)).thenReturn(mappedEntity);
+        when(financialTransactionRepository.findEarliestTransactionDateByAccountId(10L)).thenReturn(
+            Optional.of(LocalDate.parse("2026-01-15"))
+        );
+
+        assertThatThrownBy(() -> financialAccountService.update(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Initial balance date cannot be after the earliest transaction date");
         verify(financialAccountRepository, never()).save(any());
     }
 }

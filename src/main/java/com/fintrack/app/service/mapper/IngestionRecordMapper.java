@@ -27,6 +27,8 @@ public interface IngestionRecordMapper extends EntityMapper<IngestionRecordDTO, 
     @Mapping(target = "transactionIngestion", ignore = true)
     @Mapping(target = "financialTransaction", ignore = true)
     @Mapping(target = "recordIndex", ignore = true)
+    @Mapping(target = "externalRecordId", ignore = true)
+    @Mapping(target = "rawData", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     void partialUpdate(@MappingTarget IngestionRecord entity, IngestionRecordDTO dto);
 

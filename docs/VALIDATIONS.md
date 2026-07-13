@@ -1,0 +1,285 @@
+# FinTrack — Validation catalog
+
+Living reference for **where** each validation rule lives, per entity and per layer.
+
+Companion docs:
+
+- [`docs/IMPLEMENTATION.md`](IMPLEMENTATION.md) — ownership + domain rules + tracker
+- [`docs/DOMAIN-RULES.md`](DOMAIN-RULES.md) — business rules (delete guards, balances, motor — not shape validation)
+- [`docs/TESTING.md`](TESTING.md) — how to run validation/ownership tests
+- [`fintrack.jdl`](../fintrack.jdl) — structural baseline (JDL `required`, enums, sizes)
+
+**Principle:** REST checks **shape** (`@Valid` on DTO); entity/DB check **structure**; **service** is the source of truth for ownership, cross-entity rules, immutability, server defaults, and business guards.
+
+---
+
+## Layers
+
+| Layer | What it validates | Typical failure |
+|-------|-------------------|-----------------|
+| **DTO** | Request payload shape via Jakarta Bean Validation (`@NotNull`, `@Size`, `@Min`, `@Pattern`, …) | `400` field errors from Spring |
+| **Entity (JPA)** | Same constraints on domain objects at persist/flush time | `ConstraintViolationException` / `400` |
+| **DB (Liquibase)** | `NOT NULL`, FK, `UNIQUE` — structural integrity | SQL / rollback |
+| **Service** | Ownership resolution, links owned, immutables, server defaults, `existsBy*` guards, business rules stricter than DTO | `IllegalArgumentException` → REST `400 invalid` (where mapped) |
+| **REST** | Shape parsing/validation, `isAccessible()` before mutate, PATCH semantics (`JsonNode` vs DTO), maps service errors | `400` / `404` per convention |
+
+### Status symbols (per layer)
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Rules implemented and aligned with service |
+| 🟡 | Baseline JHipster only, or gaps vs service (optional DTO fields, missing error mapping) |
+| ⏳ | Not implemented / planned |
+| — | Not applicable |
+
+### PATCH styles
+
+| Style | Entities | Semantics |
+|-------|----------|-----------|
+| **JsonNode** | CreditAccountDetails, FinancialAccount, FinancialTransaction, Budget, TransactionRule, TransactionRuleCondition, FinancialSubscription, TransactionIngestion, InternalTransfer, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessToken, ApiAccessTokenPermission, UserDashboardPreference | Service uses `patchNode.has(field)` — absent preserves, explicit `null` is meaningful, `null`/`[]` on M2M clears |
+| **DTO merge** | Category, Tag | Null/absent in partial DTO typically means “do not change” via mapper `partialUpdate` |
+
+**Preferred contract for new work:** use presence-aware `JsonNode` PATCH semantics. An absent field preserves its current value; a present value replaces it; explicit `null` clears an optional field but is rejected for required or immutable fields; `null` or `[]` clears a collection; a collection of IDs replaces the complete link set. Validate the fully merged entity after applying the patch.
+
+`Category` and `Tag` retain their legacy DTO-merge behavior for now. Their migration is deferred to a dedicated compatibility pass; do not change their null behavior incidentally while implementing unrelated domain rules.
+
+### REST error mapping
+
+| Pattern | Entities |
+|---------|----------|
+| `IllegalArgumentException` → `BadRequestAlertException` (`400`, key `invalid`) | All owned entities |
+| Cross-user PUT/PATCH → `400` `idnotfound` | All owned entities |
+| Cross-user GET/DELETE → `404` | All owned entities |
+
+**IT assertion convention** (see [TESTING.md](TESTING.md)): assert `status 400`, `$.message = error.invalid`, `$.params = <entityName>`. Do not assert `$.title` (JHipster returns `"Bad Request"`).
+
+---
+
+## Summary matrix
+
+| # | Entity | DTO | Entity | DB | Service | REST | Notes |
+|---|--------|-----|--------|-----|---------|------|-------|
+| 1 | FinancialAccount | ✅ | ✅ | ✅ | ✅ | ✅ | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor |
+| 2 | FinancialTransaction | ✅ | ✅ | ✅ | ✅ | ✅ | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0 |
+| 3 | CreditAccountDetails | ✅ | ✅ | ✅ | ✅ | ✅ | CREDIT_CARD + 1:1 + immutable account |
+| 4 | Category | ✅ | ✅ | ✅ | ✅ | ✅ | Sibling-unique `name` per owner+type+parent (trim, case-insensitive) |
+| 5 | Tag | ✅ | ✅ | ✅ | ✅ | ✅ | Per-owner case-insensitive unique `name` (trim on persist) |
+| 6 | TransactionRule | ✅ | ✅ | ✅ | ✅ | ✅ | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode |
+| 7 | TransactionRuleCondition | ✅ | ✅ | ✅ | ✅ | ✅ | Parent immutable; field/operator/value semantics |
+| 8 | FinancialSubscription | ✅ | ✅ | ✅ | ✅ | ✅ | Links + PATCH JsonNode |
+| 9 | Budget | ✅ | ✅ | ✅ | ✅ | ✅ | M2M owned; PATCH JsonNode link semantics |
+| 10 | InternalTransfer | ✅ | ✅ | ✅ | ✅ | ✅ | `createdAt` server; pair validation |
+| 11 | TransactionIngestion | ✅ | ✅ | ✅ | ✅ | ✅ | Lifecycle + counter consistency; server fields optional in DTO |
+| 12 | FileIngestion | ✅ | ✅ | ✅ | ✅ | ✅ | Parent FILE + 1:1; `createdAt` server |
+| 13 | ApiIngestion | ✅ | ✅ | ✅ | ✅ | ✅ | Token snapshots (11C) ✅; `requestId` unique |
+| 14 | IngestionRecord | ✅ | ✅ | 🟡 | ✅ | ✅ | `recordIndex`/`externalRecordId` unique per ingestion in service |
+| 15 | ApiAccessToken | ✅ | ✅ | ✅ | ✅ | ✅ | Server-generated secrets; `rawToken` once; not in GET |
+| 16 | ApiAccessTokenPermission | 🟡 | ✅ | ✅ | ✅ | ✅ | Duplicate (token, permission) |
+| 17 | UserDashboardPreference | 🟡 | ✅ | 🟡 | ✅ | ✅ | `configuration` required DB not DTO; 1:1 service guard |
+
+---
+
+## Per-entity detail
+
+### 1. FinancialAccount
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `name` (1–100), `accountType`, `currency`, `initialBalance`, `initialBalanceDate`, `active`, timestamps `@NotNull`; `last4` pattern `^[0-9]{4}$`; `color` hex pattern; sizes on institution/description/icon. **`user` optional** (service assigns). |
+| **Entity** | Same as DTO + **`user` required**. |
+| **DB** | `user_id NOT NULL` FK. |
+| **Service** | Create: `user = currentUser`. Update/patch: preserve owner. **`currency` and `accountType` immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalanceDate` may not be after the earliest `FinancialTransaction.transactionDate` when transactions exist. Delete orchestrates TransactionIngestion trees, remaining FinancialTransactions, Budget account links, FinancialSubscription account nulling, CreditAccountDetails cleanup, then account delete. Scoped read/write. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode** (`currency`/`accountType` null → `400`); `isAccessible()` on mutate; `400 invalid` on business errors. |
+| **Tests** | `FinancialAccountResourceIT` (ownership, immutability, delete orchestration, initial date floor); `FinancialAccountServiceTest` (ownership, immutability, orchestration, floor unit). PATCH IT uses minimal JSON — see [TESTING.md § FA](TESTING.md#financialaccount). |
+
+### 2. FinancialTransaction
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `transactionDate`, `description` (1–500), `amount` `@DecimalMin("0")`, `flow`, `origin`, timestamps, **`account` required**. Optional: `postingDate`, `category`, `subscription`, `tags`, `transactionIngestion`, notes, externalReference. |
+| **Entity** | Same; **`account` required** FK. |
+| **DB** | `account_id NOT NULL`; optional FKs + M2M tags. |
+| **Service** | **`amount > 0` + scale 2** (stricter than DTO). Create: resolve accessible account; optional valid `transactionIngestion`; server `createdAt`/`updatedAt`. Update/patch: account/origin/transactionIngestion/createdAt immutable; updatedAt server-owned; optional links validated against transaction account owner; category/subscription compatibility; final merged state validation. |
+| **REST** | POST/PUT/PATCH receive **JsonNode** and map into DTO; `IllegalArgumentException` → `400 invalid`. |
+
+### 3. CreditAccountDetails
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `creditLimit` `@DecimalMin("0")`, `statementDay`/`paymentDueDay` 1–31, timestamps, **`account` required**. Optional `annualInterestRate` ≥ 0. |
+| **Entity** | Same; **`account` required** `@JoinColumn(unique=true)`. |
+| **DB** | `account_id NOT NULL UNIQUE` (1:1). |
+| **Service** | Create: accessible account; **`accountType = CREDIT_CARD` only**; `existsByAccountId()` duplicate. Update/patch: **`account` immutable**. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode** (`account` null → `400`); `400 invalid` on business errors. |
+
+### 4. Category
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `name` (1–80), `categoryType`, `active`, timestamps; color pattern; sizes. **`user` optional**; **`parentCategory` optional**. |
+| **Entity** | Same + **`user` required**; optional parent self-FK. |
+| **DB** | `user_id NOT NULL`; optional `parent_category_id`. |
+| **Service** | Create: `user = currentUser`. Parent: accessible, **child `categoryType` == parent**. **Trim `name`**; **sibling-unique `name`** (inactive included). Update/patch: **`parentCategory` immutable**; **`categoryType` only if unused**; preserve owner; uniqueness vs **category owner**. |
+| **REST** | `@Valid` POST/PUT; PATCH DTO; `400 invalid`. |
+
+### 5. Tag
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `name` (1–50), `active`, timestamps; color pattern; description size. **`user` optional**. |
+| **Entity** | Same + **`user` required**. |
+| **DB** | `user_id NOT NULL`. |
+| **Service** | Create: `user = currentUser`, **trim `name`**, **`name` unique per owner** (case-insensitive). Update/patch: preserve owner; uniqueness validated against **tag owner** (admin CRUD ajeno OK). Query: `TagRepository.existsByUserIdAndNormalizedName`. |
+| **REST** | `@Valid` POST/PUT; PATCH DTO; `400 invalid` on business errors. |
+| **Tests** | `TagResourceIT` (5 uniqueness IT); `TagServiceTest` (3 uniqueness unit). Different-owner case: authenticate as user B — see [TESTING.md § Tag](TESTING.md#tag). |
+
+### 6. TransactionRule
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `name` (1–100), `priority` ≥ 0, `conditionLogic`, `active`, timestamps; description sizes. **`user` optional**; **outputs optional** (`resultingCategory`, `resultingFinancialSubscription`, `resultingTags`). |
+| **Entity** | Same + **`user` required**; optional output FKs/M2M. |
+| **DB** | `user_id NOT NULL`; optional output relations. |
+| **Service** | Create: `user = currentUser`; timestamps server-owned; normalize `name` / descriptions before persist; enforce owner-scoped output links, per-owner case-insensitive trimmed name uniqueness, at least one output, and `active=true` only when conditions exist. PUT is a full DTO update and still runs final-state validations. PATCH: `has("resulting*")` link semantics; explicit `null` for required scalars/timestamps is invalid. Conditions are managed only through `TransactionRuleCondition`. Explicit null/changed `createdAt` or `updatedAt` on PUT/PATCH → `400`; successful update sets `updatedAt=now`. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`; cross-user mutate → `400`. |
+
+### 7. TransactionRuleCondition
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `field`, `operator`, `value` (max 1000), `caseSensitive`, `position` ≥ 0, **`transactionRule` required**; optional `secondValue` (max 1000). |
+| **Entity** | Same; **`transactionRule` required** FK. |
+| **DB** | `transaction_rule_id NOT NULL`. |
+| **Service — parent** | Create: resolve accessible parent. **`transactionRule` immutable after create** — PATCH omit preserves; same id OK; different id → `400` (even same owner); `null` → `400`. ~~Reparent same-owner~~ **removed**. Normal user foreign parent on create → `400`; admin foreign parent OK. |
+| **Service — domain** | Field/operator matrices (TEXT, ENUM, AMOUNT, DATE, ACCOUNT); value parsing; `IN`/`NOT_IN` token rules; duplicate guard with normalization; merged-state validation after PATCH; `ACCOUNT` ids vs **rule owner**; DELETE last condition → deactivate parent. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; required-field `null` → `400`; `secondValue: null` clears; `400 invalid`; cross-user PUT/PATCH → `400 idnotfound`; foreign GET/DELETE → `404`. |
+
+**Tests implemented:** see [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
+
+### 8. FinancialSubscription
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `name`, `status`, `currency`, `recurrenceUnit`, `intervalCount` ≥ 1, `startDate`, `automaticPayment`, timestamps; amount/tolerance bounds; sizes. **`user` optional**; **account/category/tags optional**. |
+| **Entity** | Same + **`user` required**; optional links. |
+| **DB** | `user_id NOT NULL`; optional account/category FKs; M2M tags. |
+| **Service** | Create: `user = currentUser`. Links owned on create/update/patch. PATCH JsonNode: absent preserves, `null`/`[]` clears. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`. |
+
+### 9. Budget
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `name`, `amount` ≥ 0, `currency`, `period`, `startDate`, `status`, `tagMatchMode`, timestamps; optional `endDate`, `warningPercentage` 0–100. **`user` optional**; **M2M accounts/categories/tags optional**. |
+| **Entity** | Same + **`user` required**; M2M join tables. |
+| **DB** | `user_id NOT NULL`; M2M join tables. |
+| **Service** | Create: `user = currentUser`. M2M subsets must be **owned** by user → `400`. PATCH: `patchNode.has(accounts|categories|tags)` — absent preserves, `null`/`[]` clears, ids replace. Empty-set **matching semantics** ⏳ (domain, not validation). |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`. |
+| **Tests** | `BudgetResourceIT` (9 PATCH link IT); `BudgetServiceTest` (3 patchNode unit). Minimal JSON on successful PATCH — see [TESTING.md § Budget](TESTING.md#budget). |
+
+### 10. InternalTransfer
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | Optional `notes`; `createdAt` optional/server-owned; link requiredness and PATCH semantics enforced in service/resource so PUT can preserve absent links. |
+| **Entity** | Both legs required; **`@JoinColumn(unique=true)`** each; `createdAt` required on entity. |
+| **DB** | Both FKs NOT NULL UNIQUE (1:1 per leg). |
+| **Service** | Resolve accessible txs. **`validateTransferPair()`**: distinct txs, OUT+IN, origin unrestricted, different accounts, same currency, same amount, same owner; not already participating in either role (`existsByTransactionIdInEitherRole`). Legs immutable; `createdAt` server-owned; `notes` trim/blank→null/max 500 after trim. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`. |
+
+### 11. TransactionIngestion
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | **`ingestionType` + `account` required**; `sourceLabel`/`errorMessage` max sizes; counters `>= 0`. **`status`, `startedAt`, `createdAt`, counters optional** in POST (server defaults). |
+| **Entity** | All counters/status/timestamps **`@NotNull`** on entity; **`account` required**. |
+| **DB** | `account_id NOT NULL` FK. |
+| **Service** | Source of truth for ownership, normalization and merged-state rules. Create: resolve accessible account; server **`createdAt`/`startedAt = now()`**, **`status = PENDING`**, counters **0**. **Immutable:** `account`, `ingestionType`, `createdAt`, `startedAt`; client `completedAt` changes rejected. Status lifecycle enforced (`PENDING/PROCESSING` → final, final terminal); counts validated by status; `sourceLabel`/`errorMessage` trim + blank→`null`; final FILE/API requires matching child metadata; delete reverts ingestion with explicit FK-safe cleanup. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`. |
+
+### 12. FileIngestion
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | Basic shape validation: `originalFilename`, `fileType`, `transactionIngestion` required; sizes for file/parser/storage strings; `fileSizeBytes >= 0`. `createdAt` remains optional/server-owned. `storageKey` still response-exposed; do not store public URLs/secrets. |
+| **Entity** | Same; parent **`@JoinColumn(unique=true)`**. |
+| **DB** | `transaction_ingestion_id NOT NULL UNIQUE` (1:1). |
+| **Service** | Source of truth for normalization, ownership and immutable/merged-state rules. Parent: scoped + **`ingestionType = FILE`** + **`existsByTransactionIngestionId()`**. `originalFilename` trim/nonblank/max 255; optional strings trim/blank→null; hex checksum lowercase; file metadata immutable after create; statement dates mutable with final start<=end; `createdAt = now()` on create and server-owned; direct delete blocked. |
+| **REST** | PUT/PATCH **JsonNode**; `400 invalid`; foreign PUT/PATCH `400 idnotfound`; foreign GET/DELETE `404`. |
+
+### 13. ApiIngestion
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | Basic shape validation. `ApiIngestionCreateRequestDTO` requires `requestId`, `apiVersion`, `endpoint`, `transactionIngestion`, and create-only `apiAccessTokenId`; `ApiIngestionDTO` keeps size constraints for read/update fields. Read/list/update responses expose snapshots only and no `apiAccessToken` relation. **`apiTokenIdSnapshot` / `apiTokenPrefixSnapshot` / `apiTokenNameSnapshot` read-only** in responses. |
+| **Entity** | Snapshot fields required after create; **`requestId` unique**; ingestion parent 1:1; **no** `apiAccessToken` FK. |
+| **DB** | `request_id UNIQUE`; `transaction_ingestion_id UNIQUE` FK; `api_token_id_snapshot`, `api_token_prefix_snapshot`, `api_token_name_snapshot` NOT NULL; **`api_access_token_id` dropped**. |
+| **Service** | Source of truth for normalization, ownership and immutable/merged-state rules. Normalize strings on create: required `requestId`/`apiVersion`/`endpoint` trim + nonblank + max; optional strings trim + blank→`null`; parent API + 1:1 guard; **`existsByRequestId()`** global after trim; same-owner ingestion↔token at create only (even admin); copy snapshots from accessible token; server **`createdAt`/`receivedAt = now()`**; all fields immutable after create in v1; direct delete blocked. |
+| **REST** | `@Valid` POST create DTO; PUT/PATCH use presence-aware `JsonNode`; `400 invalid`. |
+
+### 14. IngestionRecord
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | **`recordIndex` ≥ 0, `status`, `transactionIngestion` required**. **`financialTransaction` optional**. **`createdAt` optional** in POST. |
+| **Entity** | `recordIndex`, `status`, `createdAt`, `transactionIngestion` required; optional FT 1:1. |
+| **DB** | `transaction_ingestion_id NOT NULL`; `financial_transaction_id` nullable **UNIQUE**. **No** composite unique `(ingestion, recordIndex/externalRecordId)` in DB — enforced in service. |
+| **Service** | **`existsByTransactionIngestionIdAndRecordIndex()`**; normalized `externalRecordId` uniqueness per parent; optional FT: accessible + same-owner + same parent + **`existsByFinancialTransactionId()`**. Immutable: parent, `recordIndex`, `externalRecordId`, `rawData`, `createdAt`; `createdAt = now()` on create. Status consistency and parent-final freeze enforced. Direct delete blocked. |
+| **REST** | `@Valid` POST; PUT/PATCH **JsonNode**; `400 invalid`. |
+
+### 15. ApiAccessToken
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | `ApiAccessTokenCreateRequestDTO` is strict name-only (`name` 1–100; unknown fields → `400`). `ApiAccessTokenUpdateRequestDTO` accepts only editable replacement fields (`id`, `name`, `status`, `expiresAt`; unknown fields → `400`). `ApiAccessTokenDTO` remains the response/read DTO. **`rawToken` response-only** (one-time reveal on POST response). |
+| **Entity** | **`tokenHash` required unique**; **`user` required**. **No** `apiIngestions` collection (11C). |
+| **DB** | `user_id NOT NULL`; `token_hash UNIQUE`. |
+| **Service** | Create: `user = currentUser`; always generate `ftk_…` + SHA-256 server-side; set `ACTIVE` + timestamps; return `rawToken` once. Immutable/server-owned: `tokenHash`, `tokenPrefix`, `rawToken`, `createdAt`, `updatedAt`, `lastUsedAt`, `revokedAt`, `user`. Delete: cascade permissions; **no** ingestion-count block (11C). |
+| **REST** | POST/PUT use strict request DTOs; PATCH remains **JsonNode** for absent-vs-null semantics (`user` null → `400`, explicit null for immutable/server-owned fields → `400`); `400 invalid`; security: no hash in reads. |
+
+### 16. ApiAccessTokenPermission
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | **`permission` + `apiAccessToken` required**. **`createdAt` optional** in POST. |
+| **Entity** | All required including `createdAt`. |
+| **DB** | `api_access_token_id NOT NULL` FK. |
+| **Service** | Resolve accessible token; **`existsByApiAccessTokenIdAndPermission()`**; immutable token, permission, `createdAt`; **`createdAt = now()`** on create. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`. |
+
+### 17. UserDashboardPreference
+
+| Layer | Rules |
+|-------|-------|
+| **DTO** | Timestamps `@NotNull`. **`configuration` not `@NotNull`** on DTO. **`user` optional**. |
+| **Entity** | **`configuration` required** (TextBlob); **`user` required**. |
+| **DB** | `user_id NOT NULL` FK. **`UNIQUE(user_id)`** planned — today enforced via **`existsByUserId()`** in service. |
+| **Service** | Create: `user = currentUser`; **one row per user** guard. Owner immutable. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`. |
+
+---
+
+## Known DTO ↔ service gaps
+
+| Gap | Entities | Resolution |
+|-----|----------|------------|
+| DTO allows `amount ≥ 0`, service requires `> 0` | FinancialTransaction | By design — business rule in service |
+| Server fields optional in DTO, required on entity | TransactionIngestion, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessTokenPermission | Service assigns before persist |
+| `tokenHash` required in entity, absent from request DTOs | ApiAccessToken | Service always generates on create; client-provided `tokenHash` is invalid |
+| `configuration` required in DB, optional in DTO | UserDashboardPreference | Service must reject null on create |
+| Composite uniqueness only in service | Tag (`name` per owner), IngestionRecord (`recordIndex` and non-null `externalRecordId` per ingestion) | Optional Liquibase unique index later |
+
+---
+
+## How to extend
+
+When adding a validation rule:
+
+1. Decide layer: shape → DTO/entity; integrity → DB; business → **service**.
+2. Map REST: `IllegalArgumentException` → `400 invalid` unless convention says `404`.
+3. Add IT in `{Entity}ResourceIT` + unit test in `{Entity}ServiceTest`.
+4. Update this file and the entity's row in [`IMPLEMENTATION.md`](IMPLEMENTATION.md).
+
+---
+
+*Last updated: 2026-07-12 — validation catalog aligned with FinancialAccount delete orchestration, FinancialTransaction JsonNode semantics, ingestion lifecycle passes, and TransactionRule CRUD/domain baseline completion.*

@@ -30,6 +30,14 @@ public interface FileIngestionRepository extends JpaRepository<FileIngestion, Lo
 
     boolean existsByTransactionIngestionId(Long transactionIngestionId);
 
+    @Modifying
+    @Query("delete from FileIngestion fileIngestion where fileIngestion.transactionIngestion.id = :transactionIngestionId")
+    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from FileIngestion fileIngestion where fileIngestion.transactionIngestion.account.id = :accountId")
+    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
+
     @Query(
         "select fileIngestion from FileIngestion fileIngestion left join fetch fileIngestion.transactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user"
     )

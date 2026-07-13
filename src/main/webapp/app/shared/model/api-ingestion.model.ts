@@ -1,6 +1,5 @@
 import dayjs from 'dayjs';
 import { ITransactionIngestion } from 'app/shared/model/transaction-ingestion.model';
-import { IApiAccessToken } from 'app/shared/model/api-access-token.model';
 
 export interface IApiIngestion {
   id?: number;
@@ -12,8 +11,10 @@ export interface IApiIngestion {
   clientReference?: string | null;
   receivedAt?: dayjs.Dayjs;
   createdAt?: dayjs.Dayjs;
+  apiTokenIdSnapshot?: number;
+  apiTokenPrefixSnapshot?: string;
+  apiTokenNameSnapshot?: string;
   transactionIngestion?: ITransactionIngestion;
-  apiAccessToken?: IApiAccessToken;
 }
 
 export const defaultValue: Readonly<IApiIngestion> = {};

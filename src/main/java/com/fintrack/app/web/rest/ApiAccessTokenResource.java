@@ -3,7 +3,9 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.ApiAccessTokenService;
+import com.fintrack.app.service.dto.ApiAccessTokenCreateRequestDTO;
 import com.fintrack.app.service.dto.ApiAccessTokenDTO;
+import com.fintrack.app.service.dto.ApiAccessTokenUpdateRequestDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -46,17 +48,15 @@ public class ApiAccessTokenResource {
     /**
      * {@code POST  /api-access-tokens} : Create a new apiAccessToken.
      *
-     * @param apiAccessTokenDTO the apiAccessTokenDTO to create.
+     * @param createRequest the request to create.
      * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new apiAccessTokenDTO, or with status {@code 400 (Bad Request)} if the apiAccessToken has already an ID.
      * @throws URISyntaxException if the Location URI syntax is incorrect.
      */
     @PostMapping("")
-    public ResponseEntity<ApiAccessTokenDTO> createApiAccessToken(@Valid @RequestBody ApiAccessTokenDTO apiAccessTokenDTO)
+    public ResponseEntity<ApiAccessTokenDTO> createApiAccessToken(@Valid @RequestBody ApiAccessTokenCreateRequestDTO createRequest)
         throws URISyntaxException {
-        LOG.debug("REST request to save ApiAccessToken : {}", apiAccessTokenDTO);
-        if (apiAccessTokenDTO.getId() != null) {
-            throw new BadRequestAlertException("A new apiAccessToken cannot already have an ID", ENTITY_NAME, "idexists");
-        }
+        LOG.debug("REST request to save ApiAccessToken : {}", createRequest);
+        ApiAccessTokenDTO apiAccessTokenDTO = createRequest.toApiAccessTokenDTO();
         try {
             apiAccessTokenDTO = apiAccessTokenService.save(apiAccessTokenDTO);
         } catch (IllegalArgumentException e) {
@@ -71,7 +71,7 @@ public class ApiAccessTokenResource {
      * {@code PUT  /api-access-tokens/:id} : Updates an existing apiAccessToken.
      *
      * @param id the id of the apiAccessTokenDTO to save.
-     * @param apiAccessTokenDTO the apiAccessTokenDTO to update.
+     * @param updateRequest the request to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated apiAccessTokenDTO,
      * or with status {@code 400 (Bad Request)} if the apiAccessTokenDTO is not valid,
      * or with status {@code 500 (Internal Server Error)} if the apiAccessTokenDTO couldn't be updated.
@@ -80,9 +80,10 @@ public class ApiAccessTokenResource {
     @PutMapping("/{id}")
     public ResponseEntity<ApiAccessTokenDTO> updateApiAccessToken(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody ApiAccessTokenDTO apiAccessTokenDTO
+        @Valid @RequestBody ApiAccessTokenUpdateRequestDTO updateRequest
     ) throws URISyntaxException {
-        LOG.debug("REST request to update ApiAccessToken : {}, {}", id, apiAccessTokenDTO);
+        LOG.debug("REST request to update ApiAccessToken : {}, {}", id, updateRequest);
+        ApiAccessTokenDTO apiAccessTokenDTO = updateRequest.toApiAccessTokenDTO();
         if (apiAccessTokenDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }

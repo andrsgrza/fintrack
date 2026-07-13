@@ -66,13 +66,6 @@
       "relationshipWithBuiltInEntity": true
     },
     {
-      "otherEntityName": "apiIngestion",
-      "otherEntityRelationshipName": "apiAccessToken",
-      "relationshipName": "apiIngestions",
-      "relationshipSide": "right",
-      "relationshipType": "one-to-many"
-    },
-    {
       "otherEntityName": "apiAccessTokenPermission",
       "otherEntityRelationshipName": "apiAccessToken",
       "relationshipName": "permissions",

@@ -16,6 +16,7 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
+import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
@@ -53,8 +54,8 @@ class IngestionRecordResourceIT {
     private static final String DEFAULT_EXTERNAL_RECORD_ID = "AAAAAAAAAA";
     private static final String UPDATED_EXTERNAL_RECORD_ID = "BBBBBBBBBB";
 
-    private static final IngestionRecordStatus DEFAULT_STATUS = IngestionRecordStatus.CREATED;
-    private static final IngestionRecordStatus UPDATED_STATUS = IngestionRecordStatus.SKIPPED_DUPLICATE;
+    private static final IngestionRecordStatus DEFAULT_STATUS = IngestionRecordStatus.SKIPPED_DUPLICATE;
+    private static final IngestionRecordStatus UPDATED_STATUS = IngestionRecordStatus.REJECTED;
 
     private static final String DEFAULT_RAW_DATA = "AAAAAAAAAA";
     private static final String UPDATED_RAW_DATA = "BBBBBBBBBB";
@@ -275,6 +276,125 @@ class IngestionRecordResourceIT {
 
         assertThat(returnedIngestionRecordDTO.getCreatedAt()).isNotEqualTo(DEFAULT_CREATED_AT);
         ingestionRecordRepository.deleteById(returnedIngestionRecordDTO.getId());
+    }
+
+    @Test
+    @Transactional
+    void createCreatedIngestionRecordWithValidFinancialTransactionSucceeds() throws Exception {
+        FinancialTransaction financialTransaction = saveFinancialTransactionForIngestion(ingestionRecord.getTransactionIngestion());
+        IngestionRecordDTO ingestionRecordDTO = buildCreatedIngestionRecordDTO(
+            ingestionRecord.getTransactionIngestion().getId(),
+            nextRecordIndex(),
+            financialTransaction.getId()
+        );
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value(IngestionRecordStatus.CREATED.toString()))
+            .andExpect(jsonPath("$.financialTransaction.id").value(financialTransaction.getId().intValue()));
+
+        IngestionRecord persisted = ingestionRecordRepository
+            .findAll()
+            .stream()
+            .filter(
+                record ->
+                    record.getFinancialTransaction() != null &&
+                    record.getFinancialTransaction().getId().equals(financialTransaction.getId())
+            )
+            .findFirst()
+            .orElseThrow();
+        ingestionRecordRepository.delete(persisted);
+    }
+
+    @Test
+    @Transactional
+    void createCreatedIngestionRecordWithoutFinancialTransactionFails() throws Exception {
+        IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(
+            ingestionRecord.getTransactionIngestion().getId(),
+            nextRecordIndex()
+        );
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecordDTO.setErrorCode(null);
+        ingestionRecordDTO.setErrorMessage(null);
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createCreatedIngestionRecordWithErrorDetailsFails() throws Exception {
+        FinancialTransaction financialTransaction = saveFinancialTransactionForIngestion(ingestionRecord.getTransactionIngestion());
+        IngestionRecordDTO ingestionRecordDTO = buildCreatedIngestionRecordDTO(
+            ingestionRecord.getTransactionIngestion().getId(),
+            nextRecordIndex(),
+            financialTransaction.getId()
+        );
+        ingestionRecordDTO.setErrorCode(DEFAULT_ERROR_CODE);
+        ingestionRecordDTO.setErrorMessage(DEFAULT_ERROR_MESSAGE);
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createSkippedDuplicateWithFinancialTransactionFails() throws Exception {
+        FinancialTransaction financialTransaction = saveFinancialTransactionForIngestion(ingestionRecord.getTransactionIngestion());
+        IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(
+            ingestionRecord.getTransactionIngestion().getId(),
+            nextRecordIndex()
+        );
+        FinancialTransactionDTO financialTransactionDTO = new FinancialTransactionDTO();
+        financialTransactionDTO.setId(financialTransaction.getId());
+        ingestionRecordDTO.setFinancialTransaction(financialTransactionDTO);
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createRejectedWithErrorMessageSucceeds() throws Exception {
+        IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(
+            ingestionRecord.getTransactionIngestion().getId(),
+            nextRecordIndex()
+        );
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.REJECTED);
+        ingestionRecordDTO.setErrorMessage(" rejected ");
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value(IngestionRecordStatus.REJECTED.toString()))
+            .andExpect(jsonPath("$.errorMessage").value("rejected"));
+
+        IngestionRecord persisted = ingestionRecordRepository
+            .findAll()
+            .stream()
+            .filter(record -> IngestionRecordStatus.REJECTED.equals(record.getStatus()))
+            .findFirst()
+            .orElseThrow();
+        ingestionRecordRepository.delete(persisted);
+    }
+
+    @Test
+    @Transactional
+    void createRejectedWithoutErrorMessageFails() throws Exception {
+        IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(
+            ingestionRecord.getTransactionIngestion().getId(),
+            nextRecordIndex()
+        );
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.REJECTED);
+        ingestionRecordDTO.setErrorMessage(" ");
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -762,12 +882,7 @@ class IngestionRecordResourceIT {
         IngestionRecord updatedIngestionRecord = ingestionRecordRepository.findById(ingestionRecord.getId()).orElseThrow();
         // Disconnect from session so that the updates on updatedIngestionRecord are not directly saved in db
         em.detach(updatedIngestionRecord);
-        updatedIngestionRecord
-            .externalRecordId(UPDATED_EXTERNAL_RECORD_ID)
-            .status(UPDATED_STATUS)
-            .rawData(UPDATED_RAW_DATA)
-            .errorCode(UPDATED_ERROR_CODE)
-            .errorMessage(UPDATED_ERROR_MESSAGE);
+        updatedIngestionRecord.status(UPDATED_STATUS).errorCode(UPDATED_ERROR_CODE).errorMessage(UPDATED_ERROR_MESSAGE);
         IngestionRecordDTO ingestionRecordDTO = ingestionRecordMapper.toDto(updatedIngestionRecord);
 
         restIngestionRecordMockMvc
@@ -781,7 +896,7 @@ class IngestionRecordResourceIT {
         // Validate the IngestionRecord in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         assertThat(getPersistedIngestionRecord(ingestionRecord).getStatus()).isEqualTo(UPDATED_STATUS);
-        assertThat(getPersistedIngestionRecord(ingestionRecord).getExternalRecordId()).isEqualTo(UPDATED_EXTERNAL_RECORD_ID);
+        assertThat(getPersistedIngestionRecord(ingestionRecord).getExternalRecordId()).isEqualTo(DEFAULT_EXTERNAL_RECORD_ID);
     }
 
     @Test
@@ -857,12 +972,8 @@ class IngestionRecordResourceIT {
         String patchJson =
             "{\"id\":" +
             ingestionRecord.getId() +
-            ",\"externalRecordId\":\"" +
-            UPDATED_EXTERNAL_RECORD_ID +
-            "\",\"status\":\"" +
+            ",\"status\":\"" +
             UPDATED_STATUS +
-            "\",\"rawData\":\"" +
-            UPDATED_RAW_DATA +
             "\",\"errorCode\":\"" +
             UPDATED_ERROR_CODE +
             "\",\"errorMessage\":\"" +
@@ -875,7 +986,7 @@ class IngestionRecordResourceIT {
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         assertThat(getPersistedIngestionRecord(ingestionRecord).getStatus()).isEqualTo(UPDATED_STATUS);
-        assertThat(getPersistedIngestionRecord(ingestionRecord).getExternalRecordId()).isEqualTo(UPDATED_EXTERNAL_RECORD_ID);
+        assertThat(getPersistedIngestionRecord(ingestionRecord).getExternalRecordId()).isEqualTo(DEFAULT_EXTERNAL_RECORD_ID);
     }
 
     @Test
@@ -888,12 +999,8 @@ class IngestionRecordResourceIT {
         String patchJson =
             "{\"id\":" +
             ingestionRecord.getId() +
-            ",\"externalRecordId\":\"" +
-            UPDATED_EXTERNAL_RECORD_ID +
-            "\",\"status\":\"" +
+            ",\"status\":\"" +
             UPDATED_STATUS +
-            "\",\"rawData\":\"" +
-            UPDATED_RAW_DATA +
             "\",\"errorCode\":\"" +
             UPDATED_ERROR_CODE +
             "\",\"errorMessage\":\"" +
@@ -907,7 +1014,7 @@ class IngestionRecordResourceIT {
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         IngestionRecord persisted = getPersistedIngestionRecord(ingestionRecord);
         assertThat(persisted.getStatus()).isEqualTo(UPDATED_STATUS);
-        assertThat(persisted.getRawData()).isEqualTo(UPDATED_RAW_DATA);
+        assertThat(persisted.getRawData()).isEqualTo(DEFAULT_RAW_DATA);
     }
 
     @Test
@@ -980,13 +1087,11 @@ class IngestionRecordResourceIT {
 
         long databaseSizeBeforeDelete = getRepositoryCount();
 
-        // Delete the ingestionRecord
         restIngestionRecordMockMvc
             .perform(delete(ENTITY_API_URL_ID, ingestionRecord.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest());
 
-        // Validate the database contains one less item
-        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        assertSameRepositoryCount(databaseSizeBeforeDelete);
     }
 
     @Test
@@ -1097,7 +1202,7 @@ class IngestionRecordResourceIT {
 
         restIngestionRecordMockMvc
             .perform(delete(ENTITY_API_URL_ID, otherRecord.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -1168,9 +1273,7 @@ class IngestionRecordResourceIT {
     @Test
     @Transactional
     void createIngestionRecordWithFinancialTransactionAlreadyLinkedFails() throws Exception {
-        FinancialTransaction linkedTransaction = FinancialTransactionResourceIT.createEntity(em);
-        em.persist(linkedTransaction);
-        em.flush();
+        FinancialTransaction linkedTransaction = saveFinancialTransactionForIngestion(ingestionRecord.getTransactionIngestion());
         IngestionRecord existingRecord = createEntity(em);
         existingRecord.setFinancialTransaction(linkedTransaction);
         existingRecord.setRecordIndex(nextRecordIndex());
@@ -1203,6 +1306,45 @@ class IngestionRecordResourceIT {
         restIngestionRecordMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createIngestionRecordWithDuplicateExternalRecordIdForSameParentFails() throws Exception {
+        insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
+        IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(
+            ingestionRecord.getTransactionIngestion().getId(),
+            nextRecordIndex()
+        );
+        ingestionRecordDTO.setExternalRecordId(" " + DEFAULT_EXTERNAL_RECORD_ID + " ");
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createIngestionRecordAllowsSameRecordIndexAndExternalRecordIdInDifferentParents() throws Exception {
+        insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
+        TransactionIngestion otherIngestion = TransactionIngestionResourceIT.createEntity(em);
+        em.persist(otherIngestion);
+        em.flush();
+        IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(otherIngestion.getId(), ingestionRecord.getRecordIndex());
+        ingestionRecordDTO.setExternalRecordId(DEFAULT_EXTERNAL_RECORD_ID);
+
+        restIngestionRecordMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
+            .andExpect(status().isCreated());
+
+        IngestionRecord persisted = ingestionRecordRepository
+            .findAll()
+            .stream()
+            .filter(record -> record.getTransactionIngestion().getId().equals(otherIngestion.getId()))
+            .findFirst()
+            .orElseThrow();
+        ingestionRecordRepository.delete(persisted);
+        transactionIngestionRepository.delete(otherIngestion);
     }
 
     @Test
@@ -1267,6 +1409,33 @@ class IngestionRecordResourceIT {
 
     @Test
     @Transactional
+    void updateIngestionRecordWithDifferentExternalRecordIdFails() throws Exception {
+        insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
+        IngestionRecordDTO ingestionRecordDTO = ingestionRecordMapper.toDto(insertedIngestionRecord);
+        ingestionRecordDTO.setExternalRecordId(UPDATED_EXTERNAL_RECORD_ID);
+
+        restIngestionRecordMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, ingestionRecordDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(ingestionRecordDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchIngestionRecordWithDifferentRawDataFails() throws Exception {
+        insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
+        String patchJson = "{\"id\":" + ingestionRecord.getId() + ",\"rawData\":\"" + UPDATED_RAW_DATA + "\"}";
+
+        restIngestionRecordMockMvc
+            .perform(patch(ENTITY_API_URL_ID, ingestionRecord.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void patchIngestionRecordWithNullTransactionIngestionFails() throws Exception {
         insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
         String patchJson = "{\"id\":" + ingestionRecord.getId() + ",\"transactionIngestion\":null}";
@@ -1279,11 +1448,18 @@ class IngestionRecordResourceIT {
     @Test
     @Transactional
     void patchIngestionRecordWithNullFinancialTransactionFails() throws Exception {
+        FinancialTransaction financialTransaction = saveFinancialTransactionForIngestion(ingestionRecord.getTransactionIngestion());
+        ingestionRecord.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecord.setErrorCode(null);
+        ingestionRecord.setErrorMessage(null);
+        ingestionRecord.setFinancialTransaction(financialTransaction);
         insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
-        String patchJson = "{\"id\":" + ingestionRecord.getId() + ",\"financialTransaction\":null}";
+        String patchJson = "{\"id\":" + insertedIngestionRecord.getId() + ",\"financialTransaction\":null}";
 
         restIngestionRecordMockMvc
-            .perform(patch(ENTITY_API_URL_ID, ingestionRecord.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .perform(
+                patch(ENTITY_API_URL_ID, insertedIngestionRecord.getId()).contentType("application/merge-patch+json").content(patchJson)
+            )
             .andExpect(status().isBadRequest());
     }
 
@@ -1336,6 +1512,48 @@ class IngestionRecordResourceIT {
             .andExpect(status().isBadRequest());
     }
 
+    @Test
+    @Transactional
+    void parentFinalFreezesIngestionRecordChanges() throws Exception {
+        ingestionRecord.getTransactionIngestion().setStatus(IngestionStatus.COMPLETED);
+        insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
+        String patchJson = "{\"id\":" + ingestionRecord.getId() + ",\"errorMessage\":\"changed\"}";
+
+        restIngestionRecordMockMvc
+            .perform(patch(ENTITY_API_URL_ID, ingestionRecord.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void parentPendingAllowsOutcomeUpdates() throws Exception {
+        ingestionRecord.getTransactionIngestion().setStatus(IngestionStatus.PENDING);
+        insertedIngestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
+        String patchJson =
+            "{\"id\":" +
+            ingestionRecord.getId() +
+            ",\"status\":\"" +
+            IngestionRecordStatus.REJECTED +
+            "\",\"errorCode\":\"E1\",\"errorMessage\":\" rejected \"}";
+
+        restIngestionRecordMockMvc
+            .perform(patch(ENTITY_API_URL_ID, ingestionRecord.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value(IngestionRecordStatus.REJECTED.toString()))
+            .andExpect(jsonPath("$.errorMessage").value("rejected"));
+    }
+
+    @Test
+    @Transactional
+    void toStringDoesNotExposeRawDataContents() {
+        ingestionRecord.setRawData("secret raw payload");
+
+        assertThat(ingestionRecord.toString()).doesNotContain("secret raw payload").contains("rawDataPresent='true'");
+        assertThat(ingestionRecordMapper.toDto(ingestionRecord).toString())
+            .doesNotContain("secret raw payload")
+            .contains("rawDataPresent='true'");
+    }
+
     private IngestionRecord saveIngestionRecordOnOtherUsersIngestion() {
         User otherUser = createOtherUser(em);
         TransactionIngestion otherIngestion = saveTransactionIngestionForUser(otherUser);
@@ -1367,6 +1585,15 @@ class IngestionRecordResourceIT {
         return transaction;
     }
 
+    private FinancialTransaction saveFinancialTransactionForIngestion(TransactionIngestion transactionIngestion) {
+        FinancialTransaction transaction = FinancialTransactionResourceIT.createEntity(em);
+        transaction.setAccount(transactionIngestion.getAccount());
+        transaction.setTransactionIngestion(transactionIngestion);
+        em.persist(transaction);
+        em.flush();
+        return transaction;
+    }
+
     private static User createOtherUser(EntityManager em) {
         User otherUser = UserResourceIT.createEntity();
         em.persist(otherUser);
@@ -1393,6 +1620,21 @@ class IngestionRecordResourceIT {
         TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
         transactionIngestionDTO.setId(transactionIngestionId);
         ingestionRecordDTO.setTransactionIngestion(transactionIngestionDTO);
+        return ingestionRecordDTO;
+    }
+
+    private IngestionRecordDTO buildCreatedIngestionRecordDTO(
+        Long transactionIngestionId,
+        Integer recordIndex,
+        Long financialTransactionId
+    ) {
+        IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(transactionIngestionId, recordIndex);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecordDTO.setErrorCode(null);
+        ingestionRecordDTO.setErrorMessage(null);
+        FinancialTransactionDTO financialTransactionDTO = new FinancialTransactionDTO();
+        financialTransactionDTO.setId(financialTransactionId);
+        ingestionRecordDTO.setFinancialTransaction(financialTransactionDTO);
         return ingestionRecordDTO;
     }
 

@@ -16,6 +16,35 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
 
     boolean existsByIncomingTransactionId(Long incomingTransactionId);
 
+    @Query(
+        "select count(internalTransfer) > 0 from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.id = :transactionId or internalTransfer.incomingTransaction.id = :transactionId"
+    )
+    boolean existsByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
+
+    @Modifying
+    @Query(
+        "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.id = :transactionId or internalTransfer.incomingTransaction.id = :transactionId"
+    )
+    void deleteByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.transactionIngestion.id = :transactionIngestionId or internalTransfer.incomingTransaction.transactionIngestion.id = :transactionIngestionId"
+    )
+    void deleteByTransactionIngestionIdInEitherRole(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.account.id = :accountId or internalTransfer.incomingTransaction.account.id = :accountId"
+    )
+    void deleteByAccountIdInEitherRole(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.transactionIngestion.account.id = :accountId or internalTransfer.incomingTransaction.transactionIngestion.account.id = :accountId"
+    )
+    void deleteByTransactionIngestionAccountIdInEitherRole(@Param("accountId") Long accountId);
+
     default Optional<InternalTransfer> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
     }

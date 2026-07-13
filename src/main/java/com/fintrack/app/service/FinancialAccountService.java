@@ -4,9 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
+import com.fintrack.app.repository.FinancialSubscriptionRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
+import java.time.LocalDate;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +20,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,14 +41,38 @@ public class FinancialAccountService {
 
     private final CurrentUserService currentUserService;
 
+    private final TransactionIngestionService transactionIngestionService;
+
+    private final FinancialTransactionService financialTransactionService;
+
+    private final BudgetRepository budgetRepository;
+
+    private final FinancialSubscriptionRepository financialSubscriptionRepository;
+
+    private final CreditAccountDetailsRepository creditAccountDetailsRepository;
+
+    private final FinancialTransactionRepository financialTransactionRepository;
+
     public FinancialAccountService(
         FinancialAccountRepository financialAccountRepository,
         FinancialAccountMapper financialAccountMapper,
-        CurrentUserService currentUserService
+        CurrentUserService currentUserService,
+        @Lazy TransactionIngestionService transactionIngestionService,
+        @Lazy FinancialTransactionService financialTransactionService,
+        BudgetRepository budgetRepository,
+        FinancialSubscriptionRepository financialSubscriptionRepository,
+        CreditAccountDetailsRepository creditAccountDetailsRepository,
+        FinancialTransactionRepository financialTransactionRepository
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.financialAccountMapper = financialAccountMapper;
         this.currentUserService = currentUserService;
+        this.transactionIngestionService = transactionIngestionService;
+        this.financialTransactionService = financialTransactionService;
+        this.budgetRepository = budgetRepository;
+        this.financialSubscriptionRepository = financialSubscriptionRepository;
+        this.creditAccountDetailsRepository = creditAccountDetailsRepository;
+        this.financialTransactionRepository = financialTransactionRepository;
     }
 
     /**
@@ -55,6 +85,7 @@ public class FinancialAccountService {
         LOG.debug("Request to save FinancialAccount : {}", financialAccountDTO);
         FinancialAccount financialAccount = financialAccountMapper.toEntity(financialAccountDTO);
         financialAccount.setUser(currentUserService.getCurrentUser());
+        validateInitialBalanceDateFloor(financialAccount);
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
     }
@@ -74,6 +105,7 @@ public class FinancialAccountService {
         financialAccount.setUser(existingFinancialAccount.getUser());
         financialAccount.setCurrency(existingFinancialAccount.getCurrency());
         financialAccount.setAccountType(existingFinancialAccount.getAccountType());
+        validateInitialBalanceDateFloor(financialAccount);
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
     }
@@ -102,6 +134,7 @@ public class FinancialAccountService {
             .map(existingFinancialAccount -> {
                 rejectImmutableFieldChanges(existingFinancialAccount, financialAccountDTO, patchNode);
                 financialAccountMapper.partialUpdate(existingFinancialAccount, financialAccountDTO);
+                validateInitialBalanceDateFloor(existingFinancialAccount);
                 return existingFinancialAccount;
             })
             .map(financialAccountRepository::save)
@@ -189,6 +222,12 @@ public class FinancialAccountService {
         if (financialAccount.isEmpty()) {
             return false;
         }
+        FinancialAccount account = financialAccount.get();
+        transactionIngestionService.deleteAllForAccount(account);
+        financialTransactionService.deleteAllForAccount(account);
+        budgetRepository.deleteAccountLinksByAccountId(id);
+        financialSubscriptionRepository.clearAccountByAccountId(id);
+        creditAccountDetailsRepository.deleteByAccountId(id);
         financialAccountRepository.deleteById(id);
         return true;
     }
@@ -227,6 +266,20 @@ public class FinancialAccountService {
     private void rejectAccountTypeChange(FinancialAccount existing, AccountType accountType) {
         if (accountType == null || !accountType.equals(existing.getAccountType())) {
             throw new IllegalArgumentException("Account type cannot be changed");
+        }
+    }
+
+    private void validateInitialBalanceDateFloor(FinancialAccount financialAccount) {
+        if (financialAccount.getId() == null || financialAccount.getInitialBalanceDate() == null) {
+            return;
+        }
+        Optional<LocalDate> earliestTransactionDate = financialTransactionRepository.findEarliestTransactionDateByAccountId(
+            financialAccount.getId()
+        );
+        if (
+            earliestTransactionDate.isPresent() && financialAccount.getInitialBalanceDate().isAfter(earliestTransactionDate.orElseThrow())
+        ) {
+            throw new IllegalArgumentException("Initial balance date cannot be after the earliest transaction date");
         }
     }
 }

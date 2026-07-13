@@ -234,7 +234,8 @@ public class IngestionRecord implements Serializable {
             ", recordIndex=" + getRecordIndex() +
             ", externalRecordId='" + getExternalRecordId() + "'" +
             ", status='" + getStatus() + "'" +
-            ", rawData='" + getRawData() + "'" +
+            ", rawDataPresent='" + (getRawData() != null) + "'" +
+            ", rawDataLength=" + (getRawData() != null ? getRawData().length() : 0) +
             ", errorCode='" + getErrorCode() + "'" +
             ", errorMessage='" + getErrorMessage() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +

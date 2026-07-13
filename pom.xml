@@ -450,8 +450,8 @@
                                 <version>[${maven.version},)</version>
                             </requireMavenVersion>
                             <requireJavaVersion>
-                                <message>You are running an incompatible version of Java. JHipster supports JDK 17 to 24.</message>
-                                <version>[17,18),[21,22),[24,25)</version>
+                                <message>You are running an incompatible version of Java. FinTrack requires JDK 17.</message>
+                                <version>[17,18)</version>
                             </requireJavaVersion>
                         </rules>
                     </configuration>

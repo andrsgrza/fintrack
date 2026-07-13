@@ -6,11 +6,13 @@ import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
@@ -21,12 +23,15 @@ import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CategoryType;
+import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialTransactionService;
+import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import jakarta.persistence.EntityManager;
@@ -345,36 +350,48 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createFinancialTransactionIgnoresMissingCreatedAtAndSetsServerTimestamp() throws Exception {
         financialTransaction.setCreatedAt(null);
 
-        // Create the FinancialTransaction, which fails.
         FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
 
-        restFinancialTransactionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
-            .andExpect(status().isBadRequest());
+        FinancialTransactionDTO returnedFinancialTransactionDTO = om.readValue(
+            restFinancialTransactionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialTransactionDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertThat(returnedFinancialTransactionDTO.getCreatedAt()).isNotNull();
+        insertedFinancialTransaction = financialTransactionMapper.toEntity(returnedFinancialTransactionDTO);
     }
 
     @Test
     @Transactional
-    void checkUpdatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createFinancialTransactionIgnoresMissingUpdatedAtAndSetsServerTimestamp() throws Exception {
         financialTransaction.setUpdatedAt(null);
 
-        // Create the FinancialTransaction, which fails.
         FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
 
-        restFinancialTransactionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
-            .andExpect(status().isBadRequest());
+        FinancialTransactionDTO returnedFinancialTransactionDTO = om.readValue(
+            restFinancialTransactionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialTransactionDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertThat(returnedFinancialTransactionDTO.getUpdatedAt()).isNotNull();
+        insertedFinancialTransaction = financialTransactionMapper.toEntity(returnedFinancialTransactionDTO);
     }
 
     @Test
@@ -1183,11 +1200,11 @@ class FinancialTransactionResourceIT {
             .description(UPDATED_DESCRIPTION)
             .amount(UPDATED_AMOUNT)
             .flow(UPDATED_FLOW)
-            .origin(UPDATED_ORIGIN)
+            .origin(DEFAULT_ORIGIN)
             .externalReference(UPDATED_EXTERNAL_REFERENCE)
             .notes(UPDATED_NOTES)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT);
         FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(updatedFinancialTransaction);
 
         restFinancialTransactionMockMvc
@@ -1200,7 +1217,8 @@ class FinancialTransactionResourceIT {
 
         // Validate the FinancialTransaction in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        updatedFinancialTransaction.setOrigin(DEFAULT_ORIGIN);
+        FinancialTransaction persistedFinancialTransaction = getPersistedFinancialTransaction(updatedFinancialTransaction);
+        updatedFinancialTransaction.setUpdatedAt(persistedFinancialTransaction.getUpdatedAt());
         assertPersistedFinancialTransactionToMatchAllProperties(updatedFinancialTransaction);
     }
 
@@ -1282,12 +1300,17 @@ class FinancialTransactionResourceIT {
             .transactionDate(UPDATED_TRANSACTION_DATE)
             .postingDate(UPDATED_POSTING_DATE)
             .amount(UPDATED_AMOUNT);
+        ObjectNode patchNode = om.createObjectNode();
+        patchNode.put("id", partialUpdatedFinancialTransaction.getId());
+        patchNode.put("transactionDate", UPDATED_TRANSACTION_DATE.toString());
+        patchNode.put("postingDate", UPDATED_POSTING_DATE.toString());
+        patchNode.put("amount", UPDATED_AMOUNT);
 
         restFinancialTransactionMockMvc
             .perform(
                 patch(ENTITY_API_URL_ID, partialUpdatedFinancialTransaction.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedFinancialTransaction))
+                    .content(om.writeValueAsBytes(patchNode))
             )
             .andExpect(status().isOk());
 
@@ -1320,25 +1343,33 @@ class FinancialTransactionResourceIT {
             .flow(UPDATED_FLOW)
             .externalReference(UPDATED_EXTERNAL_REFERENCE)
             .notes(UPDATED_NOTES)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT);
+        ObjectNode patchNode = om.createObjectNode();
+        patchNode.put("id", partialUpdatedFinancialTransaction.getId());
+        patchNode.put("transactionDate", UPDATED_TRANSACTION_DATE.toString());
+        patchNode.put("postingDate", UPDATED_POSTING_DATE.toString());
+        patchNode.put("description", UPDATED_DESCRIPTION);
+        patchNode.put("amount", UPDATED_AMOUNT);
+        patchNode.put("flow", UPDATED_FLOW.toString());
+        patchNode.put("externalReference", UPDATED_EXTERNAL_REFERENCE);
+        patchNode.put("notes", UPDATED_NOTES);
 
         restFinancialTransactionMockMvc
             .perform(
                 patch(ENTITY_API_URL_ID, partialUpdatedFinancialTransaction.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedFinancialTransaction))
+                    .content(om.writeValueAsBytes(patchNode))
             )
             .andExpect(status().isOk());
 
         // Validate the FinancialTransaction in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        FinancialTransaction persistedFinancialTransaction = getPersistedFinancialTransaction(partialUpdatedFinancialTransaction);
         partialUpdatedFinancialTransaction.setOrigin(DEFAULT_ORIGIN);
-        assertFinancialTransactionUpdatableFieldsEquals(
-            partialUpdatedFinancialTransaction,
-            getPersistedFinancialTransaction(partialUpdatedFinancialTransaction)
-        );
+        partialUpdatedFinancialTransaction.setUpdatedAt(persistedFinancialTransaction.getUpdatedAt());
+        assertFinancialTransactionUpdatableFieldsEquals(partialUpdatedFinancialTransaction, persistedFinancialTransaction);
     }
 
     @Test
@@ -1458,7 +1489,7 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void createFinancialTransactionAssignsManualOriginRegardlessOfPayload() throws Exception {
+    void createFinancialTransactionPreservesPayloadOriginWhenNoIngestionIsSet() throws Exception {
         FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
         financialTransactionDTO.setId(null);
         financialTransactionDTO.setOrigin(TransactionOrigin.FILE_IMPORT);
@@ -1475,7 +1506,7 @@ class FinancialTransactionResourceIT {
             FinancialTransactionDTO.class
         );
 
-        assertThat(returnedFinancialTransactionDTO.getOrigin()).isEqualTo(TransactionOrigin.MANUAL);
+        assertThat(returnedFinancialTransactionDTO.getOrigin()).isEqualTo(TransactionOrigin.FILE_IMPORT);
         assertThat(returnedFinancialTransactionDTO.getTransactionIngestion()).isNull();
         insertedFinancialTransaction = financialTransactionMapper.toEntity(returnedFinancialTransactionDTO);
     }
@@ -1490,6 +1521,110 @@ class FinancialTransactionResourceIT {
         restFinancialTransactionMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionTrimsTextFieldsAndConvertsBlankOptionalTextToNull() throws Exception {
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setDescription("  Coffee  ");
+        financialTransactionDTO.setExternalReference("   ");
+        financialTransactionDTO.setNotes("  Morning cup  ");
+
+        FinancialTransactionDTO returnedFinancialTransactionDTO = om.readValue(
+            restFinancialTransactionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.description").value("Coffee"))
+                .andExpect(jsonPath("$.externalReference").value(nullValue()))
+                .andExpect(jsonPath("$.notes").value("Morning cup"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialTransactionDTO.class
+        );
+
+        insertedFinancialTransaction = financialTransactionMapper.toEntity(returnedFinancialTransactionDTO);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithIncompatibleCategoryTypeFails() throws Exception {
+        Category incomeCategory = CategoryResourceIT.createEntity(em);
+        incomeCategory.setUser(financialTransaction.getAccount().getUser());
+        incomeCategory.setCategoryType(CategoryType.INCOME);
+        em.persist(incomeCategory);
+        em.flush();
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setFlow(TransactionFlow.OUT);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(incomeCategory.getId());
+        financialTransactionDTO.setCategory(categoryDTO);
+
+        restFinancialTransactionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialTransactionAmountFailsWhenLinkedToInternalTransfer() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        FinancialTransaction oppositeTransaction = createEntity(em);
+        oppositeTransaction.setAccount(financialTransaction.getAccount());
+        oppositeTransaction.setFlow(TransactionFlow.OUT);
+        em.persist(oppositeTransaction);
+        em.persist(
+            new InternalTransfer()
+                .createdAt(DEFAULT_CREATED_AT)
+                .outgoingTransaction(financialTransaction)
+                .incomingTransaction(oppositeTransaction)
+        );
+        em.flush();
+
+        ObjectNode patchNode = om.createObjectNode();
+        patchNode.put("id", financialTransaction.getId());
+        patchNode.put("amount", UPDATED_AMOUNT);
+
+        restFinancialTransactionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialTransaction.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchNode))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialTransactionLinkedToIngestionRecordRejectsAndUnlinksRecord() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        IngestionRecord ingestionRecord = IngestionRecordResourceIT.createEntity(em);
+        ingestionRecord.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecord.setFinancialTransaction(financialTransaction);
+        em.persist(ingestionRecord);
+        em.flush();
+        Long ingestionRecordId = ingestionRecord.getId();
+
+        restFinancialTransactionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, financialTransaction.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        em.flush();
+        em.clear();
+        IngestionRecord persistedRecord = em.find(IngestionRecord.class, ingestionRecordId);
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId())).isEmpty();
+        assertThat(persistedRecord.getFinancialTransaction()).isNull();
+        assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.REJECTED);
+        assertThat(persistedRecord.getErrorCode()).isEqualTo("FINANCIAL_TRANSACTION_DELETED");
+        assertThat(persistedRecord.getErrorMessage()).isEqualTo("Financial transaction was deleted manually.");
+        insertedFinancialTransaction = null;
     }
 
     @Test
@@ -1584,13 +1719,13 @@ class FinancialTransactionResourceIT {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(om.writeValueAsBytes(financialTransactionDTO))
             )
-            .andExpect(status().isOk());
+            .andExpect(status().isBadRequest());
 
         FinancialTransaction persistedFinancialTransaction = financialTransactionRepository
             .findById(financialTransaction.getId())
             .orElseThrow();
         assertThat(persistedFinancialTransaction.getOrigin()).isEqualTo(DEFAULT_ORIGIN);
-        assertThat(persistedFinancialTransaction.getDescription()).isEqualTo(UPDATED_DESCRIPTION);
+        assertThat(persistedFinancialTransaction.getDescription()).isEqualTo(DEFAULT_DESCRIPTION);
     }
 
     @Test
@@ -1710,7 +1845,7 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void getOutgoingInternalTransferCandidatesIncludeOnlyOutManualUnlinked() throws Exception {
+    void getOutgoingInternalTransferCandidatesIncludeOnlyOutUnlinked() throws Exception {
         FinancialAccount account = financialTransaction.getAccount();
 
         FinancialTransaction eligibleOutgoing = createEntity(em);
@@ -1741,8 +1876,8 @@ class FinancialTransactionResourceIT {
             .perform(get(OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleOutgoing.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(importedOutgoing.getId().intValue())))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(inFlowTransaction.getId().intValue()))))
-            .andExpect(jsonPath("$.[*].id").value(not(hasItem(importedOutgoing.getId().intValue()))))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(linkedOutgoingId.intValue()))));
     }
 
@@ -1769,7 +1904,7 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void getIncomingInternalTransferCandidatesIncludeOnlyInManualUnlinked() throws Exception {
+    void getIncomingInternalTransferCandidatesIncludeOnlyInUnlinked() throws Exception {
         FinancialAccount account = financialTransaction.getAccount();
 
         FinancialTransaction eligibleIncoming = createEntity(em);
@@ -1800,8 +1935,8 @@ class FinancialTransactionResourceIT {
             .perform(get(INCOMING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[*].id").value(hasItem(eligibleIncoming.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(importedIncoming.getId().intValue())))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(outFlowTransaction.getId().intValue()))))
-            .andExpect(jsonPath("$.[*].id").value(not(hasItem(importedIncoming.getId().intValue()))))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(linkedIncomingId.intValue()))));
     }
 

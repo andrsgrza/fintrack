@@ -5,9 +5,7 @@
   "build": {
     "dockerfile": "Dockerfile",
     "args": {
-      // Update the VARIANT arg to pick a Java version: 17, 19
-      // Append -bullseye or -buster to pin to an OS version.
-      // Use the -bullseye variants on local arm64/Apple Silicon.
+      // Pin the development environment to Java 17 LTS.
       "VARIANT": "17-bullseye",
       // Options
       // maven and gradle wrappers are used by default, we don't need them installed globally

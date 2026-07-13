@@ -1,0 +1,1000 @@
+# FinTrack — Implementation Tracker
+
+Living document for **ownership**, **domain rules**, and **validations** per entity.
+
+Companion docs:
+
+- [`docs/OWNERSHIP-FLOWS.md`](OWNERSHIP-FLOWS.md) — flujos user vs admin por entidad
+- [`docs/VALIDATIONS.md`](VALIDATIONS.md) — catálogo de validaciones por entidad y capa
+- [`docs/DOMAIN-RULES.md`](DOMAIN-RULES.md) — catálogo de reglas de negocio (delete guards, balances, motor, pipeline)
+- [`docs/TESTING.md`](TESTING.md) — what tests exist and how to run them
+- [`fintrack.jdl`](../fintrack.jdl) — structural model (baseline only; business logic goes in services)
+
+---
+
+## Macro plan
+
+```
+Fase 0  Fundación compartida (CurrentUserService, patrón repository/service/query)
+Fase 1  Piloto ownership directo          → FinancialAccount ✅
+Fase 2  Ownership indirecto (vía parent)   → FinancialTransaction ✅
+Fase 3  Replicar ownership directo        → Tag ✅, Category ✅, Budget ✅, …
+Fase 4  Reglas de dominio por entidad     → delete guards, condicionales, motor
+Fase 5  Validaciones de negocio (service) → cross-entity, amount > 0, etc.
+Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessToken, …
+```
+
+**Principio:** la capa de verdad es el **service**. REST valida forma (`@Valid`); DB valida estructura; **ownership y negocio viven en service**.
+
+---
+
+## Status legend (per pillar)
+
+| Symbol | Ownership                                                    | Domain rules                             | Validations                                   |
+| ------ | ------------------------------------------------------------ | ---------------------------------------- | --------------------------------------------- |
+| ✅     | Scoped queries + service + admin bypass + UI sin user picker | Reglas implementadas y testeadas         | Forma (JDL) + negocio en service donde aplica |
+| 🟡     | Parcial o solo baseline generado                             | Solo ownership; faltan reglas de negocio | Solo anotaciones JHipster / DTO `@Valid`      |
+| ⏳     | No implementado                                              | No implementado                          | Revisión pendiente                            |
+| —      | N/A (owned vía otra entidad)                                 | Hereda del parent                        | Hereda del parent                             |
+
+---
+
+## Foundation (compartido entre entidades)
+
+| Componente                | Archivo                                                 | Estado | Notas                                                                                                         |
+| ------------------------- | ------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| Usuario actual + admin    | `CurrentUserService`                                    | ✅     | `getCurrentUser()`, `getCurrentUserLogin()`, `isAdmin()`                                                      |
+| Tests fundación           | `CurrentUserServiceTest`                                | ✅     | 5 unit tests                                                                                                  |
+| Patrón repository         | `*Repository` scoped queries                            | 🟡     | FA, FT, Tag, Category, Budget, FinancialSubscription, TransactionRule                                         |
+| Patrón service            | assign / filter / preserve owner                        | 🟡     | FA, Tag, Category, Budget, FinancialSubscription, TransactionRule (direct `user`); FT (vía `account`)         |
+| Patrón query service      | ownership spec si no admin                              | 🟡     | FA, Tag, Category, Budget, FinancialSubscription, TransactionRule (`user`); FT (`account.user`)               |
+| Patrón resource           | delgado; `isAccessible` en PUT/PATCH/DELETE             | 🟡     | FA, FT, Tag, Category, Budget, FinancialSubscription, TransactionRule                                         |
+| Patrón DTO                | quitar `@NotNull` en `user` si el cliente no lo manda   | 🟡     | FA, Tag, Category, Budget, FinancialSubscription, TransactionRule — ver nota abajo                            |
+| Patrón mapper             | relaciones ignore en `toEntity` / `partialUpdate`       | 🟡     | FA, Tag, Category, Budget, FinancialSubscription, TransactionRule (`user` + links); FT (links)                |
+| Patrón UI                 | sin campos que el service asigna / bloquea              | 🟡     | FA, Tag, Category, Budget, FinancialSubscription, TransactionRule sin User; FT sin origin/ingestion en create |
+| Resolver links M2M        | accounts/categories/tags owned                          | 🟡     | Budget; FinancialSubscription; TransactionRule (`resulting*`); FT (category/tags/subscription)                |
+| PATCH link semantics      | `JsonNode` + `patch.has(field)` en service              | 🟡     | FinancialSubscription, TransactionRule — ver nota abajo                                                       |
+| Resolver cuenta accesible | `FinancialAccountService.findAccessibleAccountEntity()` | ✅     | Reutilizado por FT, TransactionIngestion ✅, y futuros hijos de account                                       |
+
+**Nota — `user` en DTO (pattern A):** en `FinancialAccountDTO`, `TagDTO`, `CategoryDTO`, `BudgetDTO`, `FinancialSubscriptionDTO` y `TransactionRuleDTO`, el campo `user` es **opcional en el payload** (sin `@NotNull`). El cliente/UI no envía dueño; el service asigna `currentUser` en create y preserva owner en update. La obligatoriedad sigue en **entity/DB** (`user_id NOT NULL`) y en **service**. En GET la respuesta sí incluye `user.login` (solo lectura).
+
+**Nota — PATCH link semantics:** el resource PATCH recibe `JsonNode`; el service usa `patchNode.has(...)` para distinguir campo **ausente** (preservar link) vs **presente** (`null`/`[]` limpia M2M; `null` limpia ManyToOne). Implementado en Budget, FinancialSubscription, TransactionRule, FinancialAccount (inmutables), etc.
+
+**Nota — TransactionRule outputs:** `resultingCategory` / `resultingFinancialSubscription` / `resultingTags` se validan contra el **dueño de la rule** (`ownerLogin`), no contra el usuario actual — admin puede editar la rule ajena pero no adjuntar outputs de otro user.
+
+**Convención HTTP cross-user (todas las entidades con ownership):** PUT/PATCH de recurso ajeno → `400` `idnotfound`; GET/DELETE → `404`. No variar por entidad.
+
+### Ownership progress (17 / 17 entidades)
+
+| Entity                   | Pattern                                                | Ownership |
+| ------------------------ | ------------------------------------------------------ | --------- |
+| FinancialAccount         | A                                                      | ✅        |
+| FinancialTransaction     | B                                                      | ✅        |
+| Tag                      | A                                                      | ✅        |
+| Category                 | A                                                      | ✅        |
+| Budget                   | A + M2M                                                | ✅        |
+| FinancialSubscription    | A + links                                              | ✅        |
+| TransactionRule          | A + links                                              | ✅        |
+| TransactionRuleCondition | C — via `transactionRule`                              | ✅        |
+| CreditAccountDetails     | B — via `account`                                      | ✅        |
+| ApiAccessToken           | A — direct `user`                                      | ✅        |
+| ApiAccessTokenPermission | C — via `apiAccessToken`                               | ✅        |
+| UserDashboardPreference  | A — direct `user` (1:1)                                | ✅        |
+| InternalTransfer         | D — via both tx legs                                   | ✅        |
+| TransactionIngestion     | B — via `account`                                      | ✅        |
+| FileIngestion            | C — via `transactionIngestion`                         | ✅        |
+| ApiIngestion             | C — via `transactionIngestion` + token snapshots (11C) | ✅        |
+| IngestionRecord          | C — via `transactionIngestion` + FT                    | ✅        |
+
+---
+
+## Master tracker — 17 entidades
+
+| #   | Entity                       | Pattern                                                | Phase | Ownership | Domain rules | Validations | Tests                                                                                                |
+| --- | ---------------------------- | ------------------------------------------------------ | ----- | --------- | ------------ | ----------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | **FinancialAccount**         | A — direct `user`                                      | 1     | ✅        | ✅           | ✅          | [TESTING.md § FA](TESTING.md#financialaccount) · [VALIDATIONS §1](VALIDATIONS.md#1-financialaccount) |
+| 2   | **FinancialTransaction**     | B — via `account`                                      | 2     | ✅        | ✅           | ✅          | [TESTING.md § FT](TESTING.md#financialtransaction)                                                   |
+| 3   | **CreditAccountDetails**     | B — via `account`                                      | 4     | ✅        | ✅           | ✅          | [TESTING.md § CAD](TESTING.md#creditaccountdetails)                                                  |
+| 4   | **Category**                 | A — direct `user`                                      | 3     | ✅        | ✅           | ✅          | [TESTING.md § Category](TESTING.md#category)                                                         |
+| 5   | **Tag**                      | A — direct `user`                                      | 3     | ✅        | ✅           | ✅          | [TESTING.md § Tag](TESTING.md#tag) · [VALIDATIONS §5](VALIDATIONS.md#5-tag)                          |
+| 6   | **TransactionRule**          | A — direct `user`                                      | 3 / 6 | ✅        | ✅           | ✅          | [TESTING.md § TransactionRule](TESTING.md#transactionrule)                                           |
+| 7   | **TransactionRuleCondition** | C — via `transactionRule`                              | 6     | ✅        | ✅           | ✅          | [TESTING.md § TRC](TESTING.md#transactionrulecondition)                                              |
+| 8   | **FinancialSubscription**    | A + links                                              | 3 / 4 | ✅        | ✅           | ✅          | [TESTING.md § FinancialSubscription](TESTING.md#financialsubscription)                               |
+| 9   | **Budget**                   | A + M2M                                                | 3 / 4 | ✅        | ✅           | ✅          | [TESTING.md § Budget](TESTING.md#budget)                                                             |
+| 10  | **InternalTransfer**         | D — via 2 transactions                                 | 4     | ✅        | ✅           | ✅          | [TESTING.md § IT](TESTING.md#internaltransfer)                                                       |
+| 11  | **TransactionIngestion**     | B — via `account`                                      | 6     | ✅        | ✅           | ✅          | [TESTING.md § TI](TESTING.md#transactioningestion)                                                   |
+| 12  | **FileIngestion**            | C — via `transactionIngestion`                         | 6     | ✅        | ✅           | ✅          | [TESTING.md § FI](TESTING.md#fileingestion)                                                          |
+| 13  | **ApiIngestion**             | C — via `transactionIngestion` + token snapshots (11C) | 6     | ✅        | ✅ (11C)     | ✅          | [TESTING.md § AI](TESTING.md#apiingestion)                                                           |
+| 14  | **IngestionRecord**          | C — via `transactionIngestion`                         | 6     | ✅        | ✅           | ✅          | [TESTING.md § IR](TESTING.md#ingestionrecord) · [VALIDATIONS §14](VALIDATIONS.md#14-ingestionrecord) |
+| 15  | **ApiAccessToken**           | A — direct `user`                                      | 3 / 6 | ✅        | ✅ (11C)     | ✅          | [TESTING.md § AAT](TESTING.md#apiaccesstoken)                                                        |
+| 16  | **ApiAccessTokenPermission** | C — via `apiAccessToken`                               | 6     | ✅        | ✅           | ✅          | [TESTING.md § AATP](TESTING.md#apiaccesstokenpermission)                                             |
+| 17  | **UserDashboardPreference**  | A — direct `user` (1:1 user)                           | 3     | ✅        | ✅           | ✅          | [TESTING.md § UDP](TESTING.md#userdashboardpreference)                                               |
+
+### Delete confirmation dialogs — Grupo 1 UX ✅
+
+**Principle:** Backend service guards remain source of truth. Dialogs are UX-only and explain consequences before delete.
+
+| Entity                       | Dialog behavior                                                                                | i18n keys                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **UserDashboardPreference**  | Confirm reset; financial data unaffected                                                       | `delete.title`, `delete.message`                              |
+| **ApiAccessTokenPermission** | Confirm permission removal; token and history survive                                          | `delete.title`, `delete.message`                              |
+| **ApiAccessToken**           | Confirm delete; permissions removed; **ingestion history survives** (snapshot audit 11C)       | `delete.title`, `delete.message`                              |
+| **CreditAccountDetails**     | **No delete button** — informational only (direct delete blocked server-side)                  | `delete.title`, `delete.message`                              |
+| **Tag**                      | Confirm unlink from FT/rules/budgets/subscriptions; related entities survive                   | `delete.title`, `delete.message`                              |
+| **Category**                 | If direct children (`count` API): blocked message, no confirm. Leaf: cleanup message + confirm | `delete.title`, `delete.leafMessage`, `delete.blockedMessage` |
+| **FinancialSubscription**    | Confirm unlink from FT; rules disabled; related entities survive                               | `delete.title`, `delete.message`                              |
+
+**Files:** `*-delete-dialog.tsx` per entity; `i18n/en|es/{entity}.json`. Dynamic usage counts (e.g. “Used by 18 transactions”) — nice-to-have, deferred.
+
+### Ownership patterns (referencia)
+
+| Pattern | Descripción                        | Entidades                                                                                                                |
+| ------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **A**   | `user` directo required            | FinancialAccount, Category, Tag, TransactionRule, FinancialSubscription, Budget, ApiAccessToken, UserDashboardPreference |
+| **B**   | Owned vía relación padre (1 nivel) | FinancialTransaction → account; CreditAccountDetails → account; TransactionIngestion → account                           |
+| **C**   | Owned vía cadena (hijo de hijo)    | TransactionRuleCondition, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessTokenPermission                         |
+| **D**   | Owned vía reglas compuestas        | InternalTransfer (2 tx, mismo user/moneda)                                                                               |
+
+**Admin:** en todas las entidades user-scoped, `ROLE_ADMIN` debe poder ver y modificar todo (mismo criterio que FinancialAccount).
+
+---
+
+## Per-entity detail
+
+### 1. FinancialAccount ✅ ✅ ✅
+
+**JDL:** `user` required. Balance actual calculado, no persistido.
+
+#### Ownership ✅
+
+| Regla                                | Implementación                                     |
+| ------------------------------------ | -------------------------------------------------- |
+| Create asigna `user = currentUser`   | `FinancialAccountService.save()`                   |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` |
+| List / criteria filtrados por user   | `FinancialAccountQueryService` + repository        |
+| Get / update / patch / delete scoped | `findAccessibleEntity()`                           |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                     |
+| UI sin User                          | `financial-account-*.tsx`                          |
+
+**Archivos:** `CurrentUserService`, `FinancialAccountRepository`, `FinancialAccountService`, `FinancialAccountQueryService`, `FinancialAccountResource`, `FinancialAccountDTO`, `FinancialAccountMapper`, UI.
+
+#### Domain rules ✅
+
+| Regla                                         | Estado | Notas                |
+| --------------------------------------------- | ------ | -------------------- |
+| Usuario no puede ver/editar cuenta ajena      | ✅     |                      |
+| No cambiar dueño en update/patch              | ✅     |                      |
+| Admin accede a todo                           | ✅     |                      |
+| Delete orchestration                          | ✅     | TI tree → remaining FT → budget links → subscriptions null → CAD → account |
+| `initialBalanceDate` floor                    | ✅     | no floor without txs; otherwise `<= earliest transactionDate` |
+| `initialBalance` mutable                      | ✅     | no balance recalculation |
+| `active` mutable                              | ✅     | no side effects |
+| Balance actual = f(transacciones) + initial   | ⏳     | read model / service; out of scope |
+
+#### Validations ✅
+
+| Capa              | Estado | Detalle                                                                                 |
+| ----------------- | ------ | --------------------------------------------------------------------------------------- |
+| DTO `@Valid`      | ✅     | name, enums, pattern color/last4, required fields; `user` optional                      |
+| Entity JPA        | ✅     | Mismas constraints                                                                      |
+| DB Liquibase      | ✅     | `user_id NOT NULL`, FK                                                                  |
+| Service — negocio | ✅     | `currency` / `accountType` immutable; owner preserve; scoped read/write; delete orchestration; initialBalanceDate floor |
+| REST              | ✅     | `@Valid` POST/PUT; **PATCH JsonNode**; `IllegalArgumentException` → `400 invalid`       |
+
+**Tests:** 118 IT + 12 service — ver [TESTING.md § FA](TESTING.md#financialaccount).
+
+---
+
+### 2. FinancialTransaction ✅ ✅ ✅
+
+**JDL:** sin `user` directo; `account` required. Amount ≥ 0 en JDL (`@DecimalMin("0")`); dominio exige amount **> 0** y escala monetaria de 2 decimales en service.
+
+#### Ownership ✅
+
+| Regla                                         | Implementación                                                                                              |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Solo tx de **cuentas accesibles**             | `findAccessibleEntity()` → `account.user.login`; admin usa eager global                                     |
+| Resolver `account` desde DB por id            | `FinancialAccountService.findAccessibleAccountEntity()`                                                     |
+| List / criteria filtrados por cuenta del user | `FinancialTransactionQueryService` join `account.user`                                                      |
+| Get / update / patch / delete scoped          | Mismo patrón que FA                                                                                         |
+| Admin bypass                                  | `CurrentUserService.isAdmin()`                                                                              |
+| `category`, `tags`, `subscription` opcionales | Validados contra el owner de `transaction.account`; admin editando tx ajena usa el owner de la tx, no admin |
+
+**Archivos:** `FinancialTransactionRepository`, `FinancialTransactionService`, `FinancialTransactionQueryService`, `FinancialTransactionResource`, `FinancialTransactionMapper`, `CategoryRepository`, `TagRepository`, `FinancialSubscriptionRepository`, UI `financial-transaction-update.tsx`.
+
+#### Domain rules ✅
+
+| Regla                                                               | Estado | Implementación                                                                                                                                                       |
+| ------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Usuario no ve/edita tx de cuenta ajena                              | ✅     | Ownership vía `account`                                                                                                                                              |
+| Create server-owned timestamps                                      | ✅     | `createdAt`/`updatedAt` ignorados en POST y seteados a `now`                                                                                                         |
+| Create puede setear `transactionIngestion` válida                   | ✅     | Account debe coincidir; origin FILE/API debe corresponder                                                                                                            |
+| `account`, `origin`, `transactionIngestion`, `createdAt` inmutables | ✅     | PUT/PATCH presence-aware con `JsonNode`; null/change → `400 invalid`                                                                                                 |
+| `updatedAt` server-owned                                            | ✅     | Cliente null/change → `400`; update exitoso setea `now`                                                                                                              |
+| Text normalization                                                  | ✅     | Trim; blank optional text → null; description blank invalid                                                                                                          |
+| Amount > 0 + scale 2                                                | ✅     | `normalizeAmount()` → `IllegalArgumentException` → REST `400`                                                                                                        |
+| InternalTransfer guards                                             | ✅     | Amount/flow inmutables si participa en transfer                                                                                                                      |
+| Category compatibility                                              | ✅     | OUT → EXPENSE/BOTH; IN → INCOME/BOTH                                                                                                                                 |
+| Subscription compatibility                                          | ✅     | Same owner; currency/account compatible                                                                                                                              |
+| Tags/category/subscription PATCH semantics                          | ✅     | Absent preserve; null clear; ids replace; missing ids invalid                                                                                                        |
+| Delete cleanup                                                      | ✅     | Linked `IngestionRecord` → `REJECTED` + `FINANCIAL_TRANSACTION_DELETED` + manual-deleted message + unlink; delete transfer link; clear tag join rows; delete only tx |
+| Category override vs effective category                             | ⏳     | Futuro motor de reglas                                                                                                                                               |
+
+#### Validations ✅
+
+| Capa              | Estado      | Detalle                                                                                             |
+| ----------------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| DTO annotations   | ✅ JHipster | transactionDate, description, amount ≥ 0, enums, timestamps remain on DTO                           |
+| Entity JPA        | ✅ JHipster | Mismas constraints                                                                                  |
+| DB Liquibase      | ✅ JHipster | `account_id NOT NULL`, FK                                                                           |
+| Service — negocio | ✅          | Final merged-state validation; owner-scoped links; immutables; cleanup                              |
+| REST              | ✅          | POST/PUT/PATCH receive `JsonNode`; `IllegalArgumentException` → `400 invalid`; ownership in service |
+| UI                | 🟡          | Existing CRUD UI may still expose fields that backend now treats as server-owned/immutable          |
+
+---
+
+### 3. CreditAccountDetails ✅ ✅ ✅
+
+**JDL:** OneToOne con `FinancialAccount`; solo cuentas `CREDIT_CARD`.
+
+#### Ownership ✅ — Pattern B (vía `FinancialAccount` → `User`)
+
+| Regla                                | Implementación                                                                   |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| Acceso scoped vía padre              | `findAccessibleEntity()` — user normal: `account.user.login`; admin: sin filtro  |
+| Create resuelve `account` en service | Mapper ignora `account`; `FinancialAccountService.findAccessibleAccountEntity()` |
+| `account` inmutable tras create      | PUT/PATCH con `account` distinto → `400`                                         |
+| PATCH `account`                      | Ausente → preservar; `{ id }` distinto → `400`; `null` → `400`                   |
+| Solo `CREDIT_CARD`                   | `validateCreditCardAccount()` en create                                          |
+| Un details por cuenta                | `existsByAccountId()` antes de save                                              |
+| UI mantiene selector                 | Filtrado `CREDIT_CARD` en picker                                                 |
+
+**Archivos:** `CreditAccountDetailsRepository`, `CreditAccountDetailsService`, `CreditAccountDetailsResource` (PATCH `JsonNode`, DELETE domain guard), `CreditAccountDetailsMapper`, UI.
+
+#### Domain rules ✅
+
+| Regla                               | Estado | Notas                                                 |
+| ----------------------------------- | ------ | ----------------------------------------------------- |
+| Solo en cuentas `CREDIT_CARD`       | ✅     | Validado en service                                   |
+| Un account solo un details          | ✅     | `existsByAccountId` en service                        |
+| DELETE directo bloqueado            | ✅     | `400` invalid; admin no bypass; `404` si inaccessible |
+| Campos mutables (limit, days, rate) | ✅     | Sin checks de utilización ni interés                  |
+| `CREDIT_CARD` requiere details      | 📄     | Invariante documentada; atomic create **futuro**      |
+| Cascade en FA delete                | ⏳     | `FinancialAccountService` (#17)                       |
+
+**Fuera de scope:** cálculos de interés, statement generation, atomic FA+CAD endpoint, cascade FA delete (este pass).
+
+---
+
+### 4. Category ✅ ✅ ✅
+
+**JDL:** `user` required; `parentCategory` opcional (jerarquía self-referential). No `system` flag in v1.
+
+#### Ownership ✅
+
+| Regla                                | Implementación                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------------- |
+| Create asigna `user = currentUser`   | `CategoryService.save()`                                                                |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user`                                      |
+| List / criteria filtrados por user   | `CategoryQueryService` + repository                                                     |
+| Get / update / patch / delete scoped | `findAccessibleEntity()`                                                                |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                                          |
+| UI sin User                          | `category-*.tsx`; parent picker en create (scoped por API)                              |
+| Link validation (FT)                 | `findOneByIdAndUserLogin` — usado por `FinancialTransactionService` al asignar category |
+
+**Archivos:** `CategoryRepository`, `CategoryService`, `CategoryQueryService`, `CategoryResource`, `CategoryDTO`, `CategoryMapper`, UI.
+
+#### Validations ✅
+
+| Capa              | Estado      | Detalle                                                                                                                      |
+| ----------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| DTO `@Valid`      | ✅ JHipster | name, categoryType, color pattern, active, timestamps; `user` **sin** `@NotNull`                                             |
+| Entity JPA        | ✅ JHipster | `user` required                                                                                                              |
+| DB Liquibase      | ✅ JHipster | `user_id NOT NULL`, FK                                                                                                       |
+| Service — negocio | ✅          | Ownership + parent owned on create; **trim `name`**; **sibling-unique name** (owner + type + parent); inactive in uniqueness |
+| REST              | ✅          | `@Valid` en POST/PUT; `IllegalArgumentException` → `400 invalid`; DELETE domain violations → `400 invalid`                   |
+| UI                | ✅          | Sin User picker; parent picker en create                                                                                     |
+
+**Tests:** 103 IT + 16 service — ver [TESTING.md § Category](TESTING.md#category).
+
+#### Domain rules ✅
+
+| Regla                                  | Estado       | Notas                                                                  |
+| -------------------------------------- | ------------ | ---------------------------------------------------------------------- |
+| Block delete if direct children        | ✅           | Active + inactive children                                             |
+| Leaf delete: cleanup + `deleteById`    | ✅           | FT/FS null; budget M2M; rule `resultingCategory` null + `active=false` |
+| `parentCategory` immutable post-create | ✅           | PATCH omit preserves; change → `400`                                   |
+| `categoryType` mutable only if unused  | ✅           | In use = children + 4 references                                       |
+| Child `categoryType` == parent         | ✅           | Create + type change with parent                                       |
+| Default categories on signup           | **Deferred** | Normal user-owned rows; ver § User onboarding / default data           |
+| No `Category.system`                   | ✅           | v1 omission                                                            |
+
+**Implementado en:** `CategoryService` + `CategoryRepository` `@Modifying`. Ver [`DOMAIN-RULES.md` §5](DOMAIN-RULES.md#5-category).
+
+#### User onboarding / default data — Deferred
+
+| Item                                                     | Estado       | Notas                                                               |
+| -------------------------------------------------------- | ------------ | ------------------------------------------------------------------- |
+| Seed default categories per user on signup               | **Deferred** | Separate pass; **not** in `CategoryService.delete()` or CRUD guards |
+| Default rows follow normal Category rules after creation | 📄           | Rename / deactivate / delete like any category                      |
+
+---
+
+### 5. Tag ✅ ✅ ✅
+
+#### Ownership ✅
+
+| Regla                                | Implementación                                                                      |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| Create asigna `user = currentUser`   | `TagService.save()`                                                                 |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user`                                  |
+| List / criteria filtrados por user   | `TagQueryService` + repository                                                      |
+| Get / update / patch / delete scoped | `findAccessibleEntity()`                                                            |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                                      |
+| UI sin User                          | `tag-*.tsx`                                                                         |
+| Link validation (FT)                 | `findOneByIdAndUserLogin` — usado por `FinancialTransactionService` al asignar tags |
+
+**Archivos:** `TagRepository`, `TagService`, `TagQueryService`, `TagResource`, `TagDTO`, `TagMapper`, UI.
+
+#### Validations ✅
+
+| Capa              | Estado | Detalle                                                                                                      |
+| ----------------- | ------ | ------------------------------------------------------------------------------------------------------------ |
+| DTO `@Valid`      | ✅     | name, color pattern, active, timestamps; `user` **sin** `@NotNull` (asignado en service)                     |
+| Entity JPA        | ✅     | `user` required                                                                                              |
+| DB Liquibase      | ✅     | `user_id NOT NULL`, FK                                                                                       |
+| Service — negocio | ✅     | **Trim `name`**; **`name` unique per owner** (case-insensitive query); uniqueness vs **tag owner** not actor |
+| REST              | ✅     | `@Valid` POST/PUT; PATCH DTO; `IllegalArgumentException` → `400 invalid`                                     |
+
+**Tests:** 78 IT + 12 service — ver [TESTING.md § Tag](TESTING.md#tag).
+
+#### Domain rules ✅
+
+| Regla                                          | Estado | Notas                                                                                     |
+| ---------------------------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| DELETE permitido aunque esté en uso            | ✅     | Unlink M2M primero; no borrar entidades relacionadas                                      |
+| Cleanup join tables por `tagId`                | ✅     | 4 tablas: FT, TransactionRule, FinancialSubscription, Budget (`@Modifying` + flush/clear) |
+| `active=false` sin borrar links                | ✅     | Alternativa a delete; no requerido antes de delete                                        |
+| `name`/`color`/`description`/`active` mutables | ✅     | Uniqueness sin filtrar por `active`                                                       |
+| Soft delete                                    | ❌     | Fuera de scope                                                                            |
+
+**Implementado en:** `TagService.delete()` + `TagRepository` `@Modifying` (una transacción). Ver [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
+
+---
+
+### 6. TransactionRule ✅ ✅ ✅
+
+**JDL:** `user` required; `resultingCategory` / `resultingFinancialSubscription` opcionales (ManyToOne); `resultingTags` opcional (M2M). Evaluada al crear transaction (motor ⏳).
+
+#### Ownership ✅
+
+| Regla                                | Implementación                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Create asigna `user = currentUser`   | `TransactionRuleService.save()`                                                                |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` y links                                     |
+| List / criteria filtrados por user   | `TransactionRuleQueryService` + repository                                                     |
+| Get / update / patch / delete scoped | `findAccessibleEntity()` (con bag relationships)                                               |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                                                 |
+| UI sin User                          | `transaction-rule-*.tsx`                                                                       |
+| Links owned por **dueño de la rule** | `resolveOptionalCategory/Subscription/Tags` con `ownerLogin` — **sin bypass admin en outputs** |
+| PATCH links                          | `partialUpdate(dto, patchNode)` — `has("resultingCategory")` etc.                              |
+
+**Archivos:** `TransactionRuleRepository`, `TransactionRuleService`, `TransactionRuleQueryService`, `TransactionRuleResource` (PATCH con `JsonNode`), `TransactionRuleDTO`, `TransactionRuleMapper`, UI.
+
+#### Domain rules ✅ (CRUD/domain baseline)
+
+| Regla                                           | Estado | Notas                                                                                                                    |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                |
+| No cambiar dueño en update/patch                | ✅     |                                                                                                                          |
+| Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                          |
+| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/subscription/tag                                                                      |
+| PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                   |
+| Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                     |
+| Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                    |
+| Description/resultingDescription normalization  | ✅     | trim; blank → `null`                                                                                                     |
+| Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now` |
+| Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                               |
+| Rule requiere al menos un output                | ✅     | final merged state                                                                                                       |
+| Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                              |
+| PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                            |
+| **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                           |
+| Prioridad única                                 | ❌     | duplicate priority allowed                                                                                               |
+| Priority tie-break                              | ⏳     | definir antes del motor                                                                                                  |
+
+#### Validations ✅
+
+| Capa                      | Estado      | Detalle                                                                                                                                        |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| DTO `@Valid`              | ✅ JHipster | name, priority, enums, dates; `user` opcional en payload                                                                                       |
+| Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                  |
+| Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented |
+| REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`                               |
+
+---
+
+### 7. TransactionRuleCondition ✅ ✅ ✅
+
+#### Ownership ✅ — Pattern C (vía `TransactionRule` → `User`)
+
+| Regla                                       | Implementación                                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Acceso scoped vía padre                     | `findAccessibleEntity()` — user normal: `transactionRule.user.login`; admin: sin filtro                                                |
+| Create resuelve padre en service            | Mapper ignora `transactionRule`; `resolveTransactionRule()` valida acceso                                                              |
+| Normal user create foreign parent           | `400` invalid                                                                                                                          |
+| Admin create foreign parent                 | Permitido                                                                                                                              |
+| **`transactionRule` inmutable tras create** | PUT/PATCH otro `{id}` → `400` (incluso mismo owner); mismo id → OK; `null` → `400`; PATCH ausente → preservar; mover = delete + create |
+| ~~Reparent same-owner~~                     | **Eliminado** — reemplazado por inmutabilidad total                                                                                    |
+| PATCH `transactionRule`                     | Ausente → preservar; mismo `{id}` → OK; otro `{id}` → `400`; `null` → `400`                                                            |
+| UI mantiene selector                        | `transaction-rule-condition-*.tsx` — DTO sigue `@NotNull` en `transactionRule` (solo create)                                           |
+| Admin bypass lectura/CRUD                   | Admin opera conditions de rules ajenas                                                                                                 |
+| `ACCOUNT` values                            | Validar ids contra **`transactionRule.user.login`**, no admin                                                                          |
+
+**Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI.
+
+#### Domain rules ✅
+
+| Regla                                           | Estado | Notas                                                |
+| ----------------------------------------------- | ------ | ---------------------------------------------------- |
+| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                 |
+| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción              |
+| Create en rule inactiva no reactiva             | ✅     |                                                      |
+| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices       |
+| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización              |
+| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update               |
+| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator |
+| Delete dialog copy                              | ✅     | i18n en/es                                           |
+| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                         |
+
+#### Validations ✅
+
+| Capa              | Estado      | Detalle                                                                        |
+| ----------------- | ----------- | ------------------------------------------------------------------------------ |
+| DTO `@Valid`      | ✅ JHipster | shape: field, operator, value, caseSensitive, position, transactionRule        |
+| Service — parent  | ✅          | Inmutable tras create; PATCH preserve/null/same id                             |
+| Service — negocio | ✅          | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner |
+| REST              | ✅          | `@Valid` POST/PUT; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400` |
+
+**Tests:** 55 IT + 11 service — ver [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
+
+---
+
+### 8. FinancialSubscription ✅ ✅ ✅
+
+**JDL:** `user` required; `account` / `category` opcionales (ManyToOne); `tags` opcional (M2M). No genera transacciones automáticamente.
+
+#### Ownership ✅
+
+| Regla                                | Implementación                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Create asigna `user = currentUser`   | `FinancialSubscriptionService.save()`                                                          |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` y links                                     |
+| List / criteria filtrados por user   | `FinancialSubscriptionQueryService` + repository                                               |
+| Get / update / patch / delete scoped | `findAccessibleEntity()` (con bag relationships)                                               |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                                                 |
+| UI sin User                          | `financial-subscription-*.tsx`                                                                 |
+| Links owned                          | `resolveOptionalAccount` / `resolveOptionalCategory` / `resolveTags` vs **subscription owner** |
+| PATCH links                          | `partialUpdate(dto, patchNode)` — `has("account")` / `has("category")` / `has("tags")`         |
+
+**Archivos:** `FinancialSubscriptionRepository`, `FinancialSubscriptionService`, `FinancialSubscriptionQueryService`, `FinancialSubscriptionResource` (PATCH con `JsonNode` + `ObjectMapper`), `FinancialSubscriptionDTO`, `FinancialSubscriptionMapper`, UI.
+
+**Nota:** links `account` / `category` / `tags` se validan contra el **dueño de la subscription** (`ownerLogin`), no contra el usuario actual — admin puede editar la subscription ajena pero no adjuntar links de otro user (mismo patrón que `TransactionRuleService`).
+
+#### Domain rules ✅
+
+| Regla                                                                   | Estado | Notas                                             |
+| ----------------------------------------------------------------------- | ------ | ------------------------------------------------- |
+| Usuario no puede ver/editar subscription ajena                          | ✅     | Pattern A                                         |
+| No cambiar dueño en update/patch                                        | ✅     |                                                   |
+| Admin accede a todo                                                     | ✅     |                                                   |
+| `account` / `category` / `tags` owned vs **subscription owner**         | ✅     | POST, PUT y PATCH                                 |
+| PATCH: omitir link preserva; `null`/`[]` limpia                         | ✅     | `JsonNode` en resource                            |
+| `account.currency` == `subscription.currency` cuando `account` presente | ✅     | create/update/patch                               |
+| DELETE: unlink FT + disable rules + delete row                          | ✅     | Cleanup explícito                                 |
+| `status` PAUSED/CANCELLED preserva links                                | ✅     | Soft-off vs hard delete                           |
+| Fechas: `endDate` / `nextExpectedDate` >= `startDate`                   | ✅     | Service validation                                |
+| Structural immutability con FT linked                                   | ✅     | `currency`, `recurrenceUnit`, `intervalCount`     |
+| Matching en import / tolerancia de monto                                | ⏳     | Fase 6 / motor                                    |
+| Delete confirmation UX                                                  | ✅     | `financial-subscription-delete-dialog.tsx` + i18n |
+
+**DELETE cleanup:** `FinancialTransaction.financialSubscription = null`; `TransactionRule.resultingFinancialSubscription = null` + `active = false`; `rel_financial_subscription__tags` join rows; luego `deleteById`. Account/category/tag entities survive.
+
+#### Validations ✅
+
+| Capa            | Estado      | Detalle                                                                                                          |
+| --------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| DTO `@Valid`    | ✅ JHipster | name, enums, dates, required fields; `user` opcional en payload                                                  |
+| Service — links | ✅          | Foreign account/category/tag vs subscription owner → `400`                                                       |
+| Service — dates | ✅          | `endDate` / `nextExpectedDate` vs `startDate`                                                                    |
+| REST            | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404` |
+
+---
+
+### 9. Budget ✅ ✅ ✅
+
+**JDL:** `user` required; M2M opcional a `accounts`, `categories`, `tags`. Vacío = semántica de reporting (documentada; cálculo fuera de alcance).
+
+#### Ownership ✅
+
+| Regla                                | Implementación                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| Create asigna `user = currentUser`   | `BudgetService.save()`                                                   |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` y M2M                 |
+| List / criteria filtrados por user   | `BudgetQueryService` + repository                                        |
+| Get / update / patch / delete scoped | `findAccessibleEntity()` (con bag relationships)                         |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                           |
+| UI sin User                          | `budget-*.tsx`                                                           |
+| M2M links vs **budget owner**        | `resolveAccounts` / `resolveCategories` / `resolveTags` con `ownerLogin` |
+
+**Archivos:** `BudgetRepository`, `BudgetService`, `BudgetQueryService`, `BudgetResource`, `BudgetDTO`, `BudgetMapper`, UI.
+
+#### Domain rules ✅
+
+| Regla                                           | Estado | Notas                                                               |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------- |
+| Usuario no puede ver/editar budget ajeno        | ✅     | Pattern A                                                           |
+| No cambiar dueño en update/patch                | ✅     |                                                                     |
+| Admin accede a todo                             | ✅     | Admin links validados vs **budget owner**, no vs admin              |
+| M2M accounts/categories/tags ⊆ owner            | ✅     | `IllegalArgumentException` → REST `400`                             |
+| DELETE explícito                                | ✅     | `@Modifying` cleanup 3 join tables → `deleteById` (una transacción) |
+| DELETE no toca FA/Category/Tag/FT/Subscription  | ✅     | Solo fila Budget + joins                                            |
+| `status` PAUSED/COMPLETED preserva M2M          | ✅     |                                                                     |
+| Vacío accounts = todas activas en moneda budget | ✅     | Documentado (reporting)                                             |
+| Vacío categories = cualquiera                   | ✅     | Documentado (reporting)                                             |
+| Vacío tags = sin filtro por tag                 | ✅     | Documentado (reporting)                                             |
+
+#### Validations ✅
+
+| Capa               | Estado      | Detalle                                                                           |
+| ------------------ | ----------- | --------------------------------------------------------------------------------- |
+| DTO `@Valid`       | ✅ JHipster | name, amount ≥ 0, enums, dates, timestamps; `user` **sin** `@NotNull`             |
+| Service — amount   | ✅          | `amount` > 0 (0 o negativo → `400`)                                               |
+| Service — dates    | ✅          | `endDate` ≥ `startDate` cuando set; epoch day 0 = unset                           |
+| Service — currency | ✅          | Linked `account.currency` == `budget.currency`; re-valida al cambiar currency     |
+| Service — category | ✅          | v1 expense budget: `EXPENSE` o `BOTH` only; `INCOME` → `400`                      |
+| Service — links    | ✅          | `ownerLogin`; PATCH `patchNode.has` link semantics                                |
+| REST               | ✅          | `@Valid` POST/PUT; **PATCH JsonNode**; `IllegalArgumentException` → `400 invalid` |
+| UI                 | ✅          | Sin User picker; delete dialog con copy de dominio; i18n en/es                    |
+
+**Tests:** 125 IT + 17 service — ver [TESTING.md § Budget](TESTING.md#budget).
+
+---
+
+### 10. InternalTransfer ✅ ✅ ✅
+
+#### Ownership ✅ — Pattern D
+
+Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. Scoped queries exigen que **ambas patas** pertenezcan al login actual. Admin bypass en CRUD.
+
+| Regla                                    | Implementación                                                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| List / get scoped por user (ambas patas) | `findAccessibleEntity()` + repository joins                                                                                      |
+| Create resuelve txs accesibles           | `FinancialTransactionService.findAccessibleTransactionEntity()`                                                                  |
+| Admin bypass                             | `CurrentUserService.isAdmin()`                                                                                                   |
+| PUT/PATCH JsonNode doble                 | `outgoingTransaction` / `incomingTransaction`: ausente preserva; `null`/missing id → `400`; mismo `{id}` OK; otro `{id}` → `400` |
+| UI selectores filtrados                  | candidatos OUT/IN sin transfer en ningún rol; patas read-only en edit                                                            |
+
+**Archivos:** `InternalTransferRepository`, `InternalTransferService`, `InternalTransferResource`, `InternalTransferMapper`, `InternalTransferDTO`, `FinancialTransactionService` (candidatos + `findAccessibleTransactionEntity`), UI, E2E.
+
+#### Domain rules ✅ (baseline vínculo)
+
+| Regla                        | Implementación                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| Cuentas distintas            | `validateTransferPair()`                                                                    |
+| Misma moneda                 | comparación `account.currency`                                                              |
+| Mismo monto                  | `amount.compareTo`                                                                          |
+| Flows OUT + IN               | `TransactionFlow` guard                                                                     |
+| Origen sin restricción       | `MANUAL`, `FILE_IMPORT` y `API` permitidos en cualquier combinación                         |
+| Mismo owner en ambas patas   | validación en service (incluso admin)                                                       |
+| Tx no participa previamente  | `existsByTransactionIdInEitherRole` (candidatos y create)                                   |
+| Patas inmutables tras create | service preserva en PUT/PATCH                                                               |
+| `notes` normalizado          | trim; blank/null → `null`; max 500 después de trim                                          |
+| Solo `notes` mutable         | service maneja `PATCH notes=null` como clear                                                |
+| `createdAt` server-owned     | create ignora cliente y usa `Instant.now()`; PUT/PATCH preservan; cambio/null patch → `400` |
+| DELETE permitido             | borra solo `InternalTransfer`; txs quedan                                                   |
+
+**Interacción con FinancialTransaction:** `FinancialTransactionService.delete()` borra primero cualquier vínculo `InternalTransfer` de esa transacción y luego borra sólo esa transacción; no borra la contraparte.
+
+**Fuera de scope:** balances, create atómico out+in+transfer, QueryService.
+
+#### Deuda / riesgos documentados
+
+| Tema                                              | Estado      | Notas                                                                                                              |
+| ------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| Balances                                          | ⏳          | DELETE y create no recalculan saldos                                                                               |
+| Create atómico out+in+transfer                    | ⏳          | Solo enlazar txs existentes en este PR                                                                             |
+| Posting dates                                     | ⏳          | Sin validación de alineación entre patas                                                                           |
+| FT delete cleanup                                 | ✅          | `FinancialTransactionService.delete()` elimina el vínculo InternalTransfer y preserva la contraparte               |
+| Origin unrestricted for existing transaction legs | ✅ baseline | `MANUAL` / `FILE_IMPORT` / `API` are allowed; ingestion-created transfer pairing remains a future product decision |
+| Admin candidates cross-user                       | ✅ diseño   | Admin ve candidatos ajenos; **create bloquea cross-owner** siempre                                                 |
+
+---
+
+### 11. TransactionIngestion ✅ ✅ ✅
+
+**Modelo (refactor ✅):** `account` ManyToOne **required** (una ingestion = una cuenta; FILE y API). Liquibase: `20260709150500_updated_entity_TransactionIngestion.xml`.
+
+**Ownership ✅ — Pattern B** (como FinancialTransaction): dueño vía `account.user`. `FinancialAccountService.findAccessibleAccountEntity()`.
+
+| Campo / regla                                            | Create                                                                                                                                           | Update / PATCH                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `account`                                                | Required; `findAccessibleAccountEntity()`                                                                                                        | **Immutable**                                          |
+| `ingestionType`                                          | Required                                                                                                                                         | **Immutable**                                          |
+| `createdAt` / `startedAt`                                | Server `now()`                                                                                                                                   | Immutable                                              |
+| Contadores (`records*`)                                  | Server `0`                                                                                                                                       | Mutable, required/non-negative; validated by status    |
+| `status`                                                 | Server `PENDING`                                                                                                                                 | Lifecycle enforced; final terminal                     |
+| `sourceLabel`                                            | Cliente opcional; trim/blank→`null`; max 100 after trim                                                                                          | Mutable                                                |
+| `completedAt` / `errorMessage`                           | Ignorados/null                                                                                                                                   | Server-owned completedAt; error allowed only by status |
+| Admin                                                    | CRUD ajeno OK; create con cuenta ajena OK                                                                                                        | —                                                      |
+| DELETE                                                   | Scoped `404`; explicit revert cleanup: file/api metadata, internal-transfer links, FT tag links, ingestion-record FT links, FTs, records, parent | —                                                      |
+| PATCH                                                    | `JsonNode`; `account`/`ingestionType`/server timestamp change → `400`; absent preserves                                                          | —                                                      |
+| `findAllWhereFileIngestionIsNull` / `ApiIngestionIsNull` | Scoped + `ingestionType` FILE/API                                                                                                                | —                                                      |
+
+**Fuera de scope:** runtime ingestion pipeline execution and idempotency engine. Standalone `IngestionRecord` domain rules remain separate.
+
+#### Checklist ownership ✅
+
+- [x] Repository: `findAccessibleByAccountUserLogin` + helpers scoped
+- [x] Service: resolve account, inmutables, server timestamps/contadores en create
+- [x] QueryService: ownership spec si no admin
+- [x] Resource: PATCH `JsonNode`, `isAccessible()` en PUT/PATCH/DELETE
+- [x] Mapper: ignore server/immutable fields en write
+- [x] UI: account/ingestionType read-only en edit; create sin campos server
+- [x] IT + ServiceTest ownership
+
+---
+
+### 12. FileIngestion ✅ ✅ ✅
+
+**JDL:** OneToOne con `TransactionIngestion` (required); solo ingestions `ingestionType = FILE`.
+
+**Ownership ✅ — Pattern C** (vía `transactionIngestion.account.user`). Parent resuelto con `TransactionIngestionRepository` scoped — **no** `TransactionIngestionService` custom.
+
+| Campo / regla                                                                                                                              | Create                                                                       | Update / PATCH                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `transactionIngestion`                                                                                                                     | Required; repo scoped + `FILE` + sin hijo previo                             | **Immutable**; absent preserves; null/missing/different id → `400` |
+| `createdAt`                                                                                                                                | Server `now()`; client value ignored                                         | Server-owned; absent/same preserves; null/changed → `400`          |
+| Metadata archivo (`originalFilename`, `fileType`, `contentType`, `fileSizeBytes`, `checksum`, `storageKey`, `parserName`, `parserVersion`) | Normalized then persisted                                                    | **Immutable**                                                      |
+| Statement dates                                                                                                                            | Optional; final start <= end                                                 | Mutable; absent preserves; null clears                             |
+| Admin                                                                                                                                      | Read/update mutable dates on foreign rows; POST with foreign valid parent OK | Cannot bypass parent/type/immutable/delete guards                  |
+| DELETE                                                                                                                                     | Direct delete blocked with `400 invalid`                                     | Parent cleanup via `TransactionIngestionService.delete()`          |
+| PATCH / PUT                                                                                                                                | `JsonNode`; presence-aware parent/createdAt semantics                        | —                                                                  |
+
+**Security note:** `storageKey` remains exposed by DTO/UI. It must contain only internal non-secret storage metadata; public URLs/secrets should not be stored there.
+
+**Fuera de scope:** upload/pipeline, status machine del parent.
+
+#### Checklist ownership ✅
+
+- [x] Repository: scoped queries + `existsByTransactionIngestionId` + cleanup delete by parent id
+- [x] Service: resolve parent scoped, FILE guard, 1:1 guard, normalization, immutables, `createdAt` server
+- [x] Resource: PUT/PATCH `JsonNode`, `isAccessible()`, no `existsById` crudo
+- [x] Mapper/DTO: basic Bean Validation shape; service-owned normalization/domain rules; parent/createdAt ignored in write mapper
+- [x] UI: picker FILE sin hijo; create sin `createdAt`; parent read-only en edit; delete copy says parent-owned lifecycle
+- [x] IT + ServiceTest ownership
+
+---
+
+### 13. ApiIngestion ✅ 🟡 ✅
+
+**JDL:** OneToOne con `TransactionIngestion` (required); parent `ingestionType = API`; **no FK** a `ApiAccessToken`. Snapshot audit: `apiTokenIdSnapshot`, `apiTokenPrefixSnapshot` (max 20), `apiTokenNameSnapshot` (max 100).
+
+**Ownership ✅ — Pattern C** (vía `transactionIngestion.account.user`). Token metadata captured as **immutable snapshots** at create — not a live FK.
+
+| Campo / regla                                                                                | Create                                                                                                                                                      | Update / PATCH   |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `transactionIngestion`                                                                       | Required; repo scoped + `API` + sin hijo previo                                                                                                             | **Immutable**    |
+| Token snapshots                                                                              | Server copies `id`, `tokenPrefix`, `name` from accessible token at create via `ApiIngestionCreateRequestDTO.apiAccessTokenId` (same-owner guard); **no FK** | **Immutable**    |
+| `requestId`                                                                                  | Required; unique global (`existsByRequestId`)                                                                                                               | **Immutable**    |
+| `createdAt` / `receivedAt`                                                                   | Server `now()`                                                                                                                                              | Immutable        |
+| Metadata API (`idempotencyKey`, `sourceSystem`, `apiVersion`, `endpoint`, `clientReference`) | Cliente; trim, blank optional → `null`                                                                                                                      | **Immutable** v1 |
+| Same-owner (create only)                                                                     | `token.user.login == ingestion.account.user.login` — **incluso admin**                                                                                      | —                |
+| Admin POST                                                                                   | Padres ajenos OK solo si **mismo owner**                                                                                                                    | —                |
+| DELETE                                                                                       | Direct delete bloqueado (`400`); parent cleanup via `TransactionIngestionService`                                                                           | —                |
+| PATCH                                                                                        | `JsonNode`; no campos mutables v1; parent / snapshots / `requestId` / metadata / timestamps `null`/change → `400`; absent preserves                         | —                |
+| List/read                                                                                    | Muestra snapshots aunque el token fue borrado                                                                                                               | —                |
+
+**Fuera de scope:** pipeline, idempotency real, status machine, delete guards de hijos.
+
+#### Refactor 11C ✅
+
+- [x] JDL + `.jhipster/ApiIngestion.json`: quitar relación `apiAccessToken`; agregar campos snapshot
+- [x] Entity: remover `apiAccessToken` FK; agregar snapshots
+- [x] Liquibase `20260711160000`: drop `api_access_token_id` FK; add snapshot columns; backfill datos existentes
+- [x] DTO/mapper: quitar `apiAccessToken`; exponer snapshots en read; usar `ApiIngestionCreateRequestDTO.apiAccessTokenId` solo en POST
+- [x] Service: en create, normalizar strings, resolver token accesible por id → copiar snapshots; quitar persist FK; no mutable fields v1; direct delete blocked
+- [x] `ApiAccessToken`: quitar `apiIngestions` one-to-many + `JsonIgnoreProperties`
+- [x] UI: create usa token selector solo para captura; edit/list muestra snapshots read-only
+- [x] Tests 11C (ver `TESTING.md`)
+
+#### Checklist ownership ✅ (pre-11C baseline)
+
+- [x] Repository: scoped queries + `existsByTransactionIngestionId` + `existsByRequestId`
+- [x] Service: resolve parents scoped, same-owner, API + 1:1 guards, server timestamps
+- [x] Resource: PATCH `JsonNode`, `isAccessible()`, no `existsById` crudo
+- [x] Mapper/DTO: parents / `requestId` / timestamps ignorados en write; timestamps opcionales en POST
+- [x] `GET /api/transaction-ingestions/api-ingestion-is-null` (scoped + API)
+- [x] UI: parent candidates + tokens scoped en create; parents read-only en edit
+- [x] IT + ServiceTest ownership
+
+---
+
+### 14. IngestionRecord ✅ ✅ ✅
+
+**JDL:** `transactionIngestion` required; `financialTransaction` optional 1:1; `recordIndex` required; `createdAt` required en entity/DB.
+
+#### Ownership ✅ — Pattern C + optional FT
+
+| Regla                                          | Implementación                                                                            |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Scoped vía `transactionIngestion.account.user` | `findAccessibleEntity()` + repository eager joins                                         |
+| Admin bypass CRUD                              | `CurrentUserService.isAdmin()`                                                            |
+| Create resuelve `transactionIngestion` scoped  | admin global / user por login                                                             |
+| `financialTransaction` opcional en create      | `FinancialTransactionService.findAccessibleTransactionEntity()`                           |
+| **Same-owner** ingestion + FT                  | `validateSameOwner()` — **incluso admin**                                                 |
+| FT same-parent guard                           | `financialTransaction.transactionIngestion.id == ingestionRecord.transactionIngestion.id` |
+| List / count ownership spec                    | `IngestionRecordQueryService.createSpecification()` — scoped even when criteria is null   |
+| PUT/PATCH inmutables                           | JsonNode: ausente preserva; `null`/distinto → `400`                                       |
+
+#### Validaciones baseline ✅
+
+| Regla                                                                                            | Implementación                                                                                                   |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `createdAt` server en create                                                                     | `Instant.now()`; DTO sin `@NotNull`                                                                              |
+| `transactionIngestion` / `recordIndex` / `externalRecordId` / `rawData` / `createdAt` inmutables | `rejectImmutableFieldChanges()`                                                                                  |
+| Guard FT 1:1                                                                                     | `existsByFinancialTransactionId()`                                                                               |
+| Guard `recordIndex` único por ingestion                                                          | `existsByTransactionIngestionIdAndRecordIndex()`                                                                 |
+| Guard `externalRecordId` único por ingestion cuando no es null                                   | `existsByTransactionIngestionIdAndExternalRecordId()`                                                            |
+| Status consistency                                                                               | `CREATED` requires FT/no errors; `SKIPPED_DUPLICATE`/`REJECTED` forbid FT; `REJECTED` requires errorMessage      |
+| Parent final freeze                                                                              | `COMPLETED` / `PARTIALLY_COMPLETED` / `FAILED` allow no-op only                                                  |
+| Direct delete blocked                                                                            | Records removed by TransactionIngestion cleanup only                                                             |
+| rawData logging                                                                                  | entity/DTO `toString()` expose presence/length only                                                              |
+| Helper FT sin record                                                                             | `GET /api/financial-transactions/ingestion-record-is-null` (scoped; filtra con `existsByFinancialTransactionId`) |
+| UI create                                                                                        | ingestion scoped + FT helper; sin `createdAt`                                                                    |
+| UI edit                                                                                          | parents, `recordIndex`, `createdAt` read-only                                                                    |
+
+**Fuera de scope:** pipeline FILE/API, parent count reconciliation, balances/rule-engine execution.
+
+#### Checklist ownership ✅
+
+- [x] Repository: scoped eager joins + `existsByFinancialTransactionId` + `existsByTransactionIngestionIdAndRecordIndex`
+- [x] Service: resolve parents scoped, same-owner, guards 1:1 FT + `recordIndex`, server `createdAt`
+- [x] QueryService: ownership spec en list/count
+- [x] Resource: PATCH `JsonNode`, `isAccessible()`, `delete()` boolean
+- [x] Mapper/DTO: parents / `recordIndex` / `createdAt` ignorados en write; `createdAt` opcional en POST
+- [x] `GET /api/financial-transactions/ingestion-record-is-null` (scoped; `FinancialTransactionService` vía `existsByFinancialTransactionId`)
+- [x] UI: ingestion scoped + FT helper en create; parents/`recordIndex`/`createdAt` read-only en edit
+- [x] IT (74) + ServiceTest (7) + FT helper IT (+1)
+
+#### Domain rules ⏳ (fase 6)
+
+Procesamiento FILE/API, status machine, creación de transactions con `origin` FILE/API.
+
+---
+
+### 15. ApiAccessToken ✅ 🟡 ✅
+
+**JDL:** `user` required; `tokenHash` unique; hashed credential for API ingestion. **No** `apiIngestions` collection (11C).
+
+#### Ownership ✅ — Pattern A
+
+| Regla                              | Implementación                                                                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Create asigna `user = currentUser` | `ApiAccessTokenService.save()`                                                                                                 |
+| Contratos HTTP específicos         | `ApiAccessTokenCreateRequestDTO` (name-only) + `ApiAccessTokenUpdateRequestDTO` (editable fields only); unknown fields → `400` |
+| Cliente no elige user              | POST/PUT con `user` explícito → `400`; service asigna/preserva owner                                                           |
+| List / get scoped por user         | `findAccessibleEntity()` + repository                                                                                          |
+| Admin bypass                       | `CurrentUserService.isAdmin()`                                                                                                 |
+| UI sin User                        | `api-access-token-*.tsx`                                                                                                       |
+| PATCH `user`                       | JsonNode: ausente preserva; `null` → `400`; owner inmutable                                                                    |
+
+#### Seguridad baseline ✅
+
+| Regla                                                                       | Implementación                                                        |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `tokenHash` omitido en GET/list/detail                                      | `ApiAccessTokenMapper.toDto` + `@JsonInclude(NON_NULL)`               |
+| `tokenHash` / `tokenPrefix` generados por servidor e inmutables tras create | `rejectServerOwnedFieldChanges()` en update/patch                     |
+| Duplicado de hash                                                           | DB `UNIQUE`; hash generado con `SecureRandom`                         |
+| Create: solo `name` en UI                                                   | Server genera `ftk_…` + SHA-256 hash + prefix + `ACTIVE` + timestamps |
+| Reveal-once                                                                 | `rawToken` en respuesta POST; modal con copy en UI                    |
+
+**Fuera de scope (fase 6):** motor API runtime, enforcement `REVOKED`/`expiresAt` en ingestion.
+
+#### Domain rules ✅ (11C baseline)
+
+| Regla                                             | Estado | Notas                                            |
+| ------------------------------------------------- | ------ | ------------------------------------------------ |
+| DELETE allowed con ingestions históricas          | ✅ 11C | Sin guard por count; cascade permissions primero |
+| REVOKE vs DELETE + UI copy                        | ✅ 11C | Historia vía snapshots en `ApiIngestion`         |
+| `status` ACTIVE→REVOKED; REVOKED→ACTIVE forbidden | ⏳     | Fase 6                                           |
+| `expiresAt` immutable after create                | ⏳     | Fase 6                                           |
+| Revocación / expiración en runtime                | ⏳     | Fase 6                                           |
+| Permisos explícitos                               | ✅     | `ApiAccessTokenPermission`                       |
+
+#### Refactor 11C ✅
+
+- [x] Remover `Set<ApiIngestion> apiIngestions` y `JsonIgnoreProperties` relacionados
+- [x] `delete()`: quitar check `countByApiAccessTokenId`; cascade `ApiAccessTokenPermission` primero
+- [x] Delete dialog i18n: historial de ingestion no se borra
+- [x] Tests 11C (ver `TESTING.md`)
+- [x] `SpaWebFilter`: rutas frontend `/api-access-token` ya no matchean exclusión `/api` (fix 401 en delete)
+
+---
+
+### 16. ApiAccessTokenPermission ✅ ✅ ✅
+
+**JDL:** `permission` enum required; `createdAt` required; ManyToOne `apiAccessToken`.
+
+#### Ownership ✅ — Pattern C
+
+| Regla                                  | Implementación                                                    |
+| -------------------------------------- | ----------------------------------------------------------------- |
+| Scoped vía `apiAccessToken.user`       | `findAccessibleEntity()` + repository joins                       |
+| Create resuelve token accesible        | `ApiAccessTokenService.findAccessibleApiAccessTokenEntity()`      |
+| `apiAccessToken` inmutable tras create | `rejectApiAccessTokenChange()`                                    |
+| PATCH `apiAccessToken`                 | JsonNode: ausente preserva; `null` → `400`; otro `{ id }` → `400` |
+| Admin bypass CRUD                      | `CurrentUserService.isAdmin()`                                    |
+| UI: token selector solo en create      | `api-access-token-permission-update.tsx`                          |
+
+#### Validaciones baseline ✅
+
+| Regla                                 | Implementación                                         |
+| ------------------------------------- | ------------------------------------------------------ |
+| `createdAt` server-assigned en create | `Instant.now()` en `save()`                            |
+| `createdAt` / `permission` inmutables | `rejectCreatedAtChange()` / `rejectPermissionChange()` |
+| Duplicado `(token, permission)`       | `existsByApiAccessTokenIdAndPermission()`              |
+
+#### Domain rules ✅
+
+| Regla                                     | Estado | Notas                                |
+| ----------------------------------------- | ------ | ------------------------------------ |
+| DELETE solo la fila permission            | ✅     | Token, siblings, ingestions intactos |
+| Sin reparenting / permission mutable      | ✅     | Delete + recreate para cambiar grant |
+| CRUD sin guard de `token.status` / expiry | ✅     | Runtime enforcement fuera de scope   |
+| Enforcement en ingestion/API              | ⏳     | Fase 6 — deferred                    |
+
+**Fuera de scope:** motor API, runtime enforcement, delete cascade del token padre (#10), QueryService.
+
+---
+
+### 17. UserDashboardPreference ✅ ✅ ✅
+
+**JDL:** `user` required; `configuration` TextBlob (JSON); 1 fila lógica por user.
+
+#### Ownership ✅ — Pattern A + 1:1
+
+| Regla                              | Implementación                                              |
+| ---------------------------------- | ----------------------------------------------------------- |
+| Create asigna `user = currentUser` | `UserDashboardPreferenceService.save()`                     |
+| Cliente no elige user              | DTO `user` opcional; mapper ignora `user`                   |
+| List / get scoped por user         | `findAccessibleEntity()` + repository                       |
+| Admin bypass                       | `CurrentUserService.isAdmin()`                              |
+| UI sin User                        | `user-dashboard-preference-update.tsx`                      |
+| PATCH `user`                       | JsonNode: ausente preserva; `null` → `400`; owner inmutable |
+
+#### Validaciones baseline ✅
+
+| Regla                          | Implementación               |
+| ------------------------------ | ---------------------------- |
+| Máximo una preference por user | `existsByUserId()` en create |
+
+#### Domain rules ✅
+
+| Regla                                        | Estado | Notas                                     |
+| -------------------------------------------- | ------ | ----------------------------------------- |
+| DELETE simple (solo la fila)                 | ✅     | Sin cascade                               |
+| `configuration` required + JSON object/array | ✅     | `validateConfiguration()`; `{}` y `[]` OK |
+| PATCH omit `configuration`                   | ✅     | Preserva valor; sin revalidar             |
+| Schema widgets / `/me` / upsert              | ⏳     | Deferred                                  |
+
+**Fuera de scope:** endpoint `/me`, dashboard engine, merge JSON profundo, schema validation, QueryService, `UNIQUE(user_id)` Liquibase.
+
+---
+
+## Implementation checklist (copiar por entidad)
+
+Usar al cerrar cada entidad. Marcar en PR / commit.
+
+```markdown
+### {EntityName}
+
+**Pattern:** {A|B|C|D}
+
+#### Ownership
+
+- [ ] Repository: `findOneByIdAndUserLogin` / equivalente
+- [ ] Service: assign user on create (A) o validate parent (B/C/D)
+- [ ] Service: preserve owner on update/patch
+- [ ] QueryService: ownership spec si no admin
+- [ ] Resource: sin repository directo para exists
+- [ ] DTO/mapper: user ignorado si aplica
+- [ ] UI: sin picker User (si A)
+- [ ] IT: 16 tests ownership (+ admin)
+- [ ] Unit: ServiceTest (~9 tests)
+- [ ] E2E: create + ownership smoke (si aplica)
+
+#### Domain rules
+
+- [ ] {regla 1}
+- [ ] {regla 2}
+
+#### Validations
+
+- [ ] Revisar JDL baseline (DTO/entity/DB)
+- [ ] Service: reglas de negocio
+- [ ] IT: casos 400 por regla
+```
+
+---
+
+## Replication order (recomendado)
+
+| Orden  | Entity                                   | Por qué                                                                                                       |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 1 ✅   | FinancialAccount                         | Piloto pattern A                                                                                              |
+| 2 ✅   | FinancialTransaction                     | Core producto; pattern B                                                                                      |
+| 3 ✅   | Tag                                      | Clon rápido pattern A                                                                                         |
+| 4 ✅   | Category                                 | Pattern A + parent validation + anti-ciclo                                                                    |
+| 5 ✅   | Budget                                   | Pattern A + M2M link validation                                                                               |
+| 6 ✅   | FinancialSubscription                    | Pattern A + link validation (ManyToOne + M2M)                                                                 |
+| 7 ✅   | TransactionRule                          | Pattern A + links; outputs scoped to rule owner (no admin bypass on links)                                    |
+| 8 ✅   | TransactionRuleCondition                 | Pattern C; parent immutable; field/operator validations                                                       |
+| 9 ✅   | CreditAccountDetails                     | Pattern B via account; immutable parent; CREDIT_CARD only                                                     |
+| 10 ✅  | ApiAccessToken                           | Pattern A + token security baseline                                                                           |
+| 11 ✅  | ApiAccessTokenPermission                 | Pattern C via token; immutable parent/grant fields                                                            |
+| 12 ✅  | UserDashboardPreference                  | Pattern A + 1:1 per user guard                                                                                |
+| 13 ✅  | InternalTransfer                         | Pattern D; baseline vínculo transfer↔tx                                                                      |
+| 14a ✅ | TransactionIngestion — modelo            | M2M `accounts` → ManyToOne `account` required; migración Liquibase                                            |
+| 14b ✅ | TransactionIngestion — ownership         | Pattern B via `account`; inmutables + PATCH `JsonNode`                                                        |
+| 15a ✅ | FileIngestion — ownership + domain rules | Pattern C via `transactionIngestion`; parent scoped repo; FILE + 1:1; immutable metadata; parent-owned delete |
+| 15b ✅ | ApiIngestion — ownership + 11C snapshots | Pattern C; immutable snapshots; same-owner at create; Liquibase migration                                     |
+| 15c ✅ | IngestionRecord — ownership              | Pattern C + optional FT; same-owner guard; recordIndex unique                                                 |
+
+---
+
+## Changelog
+
+| Date       | Change                                                                                                                                                                                                                                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-08 | Initial tracker. FinancialAccount: ownership ✅, domain/validations 🟡. 16 entities ⏳.                                                                                                                                                                                                                   |
+| 2026-07-08 | FinancialTransaction: initial ownership ✅ (pattern B), initial domain baseline ✅ (manual create + amount > 0), validations ✅. Superseded by 2026-07-12 full backend domain pass.                                                                                                                       |
+| 2026-07-08 | Tag: ownership ✅ (pattern A, clon FA). Domain/validations 🟡. DTO `user` opcional en payload. Siguiente: Category.                                                                                                                                                                                       |
+| 2026-07-09 | Category: ownership ✅ (pattern A), domain rules 🟡 (parent owned, no self-parent, anti-ciclo ✅; delete guards ⏳), validations ✅. Siguiente: Budget.                                                                                                                                                   |
+| 2026-07-09 | Budget: ownership ✅ (pattern A + M2M), domain rules 🟡 (links owned ✅; empty-set semantics ⏳), validations ✅. Siguiente: FinancialSubscription.                                                                                                                                                       |
+| 2026-07-09 | FinancialSubscription: ownership ✅ (pattern A + links), domain rules 🟡 (links owned ✅; delete guards / matching ⏳), validations ✅. Siguiente: TransactionRule.                                                                                                                                       |
+| 2026-07-09 | FinancialSubscription: PATCH link semantics ✅ (`JsonNode` + `has(field)`); links owned en PUT/PATCH ✅. Convención HTTP cross-user documentada en Foundation.                                                                                                                                            |
+| 2026-07-09 | TransactionRule: ownership ✅ (pattern A + links), domain rules 🟡 (outputs ⊆ rule owner, sin bypass admin en links; motor ⏳), validations ✅. Siguiente: TransactionRuleCondition.                                                                                                                      |
+| 2026-07-11 | **TransactionRuleCondition plan:** `transactionRule` immutable after create — **reparent same-owner removed**. Domain validations planned: field/operator matrices, duplicate guard, DELETE last condition → deactivate parent rule.                                                                      |
+| 2026-07-11 | **TransactionRuleCondition complete:** immutable parent, field/operator/value matrices, normalized duplicate guard, owner-scoped ACCOUNT ids, presence-aware PATCH null handling, and last-condition rule deactivation. 55 IT + 11 service tests passing.                                                 |
+| 2026-07-09 | TransactionRuleCondition: ownership ✅ (pattern C via `transactionRule`), validations ✅ (parent required, ~~reparent same-owner~~ → **immutable parent**). Domain rules 🟡 (field/operator/value, delete side-effect). Siguiente: implement TRC domain rules.                                            |
+| 2026-07-09 | CreditAccountDetails: ownership ✅ (pattern B via `account`), validations ✅ (CREDIT_CARD only, immutable account, duplicate guard). Domain rules 🟡. Siguiente: ApiAccessToken.                                                                                                                          |
+| 2026-07-09 | ApiAccessToken: ownership ✅ (pattern A), security baseline ✅ (no `tokenHash` in reads, immutable secrets). Domain rules 🟡. Siguiente: ApiAccessTokenPermission.                                                                                                                                        |
+| 2026-07-09 | ApiAccessTokenPermission: ownership ✅ (pattern C via `apiAccessToken`), validations ✅ (immutable parent/grant, server `createdAt`, duplicate guard). Domain rules 🟡. Siguiente: UserDashboardPreference o InternalTransfer.                                                                            |
+| 2026-07-09 | UserDashboardPreference: ownership ✅ (pattern A + 1:1 guard), validations ✅ (existsByUserId, PATCH user preserve/null). Domain rules 🟡. Siguiente: InternalTransfer.                                                                                                                                   |
+| 2026-07-11 | InternalTransfer domain rules ✅: origin unrestricted, notes normalization, strict createdAt/link PATCH semantics, no duplicate participation in either role, FT delete cleanup, candidate endpoints aligned. Balances/atomic create remain out of scope.                                                 |
+| 2026-07-09 | TransactionIngestion: modelo refactor ✅ — `account` ManyToOne required (reemplaza M2M `accounts`); pattern planificado **B** (no D). Ownership ⏳. Siguiente: ownership PR (14/17).                                                                                                                      |
+| 2026-07-09 | TransactionIngestion: ownership ✅ (pattern B via `account`), validations ✅ (inmutables, server defaults, scoped helpers). Domain rules ⏳ (pipeline). Siguiente: FileIngestion.                                                                                                                         |
+| 2026-07-12 | TransactionIngestion domain rules ✅: lifecycle/status transitions, counter consistency, server-owned timestamps, source/error normalization, final child metadata guards, and explicit revert/delete cleanup order.                                                                                      |
+| 2026-07-11 | FileIngestion domain rules ✅: normalization, immutable file metadata, mutable statement dates with range guard, server-owned `createdAt`, direct delete blocked, and TransactionIngestion parent cleanup.                                                                                                |
+| 2026-07-09 | ApiIngestion: ownership ✅ (pattern C + dual parent + same-owner), validations ✅ (parent API, 1:1 guard, `requestId` unique global, immutable parents/token/requestId/timestamps, server `createdAt`/`receivedAt`). Siguiente: IngestionRecord.                                                          |
+| 2026-07-09 | IngestionRecord: ownership ✅ (pattern C + optional FT + same-owner), validations ✅ (immutable parents/recordIndex/createdAt, FT 1:1 guard, recordIndex unique, server `createdAt`, FT helper scoped). **17/17 ownership complete.** Superseded by 2026-07-12 domain-rule pass.                          |
+| 2026-07-12 | IngestionRecord domain rules ✅: status consistency, parent final freeze, externalRecordId normalization/uniqueness, rawData immutability/log safety, direct delete blocked. 87 IT + 7 service + 1 FT helper IT. Pipeline/count reconciliation ⏳ fase 6.                                                 |
+| 2026-07-12 | FinancialTransaction domain rules ✅: JsonNode POST/PUT/PATCH, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup for IngestionRecord/InternalTransfer/tag joins. 101 IT + 10 service.              |
+| 2026-07-12 | TransactionRule CRUD/domain baseline ✅: strict server-owned `createdAt`/`updatedAt`, PUT documented as full DTO update, PATCH remains JsonNode presence-aware, delete cleanup direct via repositories. Rule engine, batch reclassification, and equal-priority tie-break remain deferred/open.           |
+| 2026-07-12 | FinancialAccount domain rules ✅: final orchestrator delete implemented (TI tree → remaining FT → budget links → subscription account null → CAD → account), `initialBalanceDate` floor vs earliest transactionDate, `active=false` no side effects. 118 IT + 12 service. Balances/currentBalance deferred. |
+| 2026-07-10 | Added [`VALIDATIONS.md`](VALIDATIONS.md) — per-entity validation catalog across DTO, entity, DB, service, and REST layers.                                                                                                                                                                                |
+| 2026-07-10 | **Validation hardening (Tag + FinancialAccount):** Tag `name` unique per owner (trim + case-insensitive); FA `currency`/`accountType` immutable; FA PATCH JsonNode; `400 invalid` mapping. 200 tests (69+12 Tag, 108+11 FA). Docs: TESTING, VALIDATIONS, IMPLEMENTATION.                                  |
+| 2026-07-10 | **Budget PATCH JsonNode:** M2M link semantics (`accounts`/`categories`/`tags` absent preserves, `null`/`[]` clears, ids replace). 122 tests (111+14 Budget).                                                                                                                                              |
+| 2026-07-10 | **Category name uniqueness (hierarchical):** sibling-unique `name` per owner + `categoryType` + `parentCategory` (trim, case-insensitive); PATCH revalidates on `name`/`categoryType`/`parentCategory` change. 98 tests (84+14 Category).                                                                 |
+| 2026-07-10 | Added [`DOMAIN-RULES.md`](DOMAIN-RULES.md) — domain rules catalog (delete guards, balances, budget matching, rule motor, ingestion pipeline) with Fase 4/6 implementation order.                                                                                                                          |
+| 2026-07-11 | [`DOMAIN-RULES.md`](DOMAIN-RULES.md) refocused: FA-only detail with Done/Proposed/Open per rule; other entities deferred.                                                                                                                                                                                 |
+| 2026-07-11 | FA DELETE spec: ordered domain cascade (budgets unlink, subscriptions null, credit details, transfers, ingestion tree, txs, account); UPDATE `initialBalanceDate` floor proposed.                                                                                                                         |
+| 2026-07-11 | FA DELETE architecture plan: orchestration in `FinancialAccountService`; delegate `deleteAllForAccount` to `FinancialTransactionService` + `TransactionIngestionService`; single transaction. Superseded by 2026-07-12 implementation entry.                       |
+| 2026-07-11 | [`DOMAIN-RULES.md`](DOMAIN-RULES.md) full plan: 17 entities in 3 groups (simple→complex); FA last; **next implement:** UserDashboardPreference.                                                                                                                                                           |
+| 2026-07-11 | UserDashboardPreference domain rules: DELETE simple; `configuration` required + parseable JSON (`{}` OK); schema/`/me`/upsert deferred.                                                                                                                                                                   |
+| 2026-07-11 | ApiAccessTokenPermission domain rules ✅: confirmatory ITs (DELETE preserves token/sibling; CREATE on REVOKED/EXPIRED; same permission different token). Service unchanged. 37 IT.                                                                                                                        |
+| 2026-07-11 | Category domain rules ✅: block delete with children; leaf delete+cleanup (FT/FS/budget/rule); parentCategory immutable; categoryType guard; child type matches parent. 103 IT + 16 service. Default categories on signup deferred.                                                                       |
+| 2026-07-11 | CreditAccountDetails domain rules ✅: direct DELETE blocked (`400` invalid; admin no bypass; foreign `404`); mutable credit fields without utilization checks; `CREDIT_CARD` requires details documented (atomic create deferred). 41 IT + 10 service.                                                    |
+| 2026-07-11 | Grupo 1 delete confirmation dialogs ✅: domain-aware UX copy for UDP, AATP, Tag, Category; CAD informational-only (no confirm). i18n en/es.                                                                                                                                                               |
+| 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                     |
+| 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6. |

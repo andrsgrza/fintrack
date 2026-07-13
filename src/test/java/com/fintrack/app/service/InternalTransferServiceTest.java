@@ -120,8 +120,8 @@ class InternalTransferServiceTest {
         when(internalTransferMapper.toEntity(internalTransferDTO)).thenReturn(mappedEntity);
         when(financialTransactionService.findAccessibleTransactionEntity(20L)).thenReturn(Optional.of(outgoingTransaction));
         when(financialTransactionService.findAccessibleTransactionEntity(21L)).thenReturn(Optional.of(incomingTransaction));
-        when(internalTransferRepository.existsByOutgoingTransactionId(20L)).thenReturn(false);
-        when(internalTransferRepository.existsByIncomingTransactionId(21L)).thenReturn(false);
+        when(internalTransferRepository.existsByTransactionIdInEitherRole(20L)).thenReturn(false);
+        when(internalTransferRepository.existsByTransactionIdInEitherRole(21L)).thenReturn(false);
         when(internalTransferRepository.save(mappedEntity)).thenReturn(internalTransfer);
         when(internalTransferMapper.toDto(internalTransfer)).thenReturn(internalTransferDTO);
 
@@ -156,7 +156,7 @@ class InternalTransferServiceTest {
         when(internalTransferMapper.toEntity(internalTransferDTO)).thenReturn(mappedEntity);
         when(financialTransactionService.findAccessibleTransactionEntity(20L)).thenReturn(Optional.of(outgoingTransaction));
         when(financialTransactionService.findAccessibleTransactionEntity(21L)).thenReturn(Optional.of(incomingTransaction));
-        when(internalTransferRepository.existsByOutgoingTransactionId(20L)).thenReturn(true);
+        when(internalTransferRepository.existsByTransactionIdInEitherRole(20L)).thenReturn(true);
 
         assertThatThrownBy(() -> internalTransferService.save(internalTransferDTO))
             .isInstanceOf(IllegalArgumentException.class)
@@ -267,6 +267,61 @@ class InternalTransferServiceTest {
         assertThat(result).isPresent();
         verify(internalTransferMapper).partialUpdate(internalTransfer, internalTransferDTO);
         verify(internalTransferRepository).save(internalTransfer);
+    }
+
+    @Test
+    void saveShouldAllowNonManualOrigins() {
+        outgoingTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
+        incomingTransaction.setOrigin(TransactionOrigin.API);
+        InternalTransfer mappedEntity = new InternalTransfer();
+
+        when(internalTransferMapper.toEntity(internalTransferDTO)).thenReturn(mappedEntity);
+        when(financialTransactionService.findAccessibleTransactionEntity(20L)).thenReturn(Optional.of(outgoingTransaction));
+        when(financialTransactionService.findAccessibleTransactionEntity(21L)).thenReturn(Optional.of(incomingTransaction));
+        when(internalTransferRepository.existsByTransactionIdInEitherRole(20L)).thenReturn(false);
+        when(internalTransferRepository.existsByTransactionIdInEitherRole(21L)).thenReturn(false);
+        when(internalTransferRepository.save(mappedEntity)).thenReturn(internalTransfer);
+        when(internalTransferMapper.toDto(internalTransfer)).thenReturn(internalTransferDTO);
+
+        internalTransferService.save(internalTransferDTO);
+
+        verify(internalTransferRepository).save(mappedEntity);
+    }
+
+    @Test
+    void saveShouldNormalizeNotesBeforePersisting() {
+        internalTransferDTO.setNotes("  notes  ");
+        InternalTransfer mappedEntity = new InternalTransfer();
+        mappedEntity.setNotes("  notes  ");
+
+        when(internalTransferMapper.toEntity(internalTransferDTO)).thenReturn(mappedEntity);
+        when(financialTransactionService.findAccessibleTransactionEntity(20L)).thenReturn(Optional.of(outgoingTransaction));
+        when(financialTransactionService.findAccessibleTransactionEntity(21L)).thenReturn(Optional.of(incomingTransaction));
+        when(internalTransferRepository.existsByTransactionIdInEitherRole(20L)).thenReturn(false);
+        when(internalTransferRepository.existsByTransactionIdInEitherRole(21L)).thenReturn(false);
+        when(internalTransferRepository.save(mappedEntity)).thenReturn(internalTransfer);
+        when(internalTransferMapper.toDto(internalTransfer)).thenReturn(internalTransferDTO);
+
+        internalTransferService.save(internalTransferDTO);
+
+        assertThat(mappedEntity.getNotes()).isEqualTo("notes");
+    }
+
+    @Test
+    void updateShouldRejectCreatedAtChange() {
+        internalTransferDTO.setCreatedAt(Instant.parse("2026-02-01T00:00:00Z"));
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(internalTransferRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(internalTransfer)
+        );
+
+        assertThatThrownBy(() -> internalTransferService.update(internalTransferDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+
+        verify(internalTransferRepository, never()).save(any());
     }
 
     @Test

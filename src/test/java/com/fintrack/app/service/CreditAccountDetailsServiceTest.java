@@ -238,6 +238,21 @@ class CreditAccountDetailsServiceTest {
     }
 
     @Test
+    void deleteShouldRejectDirectDeleteWhenDetailsAreAccessible() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.delete(100L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Credit account details cannot be deleted directly");
+
+        verify(creditAccountDetailsRepository, never()).deleteById(any());
+    }
+
+    @Test
     void findAllShouldUseScopedQueryForRegularUser() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);

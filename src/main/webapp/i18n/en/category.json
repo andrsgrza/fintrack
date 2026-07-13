@@ -12,7 +12,9 @@
       "updated": "A Category is updated with identifier {{ param }}",
       "deleted": "A Category is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Category {{ id }}?"
+        "title": "Delete category?",
+        "leafMessage": "This will delete the category and remove it from everything where it is currently used. Transactions and subscriptions using this category will keep existing, but their category will be cleared. Budgets will no longer include this category. Rules using this category will be disabled because their target category will be removed. This action cannot be undone.",
+        "blockedMessage": "This category cannot be deleted because it has subcategories. Delete its subcategories first, then try again."
       },
       "detail": {
         "title": "Category"

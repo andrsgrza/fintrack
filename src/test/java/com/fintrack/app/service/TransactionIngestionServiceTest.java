@@ -3,6 +3,7 @@ package com.fintrack.app.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,6 +15,11 @@ import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.repository.ApiIngestionRepository;
+import com.fintrack.app.repository.FileIngestionRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.IngestionRecordRepository;
+import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
@@ -25,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -45,6 +52,21 @@ class TransactionIngestionServiceTest {
 
     @Mock
     private FinancialAccountService financialAccountService;
+
+    @Mock
+    private FileIngestionRepository fileIngestionRepository;
+
+    @Mock
+    private ApiIngestionRepository apiIngestionRepository;
+
+    @Mock
+    private FinancialTransactionRepository financialTransactionRepository;
+
+    @Mock
+    private InternalTransferRepository internalTransferRepository;
+
+    @Mock
+    private IngestionRecordRepository ingestionRecordRepository;
 
     @InjectMocks
     private TransactionIngestionService transactionIngestionService;
@@ -185,6 +207,77 @@ class TransactionIngestionServiceTest {
     }
 
     @Test
+    void updateShouldSetCompletedAtWhenTransitioningToCompletedWithFileMetadata() {
+        TransactionIngestionDTO updateDTO = validUpdateDTO();
+        updateDTO.setStatus(IngestionStatus.COMPLETED);
+        updateDTO.setRecordsReceived(1);
+        updateDTO.setRecordsCreated(1);
+        updateDTO.setRecordsSkipped(0);
+        updateDTO.setRecordsRejected(0);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionIngestionRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionIngestion)
+        );
+        when(fileIngestionRepository.existsByTransactionIngestionId(100L)).thenReturn(true);
+        when(transactionIngestionRepository.save(transactionIngestion)).thenReturn(transactionIngestion);
+        when(transactionIngestionMapper.toDto(transactionIngestion)).thenReturn(updateDTO);
+
+        transactionIngestionService.update(updateDTO);
+
+        assertThat(transactionIngestion.getStatus()).isEqualTo(IngestionStatus.COMPLETED);
+        assertThat(transactionIngestion.getCompletedAt()).isNotNull();
+        verify(transactionIngestionRepository).save(transactionIngestion);
+    }
+
+    @Test
+    void updateShouldRejectFinalFileIngestionWithoutFileMetadata() {
+        TransactionIngestionDTO updateDTO = validUpdateDTO();
+        updateDTO.setStatus(IngestionStatus.COMPLETED);
+        updateDTO.setRecordsReceived(1);
+        updateDTO.setRecordsCreated(1);
+        updateDTO.setRecordsSkipped(0);
+        updateDTO.setRecordsRejected(0);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionIngestionRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionIngestion)
+        );
+        when(fileIngestionRepository.existsByTransactionIngestionId(100L)).thenReturn(false);
+
+        assertThatThrownBy(() -> transactionIngestionService.update(updateDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Final FILE ingestion requires file metadata");
+
+        verify(transactionIngestionRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectTerminalStatusChange() {
+        transactionIngestion.setStatus(IngestionStatus.FAILED);
+        transactionIngestion.setCompletedAt(Instant.parse("2026-01-01T00:01:00Z"));
+        transactionIngestion.setErrorMessage("boom");
+        TransactionIngestionDTO updateDTO = validUpdateDTO();
+        updateDTO.setStatus(IngestionStatus.PROCESSING);
+        updateDTO.setCompletedAt(transactionIngestion.getCompletedAt());
+        updateDTO.setErrorMessage("boom");
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionIngestionRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionIngestion)
+        );
+
+        assertThatThrownBy(() -> transactionIngestionService.update(updateDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Final ingestion status cannot be changed");
+
+        verify(transactionIngestionRepository, never()).save(any());
+    }
+
+    @Test
     void partialUpdateShouldRejectNullAccount() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         ObjectNode patchNode = objectMapper.createObjectNode();
@@ -247,5 +340,50 @@ class TransactionIngestionServiceTest {
 
         assertThat(transactionIngestionService.delete(100L)).isFalse();
         verify(transactionIngestionRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteShouldCleanupChildIngestionsBeforeDeletingParent() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionIngestionRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionIngestion)
+        );
+
+        assertThat(transactionIngestionService.delete(100L)).isTrue();
+
+        InOrder inOrder = inOrder(
+            fileIngestionRepository,
+            apiIngestionRepository,
+            internalTransferRepository,
+            ingestionRecordRepository,
+            financialTransactionRepository,
+            transactionIngestionRepository
+        );
+        inOrder.verify(fileIngestionRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(apiIngestionRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(internalTransferRepository).deleteByTransactionIngestionIdInEitherRole(100L);
+        inOrder.verify(ingestionRecordRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(financialTransactionRepository).deleteTagLinksByTransactionIngestionId(100L);
+        inOrder.verify(financialTransactionRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(transactionIngestionRepository).deleteById(100L);
+        verify(ingestionRecordRepository, never()).clearFinancialTransactionByTransactionIngestionId(any());
+    }
+
+    private TransactionIngestionDTO validUpdateDTO() {
+        TransactionIngestionDTO updateDTO = new TransactionIngestionDTO();
+        updateDTO.setId(100L);
+        updateDTO.setIngestionType(IngestionType.FILE);
+        updateDTO.setStatus(IngestionStatus.PROCESSING);
+        updateDTO.setSourceLabel(" import.csv ");
+        updateDTO.setCreatedAt(transactionIngestion.getCreatedAt());
+        updateDTO.setStartedAt(transactionIngestion.getStartedAt());
+        updateDTO.setRecordsReceived(0);
+        updateDTO.setRecordsCreated(0);
+        updateDTO.setRecordsSkipped(0);
+        updateDTO.setRecordsRejected(0);
+        updateDTO.setCompletedAt(transactionIngestion.getCompletedAt());
+        updateDTO.setAccount(accountDTO);
+        return updateDTO;
     }
 }

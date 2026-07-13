@@ -192,8 +192,12 @@ public class CategoryResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCategory(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete Category : {}", id);
-        if (!categoryService.delete(id)) {
-            return ResponseEntity.notFound().build();
+        try {
+            if (!categoryService.delete(id)) {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))

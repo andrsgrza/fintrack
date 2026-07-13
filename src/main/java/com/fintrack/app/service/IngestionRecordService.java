@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
+import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
@@ -11,6 +13,7 @@ import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.IngestionRecordMapper;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,15 +54,16 @@ public class IngestionRecordService {
     }
 
     public IngestionRecordDTO save(IngestionRecordDTO ingestionRecordDTO) {
-        LOG.debug("Request to save IngestionRecord : {}", ingestionRecordDTO);
+        LOG.debug("Request to save IngestionRecord");
         if (ingestionRecordDTO.getRecordIndex() == null) {
             throw new IllegalArgumentException("Record index is required");
         }
         IngestionRecord ingestionRecord = ingestionRecordMapper.toEntity(ingestionRecordDTO);
         TransactionIngestion transactionIngestion = resolveTransactionIngestionForCreate(ingestionRecordDTO.getTransactionIngestion());
         ingestionRecord.setTransactionIngestion(transactionIngestion);
-        validateRecordIndexForCreate(transactionIngestion, ingestionRecord.getRecordIndex());
-        if (ingestionRecordDTO.getFinancialTransaction() != null && ingestionRecordDTO.getFinancialTransaction().getId() != null) {
+        normalizeCreateFields(ingestionRecord);
+        validateCreateUniqueness(transactionIngestion, ingestionRecord);
+        if (ingestionRecordDTO.getFinancialTransaction() != null) {
             FinancialTransaction financialTransaction = resolveFinancialTransactionForCreate(
                 ingestionRecordDTO.getFinancialTransaction(),
                 transactionIngestion
@@ -67,18 +71,26 @@ public class IngestionRecordService {
             ingestionRecord.setFinancialTransaction(financialTransaction);
         }
         ingestionRecord.setCreatedAt(Instant.now());
+        validateMergedState(ingestionRecord);
         ingestionRecord = ingestionRecordRepository.save(ingestionRecord);
         return ingestionRecordMapper.toDto(ingestionRecord);
     }
 
     public IngestionRecordDTO update(IngestionRecordDTO ingestionRecordDTO) {
-        LOG.debug("Request to update IngestionRecord : {}", ingestionRecordDTO);
+        return update(ingestionRecordDTO, null);
+    }
+
+    public IngestionRecordDTO update(IngestionRecordDTO ingestionRecordDTO, JsonNode updateNode) {
+        LOG.debug("Request to update IngestionRecord : {}", ingestionRecordDTO.getId());
         IngestionRecord existing = findAccessibleEntity(ingestionRecordDTO.getId()).orElseThrow(() ->
             new IllegalArgumentException("Entity not found")
         );
-        rejectImmutableFieldChanges(existing, ingestionRecordDTO, null);
+        rejectImmutableFieldChanges(existing, ingestionRecordDTO, updateNode);
+        rejectChangesWhenParentFinal(existing, ingestionRecordDTO, updateNode);
         ingestionRecordMapper.partialUpdate(existing, ingestionRecordDTO);
-        applyMutableFields(existing, ingestionRecordDTO);
+        applyMutableFields(existing, ingestionRecordDTO, updateNode);
+        normalizeMutableFields(existing);
+        validateMergedState(existing);
         existing = ingestionRecordRepository.save(existing);
         return ingestionRecordMapper.toDto(existing);
     }
@@ -88,18 +100,15 @@ public class IngestionRecordService {
     }
 
     public Optional<IngestionRecordDTO> partialUpdate(IngestionRecordDTO ingestionRecordDTO, JsonNode patchNode) {
-        LOG.debug("Request to partially update IngestionRecord : {}", ingestionRecordDTO);
+        LOG.debug("Request to partially update IngestionRecord : {}", ingestionRecordDTO.getId());
         return findAccessibleEntity(ingestionRecordDTO.getId())
             .map(existing -> {
-                if (patchNode != null && patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
-                    throw new IllegalArgumentException("Transaction ingestion cannot be changed");
-                }
-                if (patchNode != null && patchNode.has("financialTransaction") && patchNode.get("financialTransaction").isNull()) {
-                    throw new IllegalArgumentException("Financial transaction cannot be changed");
-                }
                 rejectImmutableFieldChanges(existing, ingestionRecordDTO, patchNode);
+                rejectChangesWhenParentFinal(existing, ingestionRecordDTO, patchNode);
                 ingestionRecordMapper.partialUpdate(existing, ingestionRecordDTO);
-                applyMutableFields(existing, ingestionRecordDTO);
+                applyMutableFields(existing, ingestionRecordDTO, patchNode);
+                normalizeMutableFields(existing);
+                validateMergedState(existing);
                 return existing;
             })
             .map(ingestionRecordRepository::save)
@@ -123,8 +132,7 @@ public class IngestionRecordService {
         if (ingestionRecord.isEmpty()) {
             return false;
         }
-        ingestionRecordRepository.deleteById(id);
-        return true;
+        throw new IllegalArgumentException("Ingestion records are deleted through TransactionIngestion cleanup");
     }
 
     private Optional<IngestionRecord> findAccessibleEntity(Long id) {
@@ -150,16 +158,9 @@ public class IngestionRecordService {
         FinancialTransactionDTO financialTransactionDTO,
         TransactionIngestion transactionIngestion
     ) {
-        if (financialTransactionDTO == null || financialTransactionDTO.getId() == null) {
-            throw new IllegalArgumentException("Financial transaction is required");
-        }
-        FinancialTransaction financialTransaction = financialTransactionService
-            .findAccessibleTransactionEntity(financialTransactionDTO.getId())
-            .orElseThrow(() -> new IllegalArgumentException("Financial transaction not found"));
-        validateSameOwner(transactionIngestion, financialTransaction);
-        if (ingestionRecordRepository.existsByFinancialTransactionId(financialTransaction.getId())) {
-            throw new IllegalArgumentException("Financial transaction already has an ingestion record");
-        }
+        FinancialTransaction financialTransaction = resolveAccessibleFinancialTransaction(financialTransactionDTO);
+        validateFinancialTransactionMatchesParent(transactionIngestion, financialTransaction);
+        validateFinancialTransactionNotLinked(financialTransaction);
         return financialTransaction;
     }
 
@@ -187,9 +188,23 @@ public class IngestionRecordService {
         }
     }
 
-    private void validateRecordIndexForCreate(TransactionIngestion transactionIngestion, Integer recordIndex) {
-        if (ingestionRecordRepository.existsByTransactionIngestionIdAndRecordIndex(transactionIngestion.getId(), recordIndex)) {
+    private void validateCreateUniqueness(TransactionIngestion transactionIngestion, IngestionRecord ingestionRecord) {
+        if (
+            ingestionRecordRepository.existsByTransactionIngestionIdAndRecordIndex(
+                transactionIngestion.getId(),
+                ingestionRecord.getRecordIndex()
+            )
+        ) {
             throw new IllegalArgumentException("Record index already exists for transaction ingestion");
+        }
+        if (
+            ingestionRecord.getExternalRecordId() != null &&
+            ingestionRecordRepository.existsByTransactionIngestionIdAndExternalRecordId(
+                transactionIngestion.getId(),
+                ingestionRecord.getExternalRecordId()
+            )
+        ) {
+            throw new IllegalArgumentException("External record id already exists for transaction ingestion");
         }
     }
 
@@ -197,11 +212,14 @@ public class IngestionRecordService {
         if (patchNode == null || patchNode.has("transactionIngestion")) {
             rejectTransactionIngestionChange(existing, ingestionRecordDTO.getTransactionIngestion());
         }
-        if (patchNode == null || patchNode.has("financialTransaction")) {
-            rejectFinancialTransactionChange(existing, ingestionRecordDTO.getFinancialTransaction());
-        }
         if (patchNode == null || patchNode.has("recordIndex")) {
             rejectRecordIndexChange(existing, ingestionRecordDTO.getRecordIndex());
+        }
+        if (patchNode == null || patchNode.has("externalRecordId")) {
+            rejectExternalRecordIdChange(existing, ingestionRecordDTO.getExternalRecordId());
+        }
+        if (patchNode == null || patchNode.has("rawData")) {
+            rejectRawDataChange(existing, ingestionRecordDTO.getRawData());
         }
         if (patchNode == null || patchNode.has("createdAt")) {
             rejectCreatedAtChange(existing, ingestionRecordDTO.getCreatedAt());
@@ -217,26 +235,24 @@ public class IngestionRecordService {
         }
     }
 
-    private void rejectFinancialTransactionChange(IngestionRecord existing, FinancialTransactionDTO financialTransactionDTO) {
-        Long existingId = existing.getFinancialTransaction() != null ? existing.getFinancialTransaction().getId() : null;
-        Long incomingId = financialTransactionDTO != null ? financialTransactionDTO.getId() : null;
-        if (existingId == null && incomingId == null) {
-            return;
-        }
-        if (existingId == null) {
-            throw new IllegalArgumentException("Financial transaction cannot be changed");
-        }
-        if (incomingId == null || !incomingId.equals(existingId)) {
-            throw new IllegalArgumentException("Financial transaction cannot be changed");
-        }
-    }
-
     private void rejectRecordIndexChange(IngestionRecord existing, Integer recordIndex) {
         if (recordIndex == null) {
             throw new IllegalArgumentException("Record index cannot be changed");
         }
         if (!recordIndex.equals(existing.getRecordIndex())) {
             throw new IllegalArgumentException("Record index cannot be changed");
+        }
+    }
+
+    private void rejectExternalRecordIdChange(IngestionRecord existing, String externalRecordId) {
+        if (!Objects.equals(existing.getExternalRecordId(), normalizeOptionalString(externalRecordId))) {
+            throw new IllegalArgumentException("External record id cannot be changed");
+        }
+    }
+
+    private void rejectRawDataChange(IngestionRecord existing, String rawData) {
+        if (!Objects.equals(existing.getRawData(), rawData)) {
+            throw new IllegalArgumentException("Raw data cannot be changed");
         }
     }
 
@@ -249,21 +265,187 @@ public class IngestionRecordService {
         }
     }
 
-    private void applyMutableFields(IngestionRecord existing, IngestionRecordDTO ingestionRecordDTO) {
-        if (ingestionRecordDTO.getStatus() != null) {
+    private void rejectChangesWhenParentFinal(IngestionRecord existing, IngestionRecordDTO ingestionRecordDTO, JsonNode patchNode) {
+        if (!isParentFinal(existing)) {
+            return;
+        }
+        IngestionRecord proposed = copyExisting(existing);
+        applyMutableFields(proposed, ingestionRecordDTO, patchNode);
+        normalizeMutableFields(proposed);
+        if (!sameMutableState(existing, proposed)) {
+            throw new IllegalArgumentException("Ingestion record cannot be changed after parent ingestion is final");
+        }
+    }
+
+    private void applyMutableFields(IngestionRecord existing, IngestionRecordDTO ingestionRecordDTO, JsonNode patchNode) {
+        if ((patchNode == null || patchNode.has("status")) && ingestionRecordDTO.getStatus() != null) {
             existing.setStatus(ingestionRecordDTO.getStatus());
         }
-        if (ingestionRecordDTO.getRawData() != null) {
-            existing.setRawData(ingestionRecordDTO.getRawData());
+        if (patchNode == null || patchNode.has("financialTransaction")) {
+            existing.setFinancialTransaction(resolveFinancialTransactionForUpdate(existing, ingestionRecordDTO.getFinancialTransaction()));
         }
-        if (ingestionRecordDTO.getErrorCode() != null) {
+        if (patchNode == null || patchNode.has("errorCode")) {
             existing.setErrorCode(ingestionRecordDTO.getErrorCode());
         }
-        if (ingestionRecordDTO.getErrorMessage() != null) {
+        if (patchNode == null || patchNode.has("errorMessage")) {
             existing.setErrorMessage(ingestionRecordDTO.getErrorMessage());
         }
-        if (ingestionRecordDTO.getExternalRecordId() != null) {
-            existing.setExternalRecordId(ingestionRecordDTO.getExternalRecordId());
+    }
+
+    private FinancialTransaction resolveFinancialTransactionForUpdate(
+        IngestionRecord existing,
+        FinancialTransactionDTO financialTransactionDTO
+    ) {
+        Long existingId = existing.getFinancialTransaction() != null ? existing.getFinancialTransaction().getId() : null;
+        if (financialTransactionDTO == null) {
+            if (existingId != null) {
+                throw new IllegalArgumentException("Financial transaction cannot be changed");
+            }
+            return null;
         }
+        if (financialTransactionDTO.getId() == null) {
+            throw new IllegalArgumentException("Financial transaction id is required");
+        }
+        if (existingId != null) {
+            if (!financialTransactionDTO.getId().equals(existingId)) {
+                throw new IllegalArgumentException("Financial transaction cannot be changed");
+            }
+            return existing.getFinancialTransaction();
+        }
+        FinancialTransaction financialTransaction = resolveAccessibleFinancialTransaction(financialTransactionDTO);
+        validateFinancialTransactionMatchesParent(existing.getTransactionIngestion(), financialTransaction);
+        validateFinancialTransactionNotLinked(financialTransaction);
+        return financialTransaction;
+    }
+
+    private FinancialTransaction resolveAccessibleFinancialTransaction(FinancialTransactionDTO financialTransactionDTO) {
+        if (financialTransactionDTO == null || financialTransactionDTO.getId() == null) {
+            throw new IllegalArgumentException("Financial transaction is required");
+        }
+        return financialTransactionService
+            .findAccessibleTransactionEntity(financialTransactionDTO.getId())
+            .orElseThrow(() -> new IllegalArgumentException("Financial transaction not found"));
+    }
+
+    private void validateFinancialTransactionMatchesParent(
+        TransactionIngestion transactionIngestion,
+        FinancialTransaction financialTransaction
+    ) {
+        validateSameOwner(transactionIngestion, financialTransaction);
+        if (
+            financialTransaction.getTransactionIngestion() == null ||
+            financialTransaction.getTransactionIngestion().getId() == null ||
+            !financialTransaction.getTransactionIngestion().getId().equals(transactionIngestion.getId())
+        ) {
+            throw new IllegalArgumentException("Financial transaction must belong to the same transaction ingestion");
+        }
+    }
+
+    private void validateFinancialTransactionNotLinked(FinancialTransaction financialTransaction) {
+        if (ingestionRecordRepository.existsByFinancialTransactionId(financialTransaction.getId())) {
+            throw new IllegalArgumentException("Financial transaction already has an ingestion record");
+        }
+    }
+
+    private void normalizeCreateFields(IngestionRecord ingestionRecord) {
+        ingestionRecord.setExternalRecordId(normalizeOptionalString(ingestionRecord.getExternalRecordId()));
+        normalizeMutableFields(ingestionRecord);
+    }
+
+    private void normalizeMutableFields(IngestionRecord ingestionRecord) {
+        ingestionRecord.setErrorCode(normalizeOptionalString(ingestionRecord.getErrorCode()));
+        ingestionRecord.setErrorMessage(normalizeOptionalString(ingestionRecord.getErrorMessage()));
+    }
+
+    private String normalizeOptionalString(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void validateMergedState(IngestionRecord ingestionRecord) {
+        if (ingestionRecord.getRecordIndex() == null) {
+            throw new IllegalArgumentException("Record index is required");
+        }
+        if (ingestionRecord.getRecordIndex() < 0) {
+            throw new IllegalArgumentException("Record index must be greater than or equal to 0");
+        }
+        if (ingestionRecord.getStatus() == null) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        if (ingestionRecord.getTransactionIngestion() == null || ingestionRecord.getTransactionIngestion().getId() == null) {
+            throw new IllegalArgumentException("Transaction ingestion is required");
+        }
+        if (ingestionRecord.getExternalRecordId() != null && ingestionRecord.getExternalRecordId().length() > 150) {
+            throw new IllegalArgumentException("External record id must be at most 150 characters");
+        }
+        if (ingestionRecord.getErrorCode() != null && ingestionRecord.getErrorCode().length() > 100) {
+            throw new IllegalArgumentException("Error code must be at most 100 characters");
+        }
+        if (ingestionRecord.getErrorMessage() != null && ingestionRecord.getErrorMessage().length() > 1000) {
+            throw new IllegalArgumentException("Error message must be at most 1000 characters");
+        }
+        validateStatusConsistency(ingestionRecord);
+    }
+
+    private void validateStatusConsistency(IngestionRecord ingestionRecord) {
+        if (ingestionRecord.getStatus() == IngestionRecordStatus.CREATED) {
+            if (ingestionRecord.getFinancialTransaction() == null) {
+                throw new IllegalArgumentException("Financial transaction is required for CREATED records");
+            }
+            if (ingestionRecord.getErrorCode() != null || ingestionRecord.getErrorMessage() != null) {
+                throw new IllegalArgumentException("CREATED records cannot have error details");
+            }
+        } else if (ingestionRecord.getStatus() == IngestionRecordStatus.SKIPPED_DUPLICATE) {
+            if (ingestionRecord.getFinancialTransaction() != null) {
+                throw new IllegalArgumentException("Skipped duplicate records cannot have a financial transaction");
+            }
+        } else if (ingestionRecord.getStatus() == IngestionRecordStatus.REJECTED) {
+            if (ingestionRecord.getFinancialTransaction() != null) {
+                throw new IllegalArgumentException("Rejected records cannot have a financial transaction");
+            }
+            if (ingestionRecord.getErrorMessage() == null) {
+                throw new IllegalArgumentException("Rejected records require an error message");
+            }
+        }
+    }
+
+    private boolean isParentFinal(IngestionRecord ingestionRecord) {
+        IngestionStatus status = ingestionRecord.getTransactionIngestion() != null
+            ? ingestionRecord.getTransactionIngestion().getStatus()
+            : null;
+        return status == IngestionStatus.COMPLETED || status == IngestionStatus.PARTIALLY_COMPLETED || status == IngestionStatus.FAILED;
+    }
+
+    private IngestionRecord copyExisting(IngestionRecord existing) {
+        IngestionRecord copy = new IngestionRecord();
+        copy.setId(existing.getId());
+        copy.setRecordIndex(existing.getRecordIndex());
+        copy.setExternalRecordId(existing.getExternalRecordId());
+        copy.setStatus(existing.getStatus());
+        copy.setRawData(existing.getRawData());
+        copy.setErrorCode(existing.getErrorCode());
+        copy.setErrorMessage(existing.getErrorMessage());
+        copy.setCreatedAt(existing.getCreatedAt());
+        copy.setFinancialTransaction(existing.getFinancialTransaction());
+        copy.setTransactionIngestion(existing.getTransactionIngestion());
+        return copy;
+    }
+
+    private boolean sameMutableState(IngestionRecord existing, IngestionRecord proposed) {
+        return (
+            existing.getStatus() == proposed.getStatus() &&
+            sameFinancialTransaction(existing, proposed) &&
+            Objects.equals(existing.getErrorCode(), proposed.getErrorCode()) &&
+            Objects.equals(existing.getErrorMessage(), proposed.getErrorMessage())
+        );
+    }
+
+    private boolean sameFinancialTransaction(IngestionRecord existing, IngestionRecord proposed) {
+        Long existingId = existing.getFinancialTransaction() != null ? existing.getFinancialTransaction().getId() : null;
+        Long proposedId = proposed.getFinancialTransaction() != null ? proposed.getFinancialTransaction().getId() : null;
+        return Objects.equals(existingId, proposedId);
     }
 }

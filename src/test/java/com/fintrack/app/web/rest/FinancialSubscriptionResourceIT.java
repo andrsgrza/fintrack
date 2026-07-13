@@ -15,12 +15,16 @@ import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.domain.enumeration.SubscriptionStatus;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialSubscriptionService;
@@ -129,6 +133,12 @@ class FinancialSubscriptionResourceIT {
 
     @Autowired
     private FinancialSubscriptionRepository financialSubscriptionRepository;
+
+    @Autowired
+    private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private TransactionRuleRepository transactionRuleRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -2280,6 +2290,242 @@ class FinancialSubscriptionResourceIT {
 
         restFinancialSubscriptionMockMvc
             .perform(patch(ENTITY_API_URL_ID, financialSubscription.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    private FinancialSubscription persistFinancialSubscription() {
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        em.clear();
+        return financialSubscriptionRepository.findById(insertedFinancialSubscription.getId()).orElseThrow();
+    }
+
+    private FinancialSubscription managedSubscriptionReference(FinancialSubscription savedSubscription) {
+        return em.getReference(FinancialSubscription.class, savedSubscription.getId());
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialSubscriptionUsedByFinancialTransactionUnlinksAndPreservesTransaction() throws Exception {
+        FinancialSubscription persistedSubscription = persistFinancialSubscription();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setFinancialSubscription(managedSubscriptionReference(persistedSubscription));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+        em.detach(financialTransaction);
+
+        restFinancialSubscriptionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedSubscription.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(financialSubscriptionRepository.existsById(persistedSubscription.getId())).isFalse();
+        em.clear();
+        FinancialTransaction persistedTransaction = financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow();
+        assertThat(persistedTransaction.getFinancialSubscription()).isNull();
+        insertedFinancialSubscription = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialSubscriptionUsedByTransactionRuleUnlinksAndDeactivatesRule() throws Exception {
+        FinancialSubscription persistedSubscription = persistFinancialSubscription();
+        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
+        transactionRule.setResultingFinancialSubscription(managedSubscriptionReference(persistedSubscription));
+        transactionRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(transactionRule);
+        em.detach(transactionRule);
+
+        restFinancialSubscriptionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedSubscription.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(financialSubscriptionRepository.existsById(persistedSubscription.getId())).isFalse();
+        em.clear();
+        TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
+        assertThat(persistedRule.getResultingFinancialSubscription()).isNull();
+        assertThat(persistedRule.getActive()).isFalse();
+        insertedFinancialSubscription = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialSubscriptionUsedInMultipleEntityTypesCleansAllReferences() throws Exception {
+        FinancialSubscription persistedSubscription = persistFinancialSubscription();
+
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setFinancialSubscription(managedSubscriptionReference(persistedSubscription));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
+        transactionRule.setResultingFinancialSubscription(managedSubscriptionReference(persistedSubscription));
+        transactionRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(transactionRule);
+        em.detach(financialTransaction);
+        em.detach(transactionRule);
+
+        restFinancialSubscriptionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedSubscription.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(financialSubscriptionRepository.existsById(persistedSubscription.getId())).isFalse();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getFinancialSubscription()).isNull();
+        TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
+        assertThat(persistedRule.getResultingFinancialSubscription()).isNull();
+        assertThat(persistedRule.getActive()).isFalse();
+        insertedFinancialSubscription = null;
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminDeleteForeignUsedFinancialSubscriptionSucceedsAndCleansReferences() throws Exception {
+        User foreignOwner = createOtherUser(em);
+        financialSubscription.setUser(foreignOwner);
+        FinancialSubscription persistedSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+        insertedFinancialSubscription = persistedSubscription;
+        em.clear();
+        persistedSubscription = financialSubscriptionRepository.findById(persistedSubscription.getId()).orElseThrow();
+
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(FinancialAccountResourceIT.createEntity(em));
+        financialTransaction.getAccount().setUser(foreignOwner);
+        em.persist(financialTransaction.getAccount());
+        financialTransaction.setFinancialSubscription(managedSubscriptionReference(persistedSubscription));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+        em.detach(financialTransaction);
+
+        restFinancialSubscriptionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, persistedSubscription.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(financialSubscriptionRepository.existsById(persistedSubscription.getId())).isFalse();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getFinancialSubscription()).isNull();
+        insertedFinancialSubscription = null;
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionStatusCancelledSucceeds() throws Exception {
+        FinancialSubscription persistedSubscription = persistFinancialSubscription();
+
+        FinancialSubscriptionDTO patchPayload = new FinancialSubscriptionDTO();
+        patchPayload.setId(persistedSubscription.getId());
+        patchPayload.setStatus(SubscriptionStatus.CANCELLED);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, persistedSubscription.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value(SubscriptionStatus.CANCELLED.toString()));
+
+        assertThat(getPersistedFinancialSubscription(persistedSubscription).getStatus()).isEqualTo(SubscriptionStatus.CANCELLED);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialSubscriptionStatusCancelledKeepsTransactionLinked() throws Exception {
+        FinancialSubscription persistedSubscription = persistFinancialSubscription();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setFinancialSubscription(managedSubscriptionReference(persistedSubscription));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        FinancialSubscriptionDTO patchPayload = new FinancialSubscriptionDTO();
+        patchPayload.setId(persistedSubscription.getId());
+        patchPayload.setStatus(SubscriptionStatus.CANCELLED);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, persistedSubscription.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value(SubscriptionStatus.CANCELLED.toString()));
+
+        FinancialTransaction persistedTransaction = financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow();
+        assertThat(persistedTransaction.getFinancialSubscription()).isNotNull();
+        assertThat(persistedTransaction.getFinancialSubscription().getId()).isEqualTo(persistedSubscription.getId());
+        assertThat(getPersistedFinancialSubscription(persistedSubscription).getStatus()).isEqualTo(SubscriptionStatus.CANCELLED);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionWithEndDateBeforeStartDateFails() throws Exception {
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        financialSubscriptionDTO.setStartDate(LocalDate.of(2026, 6, 1));
+        financialSubscriptionDTO.setEndDate(LocalDate.of(2026, 1, 1));
+
+        restFinancialSubscriptionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateFinancialSubscriptionCurrencyWithLinkedTransactionFails() throws Exception {
+        FinancialSubscription persistedSubscription = persistFinancialSubscription();
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setFinancialSubscription(managedSubscriptionReference(persistedSubscription));
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(persistedSubscription);
+        financialSubscriptionDTO.setCurrency(CurrencyCode.USD);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFinancialSubscriptionWithAccountCurrencyMismatchFails() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account.setCurrency(CurrencyCode.USD);
+        em.persist(account);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        financialSubscriptionDTO.setId(null);
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(account.getId());
+        financialSubscriptionDTO.setAccount(accountDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialSubscriptionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminUpdateForeignFinancialSubscriptionWithForeignCategoryFails() throws Exception {
+        User subscriptionOwner = createOtherUser(em);
+        financialSubscription.setUser(subscriptionOwner);
+        insertedFinancialSubscription = financialSubscriptionRepository.saveAndFlush(financialSubscription);
+
+        Category currentUsersCategory = CategoryResourceIT.createEntity(em);
+        currentUsersCategory = em.merge(currentUsersCategory);
+        em.flush();
+
+        FinancialSubscriptionDTO financialSubscriptionDTO = financialSubscriptionMapper.toDto(financialSubscription);
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(currentUsersCategory.getId());
+        financialSubscriptionDTO.setCategory(categoryDTO);
+
+        restFinancialSubscriptionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialSubscriptionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialSubscriptionDTO))
+            )
             .andExpect(status().isBadRequest());
     }
 

@@ -94,18 +94,18 @@ public class IngestionRecordQueryService extends QueryService<IngestionRecord> {
                     root.join(IngestionRecord_.transactionIngestion, JoinType.LEFT).get(TransactionIngestion_.id)
                 )
             );
-            if (!currentUserService.isAdmin()) {
-                specification = specification.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.equal(
-                        root
-                            .join(IngestionRecord_.transactionIngestion, JoinType.INNER)
-                            .join(TransactionIngestion_.account, JoinType.INNER)
-                            .join(FinancialAccount_.user, JoinType.INNER)
-                            .get(User_.login),
-                        currentUserService.getCurrentUserLogin()
-                    )
-                );
-            }
+        }
+        if (!currentUserService.isAdmin()) {
+            specification = specification.and((root, query, criteriaBuilder) ->
+                criteriaBuilder.equal(
+                    root
+                        .join(IngestionRecord_.transactionIngestion, JoinType.INNER)
+                        .join(TransactionIngestion_.account, JoinType.INNER)
+                        .join(FinancialAccount_.user, JoinType.INNER)
+                        .get(User_.login),
+                    currentUserService.getCurrentUserLogin()
+                )
+            );
         }
         return specification;
     }

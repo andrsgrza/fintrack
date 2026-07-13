@@ -58,4 +58,8 @@ public interface TransactionIngestionRepository
         "select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where account.user.login = :login"
     )
     List<TransactionIngestion> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from TransactionIngestion transactionIngestion where transactionIngestion.account.id = :accountId")
+    void deleteByAccountId(@Param("accountId") Long accountId);
 }

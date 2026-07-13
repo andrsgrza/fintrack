@@ -21,6 +21,7 @@ import com.fintrack.app.service.dto.FileIngestionDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.FileIngestionMapper;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -174,6 +175,76 @@ class FileIngestionServiceTest {
         assertThatThrownBy(() -> fileIngestionService.partialUpdate(fileIngestionDTO, patchNode)).isInstanceOf(
             IllegalArgumentException.class
         );
+    }
+
+    @Test
+    void saveShouldNormalizeStringsAndValidateStatementRange() {
+        FileIngestion mappedEntity = new FileIngestion();
+        mappedEntity.setOriginalFilename("  Import.CSV  ");
+        mappedEntity.setFileType(ImportFileType.CSV);
+        mappedEntity.setContentType("   ");
+        mappedEntity.setChecksum("ABCDEF1234");
+        mappedEntity.setStorageKey("  storage/key  ");
+        mappedEntity.setParserName("  parser  ");
+        mappedEntity.setParserVersion("  v1  ");
+        mappedEntity.setStatementStartDate(LocalDate.parse("2026-02-01"));
+        mappedEntity.setStatementEndDate(LocalDate.parse("2026-01-01"));
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(fileIngestionMapper.toEntity(fileIngestionDTO)).thenReturn(mappedEntity);
+        when(transactionIngestionRepository.findOneWithToOneRelationshipsByIdAndAccountUserLogin(50L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionIngestion)
+        );
+        when(fileIngestionRepository.existsByTransactionIngestionId(50L)).thenReturn(false);
+
+        assertThatThrownBy(() -> fileIngestionService.save(fileIngestionDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Statement start date cannot be after statement end date");
+
+        mappedEntity.setStatementEndDate(LocalDate.parse("2026-02-28"));
+        when(fileIngestionRepository.save(mappedEntity)).thenReturn(fileIngestion);
+        when(fileIngestionMapper.toDto(fileIngestion)).thenReturn(fileIngestionDTO);
+
+        fileIngestionService.save(fileIngestionDTO);
+
+        assertThat(mappedEntity.getOriginalFilename()).isEqualTo("Import.CSV");
+        assertThat(mappedEntity.getContentType()).isNull();
+        assertThat(mappedEntity.getChecksum()).isEqualTo("abcdef1234");
+        assertThat(mappedEntity.getStorageKey()).isEqualTo("storage/key");
+        assertThat(mappedEntity.getParserName()).isEqualTo("parser");
+        assertThat(mappedEntity.getParserVersion()).isEqualTo("v1");
+    }
+
+    @Test
+    void updateShouldRejectImmutableOriginalFilenameChange() {
+        fileIngestionDTO.setOriginalFilename("other.csv");
+        fileIngestionDTO.setCreatedAt(fileIngestion.getCreatedAt());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(
+            fileIngestionRepository.findOneWithRelationshipsByIdAndTransactionIngestionAccountUserLogin(100L, CURRENT_USER_LOGIN)
+        ).thenReturn(Optional.of(fileIngestion));
+
+        assertThatThrownBy(() -> fileIngestionService.update(fileIngestionDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Original filename cannot be changed");
+    }
+
+    @Test
+    void deleteShouldRejectAccessibleFileIngestion() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(
+            fileIngestionRepository.findOneWithRelationshipsByIdAndTransactionIngestionAccountUserLogin(100L, CURRENT_USER_LOGIN)
+        ).thenReturn(Optional.of(fileIngestion));
+
+        assertThatThrownBy(() -> fileIngestionService.delete(100L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("File ingestion cannot be deleted directly");
+
+        verify(fileIngestionRepository, never()).deleteById(any());
     }
 
     @Test

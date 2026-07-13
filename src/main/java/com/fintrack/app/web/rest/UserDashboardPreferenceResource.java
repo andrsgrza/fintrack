@@ -97,7 +97,11 @@ public class UserDashboardPreferenceResource {
             throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
         }
 
-        userDashboardPreferenceDTO = userDashboardPreferenceService.update(userDashboardPreferenceDTO);
+        try {
+            userDashboardPreferenceDTO = userDashboardPreferenceService.update(userDashboardPreferenceDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, userDashboardPreferenceDTO.getId().toString()))
             .body(userDashboardPreferenceDTO);

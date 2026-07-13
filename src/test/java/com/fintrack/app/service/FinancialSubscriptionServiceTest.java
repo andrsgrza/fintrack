@@ -12,13 +12,17 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.repository.CategoryRepository;
+import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.mapper.FinancialSubscriptionMapper;
+import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +49,7 @@ class FinancialSubscriptionServiceTest {
     private CurrentUserService currentUserService;
 
     @Mock
-    private FinancialAccountService financialAccountService;
+    private FinancialAccountRepository financialAccountRepository;
 
     @Mock
     private CategoryRepository categoryRepository;
@@ -70,6 +74,10 @@ class FinancialSubscriptionServiceTest {
         financialSubscription.setId(10L);
         financialSubscription.setName("Netflix");
         financialSubscription.setUser(currentUser);
+        financialSubscription.setCurrency(CurrencyCode.MXN);
+        financialSubscription.setRecurrenceUnit(RecurrenceUnit.MONTH);
+        financialSubscription.setIntervalCount(1);
+        financialSubscription.setStartDate(LocalDate.of(2026, 1, 1));
 
         financialSubscriptionDTO = new FinancialSubscriptionDTO();
         financialSubscriptionDTO.setId(10L);
@@ -79,6 +87,7 @@ class FinancialSubscriptionServiceTest {
     @Test
     void saveShouldAssignCurrentUser() {
         FinancialSubscription mappedEntity = new FinancialSubscription();
+        mappedEntity.setStartDate(LocalDate.of(2026, 1, 1));
         FinancialSubscription savedEntity = new FinancialSubscription();
         savedEntity.setId(10L);
         savedEntity.setUser(currentUser);
@@ -98,12 +107,14 @@ class FinancialSubscriptionServiceTest {
     void updateShouldPreserveExistingOwner() {
         FinancialSubscription mappedEntity = new FinancialSubscription();
         mappedEntity.setId(10L);
+        mappedEntity.setStartDate(LocalDate.of(2026, 1, 1));
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(financialSubscriptionRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(financialSubscription)
         );
+        when(financialSubscriptionRepository.existsFinancialTransactionByFinancialSubscriptionId(10L)).thenReturn(false);
         when(financialSubscriptionMapper.toEntity(financialSubscriptionDTO)).thenReturn(mappedEntity);
         when(financialSubscriptionRepository.save(mappedEntity)).thenReturn(financialSubscription);
         when(financialSubscriptionMapper.toDto(financialSubscription)).thenReturn(financialSubscriptionDTO);
@@ -164,7 +175,7 @@ class FinancialSubscriptionServiceTest {
     }
 
     @Test
-    void deleteShouldRemoveAccessibleFinancialSubscription() {
+    void deleteShouldCleanupRelationshipsBeforeRemovingAccessibleFinancialSubscription() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(financialSubscriptionRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
@@ -172,6 +183,9 @@ class FinancialSubscriptionServiceTest {
         );
 
         assertThat(financialSubscriptionService.delete(10L)).isTrue();
+        verify(financialSubscriptionRepository).clearFinancialTransactionSubscriptionReferences(10L);
+        verify(financialSubscriptionRepository).clearTransactionRuleResultingSubscriptionReferences(10L);
+        verify(financialSubscriptionRepository).deleteTagLinksByFinancialSubscriptionId(10L);
         verify(financialSubscriptionRepository).deleteById(10L);
     }
 
@@ -210,10 +224,13 @@ class FinancialSubscriptionServiceTest {
         financialSubscriptionDTO.setAccount(accountDTO);
 
         FinancialSubscription mappedEntity = new FinancialSubscription();
+        mappedEntity.setStartDate(LocalDate.of(2026, 1, 1));
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(financialSubscriptionMapper.toEntity(financialSubscriptionDTO)).thenReturn(mappedEntity);
-        when(financialAccountService.findAccessibleAccountEntity(99L)).thenReturn(Optional.empty());
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(99L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.empty()
+        );
 
         assertThatThrownBy(() -> financialSubscriptionService.save(financialSubscriptionDTO)).isInstanceOf(IllegalArgumentException.class);
         verify(financialSubscriptionRepository, never()).save(any());
@@ -227,16 +244,22 @@ class FinancialSubscriptionServiceTest {
 
         FinancialSubscription mappedEntity = new FinancialSubscription();
         mappedEntity.setId(10L);
+        mappedEntity.setStartDate(LocalDate.of(2026, 1, 1));
+        mappedEntity.setCurrency(CurrencyCode.MXN);
         FinancialAccount account = new FinancialAccount();
         account.setId(99L);
+        account.setCurrency(CurrencyCode.MXN);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(financialSubscriptionRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(financialSubscription)
         );
+        when(financialSubscriptionRepository.existsFinancialTransactionByFinancialSubscriptionId(10L)).thenReturn(false);
         when(financialSubscriptionMapper.toEntity(financialSubscriptionDTO)).thenReturn(mappedEntity);
-        when(financialAccountService.findAccessibleAccountEntity(99L)).thenReturn(Optional.of(account));
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(99L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(account)
+        );
         when(financialSubscriptionRepository.save(mappedEntity)).thenReturn(financialSubscription);
         when(financialSubscriptionMapper.toDto(financialSubscription)).thenReturn(financialSubscriptionDTO);
 
@@ -252,12 +275,72 @@ class FinancialSubscriptionServiceTest {
         financialSubscriptionDTO.setCategory(categoryDTO);
 
         FinancialSubscription mappedEntity = new FinancialSubscription();
+        mappedEntity.setStartDate(LocalDate.of(2026, 1, 1));
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(financialSubscriptionMapper.toEntity(financialSubscriptionDTO)).thenReturn(mappedEntity);
         when(categoryRepository.findOneByIdAndUserLogin(88L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
-        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+
+        assertThatThrownBy(() -> financialSubscriptionService.save(financialSubscriptionDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(financialSubscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectEndDateBeforeStartDate() {
+        FinancialSubscription mappedEntity = new FinancialSubscription();
+        mappedEntity.setStartDate(LocalDate.of(2026, 6, 1));
+        mappedEntity.setEndDate(LocalDate.of(2026, 1, 1));
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(financialSubscriptionMapper.toEntity(financialSubscriptionDTO)).thenReturn(mappedEntity);
+
+        assertThatThrownBy(() -> financialSubscriptionService.save(financialSubscriptionDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(financialSubscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectCurrencyChangeWhenLinkedToTransactions() {
+        financialSubscriptionDTO.setCurrency(CurrencyCode.USD);
+
+        FinancialSubscription mappedEntity = new FinancialSubscription();
+        mappedEntity.setId(10L);
+        mappedEntity.setCurrency(CurrencyCode.USD);
+        mappedEntity.setRecurrenceUnit(RecurrenceUnit.MONTH);
+        mappedEntity.setIntervalCount(1);
+        mappedEntity.setStartDate(LocalDate.of(2026, 1, 1));
+
         when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialSubscriptionRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialSubscription)
+        );
+        when(financialSubscriptionRepository.existsFinancialTransactionByFinancialSubscriptionId(10L)).thenReturn(true);
+        when(financialSubscriptionMapper.toEntity(financialSubscriptionDTO)).thenReturn(mappedEntity);
+
+        assertThatThrownBy(() -> financialSubscriptionService.update(financialSubscriptionDTO)).isInstanceOf(
+            IllegalArgumentException.class
+        );
+        verify(financialSubscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectAccountCurrencyMismatch() {
+        FinancialAccountDTO accountDTO = new FinancialAccountDTO();
+        accountDTO.setId(99L);
+        financialSubscriptionDTO.setAccount(accountDTO);
+
+        FinancialSubscription mappedEntity = new FinancialSubscription();
+        mappedEntity.setStartDate(LocalDate.of(2026, 1, 1));
+        mappedEntity.setCurrency(CurrencyCode.MXN);
+        FinancialAccount account = new FinancialAccount();
+        account.setId(99L);
+        account.setCurrency(CurrencyCode.USD);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(financialSubscriptionMapper.toEntity(financialSubscriptionDTO)).thenReturn(mappedEntity);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(99L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(account)
+        );
 
         assertThatThrownBy(() -> financialSubscriptionService.save(financialSubscriptionDTO)).isInstanceOf(IllegalArgumentException.class);
         verify(financialSubscriptionRepository, never()).save(any());

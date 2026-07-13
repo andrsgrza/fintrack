@@ -5,4 +5,5 @@ package com.fintrack.app.domain.enumeration;
  */
 public enum ApiPermission {
     CREATE_TRANSACTIONS,
+    READ_TRANSACTIONS,
 }

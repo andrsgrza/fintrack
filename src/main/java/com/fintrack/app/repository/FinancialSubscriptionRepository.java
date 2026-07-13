@@ -82,4 +82,29 @@ public interface FinancialSubscriptionRepository
         "select financialSubscription from FinancialSubscription financialSubscription left join fetch financialSubscription.user left join fetch financialSubscription.account left join fetch financialSubscription.category where financialSubscription.user.login = :login"
     )
     List<FinancialSubscription> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
+
+    @Query(
+        "select case when count(ft) > 0 then true else false end from FinancialTransaction ft where ft.financialSubscription.id = :subscriptionId"
+    )
+    boolean existsFinancialTransactionByFinancialSubscriptionId(@Param("subscriptionId") Long subscriptionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update FinancialTransaction ft set ft.financialSubscription = null where ft.financialSubscription.id = :subscriptionId")
+    void clearFinancialTransactionSubscriptionReferences(@Param("subscriptionId") Long subscriptionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "update TransactionRule tr set tr.resultingFinancialSubscription = null, tr.active = false where tr.resultingFinancialSubscription.id = :subscriptionId"
+    )
+    void clearTransactionRuleResultingSubscriptionReferences(@Param("subscriptionId") Long subscriptionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from rel_financial_subscription__tags where financial_subscription_id = :subscriptionId", nativeQuery = true)
+    void deleteTagLinksByFinancialSubscriptionId(@Param("subscriptionId") Long subscriptionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "update FinancialSubscription financialSubscription set financialSubscription.account = null where financialSubscription.account.id = :accountId"
+    )
+    void clearAccountByAccountId(@Param("accountId") Long accountId);
 }

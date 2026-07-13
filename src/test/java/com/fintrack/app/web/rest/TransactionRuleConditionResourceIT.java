@@ -15,14 +15,19 @@ import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
+import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
+import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
+import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TransactionRuleConditionService;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleConditionMapper;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,9 +63,10 @@ class TransactionRuleConditionResourceIT {
 
     private static final String DEFAULT_VALUE = "AAAAAAAAAA";
     private static final String UPDATED_VALUE = "BBBBBBBBBB";
+    private static final String UPDATED_AMOUNT_VALUE = "200";
 
-    private static final String DEFAULT_SECOND_VALUE = "AAAAAAAAAA";
-    private static final String UPDATED_SECOND_VALUE = "BBBBBBBBBB";
+    private static final String DEFAULT_SECOND_VALUE = null;
+    private static final String UPDATED_SECOND_VALUE = null;
 
     private static final Boolean DEFAULT_CASE_SENSITIVE = false;
     private static final Boolean UPDATED_CASE_SENSITIVE = true;
@@ -79,6 +85,12 @@ class TransactionRuleConditionResourceIT {
 
     @Autowired
     private TransactionRuleConditionRepository transactionRuleConditionRepository;
+
+    @Autowired
+    private TransactionRuleRepository transactionRuleRepository;
+
+    @Autowired
+    private FinancialAccountRepository financialAccountRepository;
 
     @Mock
     private TransactionRuleConditionRepository transactionRuleConditionRepositoryMock;
@@ -384,10 +396,9 @@ class TransactionRuleConditionResourceIT {
         // Disconnect from session so that the updates on updatedTransactionRuleCondition are not directly saved in db
         em.detach(updatedTransactionRuleCondition);
         updatedTransactionRuleCondition
-            .field(UPDATED_FIELD)
             .operator(UPDATED_OPERATOR)
             .value(UPDATED_VALUE)
-            .secondValue(UPDATED_SECOND_VALUE)
+            .secondValue(null)
             .caseSensitive(UPDATED_CASE_SENSITIVE)
             .position(UPDATED_POSITION);
         TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(updatedTransactionRuleCondition);
@@ -482,9 +493,7 @@ class TransactionRuleConditionResourceIT {
             ",\"field\":\"" +
             UPDATED_FIELD +
             "\",\"value\":\"" +
-            UPDATED_VALUE +
-            "\",\"secondValue\":\"" +
-            UPDATED_SECOND_VALUE +
+            UPDATED_AMOUNT_VALUE +
             "\",\"position\":" +
             UPDATED_POSITION +
             "}";
@@ -500,8 +509,7 @@ class TransactionRuleConditionResourceIT {
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         TransactionRuleCondition partialUpdatedTransactionRuleCondition = new TransactionRuleCondition()
             .field(UPDATED_FIELD)
-            .value(UPDATED_VALUE)
-            .secondValue(UPDATED_SECOND_VALUE)
+            .value(UPDATED_AMOUNT_VALUE)
             .position(UPDATED_POSITION);
         partialUpdatedTransactionRuleCondition.setId(transactionRuleCondition.getId());
         assertTransactionRuleConditionUpdatableFieldsEquals(
@@ -527,9 +535,7 @@ class TransactionRuleConditionResourceIT {
             "\",\"operator\":\"" +
             UPDATED_OPERATOR +
             "\",\"value\":\"" +
-            UPDATED_VALUE +
-            "\",\"secondValue\":\"" +
-            UPDATED_SECOND_VALUE +
+            UPDATED_AMOUNT_VALUE +
             "\",\"caseSensitive\":" +
             UPDATED_CASE_SENSITIVE +
             ",\"position\":" +
@@ -548,8 +554,7 @@ class TransactionRuleConditionResourceIT {
         TransactionRuleCondition partialUpdatedTransactionRuleCondition = new TransactionRuleCondition()
             .field(UPDATED_FIELD)
             .operator(UPDATED_OPERATOR)
-            .value(UPDATED_VALUE)
-            .secondValue(UPDATED_SECOND_VALUE)
+            .value(UPDATED_AMOUNT_VALUE)
             .caseSensitive(UPDATED_CASE_SENSITIVE)
             .position(UPDATED_POSITION);
         partialUpdatedTransactionRuleCondition.setId(transactionRuleCondition.getId());
@@ -809,7 +814,7 @@ class TransactionRuleConditionResourceIT {
     @Test
     @Transactional
     @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
-    void adminCanReparentTransactionRuleConditionWithinSameOwner() throws Exception {
+    void patchTransactionRuleConditionWithDifferentRuleSameOwnerFails() throws Exception {
         User otherUser = createOtherUser(em);
         TransactionRule rule1 = createRuleForUser(otherUser);
         TransactionRule rule2 = createRuleForUser(otherUser);
@@ -818,7 +823,6 @@ class TransactionRuleConditionResourceIT {
             .field(DEFAULT_FIELD)
             .operator(DEFAULT_OPERATOR)
             .value(DEFAULT_VALUE)
-            .secondValue(DEFAULT_SECOND_VALUE)
             .caseSensitive(DEFAULT_CASE_SENSITIVE)
             .position(DEFAULT_POSITION);
         condition.setTransactionRule(rule1);
@@ -828,10 +832,10 @@ class TransactionRuleConditionResourceIT {
 
         restTransactionRuleConditionMockMvc
             .perform(patch(ENTITY_API_URL_ID, condition.getId()).contentType("application/merge-patch+json").content(patchJson))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.transactionRule.id").value(rule2.getId().intValue()));
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
 
-        assertThat(getPersistedTransactionRuleCondition(condition).getTransactionRule().getId()).isEqualTo(rule2.getId());
+        assertThat(getPersistedTransactionRuleCondition(condition).getTransactionRule().getId()).isEqualTo(rule1.getId());
     }
 
     @Test
@@ -846,7 +850,6 @@ class TransactionRuleConditionResourceIT {
             .field(DEFAULT_FIELD)
             .operator(DEFAULT_OPERATOR)
             .value(DEFAULT_VALUE)
-            .secondValue(DEFAULT_SECOND_VALUE)
             .caseSensitive(DEFAULT_CASE_SENSITIVE)
             .position(DEFAULT_POSITION);
         condition.setTransactionRule(otherUsersRule);
@@ -895,6 +898,329 @@ class TransactionRuleConditionResourceIT {
             .perform(
                 patch(ENTITY_API_URL_ID, transactionRuleCondition.getId()).contentType("application/merge-patch+json").content(patchJson)
             )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanCreateTransactionRuleConditionUnderForeignRule() throws Exception {
+        TransactionRule foreignRule = createRuleForOtherUser();
+        TransactionRuleConditionDTO dto = new TransactionRuleConditionDTO();
+        dto.setField(TransactionRuleField.DESCRIPTION);
+        dto.setOperator(RuleOperator.EQUALS);
+        dto.setValue("foreign rule condition");
+        dto.setCaseSensitive(false);
+        dto.setPosition(0);
+        TransactionRuleDTO ruleDTO = new TransactionRuleDTO();
+        ruleDTO.setId(foreignRule.getId());
+        dto.setTransactionRule(ruleDTO);
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithDescriptionAndInvalidOperatorFails() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setOperator(RuleOperator.GREATER_THAN);
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithOriginAndContainsOperatorFails() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setField(TransactionRuleField.ORIGIN);
+        dto.setOperator(RuleOperator.CONTAINS);
+        dto.setValue(TransactionOrigin.MANUAL.toString());
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithOriginEqualsSucceeds() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setField(TransactionRuleField.ORIGIN);
+        dto.setOperator(RuleOperator.EQUALS);
+        dto.setValue(TransactionOrigin.MANUAL.toString());
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithAmountCurrencySymbolFails() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setField(TransactionRuleField.AMOUNT);
+        dto.setOperator(RuleOperator.EQUALS);
+        dto.setValue("$100");
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithBetweenMissingSecondValueFails() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setField(TransactionRuleField.AMOUNT);
+        dto.setOperator(RuleOperator.BETWEEN);
+        dto.setValue("10");
+        dto.setSecondValue(null);
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithNonBetweenSecondValueFails() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setSecondValue("extra");
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithInvalidRegexFails() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setOperator(RuleOperator.REGEX);
+        dto.setValue("[invalid");
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithEmptyInTokenFails() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setOperator(RuleOperator.IN);
+        dto.setValue("a,,b");
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithSingleInTokenSucceeds() throws Exception {
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setOperator(RuleOperator.IN);
+        dto.setValue("alpha");
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createDuplicateConditionInSameRuleFails() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchChangingBetweenToEqualsWhileSecondValueRemainsFails() throws Exception {
+        TransactionRuleCondition betweenCondition = new TransactionRuleCondition()
+            .field(TransactionRuleField.AMOUNT)
+            .operator(RuleOperator.BETWEEN)
+            .value("10")
+            .secondValue("20")
+            .caseSensitive(false)
+            .position(1);
+        betweenCondition.setTransactionRule(transactionRuleCondition.getTransactionRule());
+        betweenCondition = transactionRuleConditionRepository.saveAndFlush(betweenCondition);
+
+        String patchJson = "{\"id\":" + betweenCondition.getId() + ",\"operator\":\"" + RuleOperator.EQUALS + "\",\"value\":\"15\"}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, betweenCondition.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchChangingBetweenToEqualsAndClearingSecondValueSucceeds() throws Exception {
+        TransactionRuleCondition betweenCondition = new TransactionRuleCondition()
+            .field(TransactionRuleField.AMOUNT)
+            .operator(RuleOperator.BETWEEN)
+            .value("10")
+            .secondValue("20")
+            .caseSensitive(false)
+            .position(1);
+        betweenCondition.setTransactionRule(transactionRuleCondition.getTransactionRule());
+        betweenCondition = transactionRuleConditionRepository.saveAndFlush(betweenCondition);
+
+        String patchJson = "{\"id\":" + betweenCondition.getId() + ",\"operator\":\"" + RuleOperator.EQUALS + "\",\"secondValue\":null}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, betweenCondition.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.operator").value(RuleOperator.EQUALS.toString()))
+            .andExpect(jsonPath("$.secondValue").doesNotExist());
+
+        assertThat(getPersistedTransactionRuleCondition(betweenCondition).getSecondValue()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void patchRequiredConditionFieldWithNullFails() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+
+        String patchJson = "{\"id\":" + insertedTransactionRuleCondition.getId() + ",\"operator\":null}";
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, insertedTransactionRuleCondition.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(patchJson)
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void deleteLastConditionDisablesParentRule() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+        TransactionRule parentRule = transactionRuleCondition.getTransactionRule();
+        parentRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(parentRule);
+        Instant beforeUpdatedAt = parentRule.getUpdatedAt();
+
+        restTransactionRuleConditionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, insertedTransactionRuleCondition.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        TransactionRule reloadedRule = transactionRuleRepository.findById(parentRule.getId()).orElseThrow();
+        assertThat(reloadedRule.getActive()).isFalse();
+        assertThat(reloadedRule.getUpdatedAt()).isAfterOrEqualTo(beforeUpdatedAt);
+        insertedTransactionRuleCondition = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteNonLastConditionKeepsParentActive() throws Exception {
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+
+        TransactionRuleCondition secondCondition = new TransactionRuleCondition()
+            .field(TransactionRuleField.FLOW)
+            .operator(RuleOperator.EQUALS)
+            .value(TransactionFlow.OUT.toString())
+            .caseSensitive(false)
+            .position(1);
+        secondCondition.setTransactionRule(transactionRuleCondition.getTransactionRule());
+        transactionRuleConditionRepository.saveAndFlush(secondCondition);
+
+        TransactionRule parentRule = transactionRuleCondition.getTransactionRule();
+        parentRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(parentRule);
+
+        restTransactionRuleConditionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, insertedTransactionRuleCondition.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(transactionRuleRepository.findById(parentRule.getId()).orElseThrow().getActive()).isTrue();
+        insertedTransactionRuleCondition = null;
+    }
+
+    @Test
+    @Transactional
+    void createConditionOnInactiveRuleDoesNotReactivate() throws Exception {
+        TransactionRule inactiveRule = transactionRuleCondition.getTransactionRule();
+        inactiveRule.setActive(false);
+        transactionRuleRepository.saveAndFlush(inactiveRule);
+
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setValue("another condition");
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isCreated());
+
+        assertThat(transactionRuleRepository.findById(inactiveRule.getId()).orElseThrow().getActive()).isFalse();
+    }
+
+    @Test
+    @Transactional
+    void createConditionWithForeignAccountIdFails() throws Exception {
+        User otherUser = createOtherUser(em);
+        var foreignAccount = FinancialAccountResourceIT.createEntity(em);
+        foreignAccount.setUser(otherUser);
+        em.persist(foreignAccount);
+        em.flush();
+
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setField(TransactionRuleField.ACCOUNT);
+        dto.setOperator(RuleOperator.EQUALS);
+        dto.setValue(foreignAccount.getId().toString());
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCreateConditionWithAdminOwnedAccountOnForeignRuleFails() throws Exception {
+        TransactionRule foreignRule = createRuleForOtherUser();
+        var adminAccount = FinancialAccountResourceIT.createEntity(em);
+        em.persist(adminAccount);
+        em.flush();
+
+        TransactionRuleConditionDTO dto = new TransactionRuleConditionDTO();
+        dto.setField(TransactionRuleField.ACCOUNT);
+        dto.setOperator(RuleOperator.EQUALS);
+        dto.setValue(adminAccount.getId().toString());
+        dto.setCaseSensitive(false);
+        dto.setPosition(0);
+        TransactionRuleDTO ruleDTO = new TransactionRuleDTO();
+        ruleDTO.setId(foreignRule.getId());
+        dto.setTransactionRule(ruleDTO);
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
             .andExpect(status().isBadRequest());
     }
 
@@ -904,7 +1230,6 @@ class TransactionRuleConditionResourceIT {
             .field(DEFAULT_FIELD)
             .operator(DEFAULT_OPERATOR)
             .value(DEFAULT_VALUE)
-            .secondValue(DEFAULT_SECOND_VALUE)
             .caseSensitive(DEFAULT_CASE_SENSITIVE)
             .position(DEFAULT_POSITION);
         condition.setTransactionRule(otherUsersRule);

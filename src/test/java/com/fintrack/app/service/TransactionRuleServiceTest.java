@@ -13,14 +13,17 @@ import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionRuleConditionRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +59,9 @@ class TransactionRuleServiceTest {
     @Mock
     private TagRepository tagRepository;
 
+    @Mock
+    private TransactionRuleConditionRepository transactionRuleConditionRepository;
+
     @InjectMocks
     private TransactionRuleService transactionRuleService;
 
@@ -72,22 +78,35 @@ class TransactionRuleServiceTest {
         transactionRule = new TransactionRule();
         transactionRule.setId(10L);
         transactionRule.setName("Amazon rule");
+        transactionRule.setPriority(0);
+        transactionRule.setConditionLogic(RuleConditionLogic.ALL);
+        transactionRule.setResultingDescription("Amazon");
+        transactionRule.setActive(false);
+        transactionRule.setCreatedAt(Instant.parse("2026-07-11T00:00:00Z"));
+        transactionRule.setUpdatedAt(Instant.parse("2026-07-11T00:00:00Z"));
         transactionRule.setUser(currentUser);
 
         transactionRuleDTO = new TransactionRuleDTO();
         transactionRuleDTO.setId(10L);
         transactionRuleDTO.setName("Amazon rule");
+        transactionRuleDTO.setPriority(0);
+        transactionRuleDTO.setConditionLogic(RuleConditionLogic.ALL);
+        transactionRuleDTO.setResultingDescription("Amazon");
+        transactionRuleDTO.setActive(false);
+        transactionRuleDTO.setCreatedAt(Instant.parse("2026-07-11T00:00:00Z"));
+        transactionRuleDTO.setUpdatedAt(Instant.parse("2026-07-11T00:00:00Z"));
     }
 
     @Test
     void saveShouldAssignCurrentUser() {
-        TransactionRule mappedEntity = new TransactionRule();
+        TransactionRule mappedEntity = validMappedRule(null);
         TransactionRule savedEntity = new TransactionRule();
         savedEntity.setId(10L);
         savedEntity.setUser(currentUser);
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
+        when(transactionRuleRepository.existsByUserLoginAndNormalizedName(CURRENT_USER_LOGIN, "amazon rule", null)).thenReturn(false);
         when(transactionRuleRepository.save(mappedEntity)).thenReturn(savedEntity);
         when(transactionRuleMapper.toDto(savedEntity)).thenReturn(transactionRuleDTO);
 
@@ -99,8 +118,7 @@ class TransactionRuleServiceTest {
 
     @Test
     void updateShouldPreserveExistingOwner() {
-        TransactionRule mappedEntity = new TransactionRule();
-        mappedEntity.setId(10L);
+        TransactionRule mappedEntity = validMappedRule(10L);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -108,6 +126,7 @@ class TransactionRuleServiceTest {
             Optional.of(transactionRule)
         );
         when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
+        when(transactionRuleRepository.existsByUserLoginAndNormalizedName(CURRENT_USER_LOGIN, "amazon rule", 10L)).thenReturn(false);
         when(transactionRuleRepository.save(mappedEntity)).thenReturn(transactionRule);
         when(transactionRuleMapper.toDto(transactionRule)).thenReturn(transactionRuleDTO);
 
@@ -123,6 +142,34 @@ class TransactionRuleServiceTest {
         when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(java.util.NoSuchElementException.class);
+        verify(transactionRuleRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectChangedUpdatedAt() {
+        transactionRuleDTO.setUpdatedAt(Instant.parse("2026-07-12T00:00:00Z"));
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullUpdatedAt() {
+        transactionRuleDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(IllegalArgumentException.class);
         verify(transactionRuleRepository, never()).save(any());
     }
 
@@ -167,6 +214,8 @@ class TransactionRuleServiceTest {
         );
 
         assertThat(transactionRuleService.delete(10L)).isTrue();
+        verify(transactionRuleConditionRepository).deleteByTransactionRuleId(10L);
+        verify(transactionRuleRepository).deleteResultingTagsByRuleId(10L);
         verify(transactionRuleRepository).deleteById(10L);
     }
 
@@ -224,8 +273,7 @@ class TransactionRuleServiceTest {
         categoryDTO.setId(88L);
         transactionRuleDTO.setResultingCategory(categoryDTO);
 
-        TransactionRule mappedEntity = new TransactionRule();
-        mappedEntity.setId(10L);
+        TransactionRule mappedEntity = validMappedRule(10L);
         Category category = new Category();
         category.setId(88L);
 
@@ -233,6 +281,7 @@ class TransactionRuleServiceTest {
         when(transactionRuleRepository.findOneWithEagerRelationships(10L)).thenReturn(Optional.of(transactionRule));
         when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
         when(categoryRepository.findOneByIdAndUserLogin(88L, OTHER_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(transactionRuleRepository.existsByUserLoginAndNormalizedName(OTHER_USER_LOGIN, "amazon rule", 10L)).thenReturn(false);
         when(transactionRuleRepository.save(mappedEntity)).thenReturn(transactionRule);
         when(transactionRuleMapper.toDto(transactionRule)).thenReturn(transactionRuleDTO);
 
@@ -263,5 +312,18 @@ class TransactionRuleServiceTest {
 
         assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(IllegalArgumentException.class);
         verify(transactionRuleRepository, never()).save(any());
+    }
+
+    private TransactionRule validMappedRule(Long id) {
+        TransactionRule mappedRule = new TransactionRule();
+        mappedRule.setId(id);
+        mappedRule.setName("Amazon rule");
+        mappedRule.setPriority(0);
+        mappedRule.setConditionLogic(RuleConditionLogic.ALL);
+        mappedRule.setResultingDescription("Amazon");
+        mappedRule.setActive(false);
+        mappedRule.setCreatedAt(Instant.parse("2026-07-11T00:00:00Z"));
+        mappedRule.setUpdatedAt(Instant.parse("2026-07-11T00:00:00Z"));
+        return mappedRule;
     }
 }

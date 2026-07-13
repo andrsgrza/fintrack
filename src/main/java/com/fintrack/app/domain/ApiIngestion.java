@@ -57,16 +57,25 @@ public class ApiIngestion implements Serializable {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @NotNull
+    @Column(name = "api_token_id_snapshot", nullable = false)
+    private Long apiTokenIdSnapshot;
+
+    @NotNull
+    @Size(max = 20)
+    @Column(name = "api_token_prefix_snapshot", length = 20, nullable = false)
+    private String apiTokenPrefixSnapshot;
+
+    @NotNull
+    @Size(max = 100)
+    @Column(name = "api_token_name_snapshot", length = 100, nullable = false)
+    private String apiTokenNameSnapshot;
+
     @JsonIgnoreProperties(value = { "accounts", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @NotNull
     @JoinColumn(unique = true)
     private TransactionIngestion transactionIngestion;
-
-    @ManyToOne(optional = false)
-    @NotNull
-    @JsonIgnoreProperties(value = { "user", "apiIngestions", "permissions" }, allowSetters = true)
-    private ApiAccessToken apiAccessToken;
 
     // jhipster-needle-entity-add-field - JHipster will add fields here
 
@@ -187,6 +196,45 @@ public class ApiIngestion implements Serializable {
         this.createdAt = createdAt;
     }
 
+    public Long getApiTokenIdSnapshot() {
+        return this.apiTokenIdSnapshot;
+    }
+
+    public ApiIngestion apiTokenIdSnapshot(Long apiTokenIdSnapshot) {
+        this.setApiTokenIdSnapshot(apiTokenIdSnapshot);
+        return this;
+    }
+
+    public void setApiTokenIdSnapshot(Long apiTokenIdSnapshot) {
+        this.apiTokenIdSnapshot = apiTokenIdSnapshot;
+    }
+
+    public String getApiTokenPrefixSnapshot() {
+        return this.apiTokenPrefixSnapshot;
+    }
+
+    public ApiIngestion apiTokenPrefixSnapshot(String apiTokenPrefixSnapshot) {
+        this.setApiTokenPrefixSnapshot(apiTokenPrefixSnapshot);
+        return this;
+    }
+
+    public void setApiTokenPrefixSnapshot(String apiTokenPrefixSnapshot) {
+        this.apiTokenPrefixSnapshot = apiTokenPrefixSnapshot;
+    }
+
+    public String getApiTokenNameSnapshot() {
+        return this.apiTokenNameSnapshot;
+    }
+
+    public ApiIngestion apiTokenNameSnapshot(String apiTokenNameSnapshot) {
+        this.setApiTokenNameSnapshot(apiTokenNameSnapshot);
+        return this;
+    }
+
+    public void setApiTokenNameSnapshot(String apiTokenNameSnapshot) {
+        this.apiTokenNameSnapshot = apiTokenNameSnapshot;
+    }
+
     public TransactionIngestion getTransactionIngestion() {
         return this.transactionIngestion;
     }
@@ -197,19 +245,6 @@ public class ApiIngestion implements Serializable {
 
     public ApiIngestion transactionIngestion(TransactionIngestion transactionIngestion) {
         this.setTransactionIngestion(transactionIngestion);
-        return this;
-    }
-
-    public ApiAccessToken getApiAccessToken() {
-        return this.apiAccessToken;
-    }
-
-    public void setApiAccessToken(ApiAccessToken apiAccessToken) {
-        this.apiAccessToken = apiAccessToken;
-    }
-
-    public ApiIngestion apiAccessToken(ApiAccessToken apiAccessToken) {
-        this.setApiAccessToken(apiAccessToken);
         return this;
     }
 
@@ -245,6 +280,9 @@ public class ApiIngestion implements Serializable {
             ", clientReference='" + getClientReference() + "'" +
             ", receivedAt='" + getReceivedAt() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
+            ", apiTokenIdSnapshot=" + getApiTokenIdSnapshot() +
+            ", apiTokenPrefixSnapshot='" + getApiTokenPrefixSnapshot() + "'" +
+            ", apiTokenNameSnapshot='" + getApiTokenNameSnapshot() + "'" +
             "}";
     }
 }

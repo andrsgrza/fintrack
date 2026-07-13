@@ -12,7 +12,8 @@
       "updated": "Un Tag ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Tag ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Tag {{ id }}?"
+        "title": "¿Eliminar etiqueta?",
+        "message": "Esto eliminará la etiqueta y la quitará de todo donde se use actualmente. Las transacciones, reglas, presupuestos y suscripciones que usen esta etiqueta no se eliminarán. Simplemente dejarán de tener esta etiqueta. Esta acción no se puede deshacer."
       },
       "detail": {
         "title": "Tag"

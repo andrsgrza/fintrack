@@ -40,11 +40,12 @@ export const BudgetDeleteDialog = () => {
   return (
     <Modal isOpen toggle={handleClose}>
       <ModalHeader toggle={handleClose} data-cy="budgetDeleteDialogHeading">
-        <Translate contentKey="entity.delete.title">Confirm delete operation</Translate>
+        <Translate contentKey="fintrackApp.budget.delete.title">Delete budget?</Translate>
       </ModalHeader>
-      <ModalBody id="fintrackApp.budget.delete.question">
-        <Translate contentKey="fintrackApp.budget.delete.question" interpolate={{ id: budgetEntity.id }}>
-          Are you sure you want to delete this Budget?
+      <ModalBody id="fintrackApp.budget.delete.message" data-cy="budgetDeleteMessage">
+        <Translate contentKey="fintrackApp.budget.delete.message">
+          This will delete the budget. Your accounts, categories, tags, transactions, and subscriptions will not be deleted. This budget
+          will simply be removed from your reports and tracking. This action cannot be undone.
         </Translate>
       </ModalBody>
       <ModalFooter>

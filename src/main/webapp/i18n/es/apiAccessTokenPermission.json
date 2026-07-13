@@ -12,7 +12,8 @@
       "updated": "Un Api Access Token Permission ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Api Access Token Permission ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Api Access Token Permission {{ id }}?"
+        "title": "¿Eliminar permiso del token API?",
+        "message": "Esto eliminará este permiso del token API. El token ya no podrá realizar esta acción. El token API en sí no se eliminará, y los datos importados o el historial existente no se verán afectados."
       },
       "detail": {
         "title": "Api Access Token Permission"

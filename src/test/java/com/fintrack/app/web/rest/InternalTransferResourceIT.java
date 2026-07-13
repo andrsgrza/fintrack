@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -255,6 +256,63 @@ class InternalTransferResourceIT {
 
     @Test
     @Transactional
+    void createInternalTransferIgnoresClientProvidedCreatedAt() throws Exception {
+        TransferLegPair legs = createTransferLegPair(em);
+        InternalTransferDTO internalTransferDTO = toCreateDto(legs);
+        internalTransferDTO.setCreatedAt(Instant.parse("2000-01-01T00:00:00Z"));
+
+        var returnedInternalTransferDTO = om.readValue(
+            restInternalTransferMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(internalTransferDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            InternalTransferDTO.class
+        );
+
+        assertThat(returnedInternalTransferDTO.getCreatedAt()).isNotEqualTo(Instant.parse("2000-01-01T00:00:00Z"));
+        insertedInternalTransfer = internalTransferRepository.findById(returnedInternalTransferDTO.getId()).orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void createInternalTransferTrimsNotesAndConvertsBlankToNull() throws Exception {
+        TransferLegPair legs = createTransferLegPair(em);
+        InternalTransferDTO internalTransferDTO = toCreateDto(legs);
+        internalTransferDTO.setNotes("  trimmed notes  ");
+
+        var returnedInternalTransferDTO = om.readValue(
+            restInternalTransferMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(internalTransferDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.notes").value("trimmed notes"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            InternalTransferDTO.class
+        );
+        insertedInternalTransfer = internalTransferRepository.findById(returnedInternalTransferDTO.getId()).orElseThrow();
+
+        TransferLegPair blankLegs = createTransferLegPair(em);
+        InternalTransferDTO blankNotesDTO = toCreateDto(blankLegs);
+        blankNotesDTO.setNotes("   ");
+
+        var blankReturnedDTO = om.readValue(
+            restInternalTransferMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(blankNotesDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.notes").value(nullValue()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            InternalTransferDTO.class
+        );
+        internalTransferRepository.deleteById(blankReturnedDTO.getId());
+    }
+
+    @Test
+    @Transactional
     void createInternalTransferWithExistingId() throws Exception {
         internalTransfer.setId(1L);
         InternalTransferDTO internalTransferDTO = internalTransferMapper.toDto(internalTransfer);
@@ -329,6 +387,31 @@ class InternalTransferResourceIT {
 
     @Test
     @Transactional
+    void putInternalTransferWithAbsentLinksPreservesLinks() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        String updateJson = "{\"id\":" + internalTransfer.getId() + ",\"notes\":\"" + UPDATED_NOTES + "\"}";
+
+        restInternalTransferMockMvc
+            .perform(put(ENTITY_API_URL_ID, internalTransfer.getId()).contentType(MediaType.APPLICATION_JSON).content(updateJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.notes").value(UPDATED_NOTES))
+            .andExpect(jsonPath("$.outgoingTransaction.id").value(internalTransfer.getOutgoingTransaction().getId().intValue()))
+            .andExpect(jsonPath("$.incomingTransaction.id").value(internalTransfer.getIncomingTransaction().getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void putInternalTransferWithNullOutgoingTransactionFails() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        String updateJson = "{\"id\":" + internalTransfer.getId() + ",\"notes\":\"" + UPDATED_NOTES + "\",\"outgoingTransaction\":null}";
+
+        restInternalTransferMockMvc
+            .perform(put(ENTITY_API_URL_ID, internalTransfer.getId()).contentType(MediaType.APPLICATION_JSON).content(updateJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void putNonExistingInternalTransfer() throws Exception {
         long databaseSizeBeforeUpdate = getRepositoryCount();
         internalTransfer.setId(longCount.incrementAndGet());
@@ -396,6 +479,20 @@ class InternalTransferResourceIT {
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         assertThat(getPersistedInternalTransfer(internalTransfer).getNotes()).isEqualTo(UPDATED_NOTES);
         assertThat(getPersistedInternalTransfer(internalTransfer).getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void patchInternalTransferWithNullNotesClearsNotes() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        String patchJson = "{\"id\":" + internalTransfer.getId() + ",\"notes\":null}";
+
+        restInternalTransferMockMvc
+            .perform(patch(ENTITY_API_URL_ID, internalTransfer.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.notes").value(nullValue()));
+
+        assertThat(getPersistedInternalTransfer(internalTransfer).getNotes()).isNull();
     }
 
     @Test
@@ -782,7 +879,7 @@ class InternalTransferResourceIT {
 
     @Test
     @Transactional
-    void createInternalTransferWithNonManualOriginFails() throws Exception {
+    void createInternalTransferWithNonManualOriginSucceeds() throws Exception {
         TransferLegPair legs = createTransferLegPair(em);
         FinancialTransaction importedIncoming = createManualTransaction(
             em,
@@ -801,7 +898,9 @@ class InternalTransferResourceIT {
 
         restInternalTransferMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(internalTransferDTO)))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isCreated());
+
+        insertedInternalTransfer = internalTransferRepository.findAll().get(internalTransferRepository.findAll().size() - 1);
     }
 
     @Test
@@ -813,6 +912,35 @@ class InternalTransferResourceIT {
         FinancialTransactionDTO linkedOutgoingDTO = new FinancialTransactionDTO();
         linkedOutgoingDTO.setId(internalTransfer.getOutgoingTransaction().getId());
         internalTransferDTO.setOutgoingTransaction(linkedOutgoingDTO);
+
+        restInternalTransferMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(internalTransferDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createInternalTransferWithTransactionAlreadyLinkedInOppositeRoleFails() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+
+        FinancialAccount newIncomingAccount = FinancialAccountResourceIT.createEntity(em);
+        newIncomingAccount.setUser(internalTransfer.getIncomingTransaction().getAccount().getUser());
+        newIncomingAccount.setCurrency(internalTransfer.getIncomingTransaction().getAccount().getCurrency());
+        em.persist(newIncomingAccount);
+        em.flush();
+
+        FinancialTransaction newIncoming = createManualTransaction(em, newIncomingAccount, TransactionFlow.IN, TRANSFER_AMOUNT);
+        em.persist(newIncoming);
+        em.flush();
+
+        InternalTransferDTO internalTransferDTO = new InternalTransferDTO();
+        internalTransferDTO.setNotes(DEFAULT_NOTES);
+        FinancialTransactionDTO outgoingDTO = new FinancialTransactionDTO();
+        outgoingDTO.setId(internalTransfer.getIncomingTransaction().getId());
+        FinancialTransactionDTO incomingDTO = new FinancialTransactionDTO();
+        incomingDTO.setId(newIncoming.getId());
+        internalTransferDTO.setOutgoingTransaction(outgoingDTO);
+        internalTransferDTO.setIncomingTransaction(incomingDTO);
 
         restInternalTransferMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(internalTransferDTO)))
@@ -844,6 +972,39 @@ class InternalTransferResourceIT {
     void patchInternalTransferWithNullOutgoingTransactionFails() throws Exception {
         insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
         String patchJson = "{\"id\":" + internalTransfer.getId() + ",\"outgoingTransaction\":null}";
+
+        restInternalTransferMockMvc
+            .perform(patch(ENTITY_API_URL_ID, internalTransfer.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchInternalTransferWithMissingOutgoingTransactionIdFails() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        String patchJson = "{\"id\":" + internalTransfer.getId() + ",\"outgoingTransaction\":{}}";
+
+        restInternalTransferMockMvc
+            .perform(patch(ENTITY_API_URL_ID, internalTransfer.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchInternalTransferWithNullCreatedAtFails() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        String patchJson = "{\"id\":" + internalTransfer.getId() + ",\"createdAt\":null}";
+
+        restInternalTransferMockMvc
+            .perform(patch(ENTITY_API_URL_ID, internalTransfer.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchInternalTransferWithChangedCreatedAtFails() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        String patchJson = "{\"id\":" + internalTransfer.getId() + ",\"createdAt\":\"2026-02-01T00:00:00Z\"}";
 
         restInternalTransferMockMvc
             .perform(patch(ENTITY_API_URL_ID, internalTransfer.getId()).contentType("application/merge-patch+json").content(patchJson))

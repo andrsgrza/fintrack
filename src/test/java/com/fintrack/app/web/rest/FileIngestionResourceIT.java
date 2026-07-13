@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -294,6 +295,79 @@ class FileIngestionResourceIT {
 
     @Test
     @Transactional
+    void createFileIngestionIgnoresClientProvidedCreatedAt() throws Exception {
+        FileIngestionDTO fileIngestionDTO = buildCreateFileIngestionDTO(fileIngestion.getTransactionIngestion().getId());
+        fileIngestionDTO.setCreatedAt(Instant.parse("2000-01-01T00:00:00Z"));
+
+        var returnedFileIngestionDTO = om.readValue(
+            restFileIngestionMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(fileIngestionDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FileIngestionDTO.class
+        );
+
+        assertThat(returnedFileIngestionDTO.getCreatedAt()).isNotEqualTo(Instant.parse("2000-01-01T00:00:00Z"));
+        insertedFileIngestion = fileIngestionRepository.findById(returnedFileIngestionDTO.getId()).orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void createFileIngestionNormalizesStrings() throws Exception {
+        FileIngestionDTO fileIngestionDTO = buildCreateFileIngestionDTO(fileIngestion.getTransactionIngestion().getId());
+        fileIngestionDTO.setOriginalFilename("  Import.CSV  ");
+        fileIngestionDTO.setContentType("   ");
+        fileIngestionDTO.setChecksum("ABCDEF1234");
+        fileIngestionDTO.setStorageKey("  storage/key  ");
+        fileIngestionDTO.setParserName("  parser  ");
+        fileIngestionDTO.setParserVersion("  v1  ");
+
+        var returnedFileIngestionDTO = om.readValue(
+            restFileIngestionMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(fileIngestionDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.originalFilename").value("Import.CSV"))
+                .andExpect(jsonPath("$.contentType").value(nullValue()))
+                .andExpect(jsonPath("$.checksum").value("abcdef1234"))
+                .andExpect(jsonPath("$.storageKey").value("storage/key"))
+                .andExpect(jsonPath("$.parserName").value("parser"))
+                .andExpect(jsonPath("$.parserVersion").value("v1"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FileIngestionDTO.class
+        );
+
+        insertedFileIngestion = fileIngestionRepository.findById(returnedFileIngestionDTO.getId()).orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void createFileIngestionWithBlankOriginalFilenameFails() throws Exception {
+        FileIngestionDTO fileIngestionDTO = buildCreateFileIngestionDTO(fileIngestion.getTransactionIngestion().getId());
+        fileIngestionDTO.setOriginalFilename("   ");
+
+        restFileIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(fileIngestionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFileIngestionWithStatementStartAfterEndFails() throws Exception {
+        FileIngestionDTO fileIngestionDTO = buildCreateFileIngestionDTO(fileIngestion.getTransactionIngestion().getId());
+        fileIngestionDTO.setStatementStartDate(LocalDate.parse("2026-02-01"));
+        fileIngestionDTO.setStatementEndDate(LocalDate.parse("2026-01-01"));
+
+        restFileIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(fileIngestionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void getAllFileIngestions() throws Exception {
         // Initialize the database
         insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
@@ -362,14 +436,6 @@ class FileIngestionResourceIT {
         // Disconnect from session so that the updates on updatedFileIngestion are not directly saved in db
         em.detach(updatedFileIngestion);
         updatedFileIngestion
-            .originalFilename(UPDATED_ORIGINAL_FILENAME)
-            .fileType(UPDATED_FILE_TYPE)
-            .contentType(UPDATED_CONTENT_TYPE)
-            .fileSizeBytes(UPDATED_FILE_SIZE_BYTES)
-            .checksum(UPDATED_CHECKSUM)
-            .storageKey(UPDATED_STORAGE_KEY)
-            .parserName(UPDATED_PARSER_NAME)
-            .parserVersion(UPDATED_PARSER_VERSION)
             .statementStartDate(UPDATED_STATEMENT_START_DATE)
             .statementEndDate(UPDATED_STATEMENT_END_DATE)
             .createdAt(insertedFileIngestion.getCreatedAt());
@@ -462,12 +528,10 @@ class FileIngestionResourceIT {
         String patchJson =
             "{\"id\":" +
             fileIngestion.getId() +
-            ",\"fileType\":\"" +
-            UPDATED_FILE_TYPE +
-            "\",\"contentType\":\"" +
-            UPDATED_CONTENT_TYPE +
-            "\",\"checksum\":\"" +
-            UPDATED_CHECKSUM +
+            ",\"statementStartDate\":\"" +
+            UPDATED_STATEMENT_START_DATE +
+            "\",\"statementEndDate\":\"" +
+            UPDATED_STATEMENT_END_DATE +
             "\"}";
 
         restFileIngestionMockMvc
@@ -478,10 +542,81 @@ class FileIngestionResourceIT {
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         FileIngestion persisted = getPersistedFileIngestion(fileIngestion);
-        assertThat(persisted.getFileType()).isEqualTo(UPDATED_FILE_TYPE);
-        assertThat(persisted.getContentType()).isEqualTo(UPDATED_CONTENT_TYPE);
-        assertThat(persisted.getChecksum()).isEqualTo(UPDATED_CHECKSUM);
+        assertThat(persisted.getStatementStartDate()).isEqualTo(UPDATED_STATEMENT_START_DATE);
+        assertThat(persisted.getStatementEndDate()).isEqualTo(UPDATED_STATEMENT_END_DATE);
         assertThat(persisted.getCreatedAt()).isEqualTo(insertedFileIngestion.getCreatedAt());
+    }
+
+    @Test
+    @Transactional
+    void patchFileIngestionWithNullStatementDatesClearsThem() throws Exception {
+        insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
+        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"statementStartDate\":null,\"statementEndDate\":null}";
+
+        restFileIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, fileIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.statementStartDate").value(nullValue()))
+            .andExpect(jsonPath("$.statementEndDate").value(nullValue()));
+
+        FileIngestion persisted = getPersistedFileIngestion(fileIngestion);
+        assertThat(persisted.getStatementStartDate()).isNull();
+        assertThat(persisted.getStatementEndDate()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void patchFileIngestionWithFinalInvalidStatementRangeFails() throws Exception {
+        insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
+        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"statementStartDate\":\"2026-02-01\"}";
+
+        restFileIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, fileIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFileIngestionWithImmutableOriginalFilenameFails() throws Exception {
+        insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
+        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"originalFilename\":\"" + UPDATED_ORIGINAL_FILENAME + "\"}";
+
+        restFileIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, fileIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFileIngestionWithImmutableFileTypeFails() throws Exception {
+        insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
+        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"fileType\":\"" + UPDATED_FILE_TYPE + "\"}";
+
+        restFileIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, fileIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFileIngestionWithNullCreatedAtFails() throws Exception {
+        insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
+        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"createdAt\":null}";
+
+        restFileIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, fileIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchFileIngestionWithChangedCreatedAtFails() throws Exception {
+        insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
+        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"createdAt\":\"2026-02-01T00:00:00Z\"}";
+
+        restFileIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, fileIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -496,21 +631,21 @@ class FileIngestionResourceIT {
             "{\"id\":" +
             fileIngestion.getId() +
             ",\"originalFilename\":\"" +
-            UPDATED_ORIGINAL_FILENAME +
+            DEFAULT_ORIGINAL_FILENAME +
             "\",\"fileType\":\"" +
-            UPDATED_FILE_TYPE +
+            DEFAULT_FILE_TYPE +
             "\",\"contentType\":\"" +
-            UPDATED_CONTENT_TYPE +
+            DEFAULT_CONTENT_TYPE +
             "\",\"fileSizeBytes\":" +
-            UPDATED_FILE_SIZE_BYTES +
+            DEFAULT_FILE_SIZE_BYTES +
             ",\"checksum\":\"" +
-            UPDATED_CHECKSUM +
+            DEFAULT_CHECKSUM +
             "\",\"storageKey\":\"" +
-            UPDATED_STORAGE_KEY +
+            DEFAULT_STORAGE_KEY +
             "\",\"parserName\":\"" +
-            UPDATED_PARSER_NAME +
+            DEFAULT_PARSER_NAME +
             "\",\"parserVersion\":\"" +
-            UPDATED_PARSER_VERSION +
+            DEFAULT_PARSER_VERSION +
             "\",\"statementStartDate\":\"" +
             UPDATED_STATEMENT_START_DATE +
             "\",\"statementEndDate\":\"" +
@@ -525,8 +660,10 @@ class FileIngestionResourceIT {
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         FileIngestion persisted = getPersistedFileIngestion(fileIngestion);
-        assertThat(persisted.getOriginalFilename()).isEqualTo(UPDATED_ORIGINAL_FILENAME);
-        assertThat(persisted.getFileType()).isEqualTo(UPDATED_FILE_TYPE);
+        assertThat(persisted.getOriginalFilename()).isEqualTo(DEFAULT_ORIGINAL_FILENAME);
+        assertThat(persisted.getFileType()).isEqualTo(DEFAULT_FILE_TYPE);
+        assertThat(persisted.getStatementStartDate()).isEqualTo(UPDATED_STATEMENT_START_DATE);
+        assertThat(persisted.getStatementEndDate()).isEqualTo(UPDATED_STATEMENT_END_DATE);
         assertThat(persisted.getCreatedAt()).isEqualTo(insertedFileIngestion.getCreatedAt());
     }
 
@@ -603,10 +740,10 @@ class FileIngestionResourceIT {
         // Delete the fileIngestion
         restFileIngestionMockMvc
             .perform(delete(ENTITY_API_URL_ID, fileIngestion.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest());
 
-        // Validate the database contains one less item
-        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        // Direct FileIngestion delete is blocked; lifecycle is owned by TransactionIngestion.
+        assertSameRepositoryCount(databaseSizeBeforeDelete);
     }
 
     @Test
@@ -647,7 +784,7 @@ class FileIngestionResourceIT {
     void putFileIngestionOwnedByAnotherUserIsNotFound() throws Exception {
         FileIngestion otherFileIngestion = saveFileIngestionOnOtherUsersIngestion();
         FileIngestionDTO fileIngestionDTO = fileIngestionMapper.toDto(otherFileIngestion);
-        fileIngestionDTO.setOriginalFilename(UPDATED_ORIGINAL_FILENAME);
+        fileIngestionDTO.setStatementEndDate(UPDATED_STATEMENT_END_DATE);
 
         restFileIngestionMockMvc
             .perform(
@@ -699,7 +836,7 @@ class FileIngestionResourceIT {
     void adminCanUpdateFileIngestionOwnedByAnotherUser() throws Exception {
         FileIngestion otherFileIngestion = saveFileIngestionOnOtherUsersIngestion();
         FileIngestionDTO fileIngestionDTO = fileIngestionMapper.toDto(otherFileIngestion);
-        fileIngestionDTO.setOriginalFilename(UPDATED_ORIGINAL_FILENAME);
+        fileIngestionDTO.setStatementEndDate(UPDATED_STATEMENT_END_DATE);
 
         restFileIngestionMockMvc
             .perform(
@@ -708,7 +845,7 @@ class FileIngestionResourceIT {
                     .content(om.writeValueAsBytes(fileIngestionDTO))
             )
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.originalFilename").value(UPDATED_ORIGINAL_FILENAME));
+            .andExpect(jsonPath("$.statementEndDate").value(UPDATED_STATEMENT_END_DATE.toString()));
     }
 
     @Test
@@ -719,7 +856,7 @@ class FileIngestionResourceIT {
 
         restFileIngestionMockMvc
             .perform(delete(ENTITY_API_URL_ID, otherFileIngestion.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -831,7 +968,7 @@ class FileIngestionResourceIT {
     void patchFileIngestionWithoutTransactionIngestionFieldPreservesParent() throws Exception {
         insertedFileIngestion = fileIngestionRepository.saveAndFlush(fileIngestion);
         Long originalParentId = fileIngestion.getTransactionIngestion().getId();
-        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"originalFilename\":\"" + UPDATED_ORIGINAL_FILENAME + "\"}";
+        String patchJson = "{\"id\":" + fileIngestion.getId() + ",\"statementEndDate\":\"" + UPDATED_STATEMENT_END_DATE + "\"}";
 
         restFileIngestionMockMvc
             .perform(patch(ENTITY_API_URL_ID, fileIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))

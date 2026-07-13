@@ -91,9 +91,17 @@ export const ApiIngestionDetail = () => {
           </dt>
           <dd>{apiIngestionEntity.transactionIngestion ? apiIngestionEntity.transactionIngestion.id : ''}</dd>
           <dt>
-            <Translate contentKey="fintrackApp.apiIngestion.apiAccessToken">Api Access Token</Translate>
+            <Translate contentKey="fintrackApp.apiIngestion.apiTokenNameSnapshot">Token Name (snapshot)</Translate>
           </dt>
-          <dd>{apiIngestionEntity.apiAccessToken ? apiIngestionEntity.apiAccessToken.name : ''}</dd>
+          <dd>{apiIngestionEntity.apiTokenNameSnapshot}</dd>
+          <dt>
+            <Translate contentKey="fintrackApp.apiIngestion.apiTokenPrefixSnapshot">Token Prefix (snapshot)</Translate>
+          </dt>
+          <dd>{apiIngestionEntity.apiTokenPrefixSnapshot}</dd>
+          <dt>
+            <Translate contentKey="fintrackApp.apiIngestion.apiTokenIdSnapshot">Token Id (snapshot)</Translate>
+          </dt>
+          <dd>{apiIngestionEntity.apiTokenIdSnapshot}</dd>
         </dl>
         <Button tag={Link} to="/api-ingestion" replace color="info" data-cy="entityDetailsBackButton">
           <FontAwesomeIcon icon="arrow-left" />{' '}

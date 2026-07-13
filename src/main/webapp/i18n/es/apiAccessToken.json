@@ -12,7 +12,15 @@
       "updated": "Un Api Access Token ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Api Access Token ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Api Access Token {{ id }}?"
+        "question": "¿Seguro que quiere eliminar Api Access Token {{ id }}?",
+        "message": "Esto elimina el token y sus permisos. El historial de ingestiones API se conserva y sigue visible mediante campos snapshot."
+      },
+      "create": {
+        "help": "Solo ingresa un nombre. El servidor genera el secreto del token y lo muestra una sola vez al crearlo.",
+        "rawTokenTitle": "Token API creado",
+        "rawTokenMessage": "Copia este token ahora. No se volverá a mostrar.",
+        "copyToken": "Copiar",
+        "copied": "Copiado al portapapeles."
       },
       "detail": {
         "title": "Api Access Token"
@@ -28,7 +36,6 @@
       "expiresAt": "Expires At",
       "revokedAt": "Revoked At",
       "user": "User",
-      "apiIngestions": "Api Ingestions",
       "permissions": "Permissions"
     }
   }

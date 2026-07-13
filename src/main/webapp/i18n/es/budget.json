@@ -12,7 +12,8 @@
       "updated": "Un Budget ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Budget ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Budget {{ id }}?"
+        "title": "¿Eliminar presupuesto?",
+        "message": "Esto eliminará el presupuesto. Tus cuentas, categorías, etiquetas, transacciones y suscripciones no se eliminarán. Este presupuesto simplemente dejará de aparecer en tus reportes y seguimiento. Esta acción no se puede deshacer."
       },
       "detail": {
         "title": "Budget"

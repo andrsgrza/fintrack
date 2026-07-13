@@ -12,7 +12,7 @@
       "updated": "A File Ingestion is updated with identifier {{ param }}",
       "deleted": "A File Ingestion is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete File Ingestion {{ id }}?"
+        "question": "File Ingestion {{ id }} cannot be deleted directly. Delete the parent Transaction Ingestion flow to clean up this file metadata."
       },
       "detail": {
         "title": "File Ingestion"

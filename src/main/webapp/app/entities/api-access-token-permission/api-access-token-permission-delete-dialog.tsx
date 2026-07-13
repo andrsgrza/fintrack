@@ -40,14 +40,12 @@ export const ApiAccessTokenPermissionDeleteDialog = () => {
   return (
     <Modal isOpen toggle={handleClose}>
       <ModalHeader toggle={handleClose} data-cy="apiAccessTokenPermissionDeleteDialogHeading">
-        <Translate contentKey="entity.delete.title">Confirm delete operation</Translate>
+        <Translate contentKey="fintrackApp.apiAccessTokenPermission.delete.title">Remove API token permission?</Translate>
       </ModalHeader>
-      <ModalBody id="fintrackApp.apiAccessTokenPermission.delete.question">
-        <Translate
-          contentKey="fintrackApp.apiAccessTokenPermission.delete.question"
-          interpolate={{ id: apiAccessTokenPermissionEntity.id }}
-        >
-          Are you sure you want to delete this ApiAccessTokenPermission?
+      <ModalBody id="fintrackApp.apiAccessTokenPermission.delete.message" data-cy="apiAccessTokenPermissionDeleteMessage">
+        <Translate contentKey="fintrackApp.apiAccessTokenPermission.delete.message">
+          This will remove this permission from the API token. The token will no longer be allowed to perform this action. The API token
+          itself will not be deleted, and existing imported data or history will not be affected.
         </Translate>
       </ModalBody>
       <ModalFooter>

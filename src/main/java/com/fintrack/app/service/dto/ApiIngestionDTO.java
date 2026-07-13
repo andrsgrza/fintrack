@@ -15,7 +15,6 @@ public class ApiIngestionDTO implements Serializable {
 
     private Long id;
 
-    @NotNull
     @Size(min = 1, max = 100)
     private String requestId;
 
@@ -25,11 +24,9 @@ public class ApiIngestionDTO implements Serializable {
     @Size(max = 100)
     private String sourceSystem;
 
-    @NotNull
     @Size(max = 20)
     private String apiVersion;
 
-    @NotNull
     @Size(max = 150)
     private String endpoint;
 
@@ -40,11 +37,15 @@ public class ApiIngestionDTO implements Serializable {
 
     private Instant createdAt;
 
-    @NotNull
-    private TransactionIngestionDTO transactionIngestion;
+    private Long apiTokenIdSnapshot;
 
-    @NotNull
-    private ApiAccessTokenDTO apiAccessToken;
+    @Size(max = 20)
+    private String apiTokenPrefixSnapshot;
+
+    @Size(max = 100)
+    private String apiTokenNameSnapshot;
+
+    private TransactionIngestionDTO transactionIngestion;
 
     public Long getId() {
         return id;
@@ -118,20 +119,36 @@ public class ApiIngestionDTO implements Serializable {
         this.createdAt = createdAt;
     }
 
+    public Long getApiTokenIdSnapshot() {
+        return apiTokenIdSnapshot;
+    }
+
+    public void setApiTokenIdSnapshot(Long apiTokenIdSnapshot) {
+        this.apiTokenIdSnapshot = apiTokenIdSnapshot;
+    }
+
+    public String getApiTokenPrefixSnapshot() {
+        return apiTokenPrefixSnapshot;
+    }
+
+    public void setApiTokenPrefixSnapshot(String apiTokenPrefixSnapshot) {
+        this.apiTokenPrefixSnapshot = apiTokenPrefixSnapshot;
+    }
+
+    public String getApiTokenNameSnapshot() {
+        return apiTokenNameSnapshot;
+    }
+
+    public void setApiTokenNameSnapshot(String apiTokenNameSnapshot) {
+        this.apiTokenNameSnapshot = apiTokenNameSnapshot;
+    }
+
     public TransactionIngestionDTO getTransactionIngestion() {
         return transactionIngestion;
     }
 
     public void setTransactionIngestion(TransactionIngestionDTO transactionIngestion) {
         this.transactionIngestion = transactionIngestion;
-    }
-
-    public ApiAccessTokenDTO getApiAccessToken() {
-        return apiAccessToken;
-    }
-
-    public void setApiAccessToken(ApiAccessTokenDTO apiAccessToken) {
-        this.apiAccessToken = apiAccessToken;
     }
 
     @Override
@@ -168,8 +185,10 @@ public class ApiIngestionDTO implements Serializable {
             ", clientReference='" + getClientReference() + "'" +
             ", receivedAt='" + getReceivedAt() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
+            ", apiTokenIdSnapshot=" + getApiTokenIdSnapshot() +
+            ", apiTokenPrefixSnapshot='" + getApiTokenPrefixSnapshot() + "'" +
+            ", apiTokenNameSnapshot='" + getApiTokenNameSnapshot() + "'" +
             ", transactionIngestion=" + getTransactionIngestion() +
-            ", apiAccessToken=" + getApiAccessToken() +
             "}";
     }
 }

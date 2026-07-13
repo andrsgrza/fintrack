@@ -40,11 +40,12 @@ export const FinancialSubscriptionDeleteDialog = () => {
   return (
     <Modal isOpen toggle={handleClose}>
       <ModalHeader toggle={handleClose} data-cy="financialSubscriptionDeleteDialogHeading">
-        <Translate contentKey="entity.delete.title">Confirm delete operation</Translate>
+        <Translate contentKey="fintrackApp.financialSubscription.delete.title">Delete subscription?</Translate>
       </ModalHeader>
-      <ModalBody id="fintrackApp.financialSubscription.delete.question">
-        <Translate contentKey="fintrackApp.financialSubscription.delete.question" interpolate={{ id: financialSubscriptionEntity.id }}>
-          Are you sure you want to delete this FinancialSubscription?
+      <ModalBody id="fintrackApp.financialSubscription.delete.message" data-cy="financialSubscriptionDeleteMessage">
+        <Translate contentKey="fintrackApp.financialSubscription.delete.message">
+          This will delete the subscription. Transactions that were linked to this subscription will not be deleted. They will simply no
+          longer be associated with it. Any rules that use this subscription as their target will be disabled. This action cannot be undone.
         </Translate>
       </ModalBody>
       <ModalFooter>

@@ -40,11 +40,12 @@ export const UserDashboardPreferenceDeleteDialog = () => {
   return (
     <Modal isOpen toggle={handleClose}>
       <ModalHeader toggle={handleClose} data-cy="userDashboardPreferenceDeleteDialogHeading">
-        <Translate contentKey="entity.delete.title">Confirm delete operation</Translate>
+        <Translate contentKey="fintrackApp.userDashboardPreference.delete.title">Reset dashboard preferences?</Translate>
       </ModalHeader>
-      <ModalBody id="fintrackApp.userDashboardPreference.delete.question">
-        <Translate contentKey="fintrackApp.userDashboardPreference.delete.question" interpolate={{ id: userDashboardPreferenceEntity.id }}>
-          Are you sure you want to delete this UserDashboardPreference?
+      <ModalBody id="fintrackApp.userDashboardPreference.delete.message" data-cy="userDashboardPreferenceDeleteMessage">
+        <Translate contentKey="fintrackApp.userDashboardPreference.delete.message">
+          This will reset your dashboard preferences. Your dashboard layout and saved display settings will be deleted. Your accounts,
+          transactions, categories, tags, budgets, and subscriptions will not be affected. You can configure your dashboard again later.
         </Translate>
       </ModalBody>
       <ModalFooter>

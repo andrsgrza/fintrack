@@ -12,7 +12,8 @@
       "updated": "A Api Access Token Permission is updated with identifier {{ param }}",
       "deleted": "A Api Access Token Permission is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Api Access Token Permission {{ id }}?"
+        "title": "Remove API token permission?",
+        "message": "This will remove this permission from the API token. The token will no longer be allowed to perform this action. The API token itself will not be deleted, and existing imported data or history will not be affected."
       },
       "detail": {
         "title": "Api Access Token Permission"

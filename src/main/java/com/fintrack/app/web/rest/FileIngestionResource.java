@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FileIngestionService;
 import com.fintrack.app.service.dto.FileIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -51,8 +50,7 @@ public class FileIngestionResource {
      * @throws URISyntaxException if the Location URI syntax is incorrect.
      */
     @PostMapping("")
-    public ResponseEntity<FileIngestionDTO> createFileIngestion(@Valid @RequestBody FileIngestionDTO fileIngestionDTO)
-        throws URISyntaxException {
+    public ResponseEntity<FileIngestionDTO> createFileIngestion(@RequestBody FileIngestionDTO fileIngestionDTO) throws URISyntaxException {
         LOG.debug("REST request to save FileIngestion : {}", fileIngestionDTO);
         if (fileIngestionDTO.getId() != null) {
             throw new BadRequestAlertException("A new fileIngestion cannot already have an ID", ENTITY_NAME, "idexists");
@@ -80,8 +78,14 @@ public class FileIngestionResource {
     @PutMapping("/{id}")
     public ResponseEntity<FileIngestionDTO> updateFileIngestion(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody FileIngestionDTO fileIngestionDTO
+        @NotNull @RequestBody JsonNode updateNode
     ) throws URISyntaxException {
+        FileIngestionDTO fileIngestionDTO;
+        try {
+            fileIngestionDTO = objectMapper.treeToValue(updateNode, FileIngestionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid update payload", ENTITY_NAME, "invalid");
+        }
         LOG.debug("REST request to update FileIngestion : {}, {}", id, fileIngestionDTO);
         if (fileIngestionDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
@@ -95,7 +99,7 @@ public class FileIngestionResource {
         }
 
         try {
-            fileIngestionDTO = fileIngestionService.update(fileIngestionDTO);
+            fileIngestionDTO = fileIngestionService.update(fileIngestionDTO, updateNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -123,6 +127,9 @@ public class FileIngestionResource {
         LOG.debug("REST request to partial update FileIngestion partially : {}, {}", id, patchNode);
         if (patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
             throw new BadRequestAlertException("Transaction ingestion cannot be null", ENTITY_NAME, "invalid");
+        }
+        if (patchNode.has("createdAt") && patchNode.get("createdAt").isNull()) {
+            throw new BadRequestAlertException("Created at cannot be null", ENTITY_NAME, "invalid");
         }
         FileIngestionDTO fileIngestionDTO;
         try {
@@ -187,8 +194,12 @@ public class FileIngestionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFileIngestion(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete FileIngestion : {}", id);
-        if (!fileIngestionService.delete(id)) {
-            return ResponseEntity.notFound().build();
+        try {
+            if (!fileIngestionService.delete(id)) {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))

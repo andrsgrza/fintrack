@@ -46,6 +46,11 @@ export const ApiAccessTokenDeleteDialog = () => {
         <Translate contentKey="fintrackApp.apiAccessToken.delete.question" interpolate={{ id: apiAccessTokenEntity.id }}>
           Are you sure you want to delete this ApiAccessToken?
         </Translate>
+        <p className="mt-2 mb-0">
+          <Translate contentKey="fintrackApp.apiAccessToken.delete.message">
+            This removes the token and its permissions. Historical API ingestion records are preserved.
+          </Translate>
+        </p>
       </ModalBody>
       <ModalFooter>
         <Button color="secondary" onClick={handleClose}>

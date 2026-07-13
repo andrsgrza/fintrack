@@ -1,6 +1,8 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.TransactionRuleCondition;
+import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -33,6 +35,27 @@ public interface TransactionRuleConditionRepository extends JpaRepository<Transa
     default List<TransactionRuleCondition> findAllWithEagerRelationshipsByRuleUserLogin(String login) {
         return this.findAllWithToOneRelationshipsByRuleUserLogin(login);
     }
+
+    long countByTransactionRuleId(Long transactionRuleId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    void deleteByTransactionRuleId(Long transactionRuleId);
+
+    @Query(
+        "select transactionRuleCondition from TransactionRuleCondition transactionRuleCondition " +
+        "where transactionRuleCondition.transactionRule.id = :ruleId " +
+        "and transactionRuleCondition.field = :field " +
+        "and transactionRuleCondition.operator = :operator " +
+        "and transactionRuleCondition.caseSensitive = :caseSensitive " +
+        "and (:excludeId is null or transactionRuleCondition.id <> :excludeId)"
+    )
+    List<TransactionRuleCondition> findPotentialDuplicates(
+        @Param("ruleId") Long ruleId,
+        @Param("field") TransactionRuleField field,
+        @Param("operator") RuleOperator operator,
+        @Param("caseSensitive") Boolean caseSensitive,
+        @Param("excludeId") Long excludeId
+    );
 
     @Query(
         value = "select transactionRuleCondition from TransactionRuleCondition transactionRuleCondition left join fetch transactionRuleCondition.transactionRule transactionRule left join fetch transactionRule.user",

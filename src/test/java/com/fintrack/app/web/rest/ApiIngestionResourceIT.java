@@ -5,6 +5,7 @@ import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -17,11 +18,12 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.repository.ApiAccessTokenRepository;
 import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.ApiIngestionService;
-import com.fintrack.app.service.dto.ApiAccessTokenDTO;
+import com.fintrack.app.service.dto.ApiIngestionCreateRequestDTO;
 import com.fintrack.app.service.dto.ApiIngestionDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.ApiIngestionMapper;
@@ -89,6 +91,9 @@ class ApiIngestionResourceIT {
     private ObjectMapper om;
 
     @Autowired
+    private ApiAccessTokenRepository apiAccessTokenRepository;
+
+    @Autowired
     private ApiIngestionRepository apiIngestionRepository;
 
     @Autowired
@@ -140,8 +145,14 @@ class ApiIngestionResourceIT {
         apiAccessToken.setTokenPrefix("PREFIX" + longCount.incrementAndGet());
         em.persist(apiAccessToken);
         em.flush();
-        apiIngestion.setApiAccessToken(apiAccessToken);
+        applyTokenSnapshots(apiIngestion, apiAccessToken);
         return apiIngestion;
+    }
+
+    public static void applyTokenSnapshots(ApiIngestion apiIngestion, ApiAccessToken apiAccessToken) {
+        apiIngestion.setApiTokenIdSnapshot(apiAccessToken.getId());
+        apiIngestion.setApiTokenPrefixSnapshot(apiAccessToken.getTokenPrefix());
+        apiIngestion.setApiTokenNameSnapshot(apiAccessToken.getName());
     }
 
     public static TransactionIngestion createApiTransactionIngestionEntity(EntityManager em) {
@@ -175,7 +186,7 @@ class ApiIngestionResourceIT {
         apiAccessToken.setTokenPrefix("PREFIX" + longCount.incrementAndGet());
         em.persist(apiAccessToken);
         em.flush();
-        updatedApiIngestion.setApiAccessToken(apiAccessToken);
+        applyTokenSnapshots(updatedApiIngestion, apiAccessToken);
         return updatedApiIngestion;
     }
 
@@ -196,8 +207,11 @@ class ApiIngestionResourceIT {
     @Transactional
     void createApiIngestion() throws Exception {
         long databaseSizeBeforeCreate = getRepositoryCount();
-        // Create the ApiIngestion
-        ApiIngestionDTO apiIngestionDTO = apiIngestionMapper.toDto(apiIngestion);
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+            apiIngestion.getTransactionIngestion().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
+            apiIngestion.getRequestId()
+        );
         var returnedApiIngestionDTO = om.readValue(
             restApiIngestionMockMvc
                 .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiIngestionDTO)))
@@ -215,6 +229,9 @@ class ApiIngestionResourceIT {
         assertThat(returnedApiIngestionDTO.getReceivedAt()).isNotNull();
         ApiIngestion persisted = apiIngestionRepository.findById(returnedApiIngestionDTO.getId()).orElseThrow();
         assertThat(persisted.getRequestId()).isEqualTo(returnedApiIngestionDTO.getRequestId());
+        assertThat(persisted.getApiTokenIdSnapshot()).isEqualTo(apiIngestion.getApiTokenIdSnapshot());
+        assertThat(persisted.getApiTokenPrefixSnapshot()).isEqualTo(apiIngestion.getApiTokenPrefixSnapshot());
+        assertThat(persisted.getApiTokenNameSnapshot()).isEqualTo(apiIngestion.getApiTokenNameSnapshot());
 
         insertedApiIngestion = persisted;
     }
@@ -292,9 +309,9 @@ class ApiIngestionResourceIT {
     @Transactional
     void createApiIngestionWithoutTimestampsPersistsServerTimestamps() throws Exception {
         long databaseSizeBeforeCreate = getRepositoryCount();
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             apiIngestion.getTransactionIngestion().getId(),
-            apiIngestion.getApiAccessToken().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
             "REQ-NO-TS-" + longCount.incrementAndGet()
         );
 
@@ -314,9 +331,9 @@ class ApiIngestionResourceIT {
     @Test
     @Transactional
     void createApiIngestionIgnoresClientTimestamps() throws Exception {
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             apiIngestion.getTransactionIngestion().getId(),
-            apiIngestion.getApiAccessToken().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
             "REQ-FAKE-TS-" + longCount.incrementAndGet()
         );
         apiIngestionDTO.setCreatedAt(DEFAULT_CREATED_AT);
@@ -400,12 +417,6 @@ class ApiIngestionResourceIT {
         ApiIngestion updatedApiIngestion = apiIngestionRepository.findById(apiIngestion.getId()).orElseThrow();
         // Disconnect from session so that the updates on updatedApiIngestion are not directly saved in db
         em.detach(updatedApiIngestion);
-        updatedApiIngestion
-            .idempotencyKey(UPDATED_IDEMPOTENCY_KEY)
-            .sourceSystem(UPDATED_SOURCE_SYSTEM)
-            .apiVersion(UPDATED_API_VERSION)
-            .endpoint(UPDATED_ENDPOINT)
-            .clientReference(UPDATED_CLIENT_REFERENCE);
         ApiIngestionDTO apiIngestionDTO = apiIngestionMapper.toDto(updatedApiIngestion);
 
         restApiIngestionMockMvc
@@ -418,7 +429,7 @@ class ApiIngestionResourceIT {
 
         // Validate the ApiIngestion in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedApiIngestionToMatchAllProperties(updatedApiIngestion);
+        assertPersistedApiIngestionToMatchAllProperties(apiIngestion);
     }
 
     @Test
@@ -495,16 +506,7 @@ class ApiIngestionResourceIT {
         ApiIngestion partialUpdatedApiIngestion = new ApiIngestion();
         partialUpdatedApiIngestion.setId(apiIngestion.getId());
 
-        String patchJson =
-            "{\"id\":" +
-            apiIngestion.getId() +
-            ",\"sourceSystem\":\"" +
-            UPDATED_SOURCE_SYSTEM +
-            "\",\"apiVersion\":\"" +
-            UPDATED_API_VERSION +
-            "\",\"endpoint\":\"" +
-            UPDATED_ENDPOINT +
-            "\"}";
+        String patchJson = "{\"id\":" + apiIngestion.getId() + "}";
 
         restApiIngestionMockMvc
             .perform(patch(ENTITY_API_URL_ID, apiIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
@@ -513,9 +515,7 @@ class ApiIngestionResourceIT {
         // Validate the ApiIngestion in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertThat(getPersistedApiIngestion(apiIngestion).getSourceSystem()).isEqualTo(UPDATED_SOURCE_SYSTEM);
-        assertThat(getPersistedApiIngestion(apiIngestion).getApiVersion()).isEqualTo(UPDATED_API_VERSION);
-        assertThat(getPersistedApiIngestion(apiIngestion).getEndpoint()).isEqualTo(UPDATED_ENDPOINT);
+        assertPersistedApiIngestionToMatchAllProperties(apiIngestion);
     }
 
     @Test
@@ -536,15 +536,15 @@ class ApiIngestionResourceIT {
             "{\"id\":" +
             apiIngestion.getId() +
             ",\"idempotencyKey\":\"" +
-            UPDATED_IDEMPOTENCY_KEY +
+            apiIngestion.getIdempotencyKey() +
             "\",\"sourceSystem\":\"" +
-            UPDATED_SOURCE_SYSTEM +
+            apiIngestion.getSourceSystem() +
             "\",\"apiVersion\":\"" +
-            UPDATED_API_VERSION +
+            apiIngestion.getApiVersion() +
             "\",\"endpoint\":\"" +
-            UPDATED_ENDPOINT +
+            apiIngestion.getEndpoint() +
             "\",\"clientReference\":\"" +
-            UPDATED_CLIENT_REFERENCE +
+            apiIngestion.getClientReference() +
             "\"}";
 
         restApiIngestionMockMvc
@@ -554,12 +554,7 @@ class ApiIngestionResourceIT {
         // Validate the ApiIngestion in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        ApiIngestion persisted = getPersistedApiIngestion(apiIngestion);
-        assertThat(persisted.getIdempotencyKey()).isEqualTo(UPDATED_IDEMPOTENCY_KEY);
-        assertThat(persisted.getSourceSystem()).isEqualTo(UPDATED_SOURCE_SYSTEM);
-        assertThat(persisted.getApiVersion()).isEqualTo(UPDATED_API_VERSION);
-        assertThat(persisted.getEndpoint()).isEqualTo(UPDATED_ENDPOINT);
-        assertThat(persisted.getClientReference()).isEqualTo(UPDATED_CLIENT_REFERENCE);
+        assertPersistedApiIngestionToMatchAllProperties(apiIngestion);
     }
 
     @Test
@@ -635,10 +630,10 @@ class ApiIngestionResourceIT {
         // Delete the apiIngestion
         restApiIngestionMockMvc
             .perform(delete(ENTITY_API_URL_ID, apiIngestion.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest());
 
-        // Validate the database contains one less item
-        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        // Validate the database is unchanged
+        assertSameRepositoryCount(databaseSizeBeforeDelete);
     }
 
     @Test
@@ -739,8 +734,7 @@ class ApiIngestionResourceIT {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(om.writeValueAsBytes(apiIngestionDTO))
             )
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.endpoint").value(UPDATED_ENDPOINT));
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -751,7 +745,7 @@ class ApiIngestionResourceIT {
 
         restApiIngestionMockMvc
             .perform(delete(ENTITY_API_URL_ID, otherApiIngestion.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -761,7 +755,7 @@ class ApiIngestionResourceIT {
         User otherUser = createOtherUser(em);
         TransactionIngestion otherIngestion = saveApiTransactionIngestionForUser(otherUser);
         ApiAccessToken otherToken = saveApiAccessTokenForUser(otherUser);
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             otherIngestion.getId(),
             otherToken.getId(),
             "REQ-ADMIN-FOREIGN-" + longCount.incrementAndGet()
@@ -787,7 +781,7 @@ class ApiIngestionResourceIT {
         User userB = createOtherUser(em);
         TransactionIngestion ingestionUserA = saveApiTransactionIngestionForUser(userA);
         ApiAccessToken tokenUserB = saveApiAccessTokenForUser(userB);
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             ingestionUserA.getId(),
             tokenUserB.getId(),
             "REQ-CROSS-OWNER-" + longCount.incrementAndGet()
@@ -802,9 +796,9 @@ class ApiIngestionResourceIT {
     @Transactional
     void createApiIngestionWithTransactionIngestionOwnedByAnotherUserFails() throws Exception {
         TransactionIngestion otherIngestion = saveApiTransactionIngestionForUser(createOtherUser(em));
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             otherIngestion.getId(),
-            apiIngestion.getApiAccessToken().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
             "REQ-FOREIGN-TI-" + longCount.incrementAndGet()
         );
 
@@ -817,7 +811,7 @@ class ApiIngestionResourceIT {
     @Transactional
     void createApiIngestionWithApiAccessTokenOwnedByAnotherUserFails() throws Exception {
         ApiAccessToken otherToken = saveApiAccessTokenForUser(createOtherUser(em));
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             apiIngestion.getTransactionIngestion().getId(),
             otherToken.getId(),
             "REQ-FOREIGN-TOKEN-" + longCount.incrementAndGet()
@@ -836,9 +830,9 @@ class ApiIngestionResourceIT {
         em.persist(fileIngestion);
         em.flush();
 
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             fileIngestion.getId(),
-            apiIngestion.getApiAccessToken().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
             "REQ-FILE-PARENT-" + longCount.incrementAndGet()
         );
 
@@ -851,9 +845,9 @@ class ApiIngestionResourceIT {
     @Transactional
     void createApiIngestionWithParentThatAlreadyHasApiIngestionFails() throws Exception {
         insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             apiIngestion.getTransactionIngestion().getId(),
-            apiIngestion.getApiAccessToken().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
             "REQ-DUP-PARENT-" + longCount.incrementAndGet()
         );
 
@@ -874,11 +868,81 @@ class ApiIngestionResourceIT {
         freshToken.setTokenPrefix("PREFIX" + longCount.incrementAndGet());
         em.persist(freshToken);
         em.flush();
-        ApiIngestionDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
             freshIngestion.getId(),
             freshToken.getId(),
             apiIngestion.getRequestId()
         );
+
+        restApiIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiIngestionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createApiIngestionNormalizesStrings() throws Exception {
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+            apiIngestion.getTransactionIngestion().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
+            "  REQ-TRIM-" + longCount.incrementAndGet() + "  "
+        );
+        apiIngestionDTO.setIdempotencyKey("   ");
+        apiIngestionDTO.setSourceSystem("  Mobile App  ");
+        apiIngestionDTO.setApiVersion("  v1  ");
+        apiIngestionDTO.setEndpoint("  /transactions  ");
+        apiIngestionDTO.setClientReference("   ");
+
+        var returnedApiIngestionDTO = om.readValue(
+            restApiIngestionMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiIngestionDTO)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.idempotencyKey").value(nullValue()))
+                .andExpect(jsonPath("$.sourceSystem").value("Mobile App"))
+                .andExpect(jsonPath("$.apiVersion").value("v1"))
+                .andExpect(jsonPath("$.endpoint").value("/transactions"))
+                .andExpect(jsonPath("$.clientReference").value(nullValue()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            ApiIngestionDTO.class
+        );
+
+        ApiIngestion persisted = apiIngestionRepository.findById(returnedApiIngestionDTO.getId()).orElseThrow();
+        assertThat(persisted.getRequestId()).startsWith("REQ-TRIM-").doesNotStartWith(" ");
+        insertedApiIngestion = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createApiIngestionWithBlankRequiredStringsFails() throws Exception {
+        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
+            apiIngestion.getTransactionIngestion().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
+            "   "
+        );
+
+        restApiIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiIngestionDTO)))
+            .andExpect(status().isBadRequest());
+
+        apiIngestionDTO = buildCreateApiIngestionDTO(
+            apiIngestion.getTransactionIngestion().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
+            "REQ-BLANK-API-VERSION-" + longCount.incrementAndGet()
+        );
+        apiIngestionDTO.setApiVersion("   ");
+
+        restApiIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiIngestionDTO)))
+            .andExpect(status().isBadRequest());
+
+        apiIngestionDTO = buildCreateApiIngestionDTO(
+            apiIngestion.getTransactionIngestion().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
+            "REQ-BLANK-ENDPOINT-" + longCount.incrementAndGet()
+        );
+        apiIngestionDTO.setEndpoint("   ");
 
         restApiIngestionMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiIngestionDTO)))
@@ -909,16 +973,26 @@ class ApiIngestionResourceIT {
 
     @Test
     @Transactional
-    void updateApiIngestionWithDifferentApiAccessTokenFails() throws Exception {
+    void updateApiIngestionWithDifferentEndpointFails() throws Exception {
         insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
-        ApiAccessToken otherToken = ApiAccessTokenResourceIT.createUpdatedEntity(em);
-        em.persist(otherToken);
-        em.flush();
-
         ApiIngestionDTO apiIngestionDTO = apiIngestionMapper.toDto(insertedApiIngestion);
-        ApiAccessTokenDTO otherTokenDTO = new ApiAccessTokenDTO();
-        otherTokenDTO.setId(otherToken.getId());
-        apiIngestionDTO.setApiAccessToken(otherTokenDTO);
+        apiIngestionDTO.setEndpoint(UPDATED_ENDPOINT);
+
+        restApiIngestionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, apiIngestionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(apiIngestionDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateApiIngestionWithDifferentApiTokenNameSnapshotFails() throws Exception {
+        insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
+        ApiIngestionDTO apiIngestionDTO = apiIngestionMapper.toDto(insertedApiIngestion);
+        apiIngestionDTO.setApiTokenNameSnapshot("renamed-token");
 
         restApiIngestionMockMvc
             .perform(
@@ -958,9 +1032,9 @@ class ApiIngestionResourceIT {
 
     @Test
     @Transactional
-    void patchApiIngestionWithNullApiAccessTokenFails() throws Exception {
+    void patchApiIngestionWithNullApiTokenNameSnapshotFails() throws Exception {
         insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
-        String patchJson = "{\"id\":" + apiIngestion.getId() + ",\"apiAccessToken\":null}";
+        String patchJson = "{\"id\":" + apiIngestion.getId() + ",\"apiTokenNameSnapshot\":null}";
 
         restApiIngestionMockMvc
             .perform(patch(ENTITY_API_URL_ID, apiIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
@@ -983,12 +1057,9 @@ class ApiIngestionResourceIT {
 
     @Test
     @Transactional
-    void patchApiIngestionWithDifferentApiAccessTokenFails() throws Exception {
+    void patchApiIngestionWithDifferentApiTokenNameSnapshotFails() throws Exception {
         insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
-        ApiAccessToken otherToken = ApiAccessTokenResourceIT.createUpdatedEntity(em);
-        em.persist(otherToken);
-        em.flush();
-        String patchJson = "{\"id\":" + apiIngestion.getId() + ",\"apiAccessToken\":{\"id\":" + otherToken.getId() + "}}";
+        String patchJson = "{\"id\":" + apiIngestion.getId() + ",\"apiTokenNameSnapshot\":\"renamed-token\"}";
 
         restApiIngestionMockMvc
             .perform(patch(ENTITY_API_URL_ID, apiIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
@@ -1006,6 +1077,70 @@ class ApiIngestionResourceIT {
             .andExpect(status().isBadRequest());
     }
 
+    @Test
+    @Transactional
+    void patchApiIngestionWithDifferentEndpointFails() throws Exception {
+        insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
+        String patchJson = "{\"id\":" + apiIngestion.getId() + ",\"endpoint\":\"" + UPDATED_ENDPOINT + "\"}";
+
+        restApiIngestionMockMvc
+            .perform(patch(ENTITY_API_URL_ID, apiIngestion.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createApiIngestionCopiesTokenSnapshots() throws Exception {
+        ApiIngestionCreateRequestDTO dto = buildCreateApiIngestionDTO(
+            apiIngestion.getTransactionIngestion().getId(),
+            apiIngestion.getApiTokenIdSnapshot(),
+            "REQ-SNAPSHOT-" + longCount.incrementAndGet()
+        );
+
+        restApiIngestionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.apiTokenIdSnapshot").value(apiIngestion.getApiTokenIdSnapshot().intValue()))
+            .andExpect(jsonPath("$.apiTokenPrefixSnapshot").value(apiIngestion.getApiTokenPrefixSnapshot()))
+            .andExpect(jsonPath("$.apiTokenNameSnapshot").value(apiIngestion.getApiTokenNameSnapshot()))
+            .andExpect(jsonPath("$.apiAccessToken").doesNotExist());
+
+        ApiIngestion persisted = apiIngestionRepository.findAll().get(apiIngestionRepository.findAll().size() - 1);
+        apiIngestionRepository.delete(persisted);
+    }
+
+    @Test
+    @Transactional
+    void getApiIngestionRetainsSnapshotsAfterTokenDeleted() throws Exception {
+        insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
+        Long tokenId = insertedApiIngestion.getApiTokenIdSnapshot();
+        String prefix = insertedApiIngestion.getApiTokenPrefixSnapshot();
+        String name = insertedApiIngestion.getApiTokenNameSnapshot();
+
+        apiAccessTokenRepository.deleteById(tokenId);
+        em.flush();
+
+        restApiIngestionMockMvc
+            .perform(get(ENTITY_API_URL_ID, insertedApiIngestion.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.apiTokenIdSnapshot").value(tokenId.intValue()))
+            .andExpect(jsonPath("$.apiTokenPrefixSnapshot").value(prefix))
+            .andExpect(jsonPath("$.apiTokenNameSnapshot").value(name));
+    }
+
+    @Test
+    @Transactional
+    void renameTokenDoesNotMutateOldIngestionSnapshots() throws Exception {
+        insertedApiIngestion = apiIngestionRepository.saveAndFlush(apiIngestion);
+        String originalName = insertedApiIngestion.getApiTokenNameSnapshot();
+        ApiAccessToken token = apiAccessTokenRepository.findById(insertedApiIngestion.getApiTokenIdSnapshot()).orElseThrow();
+        token.setName("Renamed Token");
+        apiAccessTokenRepository.saveAndFlush(token);
+
+        ApiIngestion reloaded = apiIngestionRepository.findById(insertedApiIngestion.getId()).orElseThrow();
+        assertThat(reloaded.getApiTokenNameSnapshot()).isEqualTo(originalName);
+    }
+
     private ApiIngestion saveApiIngestionOnOtherUsersIngestion() {
         User otherUser = createOtherUser(em);
         TransactionIngestion otherIngestion = saveApiTransactionIngestionForUser(otherUser);
@@ -1020,7 +1155,7 @@ class ApiIngestionResourceIT {
             .receivedAt(DEFAULT_RECEIVED_AT)
             .createdAt(DEFAULT_CREATED_AT);
         otherApiIngestion.setTransactionIngestion(otherIngestion);
-        otherApiIngestion.setApiAccessToken(otherToken);
+        applyTokenSnapshots(otherApiIngestion, otherToken);
         return apiIngestionRepository.saveAndFlush(otherApiIngestion);
     }
 
@@ -1056,8 +1191,8 @@ class ApiIngestionResourceIT {
         return financialAccount;
     }
 
-    private ApiIngestionDTO buildCreateApiIngestionDTO(Long transactionIngestionId, Long apiAccessTokenId, String requestId) {
-        ApiIngestionDTO apiIngestionDTO = new ApiIngestionDTO();
+    private ApiIngestionCreateRequestDTO buildCreateApiIngestionDTO(Long transactionIngestionId, Long apiAccessTokenId, String requestId) {
+        ApiIngestionCreateRequestDTO apiIngestionDTO = new ApiIngestionCreateRequestDTO();
         apiIngestionDTO.setRequestId(requestId);
         apiIngestionDTO.setIdempotencyKey(DEFAULT_IDEMPOTENCY_KEY);
         apiIngestionDTO.setSourceSystem(DEFAULT_SOURCE_SYSTEM);
@@ -1067,9 +1202,7 @@ class ApiIngestionResourceIT {
         TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
         transactionIngestionDTO.setId(transactionIngestionId);
         apiIngestionDTO.setTransactionIngestion(transactionIngestionDTO);
-        ApiAccessTokenDTO apiAccessTokenDTO = new ApiAccessTokenDTO();
-        apiAccessTokenDTO.setId(apiAccessTokenId);
-        apiIngestionDTO.setApiAccessToken(apiAccessTokenDTO);
+        apiIngestionDTO.setApiAccessTokenId(apiAccessTokenId);
         return apiIngestionDTO;
     }
 

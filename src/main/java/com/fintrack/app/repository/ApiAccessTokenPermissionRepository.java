@@ -17,6 +17,8 @@ import org.springframework.stereotype.Repository;
 public interface ApiAccessTokenPermissionRepository extends JpaRepository<ApiAccessTokenPermission, Long> {
     boolean existsByApiAccessTokenIdAndPermission(Long apiAccessTokenId, ApiPermission permission);
 
+    void deleteByApiAccessTokenId(Long apiAccessTokenId);
+
     default Optional<ApiAccessTokenPermission> findOneWithEagerRelationships(Long id) {
         return this.findOneWithToOneRelationships(id);
     }

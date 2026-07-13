@@ -31,6 +31,11 @@ class SpaWebFilterIT {
     }
 
     @Test
+    void testFilterForwardsApiPrefixedEntityRoutesToIndex() throws Exception {
+        mockMvc.perform(get("/api-access-token/2251/delete")).andExpect(status().isOk()).andExpect(forwardedUrl("/index.html"));
+    }
+
+    @Test
     @WithMockUser(authorities = AuthoritiesConstants.ADMIN)
     void testFilterDoesNotForwardToIndexForV3ApiDocs() throws Exception {
         mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk()).andExpect(forwardedUrl(null));

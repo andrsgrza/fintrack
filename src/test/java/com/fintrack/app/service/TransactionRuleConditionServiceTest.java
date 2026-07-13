@@ -3,6 +3,7 @@ package com.fintrack.app.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,11 +15,14 @@ import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.RuleOperator;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
+import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleConditionMapper;
+import java.time.Instant;
+import java.util.Collections;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +49,9 @@ class TransactionRuleConditionServiceTest {
     @Mock
     private TransactionRuleRepository transactionRuleRepository;
 
+    @Mock
+    private FinancialAccountRepository financialAccountRepository;
+
     @InjectMocks
     private TransactionRuleConditionService transactionRuleConditionService;
 
@@ -70,10 +77,14 @@ class TransactionRuleConditionServiceTest {
         ownRule = new TransactionRule();
         ownRule.setId(10L);
         ownRule.setUser(currentUser);
+        ownRule.setActive(true);
+        ownRule.setUpdatedAt(Instant.parse("2026-01-01T00:00:00Z"));
 
         otherRule = new TransactionRule();
         otherRule.setId(20L);
         otherRule.setUser(otherUser);
+        otherRule.setActive(true);
+        otherRule.setUpdatedAt(Instant.parse("2026-01-01T00:00:00Z"));
 
         transactionRuleCondition = new TransactionRuleCondition();
         transactionRuleCondition.setId(100L);
@@ -102,12 +113,20 @@ class TransactionRuleConditionServiceTest {
     @Test
     void saveShouldResolveAccessibleTransactionRule() {
         TransactionRuleCondition mappedEntity = new TransactionRuleCondition();
+        mappedEntity.setField(TransactionRuleField.DESCRIPTION);
+        mappedEntity.setOperator(RuleOperator.EQUALS);
+        mappedEntity.setValue("test");
+        mappedEntity.setCaseSensitive(false);
+        mappedEntity.setPosition(0);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(transactionRuleConditionMapper.toEntity(transactionRuleConditionDTO)).thenReturn(mappedEntity);
         when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(ownRule)
+        );
+        when(transactionRuleConditionRepository.findPotentialDuplicates(any(), any(), any(), any(), any())).thenReturn(
+            Collections.emptyList()
         );
         when(transactionRuleConditionRepository.save(mappedEntity)).thenReturn(transactionRuleCondition);
         when(transactionRuleConditionMapper.toDto(transactionRuleCondition)).thenReturn(transactionRuleConditionDTO);
@@ -135,6 +154,31 @@ class TransactionRuleConditionServiceTest {
     }
 
     @Test
+    void saveShouldRejectInvalidFieldOperatorCombination() {
+        TransactionRuleCondition mappedEntity = new TransactionRuleCondition();
+        mappedEntity.setField(TransactionRuleField.DESCRIPTION);
+        mappedEntity.setOperator(RuleOperator.GREATER_THAN);
+        mappedEntity.setValue("test");
+        mappedEntity.setCaseSensitive(false);
+        mappedEntity.setPosition(0);
+
+        transactionRuleConditionDTO.setOperator(RuleOperator.GREATER_THAN);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleConditionMapper.toEntity(transactionRuleConditionDTO)).thenReturn(mappedEntity);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(ownRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleConditionService.save(transactionRuleConditionDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Operator is not allowed for field");
+
+        verify(transactionRuleConditionRepository, never()).save(any());
+    }
+
+    @Test
     void updateShouldFailWhenConditionIsNotAccessible() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -150,8 +194,13 @@ class TransactionRuleConditionServiceTest {
     }
 
     @Test
-    void updateShouldRejectForeignTransactionRule() {
+    void updateShouldRejectChangedTransactionRule() {
         TransactionRuleCondition mappedEntity = new TransactionRuleCondition();
+        mappedEntity.setField(TransactionRuleField.DESCRIPTION);
+        mappedEntity.setOperator(RuleOperator.EQUALS);
+        mappedEntity.setValue("test");
+        mappedEntity.setCaseSensitive(false);
+        mappedEntity.setPosition(0);
         transactionRuleConditionDTO.setTransactionRule(otherRuleDTO);
 
         when(currentUserService.isAdmin()).thenReturn(false);
@@ -160,11 +209,10 @@ class TransactionRuleConditionServiceTest {
             Optional.of(transactionRuleCondition)
         );
         when(transactionRuleConditionMapper.toEntity(transactionRuleConditionDTO)).thenReturn(mappedEntity);
-        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(20L, CURRENT_USER_LOGIN)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionRuleConditionService.update(transactionRuleConditionDTO))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Transaction rule is not accessible");
+            .hasMessage("Transaction rule cannot be changed");
 
         verify(transactionRuleConditionRepository, never()).save(any());
     }
@@ -183,6 +231,9 @@ class TransactionRuleConditionServiceTest {
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(transactionRuleConditionRepository.findOneWithEagerRelationshipsByIdAndRuleUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(transactionRuleCondition)
+        );
+        when(transactionRuleConditionRepository.findPotentialDuplicates(any(), any(), any(), any(), eq(100L))).thenReturn(
+            Collections.emptyList()
         );
         when(transactionRuleConditionRepository.save(transactionRuleCondition)).thenReturn(transactionRuleCondition);
         when(transactionRuleConditionMapper.toDto(transactionRuleCondition)).thenReturn(transactionRuleConditionDTO);
@@ -218,35 +269,7 @@ class TransactionRuleConditionServiceTest {
     }
 
     @Test
-    void partialUpdateShouldRejectCrossOwnerReparentForAdmin() throws Exception {
-        ObjectMapper objectMapper = new ObjectMapper();
-        ObjectNode patchNode = objectMapper.createObjectNode();
-        patchNode.put("id", 200L);
-        patchNode.set("transactionRule", objectMapper.createObjectNode().put("id", 10L));
-
-        TransactionRuleCondition otherCondition = new TransactionRuleCondition();
-        otherCondition.setId(200L);
-        otherCondition.setTransactionRule(otherRule);
-        transactionRuleConditionDTO.setId(200L);
-        transactionRuleConditionDTO.setTransactionRule(ownRuleDTO);
-
-        when(currentUserService.isAdmin()).thenReturn(true);
-        when(transactionRuleConditionRepository.findOneWithEagerRelationships(200L)).thenReturn(Optional.of(otherCondition));
-        when(transactionRuleRepository.findOneWithToOneRelationships(10L)).thenReturn(Optional.of(ownRule));
-
-        assertThatThrownBy(() -> transactionRuleConditionService.partialUpdate(transactionRuleConditionDTO, patchNode))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Transaction rule must belong to the same owner");
-
-        verify(transactionRuleConditionRepository, never()).save(any());
-    }
-
-    @Test
-    void adminCanReparentWithinSameOwner() throws Exception {
-        TransactionRule secondOtherRule = new TransactionRule();
-        secondOtherRule.setId(21L);
-        secondOtherRule.setUser(otherUser);
-
+    void partialUpdateShouldRejectDifferentTransactionRuleId() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         ObjectNode patchNode = objectMapper.createObjectNode();
         patchNode.put("id", 200L);
@@ -254,6 +277,11 @@ class TransactionRuleConditionServiceTest {
 
         TransactionRuleCondition otherCondition = new TransactionRuleCondition();
         otherCondition.setId(200L);
+        otherCondition.setField(TransactionRuleField.DESCRIPTION);
+        otherCondition.setOperator(RuleOperator.EQUALS);
+        otherCondition.setValue("other");
+        otherCondition.setCaseSensitive(false);
+        otherCondition.setPosition(0);
         otherCondition.setTransactionRule(otherRule);
         transactionRuleConditionDTO.setId(200L);
         TransactionRuleDTO secondOtherRuleDTO = new TransactionRuleDTO();
@@ -262,17 +290,29 @@ class TransactionRuleConditionServiceTest {
 
         when(currentUserService.isAdmin()).thenReturn(true);
         when(transactionRuleConditionRepository.findOneWithEagerRelationships(200L)).thenReturn(Optional.of(otherCondition));
-        when(transactionRuleRepository.findOneWithToOneRelationships(21L)).thenReturn(Optional.of(secondOtherRule));
-        when(transactionRuleConditionRepository.save(otherCondition)).thenReturn(otherCondition);
-        when(transactionRuleConditionMapper.toDto(otherCondition)).thenReturn(transactionRuleConditionDTO);
 
-        Optional<TransactionRuleConditionDTO> result = transactionRuleConditionService.partialUpdate(
-            transactionRuleConditionDTO,
-            patchNode
+        assertThatThrownBy(() -> transactionRuleConditionService.partialUpdate(transactionRuleConditionDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Transaction rule cannot be changed");
+
+        verify(transactionRuleConditionRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteShouldDeactivateParentWhenLastCondition() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleConditionRepository.findOneWithEagerRelationshipsByIdAndRuleUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRuleCondition)
         );
+        when(transactionRuleConditionRepository.countByTransactionRuleId(10L)).thenReturn(1L);
+        when(transactionRuleRepository.save(ownRule)).thenReturn(ownRule);
 
-        assertThat(result).isPresent();
-        assertThat(otherCondition.getTransactionRule()).isEqualTo(secondOtherRule);
+        assertThat(transactionRuleConditionService.delete(100L)).isTrue();
+
+        verify(transactionRuleConditionRepository).deleteById(100L);
+        verify(transactionRuleRepository).save(ownRule);
+        assertThat(ownRule.getActive()).isFalse();
     }
 
     @Test

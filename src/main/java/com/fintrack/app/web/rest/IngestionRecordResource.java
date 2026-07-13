@@ -77,9 +77,15 @@ public class IngestionRecordResource {
     @PutMapping("/{id}")
     public ResponseEntity<IngestionRecordDTO> updateIngestionRecord(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody IngestionRecordDTO ingestionRecordDTO
+        @NotNull @RequestBody JsonNode updateNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to update IngestionRecord : {}, {}", id, ingestionRecordDTO);
+        LOG.debug("REST request to update IngestionRecord : {}, {}", id, updateNode);
+        IngestionRecordDTO ingestionRecordDTO;
+        try {
+            ingestionRecordDTO = objectMapper.treeToValue(updateNode, IngestionRecordDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid update payload", ENTITY_NAME, "invalid");
+        }
         if (ingestionRecordDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
@@ -92,7 +98,7 @@ public class IngestionRecordResource {
         }
 
         try {
-            ingestionRecordDTO = ingestionRecordService.update(ingestionRecordDTO);
+            ingestionRecordDTO = ingestionRecordService.update(ingestionRecordDTO, updateNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -109,9 +115,6 @@ public class IngestionRecordResource {
         LOG.debug("REST request to partial update IngestionRecord partially : {}, {}", id, patchNode);
         if (patchNode.has("transactionIngestion") && patchNode.get("transactionIngestion").isNull()) {
             throw new BadRequestAlertException("Transaction ingestion cannot be changed", ENTITY_NAME, "invalid");
-        }
-        if (patchNode.has("financialTransaction") && patchNode.get("financialTransaction").isNull()) {
-            throw new BadRequestAlertException("Financial transaction cannot be changed", ENTITY_NAME, "invalid");
         }
         IngestionRecordDTO ingestionRecordDTO;
         try {
@@ -171,8 +174,12 @@ public class IngestionRecordResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteIngestionRecord(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete IngestionRecord : {}", id);
-        if (!ingestionRecordService.delete(id)) {
-            return ResponseEntity.notFound().build();
+        try {
+            if (!ingestionRecordService.delete(id)) {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))

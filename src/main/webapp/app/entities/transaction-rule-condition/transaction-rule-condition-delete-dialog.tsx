@@ -40,14 +40,12 @@ export const TransactionRuleConditionDeleteDialog = () => {
   return (
     <Modal isOpen toggle={handleClose}>
       <ModalHeader toggle={handleClose} data-cy="transactionRuleConditionDeleteDialogHeading">
-        <Translate contentKey="entity.delete.title">Confirm delete operation</Translate>
+        <Translate contentKey="fintrackApp.transactionRuleCondition.delete.title">Delete rule condition?</Translate>
       </ModalHeader>
-      <ModalBody id="fintrackApp.transactionRuleCondition.delete.question">
-        <Translate
-          contentKey="fintrackApp.transactionRuleCondition.delete.question"
-          interpolate={{ id: transactionRuleConditionEntity.id }}
-        >
-          Are you sure you want to delete this TransactionRuleCondition?
+      <ModalBody id="fintrackApp.transactionRuleCondition.delete.message" data-cy="transactionRuleConditionDeleteMessage">
+        <Translate contentKey="fintrackApp.transactionRuleCondition.delete.message">
+          This will delete this rule condition. The rule itself will not be deleted. If this was the last condition, the rule will be
+          disabled to prevent it from matching every transaction. This action cannot be undone.
         </Translate>
       </ModalBody>
       <ModalFooter>

@@ -44,7 +44,7 @@ export const ApiIngestionDeleteDialog = () => {
       </ModalHeader>
       <ModalBody id="fintrackApp.apiIngestion.delete.question">
         <Translate contentKey="fintrackApp.apiIngestion.delete.question" interpolate={{ id: apiIngestionEntity.id }}>
-          Are you sure you want to delete this ApiIngestion?
+          Api Ingestion cannot be deleted directly.
         </Translate>
       </ModalBody>
       <ModalFooter>

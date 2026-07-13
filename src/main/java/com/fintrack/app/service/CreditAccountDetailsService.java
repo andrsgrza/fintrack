@@ -182,8 +182,7 @@ public class CreditAccountDetailsService {
         if (creditAccountDetails.isEmpty()) {
             return false;
         }
-        creditAccountDetailsRepository.deleteById(id);
-        return true;
+        throw new IllegalArgumentException("Credit account details cannot be deleted directly");
     }
 
     private Optional<CreditAccountDetails> findAccessibleEntity(Long id) {

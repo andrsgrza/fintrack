@@ -5,9 +5,8 @@ import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
-import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -46,8 +45,9 @@ public class CategoryService {
         LOG.debug("Request to save Category : {}", categoryDTO);
         Category category = categoryMapper.toEntity(categoryDTO);
         category.setUser(currentUserService.getCurrentUser());
-        applyParentCategory(category, categoryDTO.getParentCategory(), null);
+        applyParentCategoryOnCreate(category, categoryDTO.getParentCategory());
         category.setName(normalizeName(category.getName()));
+        validateChildCategoryTypeMatchesParent(category);
         validateUniqueSiblingNameForOwner(
             category.getUser().getId(),
             category.getCategoryType(),
@@ -68,10 +68,12 @@ public class CategoryService {
     public CategoryDTO update(CategoryDTO categoryDTO) {
         LOG.debug("Request to update Category : {}", categoryDTO);
         Category existingCategory = findAccessibleEntity(categoryDTO.getId()).orElseThrow();
+        validateParentCategoryImmutable(existingCategory, categoryDTO.getParentCategory());
         Category category = categoryMapper.toEntity(categoryDTO);
         category.setUser(existingCategory.getUser());
-        applyParentCategory(category, categoryDTO.getParentCategory(), existingCategory.getId());
+        category.setParentCategory(existingCategory.getParentCategory());
         category.setName(normalizeName(category.getName()));
+        validateCategoryTypeChange(existingCategory, existingCategory.getCategoryType(), category.getCategoryType());
         validateUniqueSiblingNameForOwner(
             existingCategory.getUser().getId(),
             category.getCategoryType(),
@@ -98,14 +100,20 @@ public class CategoryService {
                 boolean nameProvided = categoryDTO.getName() != null;
                 boolean categoryTypeProvided = categoryDTO.getCategoryType() != null;
 
-                categoryMapper.partialUpdate(existingCategory, categoryDTO);
+                CategoryType previousCategoryType = existingCategory.getCategoryType();
+
                 if (parentProvided) {
-                    applyParentCategory(existingCategory, categoryDTO.getParentCategory(), existingCategory.getId());
+                    validateParentCategoryImmutable(existingCategory, categoryDTO.getParentCategory());
                 }
+
+                categoryMapper.partialUpdate(existingCategory, categoryDTO);
                 if (nameProvided) {
                     existingCategory.setName(normalizeName(categoryDTO.getName()));
                 }
-                if (nameProvided || parentProvided || categoryTypeProvided) {
+                if (categoryTypeProvided) {
+                    validateCategoryTypeChange(existingCategory, previousCategoryType, existingCategory.getCategoryType());
+                }
+                if (nameProvided || categoryTypeProvided) {
                     validateUniqueSiblingNameForOwner(
                         existingCategory.getUser().getId(),
                         existingCategory.getCategoryType(),
@@ -169,8 +177,20 @@ public class CategoryService {
         if (category.isEmpty()) {
             return false;
         }
-        categoryRepository.deleteById(id);
+        Long categoryId = category.orElseThrow().getId();
+        if (categoryRepository.existsByParentCategoryId(categoryId)) {
+            throw new IllegalArgumentException("Category with child categories cannot be deleted");
+        }
+        unlinkCategoryFromAllRelationships(categoryId);
+        categoryRepository.deleteById(categoryId);
         return true;
+    }
+
+    private void unlinkCategoryFromAllRelationships(Long categoryId) {
+        categoryRepository.clearFinancialTransactionCategoryReferences(categoryId);
+        categoryRepository.clearFinancialSubscriptionCategoryReferences(categoryId);
+        categoryRepository.deleteBudgetCategoryLinksByCategoryId(categoryId);
+        categoryRepository.clearTransactionRuleResultingCategoryReferences(categoryId);
     }
 
     private Optional<Category> findAccessibleEntity(Long id) {
@@ -180,41 +200,60 @@ public class CategoryService {
         return categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void applyParentCategory(Category category, CategoryDTO parentCategoryDTO, Long categoryId) {
+    private void applyParentCategoryOnCreate(Category category, CategoryDTO parentCategoryDTO) {
         if (parentCategoryDTO == null || parentCategoryDTO.getId() == null) {
             category.setParentCategory(null);
             return;
         }
         Long parentId = parentCategoryDTO.getId();
-        if (categoryId != null && parentId.equals(categoryId)) {
-            throw new IllegalArgumentException("Category cannot be its own parent");
-        }
         Category parent = findAccessibleEntity(parentId).orElseThrow(() -> new IllegalArgumentException("Parent category is not accessible")
         );
-        validateNoCycle(categoryId, parent);
         category.setParentCategory(parent);
     }
 
-    private void validateNoCycle(Long categoryId, Category parent) {
-        if (categoryId == null) {
+    private void validateParentCategoryImmutable(Category existingCategory, CategoryDTO parentCategoryDTO) {
+        Long existingParentId = resolveParentCategoryId(existingCategory);
+        Long requestedParentId = null;
+        if (parentCategoryDTO != null && parentCategoryDTO.getId() != null) {
+            requestedParentId = parentCategoryDTO.getId();
+        }
+        if (Objects.equals(existingParentId, requestedParentId)) {
             return;
         }
-        Set<Long> visitedParentIds = new HashSet<>();
-        Category current = parent;
-        while (current != null && current.getId() != null) {
-            Long currentId = current.getId();
-            if (currentId.equals(categoryId)) {
-                throw new IllegalArgumentException("Category hierarchy cannot contain a cycle");
-            }
-            if (!visitedParentIds.add(currentId)) {
-                throw new IllegalArgumentException("Category hierarchy cannot contain a cycle");
-            }
-            Category parentCategory = current.getParentCategory();
-            if (parentCategory == null || parentCategory.getId() == null) {
-                break;
-            }
-            current = categoryRepository.findOneWithToOneRelationships(parentCategory.getId()).orElse(parentCategory);
+        throw new IllegalArgumentException("Parent category cannot be changed");
+    }
+
+    private void validateCategoryTypeChange(Category existingCategory, CategoryType previousCategoryType, CategoryType newCategoryType) {
+        if (newCategoryType == null || newCategoryType.equals(previousCategoryType)) {
+            return;
         }
+        if (isCategoryInUse(existingCategory.getId())) {
+            throw new IllegalArgumentException("Category type cannot be changed while category is in use");
+        }
+        validateChildCategoryTypeMatchesParent(existingCategory.getParentCategory(), newCategoryType);
+    }
+
+    private void validateChildCategoryTypeMatchesParent(Category category) {
+        validateChildCategoryTypeMatchesParent(category.getParentCategory(), category.getCategoryType());
+    }
+
+    private void validateChildCategoryTypeMatchesParent(Category parentCategory, CategoryType categoryType) {
+        if (parentCategory == null || categoryType == null) {
+            return;
+        }
+        if (!categoryType.equals(parentCategory.getCategoryType())) {
+            throw new IllegalArgumentException("Child category type must match parent category type");
+        }
+    }
+
+    private boolean isCategoryInUse(Long categoryId) {
+        return (
+            categoryRepository.existsByParentCategoryId(categoryId) ||
+            categoryRepository.existsFinancialTransactionByCategoryId(categoryId) ||
+            categoryRepository.existsFinancialSubscriptionByCategoryId(categoryId) ||
+            categoryRepository.existsBudgetCategoryLinkByCategoryId(categoryId) ||
+            categoryRepository.existsTransactionRuleByResultingCategoryId(categoryId)
+        );
     }
 
     private String normalizeName(String name) {
