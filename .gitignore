@@ -151,8 +151,3 @@ Desktop.ini
 ######################
 coverage/
 .nyc_output/
-
-######################
-# Implementation documentation
-######################
-docs/
