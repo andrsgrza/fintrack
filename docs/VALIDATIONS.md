@@ -59,7 +59,7 @@ Companion docs:
 
 | # | Entity | DTO | Entity | DB | Service | REST | Notes |
 |---|--------|-----|--------|-----|---------|------|-------|
-| 1 | FinancialAccount | ✅ | ✅ | ✅ | ✅ | ✅ | Immutable `currency`/`accountType`; PATCH JsonNode |
+| 1 | FinancialAccount | ✅ | ✅ | ✅ | ✅ | ✅ | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor |
 | 2 | FinancialTransaction | ✅ | ✅ | ✅ | ✅ | ✅ | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0 |
 | 3 | CreditAccountDetails | ✅ | ✅ | ✅ | ✅ | ✅ | CREDIT_CARD + 1:1 + immutable account |
 | 4 | Category | ✅ | ✅ | ✅ | ✅ | ✅ | Sibling-unique `name` per owner+type+parent (trim, case-insensitive) |
@@ -88,9 +88,9 @@ Companion docs:
 | **DTO** | `name` (1–100), `accountType`, `currency`, `initialBalance`, `initialBalanceDate`, `active`, timestamps `@NotNull`; `last4` pattern `^[0-9]{4}$`; `color` hex pattern; sizes on institution/description/icon. **`user` optional** (service assigns). |
 | **Entity** | Same as DTO + **`user` required**. |
 | **DB** | `user_id NOT NULL` FK. |
-| **Service** | Create: `user = currentUser`. Update/patch: preserve owner. **`currency` and `accountType` immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. Scoped read/write. |
+| **Service** | Create: `user = currentUser`. Update/patch: preserve owner. **`currency` and `accountType` immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalanceDate` may not be after the earliest `FinancialTransaction.transactionDate` when transactions exist. Delete orchestrates TransactionIngestion trees, remaining FinancialTransactions, Budget account links, FinancialSubscription account nulling, CreditAccountDetails cleanup, then account delete. Scoped read/write. |
 | **REST** | `@Valid` POST/PUT; PATCH **JsonNode** (`currency`/`accountType` null → `400`); `isAccessible()` on mutate; `400 invalid` on business errors. |
-| **Tests** | `FinancialAccountResourceIT` (7 immutability IT); `FinancialAccountServiceTest` (2 immutability unit). PATCH IT uses minimal JSON — see [TESTING.md § FA](TESTING.md#financialaccount). |
+| **Tests** | `FinancialAccountResourceIT` (ownership, immutability, delete orchestration, initial date floor); `FinancialAccountServiceTest` (ownership, immutability, orchestration, floor unit). PATCH IT uses minimal JSON — see [TESTING.md § FA](TESTING.md#financialaccount). |
 
 ### 2. FinancialTransaction
 
@@ -282,4 +282,4 @@ When adding a validation rule:
 
 ---
 
-*Last updated: 2026-07-12 — validation catalog aligned with FinancialTransaction JsonNode semantics, ingestion lifecycle passes, and TransactionRule CRUD/domain baseline completion.*
+*Last updated: 2026-07-12 — validation catalog aligned with FinancialAccount delete orchestration, FinancialTransaction JsonNode semantics, ingestion lifecycle passes, and TransactionRule CRUD/domain baseline completion.*

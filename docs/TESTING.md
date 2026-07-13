@@ -290,14 +290,14 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 **Domain rules in service:** assign `user` on create; ignore client `user`; preserve owner on update/patch; scope all reads/writes.
 
-**Validation rules in service:** `currency` and `accountType` **immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType` null or different → `400 invalid`.
+**Validation/domain rules in service:** `currency` and `accountType` **immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalanceDate` must be `<=` earliest transaction `transactionDate` when transactions exist. `active=false` has no side effects. DELETE is orchestrated through TransactionIngestion and FinancialTransaction delegates before account-level link cleanup. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType` null or different → `400 invalid`.
 
 ### Summary counts
 
 | Type | File | Tests | Custom vs generated |
 |------|------|-------|---------------------|
-| Integration IT | `FinancialAccountResourceIT` | **108** | 23 custom (16 ownership + 7 immutability) + 85 JHipster CRUD/filters |
-| Unit — service | `FinancialAccountServiceTest` | **11** | All custom (ownership + immutables) |
+| Integration IT | `FinancialAccountResourceIT` | **118** | Custom ownership + immutability + delete orchestration + date-floor tests, plus JHipster CRUD/filters |
+| Unit — service | `FinancialAccountServiceTest` | **12** | All custom (ownership + immutables + delete orchestration + date-floor guard) |
 | Unit — foundation | `CurrentUserServiceTest` | **5** | Shared; used by FA, FT, and future entities |
 | Unit — domain | `FinancialAccountTest` | **6** | Generated (JPA relations) |
 | Unit — mapper | `FinancialAccountMapperTest` | **1** | Generated |
@@ -345,9 +345,24 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `patchFinancialAccountCanChangeInitialBalanceDate` | `PATCH /:id` | `{"initialBalanceDate":"…"}` only | `200`; date updated |
 | `patchFinancialAccountCanChangeActive` | `PATCH /:id` | `{"active": true}` only | `200`; active updated |
 
+#### 1.3 Delete orchestration & domain guards (10) — ✅ custom
+
+| Test | What it checks |
+|------|----------------|
+| `deleteFinancialAccountWithCreditAccountDetailsDeletesDetails` | CAD row is removed through account orchestration |
+| `deleteFinancialAccountLinkedToBudgetRemovesLinkAndPreservesBudget` | Budget survives; account M2M link removed |
+| `deleteFinancialAccountLinkedToSubscriptionClearsAccountAndPreservesSubscription` | Subscription survives; `account = null` |
+| `deleteFinancialAccountWithManualTransactionDeletesTransactionAndPreservesTags` | Remaining tx deleted; tags survive |
+| `deleteFinancialAccountWithInternalTransferPreservesOppositeTransaction` | Transfer row deleted; tx on deleted account removed; opposite tx survives |
+| `deleteFinancialAccountWithTransactionIngestionTreeDeletesTree` | File/API metadata, records, ingestion-linked txs, and parents removed |
+| `patchFinancialAccountActiveHasNoSideEffects` | `active` update does not delete txs or unlink budgets/subscriptions |
+| `putInitialBalanceDateAfterEarliestTransactionDateFails` | PUT date floor violation → `400` |
+| `putInitialBalanceDateEqualOrBeforeEarliestTransactionDateSucceeds` | Equal/before earliest transaction date accepted |
+| `patchInitialBalanceDateAfterEarliestTransactionDateFails` | PATCH date floor violation → `400` |
+
 **PATCH note:** Successful PATCH tests send **minimal JSON** (`ObjectNode` with only the field under test). Full entity/DTO serialization includes `currency`/`accountType: null`, which JsonNode PATCH treats as an explicit change → `400`.
 
-#### 1.3 CRUD & validation (11) — 🟡 JHipster generated
+#### 1.4 CRUD & validation (11) — 🟡 JHipster generated
 
 | Test | What it checks |
 |------|----------------|
@@ -363,7 +378,7 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `checkUpdatedAtIsRequired` | Missing timestamp → `400` |
 | `deleteFinancialAccount` | Happy-path `DELETE` → `204` |
 
-#### 1.4 Read & update (14) — 🟡 JHipster generated
+#### 1.5 Read & update (14) — 🟡 JHipster generated
 
 | Test | What it checks |
 |------|----------------|
@@ -382,7 +397,7 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `getAllFinancialAccountsWithEagerRelationshipsIsEnabled` | Mockito — eager load path |
 | `getAllFinancialAccountsWithEagerRelationshipsIsNotEnabled` | Mockito — lazy path |
 
-#### 1.5 Criteria filters (60) — 🟡 JHipster generated
+#### 1.6 Criteria filters (60) — 🟡 JHipster generated
 
 One test per filterable field (`name`, `institutionName`, `accountType`, `currency`, `initialBalance`, `initialBalanceDate`, `lastFourDigits`, `description`, `color`, `icon`, `active`, `createdAt`, `updatedAt`, `userId`, `budgets`, `transactionIngestions`). Each exercises `equals`, `in`, `specified`, `contains` / `doesNotContain`, or range operators where applicable.
 
@@ -392,9 +407,9 @@ One test per filterable field (`name`, `institutionName`, `accountType`, `curren
 
 ### 2. Unit tests — service layer
 
-#### 2.1 `FinancialAccountServiceTest` (11) — ✅ custom
+#### 2.1 `FinancialAccountServiceTest` (12) — ✅ custom
 
-Mocks: `FinancialAccountRepository`, `FinancialAccountMapper`, `CurrentUserService`. No Spring context.
+Mocks: `FinancialAccountRepository`, `FinancialAccountMapper`, `CurrentUserService`, cleanup/delegate repositories/services. No Spring context.
 
 | Test | Rule under test |
 |------|-----------------|
@@ -406,7 +421,8 @@ Mocks: `FinancialAccountRepository`, `FinancialAccountMapper`, `CurrentUserServi
 | `findOneShouldReturnEmptyForAnotherUsersAccount` | Non-admin scoped `findOne` → empty |
 | `findOneShouldUseAdminLookupWhenCurrentUserIsAdmin` | Admin uses `findOneWithEagerRelationships` |
 | `deleteShouldReturnFalseWhenAccountIsNotAccessible` | `delete()` → `false`, no `deleteById` |
-| `deleteShouldRemoveAccessibleAccount` | `delete()` → `true`, calls `deleteById` |
+| `deleteShouldRemoveAccessibleAccount` | `delete()` → `true`, delegates TI/FT cleanup, clears account-level links, calls `deleteById` |
+| `updateShouldRejectInitialBalanceDateAfterEarliestTransactionDate` | `initialBalanceDate` after earliest transaction date → `IllegalArgumentException` |
 | `findAllWithEagerRelationshipsShouldScopeToCurrentUser` | Non-admin list uses `findAll...ByUserLogin` |
 | `partialUpdateShouldReturnEmptyWhenAccountIsNotAccessible` | Scoped partial update → `Optional.empty()` |
 
@@ -2173,5 +2189,6 @@ Copy this block when hardening the next entity:
 | 2026-07-09 | IngestionRecord | Superseded by 2026-07-12 domain pass; initial ownership baseline was 74 IT + 7 service. |
 | 2026-07-12 | IngestionRecord domain rules | 87 IT, 7 service unit, +1 FT helper IT; status consistency, parent final freeze, externalRecordId parent-scoped uniqueness, rawData log safety, direct delete blocked. |
 | 2026-07-12 | FinancialTransaction domain rules | 101 IT, 10 service unit; JsonNode presence semantics, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup. |
+| 2026-07-12 | FinancialAccount domain rules | 118 IT, 12 service unit; delete orchestration for ingestion/transaction trees and account-level links, `initialBalanceDate` floor, active no-side-effects. |
 | 2026-07-11 | **Decision 11C — snapshot audit** | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup. |
 | 2026-07-11 | **Decision 11C implemented ✅** | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal. |
