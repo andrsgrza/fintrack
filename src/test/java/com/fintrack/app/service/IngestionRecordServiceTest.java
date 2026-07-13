@@ -15,6 +15,7 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
+import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
@@ -83,11 +84,13 @@ class IngestionRecordServiceTest {
 
         transactionIngestion = new TransactionIngestion();
         transactionIngestion.setId(50L);
+        transactionIngestion.setStatus(IngestionStatus.PENDING);
         transactionIngestion.setAccount(account);
 
         financialTransaction = new FinancialTransaction();
         financialTransaction.setId(70L);
         financialTransaction.setAccount(account);
+        financialTransaction.setTransactionIngestion(transactionIngestion);
 
         ingestionRecord = new IngestionRecord();
         ingestionRecord.setId(100L);
@@ -99,7 +102,7 @@ class IngestionRecordServiceTest {
 
         ingestionRecordDTO = new IngestionRecordDTO();
         ingestionRecordDTO.setRecordIndex(0);
-        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.SKIPPED_DUPLICATE);
 
         TransactionIngestionDTO transactionIngestionDTO = new TransactionIngestionDTO();
         transactionIngestionDTO.setId(50L);
@@ -110,7 +113,7 @@ class IngestionRecordServiceTest {
     void saveShouldResolveParentsApplyCreatedAtAndValidateRecordIndex() {
         IngestionRecord mappedEntity = new IngestionRecord();
         mappedEntity.setRecordIndex(0);
-        mappedEntity.setStatus(IngestionRecordStatus.CREATED);
+        mappedEntity.setStatus(IngestionRecordStatus.SKIPPED_DUPLICATE);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -138,6 +141,7 @@ class IngestionRecordServiceTest {
     void saveShouldRejectCrossOwnerFinancialTransactionEvenForAdmin() {
         IngestionRecord mappedEntity = new IngestionRecord();
         mappedEntity.setRecordIndex(1);
+        mappedEntity.setStatus(IngestionRecordStatus.CREATED);
 
         FinancialTransaction otherTransaction = new FinancialTransaction();
         otherTransaction.setId(71L);
@@ -147,6 +151,7 @@ class IngestionRecordServiceTest {
         financialTransactionDTO.setId(71L);
         ingestionRecordDTO.setFinancialTransaction(financialTransactionDTO);
         ingestionRecordDTO.setRecordIndex(1);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
 
         when(currentUserService.isAdmin()).thenReturn(true);
         when(ingestionRecordMapper.toEntity(ingestionRecordDTO)).thenReturn(mappedEntity);
@@ -161,11 +166,13 @@ class IngestionRecordServiceTest {
     void saveShouldRejectFinancialTransactionAlreadyLinked() {
         IngestionRecord mappedEntity = new IngestionRecord();
         mappedEntity.setRecordIndex(2);
+        mappedEntity.setStatus(IngestionRecordStatus.CREATED);
 
         FinancialTransactionDTO financialTransactionDTO = new FinancialTransactionDTO();
         financialTransactionDTO.setId(70L);
         ingestionRecordDTO.setFinancialTransaction(financialTransactionDTO);
         ingestionRecordDTO.setRecordIndex(2);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -211,6 +218,7 @@ class IngestionRecordServiceTest {
         ).thenReturn(Optional.of(ingestionRecord));
 
         ingestionRecordDTO.setId(100L);
+        ingestionRecordDTO.setTransactionIngestion(null);
         ObjectNode patchNode = new ObjectMapper().createObjectNode();
         patchNode.putNull("transactionIngestion");
         assertThatThrownBy(() -> ingestionRecordService.partialUpdate(ingestionRecordDTO, patchNode)).isInstanceOf(
