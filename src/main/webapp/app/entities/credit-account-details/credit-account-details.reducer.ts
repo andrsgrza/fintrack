@@ -36,6 +36,15 @@ export const getEntity = createAsyncThunk(
   { serializeError: serializeAxiosError },
 );
 
+export const getEntityByAccountId = createAsyncThunk(
+  'creditAccountDetails/fetch_entity_by_account',
+  async (accountId: string | number) => {
+    const requestUrl = `${apiUrl}/by-account/${accountId}`;
+    return axios.get<ICreditAccountDetails>(requestUrl);
+  },
+  { serializeError: serializeAxiosError },
+);
+
 export const createEntity = createAsyncThunk(
   'creditAccountDetails/create_entity',
   async (entity: ICreditAccountDetails, thunkAPI) => {
@@ -88,6 +97,10 @@ export const CreditAccountDetailsSlice = createEntitySlice({
         state.loading = false;
         state.entity = action.payload.data;
       })
+      .addCase(getEntityByAccountId.fulfilled, (state, action) => {
+        state.loading = false;
+        state.entity = action.payload.data;
+      })
       .addCase(deleteEntity.fulfilled, state => {
         state.updating = false;
         state.updateSuccess = true;
@@ -115,7 +128,7 @@ export const CreditAccountDetailsSlice = createEntitySlice({
         state.updateSuccess = true;
         state.entity = action.payload.data;
       })
-      .addMatcher(isPending(getEntities, getEntity), state => {
+      .addMatcher(isPending(getEntities, getEntity, getEntityByAccountId), state => {
         state.errorMessage = null;
         state.updateSuccess = false;
         state.loading = true;

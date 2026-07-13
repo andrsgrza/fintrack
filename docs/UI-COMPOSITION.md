@@ -42,3 +42,13 @@ Naming:
 - `*ViewSection.tsx` for embedded read-only child sections.
 - `*CollectionEditor.tsx` for embedded editable child collections.
 - `*RelatedList.tsx` for read-only related lists.
+
+## Implemented cases
+
+### FinancialAccount + CreditAccountDetails
+
+`CREDIT_CARD` FinancialAccount create/edit embeds CreditAccountDetails fields as a child form section, without exposing the `account` relationship selector. FinancialAccount detail embeds a read-only CreditAccountDetails view section.
+
+This is frontend orchestration today: FinancialAccount is saved first, then CreditAccountDetails is created or updated for the saved account. Atomic backend command endpoint remains deferred.
+
+Standalone CreditAccountDetails CRUD remains available for admin/debug/direct maintenance.

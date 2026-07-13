@@ -499,4 +499,20 @@ class CreditAccountDetailsServiceTest {
         verify(creditAccountDetailsRepository).findAllWithEagerRelationshipsByAccountUserLogin(CURRENT_USER_LOGIN);
         verify(creditAccountDetailsRepository, never()).findAllWithEagerRelationships();
     }
+
+    @Test
+    void findOneByAccountIdShouldUseScopedQueryForRegularUser() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(
+            creditAccountDetailsRepository.findOneWithEagerRelationshipsByAccountIdAndAccountUserLogin(10L, CURRENT_USER_LOGIN)
+        ).thenReturn(Optional.of(creditAccountDetails));
+        when(creditAccountDetailsMapper.toDto(creditAccountDetails)).thenReturn(creditAccountDetailsDTO);
+
+        Optional<CreditAccountDetailsDTO> result = creditAccountDetailsService.findOneByAccountId(10L);
+
+        assertThat(result).contains(creditAccountDetailsDTO);
+        verify(creditAccountDetailsRepository).findOneWithEagerRelationshipsByAccountIdAndAccountUserLogin(10L, CURRENT_USER_LOGIN);
+        verify(creditAccountDetailsRepository, never()).findOneWithEagerRelationshipsByAccountId(10L);
+    }
 }

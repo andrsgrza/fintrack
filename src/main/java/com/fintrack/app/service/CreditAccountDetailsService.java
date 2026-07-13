@@ -180,6 +180,25 @@ public class CreditAccountDetailsService {
     }
 
     /**
+     * Get one creditAccountDetails by financial account id.
+     *
+     * @param accountId the id of the parent financial account.
+     * @return the entity when the parent account is accessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<CreditAccountDetailsDTO> findOneByAccountId(Long accountId) {
+        LOG.debug("Request to get CreditAccountDetails for FinancialAccount : {}", accountId);
+        if (currentUserService.isAdmin()) {
+            return creditAccountDetailsRepository
+                .findOneWithEagerRelationshipsByAccountId(accountId)
+                .map(creditAccountDetailsMapper::toDto);
+        }
+        return creditAccountDetailsRepository
+            .findOneWithEagerRelationshipsByAccountIdAndAccountUserLogin(accountId, currentUserService.getCurrentUserLogin())
+            .map(creditAccountDetailsMapper::toDto);
+    }
+
+    /**
      * Returns whether the current user can access the credit account details.
      *
      * @param id the id of the entity.

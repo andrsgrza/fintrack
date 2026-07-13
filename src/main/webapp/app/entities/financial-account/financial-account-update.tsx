@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Alert, Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -9,7 +9,15 @@ import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { AccountType } from 'app/shared/model/enumerations/account-type.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { createEntity, getEntity, reset, updateEntity } from './financial-account.reducer';
+import {
+  createEntity as createCreditAccountDetails,
+  getEntityByAccountId as getCreditAccountDetailsByAccountId,
+  reset as resetCreditAccountDetails,
+  updateEntity as updateCreditAccountDetails,
+} from 'app/entities/credit-account-details/credit-account-details.reducer';
 import { getInitialBalanceHelpKey, getInitialBalanceLabelKey } from './financial-account-labels';
+import CreditCardDetailsFormSection, { creditCardDetailsFieldNames } from './components/credit-card-details-form-section';
+import { ICreditAccountDetails } from 'app/shared/model/credit-account-details.model';
 
 const resetOpeningPositionFields = (form: HTMLFormElement | null) => {
   if (!form) {
@@ -34,12 +42,15 @@ export const FinancialAccountUpdate = () => {
   const isNew = id === undefined;
 
   const financialAccountEntity = useAppSelector(state => state.financialAccount.entity);
+  const creditAccountDetailsEntity = useAppSelector(state => state.creditAccountDetails.entity);
   const loading = useAppSelector(state => state.financialAccount.loading);
+  const creditAccountDetailsLoading = useAppSelector(state => state.creditAccountDetails.loading);
   const updating = useAppSelector(state => state.financialAccount.updating);
-  const updateSuccess = useAppSelector(state => state.financialAccount.updateSuccess);
   const accountTypeValues = Object.keys(AccountType);
   const currencyCodeValues = Object.keys(CurrencyCode);
   const [selectedAccountType, setSelectedAccountType] = useState<keyof typeof AccountType>('DEBIT');
+  const [compositionError, setCompositionError] = useState<string | null>(null);
+  const [creditCardDetailsFormValues, setCreditCardDetailsFormValues] = useState<Record<string, string>>({});
 
   const handleClose = () => {
     navigate('/financial-account');
@@ -48,16 +59,11 @@ export const FinancialAccountUpdate = () => {
   useEffect(() => {
     if (isNew) {
       dispatch(reset());
+      dispatch(resetCreditAccountDetails());
     } else {
       dispatch(getEntity(id));
     }
   }, []);
-
-  useEffect(() => {
-    if (updateSuccess) {
-      handleClose();
-    }
-  }, [updateSuccess]);
 
   useEffect(() => {
     if (!isNew && financialAccountEntity.accountType) {
@@ -65,7 +71,43 @@ export const FinancialAccountUpdate = () => {
     }
   }, [isNew, financialAccountEntity.accountType]);
 
-  const saveEntity = values => {
+  useEffect(() => {
+    if (!isNew && financialAccountEntity.id && financialAccountEntity.accountType === 'CREDIT_CARD') {
+      dispatch(resetCreditAccountDetails());
+      dispatch(getCreditAccountDetailsByAccountId(financialAccountEntity.id));
+    }
+  }, [isNew, financialAccountEntity.id, financialAccountEntity.accountType]);
+
+  const toNumber = value => (value !== undefined && typeof value !== 'number' ? Number(value) : value);
+  const toOptionalNumber = value => {
+    if (value === undefined || value === '') {
+      return null;
+    }
+    return typeof value !== 'number' ? Number(value) : value;
+  };
+  const getCreditCardDetailsValue = (values, fieldName, existingValue?) =>
+    creditCardDetailsFormValues[fieldName] ?? values[fieldName] ?? existingValue;
+
+  const buildCreditAccountDetailsEntity = (values, account, existingDetails: Partial<ICreditAccountDetails> = {}) => ({
+    ...existingDetails,
+    creditLimit: toNumber(getCreditCardDetailsValue(values, creditCardDetailsFieldNames.creditLimit, existingDetails?.creditLimit)),
+    statementDay: toNumber(getCreditCardDetailsValue(values, creditCardDetailsFieldNames.statementDay, existingDetails?.statementDay)),
+    paymentDueDay: toNumber(getCreditCardDetailsValue(values, creditCardDetailsFieldNames.paymentDueDay, existingDetails?.paymentDueDay)),
+    annualInterestRate: toOptionalNumber(
+      getCreditCardDetailsValue(values, creditCardDetailsFieldNames.annualInterestRate, existingDetails?.annualInterestRate),
+    ),
+    account,
+  });
+
+  const getPayloadData = action => action?.payload?.data ?? action?.payload;
+  const throwIfRejected = action => {
+    if (action?.error) {
+      throw action.error;
+    }
+  };
+
+  const saveEntity = async values => {
+    setCompositionError(null);
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
@@ -78,10 +120,28 @@ export const FinancialAccountUpdate = () => {
       active: isNew ? true : values.active,
     };
 
-    if (isNew) {
-      dispatch(createEntity(entity));
-    } else {
-      dispatch(updateEntity(entity));
+    try {
+      const financialAccountAction = isNew ? await dispatch(createEntity(entity)) : await dispatch(updateEntity(entity));
+      throwIfRejected(financialAccountAction);
+      const savedFinancialAccount = getPayloadData(financialAccountAction);
+
+      if (savedFinancialAccount?.accountType === 'CREDIT_CARD') {
+        const creditCardAccount = { id: savedFinancialAccount.id, name: savedFinancialAccount.name };
+        const existingDetails = !isNew && creditAccountDetailsEntity?.id ? creditAccountDetailsEntity : {};
+        const creditCardDetails = buildCreditAccountDetailsEntity(values, creditCardAccount, existingDetails);
+
+        if (!isNew && creditAccountDetailsEntity?.id) {
+          const creditAccountDetailsAction = await dispatch(updateCreditAccountDetails(creditCardDetails));
+          throwIfRejected(creditAccountDetailsAction);
+        } else {
+          const creditAccountDetailsAction = await dispatch(createCreditAccountDetails(creditCardDetails));
+          throwIfRejected(creditAccountDetailsAction);
+        }
+      }
+
+      handleClose();
+    } catch (error) {
+      setCompositionError(translate('fintrackApp.creditAccountDetails.composition.saveError'));
     }
   };
 
@@ -93,8 +153,12 @@ export const FinancialAccountUpdate = () => {
             accountType: 'DEBIT',
             currency: 'MXN',
             ...financialAccountEntity,
+            [creditCardDetailsFieldNames.creditLimit]: creditAccountDetailsEntity?.creditLimit,
+            [creditCardDetailsFieldNames.statementDay]: creditAccountDetailsEntity?.statementDay,
+            [creditCardDetailsFieldNames.paymentDueDay]: creditAccountDetailsEntity?.paymentDueDay,
+            [creditCardDetailsFieldNames.annualInterestRate]: creditAccountDetailsEntity?.annualInterestRate,
           },
-    [isNew, financialAccountEntity],
+    [isNew, financialAccountEntity, creditAccountDetailsEntity],
   );
 
   return (
@@ -113,7 +177,12 @@ export const FinancialAccountUpdate = () => {
           {loading ? (
             <p>Loading...</p>
           ) : (
-            <ValidatedForm defaultValues={defaultFormValues} onSubmit={saveEntity}>
+            <ValidatedForm
+              key={`${financialAccountEntity?.id ?? 'new'}-${creditAccountDetailsEntity?.id ?? 'missing'}`}
+              defaultValues={defaultFormValues}
+              onSubmit={saveEntity}
+            >
+              {compositionError ? <Alert color="danger">{compositionError}</Alert> : null}
               {!isNew ? (
                 <ValidatedField
                   name="id"
@@ -156,6 +225,7 @@ export const FinancialAccountUpdate = () => {
                 onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                   const nextAccountType = event.target.value as keyof typeof AccountType;
                   setSelectedAccountType(nextAccountType);
+                  setCreditCardDetailsFormValues({});
                   resetOpeningPositionFields(event.target.form);
                 }}
               >
@@ -205,6 +275,19 @@ export const FinancialAccountUpdate = () => {
                   required: { value: true, message: translate('entity.validation.required') },
                 }}
               />
+              {selectedAccountType === 'CREDIT_CARD' ? (
+                creditAccountDetailsLoading && !isNew ? (
+                  <p>Loading...</p>
+                ) : (
+                  <CreditCardDetailsFormSection
+                    details={creditAccountDetailsEntity}
+                    values={creditCardDetailsFormValues}
+                    onFieldChange={(fieldName, value) =>
+                      setCreditCardDetailsFormValues(previousValues => ({ ...previousValues, [fieldName]: value }))
+                    }
+                  />
+                )
+              ) : null}
               <ValidatedField
                 label={translate('fintrackApp.financialAccount.lastFourDigits')}
                 id="financial-account-lastFourDigits"

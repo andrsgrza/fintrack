@@ -68,25 +68,25 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## Master summary
 
-| #   | Entity                   | DELETE                                | UPDATE guards                                             | Product rules                                    | Overall                                   |
-| --- | ------------------------ | ------------------------------------- | --------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------- |
-| 1   | UserDashboardPreference  | Simple                                | 1:1 + JSON parse                                          | Schema, /me, upsert                              | **Done**                                  |
-| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                             | Runtime enforcement                              | **Done**                                  |
-| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                             | Atomic FA+CAD create                             | **Done**                                  |
-| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                             | `active` soft-off                                | **Done**                                  |
-| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                           | Default cats on signup                           | **Done**                                  |
-| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                             | Import matching                                  | **Done**                                  |
-| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                    | Empty-set matching, spend                        | **Done**                                  |
-| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                            | Motor eval                                       | **Done**                                  |
-| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅           | Motor on FT create                               | **Done**                                  |
-| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                  | Revocation runtime / expiry enforcement (fase 6) | **Done** (11C)                            |
-| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                         | Balances, atomic create                          | **Done**                                  |
-| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                     | Rule motor, balances                             | **Done**                                  |
-| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                              | Runtime pipeline/idempotency                     | **Done**                                  |
-| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked | Upload / parser (fase 6)                         | **Done** (metadata lifecycle)             |
-| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked | API runtime handler + idempotency (fase 6)       | **Done** (11C lifecycle; runtime pending) |
-| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                     | Pipeline/count reconciliation                    | **Done**                                  |
-| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor | Balance/currentBalance read model                | **Done**                                  |
+| #   | Entity                   | DELETE                                | UPDATE guards                                                | Product rules                                         | Overall                                   |
+| --- | ------------------------ | ------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------- | ----------------------------------------- |
+| 1   | UserDashboardPreference  | Simple                                | 1:1 + JSON parse                                             | Schema, /me, upsert                                   | **Done**                                  |
+| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                | Runtime enforcement                                   | **Done**                                  |
+| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                | FA UI composition ✅; atomic backend command deferred | **Done**                                  |
+| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                | `active` soft-off                                     | **Done**                                  |
+| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                              | Default cats on signup                                | **Done**                                  |
+| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                | Import matching                                       | **Done**                                  |
+| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                       | Empty-set matching, spend                             | **Done**                                  |
+| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                               | Motor eval                                            | **Done**                                  |
+| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅              | Motor on FT create                                    | **Done**                                  |
+| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                     | Revocation runtime / expiry enforcement (fase 6)      | **Done** (11C)                            |
+| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                            | Balances, atomic create                               | **Done**                                  |
+| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                        | Rule motor, balances                                  | **Done**                                  |
+| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                                 | Runtime pipeline/idempotency                          | **Done**                                  |
+| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked    | Upload / parser (fase 6)                              | **Done** (metadata lifecycle)             |
+| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked    | API runtime handler + idempotency (fase 6)            | **Done** (11C lifecycle; runtime pending) |
+| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                        | Pipeline/count reconciliation                         | **Done**                                  |
+| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor | Balance/currentBalance read model                     | **Done**                                  |
 
 ---
 
@@ -229,28 +229,28 @@ Grupo 1 #2 domain rules **Done**.
 
 ### CREATE
 
-| Rule                                        | Decision                         | Applies to admin | Error         | Status         |
-| ------------------------------------------- | -------------------------------- | ---------------- | ------------- | -------------- |
-| Parent `account` required                   | Resolved via accessible account  | Yes              | `400` invalid | **Done**       |
-| Only `CREDIT_CARD` accounts                 | On create                        | Yes              | `400` invalid | **Done**       |
-| One details per account                     | `existsByAccountId()` on create  | Yes              | `400` invalid | **Done**       |
-| `createdAt` / `updatedAt` server-owned      | Ignore client values; set both to `Instant.now()` | Yes | — | **Done** |
-| `CREDIT_CARD` expected to have details for full card functionality | Future/full-functionality expectation; separate CRUD today; not enforced by `FinancialAccountService` | Yes | — | **Documented** |
+| Rule                                                               | Decision                                                                                              | Applies to admin | Error         | Status         |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------------- | ------------- | -------------- |
+| Parent `account` required                                          | Resolved via accessible account                                                                       | Yes              | `400` invalid | **Done**       |
+| Only `CREDIT_CARD` accounts                                        | On create                                                                                             | Yes              | `400` invalid | **Done**       |
+| One details per account                                            | `existsByAccountId()` on create                                                                       | Yes              | `400` invalid | **Done**       |
+| `createdAt` / `updatedAt` server-owned                             | Ignore client values; set both to `Instant.now()`                                                     | Yes              | —             | **Done**       |
+| `CREDIT_CARD` expected to have details for full card functionality | Future/full-functionality expectation; separate CRUD today; not enforced by `FinancialAccountService` | Yes              | —             | **Documented** |
 
 **Future:** atomic endpoint may create `FinancialAccount` + `CreditAccountDetails` together for `CREDIT_CARD`, or a later guard may require details before enabling full credit-card features. Do not break standalone FA create in this pass.
 
 ### UPDATE / PATCH
 
-| Rule                                  | Decision                                       | Applies to admin | Error         | Status   |
-| ------------------------------------- | ---------------------------------------------- | ---------------- | ------------- | -------- |
-| Parent `account` immutable            | After create                                   | Yes              | `400` invalid | **Done** |
-| `creditLimit` mutable                 | `>= 0`; informational only                     | Yes              | —             | **Done** |
-| Lower limit below outstanding balance | Allowed — no utilization check                 | Yes              | —             | **Done** |
-| `statementDay` mutable                | `1–31`                                         | Yes              | —             | **Done** |
-| `paymentDueDay` mutable               | `1–31`; no `paymentDueDay > statementDay` rule | Yes              | —             | **Done** |
-| `annualInterestRate` mutable          | `>= 0`; no interest calculations yet           | Yes              | —             | **Done** |
-| `createdAt` server-owned              | PUT/PATCH preserve existing; explicit null or changed value rejected; same value allowed as no-op | Yes | `400` invalid | **Done** |
-| `updatedAt` server-owned              | Explicit null or changed value rejected; same value allowed, then successful PUT/PATCH sets `updatedAt = now` | Yes | `400` invalid | **Done** |
+| Rule                                  | Decision                                                                                                      | Applies to admin | Error         | Status   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------- | ------------- | -------- |
+| Parent `account` immutable            | After create                                                                                                  | Yes              | `400` invalid | **Done** |
+| `creditLimit` mutable                 | `>= 0`; informational only                                                                                    | Yes              | —             | **Done** |
+| Lower limit below outstanding balance | Allowed — no utilization check                                                                                | Yes              | —             | **Done** |
+| `statementDay` mutable                | `1–31`                                                                                                        | Yes              | —             | **Done** |
+| `paymentDueDay` mutable               | `1–31`; no `paymentDueDay > statementDay` rule                                                                | Yes              | —             | **Done** |
+| `annualInterestRate` mutable          | `>= 0`; no interest calculations yet                                                                          | Yes              | —             | **Done** |
+| `createdAt` server-owned              | PUT/PATCH preserve existing; explicit null or changed value rejected; same value allowed as no-op             | Yes              | `400` invalid | **Done** |
+| `updatedAt` server-owned              | Explicit null or changed value rejected; same value allowed, then successful PUT/PATCH sets `updatedAt = now` | Yes              | `400` invalid | **Done** |
 
 ### Product rules (deferred)
 
@@ -1155,17 +1155,17 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### UPDATE / PATCH
 
-| Rule                                                     | Decision | Status       |
-| -------------------------------------------------------- | -------- | ------------ |
-| `currency` immutable                                     |          | **Done**     |
-| `accountType` immutable                                  |          | **Done**     |
-| `createdAt` / `updatedAt` server-owned                   | Create ignores client values and sets both to `now` | **Done** |
-| PUT / PATCH `createdAt`                                  | Preserve existing; explicit null or changed value → `400 invalid`; same value allowed as no-op | **Done** |
-| PUT / PATCH `updatedAt`                                  | Explicit null or changed value → `400 invalid`; same value allowed, then server sets `updatedAt = now` | **Done** |
-| `initialBalance` mutable                                 |          | **Done**     |
-| `initialBalance` monetary scale                          | Required; positive, zero, and negative values allowed; `scale <= 2`; no rounding | **Done** |
+| Rule                                                     | Decision                                                                                                              | Status   |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------- |
+| `currency` immutable                                     |                                                                                                                       | **Done** |
+| `accountType` immutable                                  |                                                                                                                       | **Done** |
+| `createdAt` / `updatedAt` server-owned                   | Create ignores client values and sets both to `now`                                                                   | **Done** |
+| PUT / PATCH `createdAt`                                  | Preserve existing; explicit null or changed value → `400 invalid`; same value allowed as no-op                        | **Done** |
+| PUT / PATCH `updatedAt`                                  | Explicit null or changed value → `400 invalid`; same value allowed, then server sets `updatedAt = now`                | **Done** |
+| `initialBalance` mutable                                 |                                                                                                                       | **Done** |
+| `initialBalance` monetary scale                          | Required; positive, zero, and negative values allowed; `scale <= 2`; no rounding                                      | **Done** |
 | `initialBalanceDate` floor `<= earliest transactionDate` | No floor when there are zero transactions; uses `transactionDate`, not `postingDate`; validates final PUT/PATCH state | **Done** |
-| `active` mutable                                         | No side effects; does not delete/unlink/block imports | **Done** |
+| `active` mutable                                         | No side effects; does not delete/unlink/block imports                                                                 | **Done** |
 
 **UI alignment:** FinancialAccount create/edit does not expose `createdAt` or `updatedAt` inputs. Edit mode treats `currency` and `accountType` as immutable selects. In create mode, changing `accountType` resets only `initialBalance` and `initialBalanceDate`; unrelated form fields are preserved.
 
@@ -1173,12 +1173,12 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 `FinancialAccount.initialBalance` is the opening position at the beginning of tracking (`posición inicial`). Its meaning depends on `accountType` and sign. It is not always an available balance and it is not always debt.
 
-| Account type | Positive `initialBalance` | Zero | Negative `initialBalance` | Future formula |
-| --- | --- | --- | --- | --- |
-| `DEBIT` | Starting available balance | No balance | Overdraft / negative balance | `currentBalance = initialBalance + IN - OUT` |
-| `CASH` | Starting cash on hand | No cash recorded | Adjustment / negative cash position | `currentBalance = initialBalance + IN - OUT` |
-| `CREDIT_CARD` | Outstanding debt | No debt / no credit balance | Credit balance / saldo a favor | `currentDebt = initialBalance + OUT - IN` |
-| `INVESTMENT` | Starting account value | No value recorded | Advanced/adjustment case; investment modeling deferred | `currentValue = initialBalance + IN - OUT`, provisional only |
+| Account type  | Positive `initialBalance`  | Zero                        | Negative `initialBalance`                              | Future formula                                               |
+| ------------- | -------------------------- | --------------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
+| `DEBIT`       | Starting available balance | No balance                  | Overdraft / negative balance                           | `currentBalance = initialBalance + IN - OUT`                 |
+| `CASH`        | Starting cash on hand      | No cash recorded            | Adjustment / negative cash position                    | `currentBalance = initialBalance + IN - OUT`                 |
+| `CREDIT_CARD` | Outstanding debt           | No debt / no credit balance | Credit balance / saldo a favor                         | `currentDebt = initialBalance + OUT - IN`                    |
+| `INVESTMENT`  | Starting account value     | No value recorded           | Advanced/adjustment case; investment modeling deferred | `currentValue = initialBalance + IN - OUT`, provisional only |
 
 For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available credit. It represents the card's opening position. A positive value is debt; a negative value is saldo a favor. `CreditAccountDetails.creditLimit` is used later to calculate `availableCredit`.
 
@@ -1188,11 +1188,11 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 
 ### Product rules
 
-| Rule                          | Decision            | Status   |
-| ----------------------------- | ------------------- | -------- |
-| `currentBalance` read model   | Not persisted (JDL) | **Open** |
-| Balance recalculation      | Not part of this pass | **Deferred** |
-| Monetary scale validation for `initialBalance` | `scale <= 2`; no rounding; negatives allowed | **Done** |
+| Rule                                           | Decision                                     | Status       |
+| ---------------------------------------------- | -------------------------------------------- | ------------ |
+| `currentBalance` read model                    | Not persisted (JDL)                          | **Open**     |
+| Balance recalculation                          | Not part of this pass                        | **Deferred** |
+| Monetary scale validation for `initialBalance` | `scale <= 2`; no rounding; negatives allowed | **Done**     |
 
 ---
 

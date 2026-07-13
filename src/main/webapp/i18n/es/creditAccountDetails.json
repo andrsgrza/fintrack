@@ -31,7 +31,11 @@
       "annualInterestRateHelp": "Porcentaje anual de interés. Se usará después para cálculos de intereses.",
       "createdAt": "Creado en",
       "updatedAt": "Actualizado en",
-      "account": "Cuenta"
+      "account": "Cuenta",
+      "composition": {
+        "notConfigured": "Los detalles de tarjeta de crédito aún no han sido configurados.",
+        "saveError": "La cuenta financiera se guardó, pero no se pudieron guardar los detalles de tarjeta de crédito. Edita la cuenta e inténtalo de nuevo."
+      }
     }
   }
 }

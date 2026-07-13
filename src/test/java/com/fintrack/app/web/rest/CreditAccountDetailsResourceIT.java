@@ -72,6 +72,7 @@ class CreditAccountDetailsResourceIT {
 
     private static final String ENTITY_API_URL = "/api/credit-account-details";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
+    private static final String ENTITY_API_URL_BY_ACCOUNT_ID = ENTITY_API_URL + "/by-account/{accountId}";
 
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
@@ -452,6 +453,39 @@ class CreditAccountDetailsResourceIT {
             .andExpect(jsonPath("$.annualInterestRate").value(sameNumber(DEFAULT_ANNUAL_INTEREST_RATE)))
             .andExpect(jsonPath("$.createdAt").value(DEFAULT_CREATED_AT.toString()))
             .andExpect(jsonPath("$.updatedAt").value(DEFAULT_UPDATED_AT.toString()));
+    }
+
+    @Test
+    @Transactional
+    void getCreditAccountDetailsByAccountId() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL_BY_ACCOUNT_ID, creditAccountDetails.getAccount().getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(creditAccountDetails.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void getCreditAccountDetailsByAccountIdOwnedByAnotherUserIsNotFound() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL_BY_ACCOUNT_ID, otherDetails.getAccount().getId()))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetCreditAccountDetailsByAccountIdOwnedByAnotherUser() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL_BY_ACCOUNT_ID, otherDetails.getAccount().getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(otherDetails.getId().intValue()));
     }
 
     @Test

@@ -18,7 +18,7 @@
         "message": "Credit card details cannot be deleted directly. These details are required for credit card accounts. To remove them, you must delete the financial account itself."
       },
       "detail": {
-        "title": "Credit Account Details"
+        "title": "Credit card details"
       },
       "id": "ID",
       "creditLimit": "Credit limit",
@@ -31,7 +31,11 @@
       "annualInterestRateHelp": "Annual percentage interest rate. Used later for interest calculations.",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
-      "account": "Account"
+      "account": "Account",
+      "composition": {
+        "notConfigured": "Credit card details have not been configured yet.",
+        "saveError": "The financial account was saved, but credit card details could not be saved. Please edit the account and try again."
+      }
     }
   }
 }

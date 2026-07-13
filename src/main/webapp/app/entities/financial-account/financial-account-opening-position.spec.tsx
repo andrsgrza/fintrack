@@ -4,14 +4,28 @@ import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
+import enCreditAccountDetails from 'app/../i18n/en/creditAccountDetails.json';
 import { FinancialAccountDetail } from './financial-account-detail';
 import { FinancialAccountUpdate } from './financial-account-update';
 
 const mockDispatch = jest.fn();
-const mockCreateEntity = jest.fn(entity => ({ type: 'financialAccount/createEntity', payload: entity }));
-const mockUpdateEntity = jest.fn(entity => ({ type: 'financialAccount/updateEntity', payload: entity }));
+const mockCreateEntity = jest.fn(entity => ({ type: 'financialAccount/createEntity', payload: { data: { id: 99, ...entity } } }));
+const mockUpdateEntity = jest.fn(entity => ({ type: 'financialAccount/updateEntity', payload: { data: entity } }));
 const mockGetEntity = jest.fn(id => ({ type: 'financialAccount/getEntity', payload: id }));
 const mockReset = jest.fn(() => ({ type: 'financialAccount/reset' }));
+const mockCreateCreditAccountDetails = jest.fn(entity => ({
+  type: 'creditAccountDetails/createEntity',
+  payload: { data: { id: 25, ...entity } },
+}));
+const mockUpdateCreditAccountDetails = jest.fn(entity => ({
+  type: 'creditAccountDetails/updateEntity',
+  payload: { data: entity },
+}));
+const mockGetCreditAccountDetailsByAccountId = jest.fn(accountId => ({
+  type: 'creditAccountDetails/getEntityByAccountId',
+  payload: accountId,
+}));
+const mockResetCreditAccountDetails = jest.fn(() => ({ type: 'creditAccountDetails/reset' }));
 let mockState;
 
 jest.mock('app/config/store', () => ({
@@ -24,6 +38,13 @@ jest.mock('./financial-account.reducer', () => ({
   updateEntity: entity => mockUpdateEntity(entity),
   getEntity: id => mockGetEntity(id),
   reset: () => mockReset(),
+}));
+
+jest.mock('app/entities/credit-account-details/credit-account-details.reducer', () => ({
+  createEntity: entity => mockCreateCreditAccountDetails(entity),
+  updateEntity: entity => mockUpdateCreditAccountDetails(entity),
+  getEntityByAccountId: accountId => mockGetCreditAccountDetailsByAccountId(accountId),
+  reset: () => mockResetCreditAccountDetails(),
 }));
 
 const baseState = {
@@ -40,19 +61,31 @@ const baseState = {
     updating: false,
     updateSuccess: false,
   },
+  creditAccountDetails: {
+    entity: {},
+    entities: [],
+    loading: false,
+    updating: false,
+    updateSuccess: false,
+  },
 };
 
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enFinancialAccount);
+  TranslatorContext.registerTranslations('en', enCreditAccountDetails);
   TranslatorContext.setLocale('en');
 };
 
-const renderCreateForm = () => {
+const renderCreateForm = (creditAccountDetailsEntity = {}) => {
   mockState = {
     ...baseState,
     financialAccount: {
       ...baseState.financialAccount,
       entity: {},
+    },
+    creditAccountDetails: {
+      ...baseState.creditAccountDetails,
+      entity: creditAccountDetailsEntity,
     },
   };
 
@@ -65,7 +98,7 @@ const renderCreateForm = () => {
   );
 };
 
-const renderEditForm = () => {
+const renderEditForm = (accountType = 'CREDIT_CARD', creditAccountDetailsEntity = {}) => {
   mockState = {
     ...baseState,
     financialAccount: {
@@ -73,7 +106,7 @@ const renderEditForm = () => {
       entity: {
         id: 1,
         name: 'Existing account',
-        accountType: 'CREDIT_CARD',
+        accountType,
         currency: 'MXN',
         initialBalance: 500,
         initialBalanceDate: '2026-01-10',
@@ -82,6 +115,10 @@ const renderEditForm = () => {
         budgets: [],
         transactionIngestions: [],
       },
+    },
+    creditAccountDetails: {
+      ...baseState.creditAccountDetails,
+      entity: creditAccountDetailsEntity,
     },
   };
 
@@ -94,7 +131,7 @@ const renderEditForm = () => {
   );
 };
 
-const renderDetail = accountType => {
+const renderDetail = (accountType, creditAccountDetailsEntity = {}) => {
   mockState = {
     ...baseState,
     financialAccount: {
@@ -107,6 +144,10 @@ const renderDetail = accountType => {
         initialBalanceDate: '2026-01-10',
       },
     },
+    creditAccountDetails: {
+      ...baseState.creditAccountDetails,
+      entity: creditAccountDetailsEntity,
+    },
   };
 
   return render(
@@ -118,15 +159,25 @@ const renderDetail = accountType => {
   );
 };
 
+const expectNoMissingTranslations = () => {
+  expect(screen.queryByText(/translation-not-found\[fintrackApp\.financialAccount\.creditCardDetails/)).toBeNull();
+  expect(screen.queryByText(/translation-not-found\[fintrackApp\.creditAccountDetails\.composition/)).toBeNull();
+};
+
 describe('FinancialAccount opening-position labels', () => {
   beforeAll(registerTranslations);
 
   beforeEach(() => {
     mockDispatch.mockClear();
+    mockDispatch.mockImplementation(action => action);
     mockCreateEntity.mockClear();
     mockUpdateEntity.mockClear();
     mockGetEntity.mockClear();
     mockReset.mockClear();
+    mockCreateCreditAccountDetails.mockClear();
+    mockUpdateCreditAccountDetails.mockClear();
+    mockGetCreditAccountDetailsByAccountId.mockClear();
+    mockResetCreditAccountDetails.mockClear();
   });
 
   it('shows DEBIT opening-position copy on initial create render', () => {
@@ -150,6 +201,7 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Budgets')).toBeNull();
     expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
+    expect(screen.queryByText('Credit card details')).toBeNull();
   });
 
   it('changes DEBIT to CREDIT_CARD labels and resets initial balance fields', () => {
@@ -177,6 +229,13 @@ describe('FinancialAccount opening-position labels', () => {
     ).toBeNull();
     expect((screen.getByLabelText('Opening card balance') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Tracking start date') as HTMLInputElement).value).toBe('');
+    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByLabelText('Credit limit')).toBeTruthy();
+    expect(screen.getByLabelText('Statement day')).toBeTruthy();
+    expect(screen.getByLabelText('Payment due day')).toBeTruthy();
+    expect(screen.getByLabelText('Annual interest rate')).toBeTruthy();
+    expect(screen.queryByLabelText('Account')).toBeNull();
+    expectNoMissingTranslations();
   });
 
   it('preserves unrelated form fields when account type changes', () => {
@@ -223,6 +282,31 @@ describe('FinancialAccount opening-position labels', () => {
     expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ active: true }));
   });
 
+  it('creates credit account details after creating a CREDIT_CARD financial account', async () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New card' } });
+    fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
+    fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
+    fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '50000' } });
+    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Annual interest rate'), { target: { value: '65' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(mockCreateCreditAccountDetails).toHaveBeenCalled());
+    expect(mockCreateCreditAccountDetails.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        creditLimit: 50000,
+        statementDay: 15,
+        paymentDueDay: 5,
+        annualInterestRate: 65,
+        account: expect.objectContaining({ id: 99, name: 'New card' }),
+      }),
+    );
+  });
+
   it('changes CREDIT_CARD back to DEBIT labels and resets initial balance', () => {
     renderCreateForm();
 
@@ -244,6 +328,64 @@ describe('FinancialAccount opening-position labels', () => {
       ),
     ).toBeNull();
     expect((screen.getByLabelText('Initial balance') as HTMLInputElement).value).toBe('');
+    expect(screen.queryByText('Credit card details')).toBeNull();
+    expectNoMissingTranslations();
+  });
+
+  it('does not show credit card details in DEBIT edit mode', () => {
+    renderEditForm('DEBIT');
+
+    expect(screen.queryByText('Credit card details')).toBeNull();
+  });
+
+  it('shows existing credit card details in CREDIT_CARD edit mode and updates them on save', async () => {
+    renderEditForm('CREDIT_CARD', {
+      id: 25,
+      creditLimit: 50000,
+      statementDay: 15,
+      paymentDueDay: 5,
+      annualInterestRate: 65,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      account: { id: 1, name: 'Existing account' },
+    });
+
+    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect((screen.getByLabelText('Credit limit') as HTMLInputElement).value).toBe('50000');
+    expect(screen.queryByLabelText('Account')).toBeNull();
+    expectNoMissingTranslations();
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Existing account edited' } });
+    fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '60000' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(mockUpdateCreditAccountDetails).toHaveBeenCalled());
+    expect(mockUpdateCreditAccountDetails.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        id: 25,
+        creditLimit: 60000,
+        account: expect.objectContaining({ id: 1 }),
+      }),
+    );
+  });
+
+  it('creates missing credit account details for existing CREDIT_CARD account on save', async () => {
+    renderEditForm('CREDIT_CARD');
+
+    fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '40000' } });
+    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(mockCreateCreditAccountDetails).toHaveBeenCalled());
+    expect(mockCreateCreditAccountDetails.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        creditLimit: 40000,
+        statementDay: 12,
+        paymentDueDay: 4,
+        account: expect.objectContaining({ id: 1 }),
+      }),
+    );
   });
 
   it('shows CASH opening-position copy', () => {
@@ -279,13 +421,32 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.getByText('Tracking start date')).toBeTruthy();
     expect(screen.getByText('123')).toBeTruthy();
     expect(screen.queryByText('Opening card balance')).toBeNull();
+    expect(screen.queryByText('Credit card details')).toBeNull();
   });
 
   it('uses the CREDIT_CARD opening-position label in detail view', () => {
-    renderDetail('CREDIT_CARD');
+    renderDetail('CREDIT_CARD', {
+      id: 25,
+      creditLimit: 50000,
+      statementDay: 15,
+      paymentDueDay: 5,
+      annualInterestRate: 65,
+    });
 
     expect(screen.getByText('Opening card balance')).toBeTruthy();
     expect(screen.getByText('Tracking start date')).toBeTruthy();
     expect(screen.getByText('123')).toBeTruthy();
+    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit limit')).toBeTruthy();
+    expect(screen.getByText('50000')).toBeTruthy();
+    expect(screen.queryByText('Account')).toBeNull();
+    expectNoMissingTranslations();
+  });
+
+  it('shows a clear detail message when CREDIT_CARD details are missing', () => {
+    renderDetail('CREDIT_CARD');
+
+    expect(screen.getByText('Credit card details have not been configured yet.')).toBeTruthy();
+    expectNoMissingTranslations();
   });
 });
