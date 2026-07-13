@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
+import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -13,6 +13,21 @@ import { getEntities as getTransactionIngestions } from 'app/entities/transactio
 import { AccountType } from 'app/shared/model/enumerations/account-type.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { createEntity, getEntity, reset, updateEntity } from './financial-account.reducer';
+import { getInitialBalanceHelpKey, getInitialBalanceLabelKey } from './financial-account-labels';
+
+const resetOpeningPositionFields = (form: HTMLFormElement | null) => {
+  if (!form) {
+    return;
+  }
+  ['initialBalance', 'initialBalanceDate'].forEach(fieldName => {
+    const field = form.elements.namedItem(fieldName) as HTMLInputElement | null;
+    if (field) {
+      field.value = '';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+};
 
 export const FinancialAccountUpdate = () => {
   const dispatch = useAppDispatch();
@@ -30,6 +45,7 @@ export const FinancialAccountUpdate = () => {
   const updateSuccess = useAppSelector(state => state.financialAccount.updateSuccess);
   const accountTypeValues = Object.keys(AccountType);
   const currencyCodeValues = Object.keys(CurrencyCode);
+  const [selectedAccountType, setSelectedAccountType] = useState<keyof typeof AccountType>('DEBIT');
 
   const handleClose = () => {
     navigate('/financial-account');
@@ -51,6 +67,12 @@ export const FinancialAccountUpdate = () => {
       handleClose();
     }
   }, [updateSuccess]);
+
+  useEffect(() => {
+    if (!isNew && financialAccountEntity.accountType) {
+      setSelectedAccountType(financialAccountEntity.accountType as keyof typeof AccountType);
+    }
+  }, [isNew, financialAccountEntity.accountType]);
 
   const saveEntity = values => {
     if (values.id !== undefined && typeof values.id !== 'number') {
@@ -76,21 +98,24 @@ export const FinancialAccountUpdate = () => {
     }
   };
 
-  const defaultValues = () =>
-    isNew
-      ? {
-          createdAt: displayDefaultDateTime(),
-          updatedAt: displayDefaultDateTime(),
-        }
-      : {
-          accountType: 'DEBIT',
-          currency: 'MXN',
-          ...financialAccountEntity,
-          createdAt: convertDateTimeFromServer(financialAccountEntity.createdAt),
-          updatedAt: convertDateTimeFromServer(financialAccountEntity.updatedAt),
-          budgets: financialAccountEntity?.budgets?.map(e => e.id.toString()),
-          transactionIngestions: financialAccountEntity?.transactionIngestions?.map(e => e.id.toString()),
-        };
+  const defaultFormValues = useMemo(
+    () =>
+      isNew
+        ? {
+            createdAt: displayDefaultDateTime(),
+            updatedAt: displayDefaultDateTime(),
+          }
+        : {
+            accountType: 'DEBIT',
+            currency: 'MXN',
+            ...financialAccountEntity,
+            createdAt: convertDateTimeFromServer(financialAccountEntity.createdAt),
+            updatedAt: convertDateTimeFromServer(financialAccountEntity.updatedAt),
+            budgets: financialAccountEntity?.budgets?.map(e => e.id.toString()),
+            transactionIngestions: financialAccountEntity?.transactionIngestions?.map(e => e.id.toString()),
+          },
+    [isNew, financialAccountEntity],
+  );
 
   return (
     <div>
@@ -106,7 +131,7 @@ export const FinancialAccountUpdate = () => {
           {loading ? (
             <p>Loading...</p>
           ) : (
-            <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
+            <ValidatedForm defaultValues={defaultFormValues} onSubmit={saveEntity}>
               {!isNew ? (
                 <ValidatedField
                   name="id"
@@ -145,6 +170,11 @@ export const FinancialAccountUpdate = () => {
                 name="accountType"
                 data-cy="accountType"
                 type="select"
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                  const nextAccountType = event.target.value as keyof typeof AccountType;
+                  setSelectedAccountType(nextAccountType);
+                  resetOpeningPositionFields(event.target.form);
+                }}
               >
                 {accountTypeValues.map(accountType => (
                   <option value={accountType} key={accountType}>
@@ -166,7 +196,7 @@ export const FinancialAccountUpdate = () => {
                 ))}
               </ValidatedField>
               <ValidatedField
-                label={translate('fintrackApp.financialAccount.initialBalance')}
+                label={translate(getInitialBalanceLabelKey(selectedAccountType))}
                 id="financial-account-initialBalance"
                 name="initialBalance"
                 data-cy="initialBalance"
@@ -176,6 +206,11 @@ export const FinancialAccountUpdate = () => {
                   validate: v => isNumber(v) || translate('entity.validation.number'),
                 }}
               />
+              <FormText>
+                <Translate key={selectedAccountType} contentKey={getInitialBalanceHelpKey(selectedAccountType)}>
+                  Opening position when you started tracking this account.
+                </Translate>
+              </FormText>
               <ValidatedField
                 label={translate('fintrackApp.financialAccount.initialBalanceDate')}
                 id="financial-account-initialBalanceDate"

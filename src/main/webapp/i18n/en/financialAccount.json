@@ -22,8 +22,20 @@
       "institutionName": "Institution Name",
       "accountType": "Account Type",
       "currency": "Currency",
-      "initialBalance": "Initial Balance",
-      "initialBalanceDate": "Initial Balance Date",
+      "initialBalance": "Opening position",
+      "initialBalanceByAccountType": {
+        "DEBIT": "Initial balance",
+        "CASH": "Initial cash",
+        "CREDIT_CARD": "Opening card balance",
+        "INVESTMENT": "Initial account value"
+      },
+      "initialBalanceHelpByAccountType": {
+        "DEBIT": "Amount available when you started tracking this account. Negative values represent overdraft or a negative balance.",
+        "CASH": "Cash on hand when you started tracking. Negative values can represent an adjustment or negative cash position.",
+        "CREDIT_CARD": "Use a positive number if you owed money, or a negative number if you had credit in your favor. This is not your credit limit.",
+        "INVESTMENT": "Account value when you started tracking. Detailed investment valuation is deferred."
+      },
+      "initialBalanceDate": "Tracking start date",
       "lastFourDigits": "Last Four Digits",
       "description": "Description",
       "color": "Color",

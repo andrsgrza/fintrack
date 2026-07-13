@@ -22,8 +22,20 @@
       "institutionName": "Institution Name",
       "accountType": "Account Type",
       "currency": "Currency",
-      "initialBalance": "Initial Balance",
-      "initialBalanceDate": "Initial Balance Date",
+      "initialBalance": "Posición inicial",
+      "initialBalanceByAccountType": {
+        "DEBIT": "Saldo inicial",
+        "CASH": "Efectivo inicial",
+        "CREDIT_CARD": "Saldo inicial de la tarjeta",
+        "INVESTMENT": "Valor inicial de la cuenta"
+      },
+      "initialBalanceHelpByAccountType": {
+        "DEBIT": "Monto disponible cuando empezaste a registrar esta cuenta. Los valores negativos representan sobregiro o saldo negativo.",
+        "CASH": "Efectivo disponible cuando empezaste a registrar. Los valores negativos pueden representar un ajuste o posición negativa.",
+        "CREDIT_CARD": "Usa un número positivo si debías dinero, o negativo si tenías saldo a favor. Este valor no es tu límite de crédito.",
+        "INVESTMENT": "Valor de la cuenta cuando empezaste a registrar. La valuación detallada de inversiones queda pendiente."
+      },
+      "initialBalanceDate": "Fecha inicial de seguimiento",
       "lastFourDigits": "Last Four Digits",
       "description": "Description",
       "color": "Color",

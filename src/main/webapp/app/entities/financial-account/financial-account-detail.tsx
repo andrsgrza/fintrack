@@ -8,6 +8,7 @@ import { APP_DATE_FORMAT, APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntity } from './financial-account.reducer';
+import { getInitialBalanceLabelKey } from './financial-account-labels';
 
 export const FinancialAccountDetail = () => {
   const dispatch = useAppDispatch();
@@ -58,7 +59,7 @@ export const FinancialAccountDetail = () => {
           <dd>{financialAccountEntity.currency}</dd>
           <dt>
             <span id="initialBalance">
-              <Translate contentKey="fintrackApp.financialAccount.initialBalance">Initial Balance</Translate>
+              <Translate contentKey={getInitialBalanceLabelKey(financialAccountEntity.accountType)}>Opening position</Translate>
             </span>
           </dt>
           <dd>{financialAccountEntity.initialBalance}</dd>
