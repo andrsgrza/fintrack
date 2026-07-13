@@ -292,20 +292,22 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 **Validation/domain rules in service:** `currency` and `accountType` **immutable** after create; `createdAt` and `updatedAt` are server-owned. Create ignores client timestamps and sets both to `now`; successful update/patch preserves `createdAt` and sets `updatedAt = now`; explicit null or changed timestamp on PUT/PATCH → `400 invalid`; same timestamp is accepted as a no-op. `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalance` is required and is the opening position (`posición inicial`) at the beginning of tracking; positive, zero, and negative values are allowed, with sign semantics depending on `accountType` (including `CREDIT_CARD` saldo a favor). There is no non-negative validation. `initialBalance` must have monetary `scale <= 2`; values with more decimals are rejected, not rounded. `initialBalanceDate` must be `<=` earliest transaction `transactionDate` when transactions exist. `active=false` has no side effects. DELETE is orchestrated through TransactionIngestion and FinancialTransaction delegates before account-level link cleanup. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType`/timestamp null or different → `400 invalid`.
 
-**Balance calculation status:** tests only cover persistence, mutability, filters, and `initialBalanceDate` floor. `currentBalance`, `currentDebt`, `availableCredit`, `AccountBalanceService`, investment valuation, and persisted balance/read-model calculations remain deferred/open.
+**Balance calculation status:** backend-only read model is implemented at `GET /api/financial-accounts/{id}/balance`. It is calculated on demand, not persisted, and uses `transactionDate` from `initialBalanceDate` through `asOfDate`. UI display, charts, dashboard aggregation, interest, statement cycles, and persisted balance recalculation remain deferred/open.
 
 ### Summary counts
 
-| Type              | File                           | Tests   | Custom vs generated                                                                                                                                         |
-| ----------------- | ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT    | `FinancialAccountResourceIT`   | **138** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor tests, plus JHipster CRUD/filters |
-| Unit — service    | `FinancialAccountServiceTest`  | **24**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor guard)                         |
-| Unit — foundation | `CurrentUserServiceTest`       | **5**   | Shared; used by FA, FT, and future entities                                                                                                                 |
-| Unit — domain     | `FinancialAccountTest`         | **6**   | Generated (JPA relations)                                                                                                                                   |
-| Unit — mapper     | `FinancialAccountMapperTest`   | **1**   | Generated                                                                                                                                                   |
-| Unit — DTO        | `FinancialAccountDTOTest`      | **1**   | Generated                                                                                                                                                   |
-| Unit — criteria   | `FinancialAccountCriteriaTest` | **5**   | Generated                                                                                                                                                   |
-| E2E               | `financial-account.cy.ts`      | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                             |
+| Type                   | File                                                    | Tests   | Custom vs generated                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Integration IT         | `FinancialAccountResourceIT`                            | **145** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor + balance endpoint tests, plus JHipster CRUD/filters |
+| Unit — service         | `FinancialAccountServiceTest`                           | **24**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor guard)                                            |
+| Unit — balance service | `FinancialAccountBalanceServiceTest`                    | **8**   | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading)                                                                               |
+| Unit — calculators     | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                      |
+| Unit — foundation      | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                    |
+| Unit — domain          | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                      |
+| Unit — mapper          | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                      |
+| Unit — DTO             | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                      |
+| Unit — criteria        | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                      |
+| E2E                    | `financial-account.cy.ts`                               | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                                |
 
 ---
 
@@ -380,7 +382,19 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 **PATCH note:** Successful PATCH tests send **minimal JSON** (`ObjectNode` with only the field under test). Full entity/DTO serialization includes `currency`/`accountType: null`, which JsonNode PATCH treats as an explicit change → `400`.
 
-#### 1.4 CRUD & validation (11) — 🟡 JHipster generated
+#### 1.4 Balance endpoint (7) — ✅ custom
+
+| Test                                                            | What it checks                                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `getBalanceForOwnDebitAccountReturnsCurrentBalance`             | Own DEBIT account returns `currentBalance = initialBalance + IN - OUT`    |
+| `getBalanceForForeignAccountReturnsNotFoundForNormalUser`       | Normal user gets `404` for another user's account                         |
+| `adminCanGetBalanceForForeignAccount`                           | Admin can calculate a foreign account balance                             |
+| `getCreditCardBalanceReturnsCurrentDebtAndAvailableCredit`      | CREDIT_CARD returns `currentDebt` and `availableCredit` from credit limit |
+| `getCreditCardBalanceWithoutDetailsReturnsMissingCreditDetails` | Missing CAD returns `missingCreditDetails=true`, no hard failure          |
+| `getBalanceAsOfDateFiltersTransactions`                         | `asOfDate` excludes later transactions                                    |
+| `getBalanceForAccountWithoutTransactionsReturnsTotalsZero`      | No-transaction account returns opening-position snapshot                  |
+
+#### 1.5 CRUD & validation (11) — 🟡 JHipster generated
 
 | Test                                                        | What it checks                                      |
 | ----------------------------------------------------------- | --------------------------------------------------- |
@@ -396,7 +410,7 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `createFinancialAccountWithoutUpdatedAtUsesServerTimestamp` | Missing `updatedAt` accepted; server sets timestamp |
 | `deleteFinancialAccount`                                    | Happy-path `DELETE` → `204`                         |
 
-#### 1.5 Read & update (14) — 🟡 JHipster generated
+#### 1.6 Read & update (14) — 🟡 JHipster generated
 
 | Test                                                        | What it checks                                           |
 | ----------------------------------------------------------- | -------------------------------------------------------- |
@@ -415,7 +429,7 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `getAllFinancialAccountsWithEagerRelationshipsIsEnabled`    | Mockito — eager load path                                |
 | `getAllFinancialAccountsWithEagerRelationshipsIsNotEnabled` | Mockito — lazy path                                      |
 
-#### 1.6 Criteria filters (60) — 🟡 JHipster generated
+#### 1.7 Criteria filters (60) — 🟡 JHipster generated
 
 One test per filterable field (`name`, `institutionName`, `accountType`, `currency`, `initialBalance`, `initialBalanceDate`, `lastFourDigits`, `description`, `color`, `icon`, `active`, `createdAt`, `updatedAt`, `userId`, `budgets`, `transactionIngestions`). Each exercises `equals`, `in`, `specified`, `contains` / `doesNotContain`, or range operators where applicable.
 
@@ -455,6 +469,30 @@ Mocks: `FinancialAccountRepository`, `FinancialAccountMapper`, `CurrentUserServi
 | `partialUpdateShouldRejectChangedUpdatedAt`                                         | PATCH-style service call rejects changed `updatedAt`                                         |
 | `partialUpdateShouldAllowSameTimestampsAndSetUpdatedAt`                             | Same timestamps accepted; `updatedAt` set by server                                          |
 | `partialUpdateShouldRejectExplicitInitialBalanceScaleGreaterThanTwoWithoutMutating` | explicit invalid PATCH balance is rejected before mutating the entity                        |
+
+#### 2.2 `FinancialAccountBalanceServiceTest` (8) — ✅ custom
+
+Mocks: `FinancialAccountService`, `FinancialTransactionRepository`, `CreditAccountDetailsRepository`, and calculator strategy list. No Spring context.
+
+| Test                                                                          | Rule under test                                            |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `calculateBalanceShouldUseAccessibleAccountAndDelegateToMatchingCalculator`   | Uses scoped account resolver and matching calculator       |
+| `calculateBalanceShouldPropagateEmptyAccessibleLookup`                        | Foreign/inaccessible account returns empty                 |
+| `calculateBalanceShouldUseAdminAccessibleAccountFromResolver`                 | Admin path is inherited from accessible account resolver   |
+| `calculateBalanceShouldUseInitialBalanceWhenNoTransactionsExist`              | Empty tx list still delegates and returns opening snapshot |
+| `calculateBalanceShouldLoadTransactionsFromInitialBalanceDateThroughAsOfDate` | Inclusive date range uses `transactionDate`                |
+| `calculateBalanceShouldCalculateInactiveAccounts`                             | `active=false` still calculates                            |
+| `calculateBalanceShouldHandleCreditCardWithoutDetails`                        | Missing card details are represented in DTO                |
+| `calculateBalanceShouldLoadCreditDetailsForCreditCard`                        | Credit details are loaded only for card calculations       |
+
+#### 2.3 Calculator unit tests (18) — ✅ custom
+
+| File                              | Tests | Coverage                                                                                              |
+| --------------------------------- | ----- | ----------------------------------------------------------------------------------------------------- |
+| `DebitBalanceCalculatorTest`      | 5     | positive/zero/negative opening positions; IN/OUT formula; supports                                    |
+| `CashBalanceCalculatorTest`       | 5     | positive/zero/negative cash positions; IN/OUT formula; supports                                       |
+| `CreditCardBalanceCalculatorTest` | 6     | debt increases with OUT/decreases with IN; negative opening credit; available credit; missing details |
+| `InvestmentBalanceCalculatorTest` | 2     | provisional currentBalance formula; supports                                                          |
 
 ### 3. Frontend tests — `financial-account-opening-position.spec.tsx`
 
@@ -2249,5 +2287,6 @@ Copy this block when hardening the next entity:
 | 2026-07-12 | IngestionRecord domain rules          | 87 IT, 7 service unit, +1 FT helper IT; status consistency, parent final freeze, externalRecordId parent-scoped uniqueness, rawData log safety, direct delete blocked.                                                                                                                                                                    |
 | 2026-07-12 | FinancialTransaction domain rules     | 101 IT, 10 service unit; JsonNode presence semantics, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup.                                                                                                                           |
 | 2026-07-12 | FinancialAccount domain rules         | 118 IT, 12 service unit; delete orchestration for ingestion/transaction trees and account-level links, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                |
+| 2026-07-13 | FinancialAccount balance read model   | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                           |
 | 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                            |
 | 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal. |

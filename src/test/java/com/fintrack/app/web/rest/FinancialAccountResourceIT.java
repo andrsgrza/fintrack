@@ -262,11 +262,20 @@ class FinancialAccountResourceIT {
     }
 
     private FinancialTransaction createTransaction(FinancialAccount account, LocalDate transactionDate) {
+        return createTransaction(account, transactionDate, TransactionFlow.OUT, new BigDecimal("10.00"));
+    }
+
+    private FinancialTransaction createTransaction(
+        FinancialAccount account,
+        LocalDate transactionDate,
+        TransactionFlow flow,
+        BigDecimal amount
+    ) {
         FinancialTransaction transaction = new FinancialTransaction()
             .transactionDate(transactionDate)
             .description("Test transaction")
-            .amount(new BigDecimal("10.00"))
-            .flow(TransactionFlow.OUT)
+            .amount(amount)
+            .flow(flow)
             .origin(TransactionOrigin.MANUAL)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT)
@@ -274,6 +283,20 @@ class FinancialAccountResourceIT {
         em.persist(transaction);
         em.flush();
         return transaction;
+    }
+
+    private CreditAccountDetails createCreditAccountDetails(FinancialAccount account, BigDecimal creditLimit) {
+        CreditAccountDetails details = new CreditAccountDetails()
+            .creditLimit(creditLimit)
+            .statementDay(15)
+            .paymentDueDay(5)
+            .annualInterestRate(new BigDecimal("65.00"))
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT)
+            .account(account);
+        em.persist(details);
+        em.flush();
+        return details;
     }
 
     private TransactionIngestion createTransactionIngestion(FinancialAccount account, IngestionType ingestionType) {
@@ -2681,6 +2704,131 @@ class FinancialAccountResourceIT {
                     .content(om.writeValueAsBytes(patchJson))
             )
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void getBalanceForOwnDebitAccountReturnsCurrentBalance() throws Exception {
+        financialAccount.setInitialBalance(new BigDecimal("100.00"));
+        financialAccount.setInitialBalanceDate(LocalDate.parse("2026-01-01"));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        createTransaction(financialAccount, LocalDate.parse("2026-01-10"), TransactionFlow.IN, new BigDecimal("50.00"));
+        createTransaction(financialAccount, LocalDate.parse("2026-01-11"), TransactionFlow.OUT, new BigDecimal("25.00"));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/balance", financialAccount.getId()).param("asOfDate", "2026-01-31"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accountId").value(financialAccount.getId().intValue()))
+            .andExpect(jsonPath("$.accountName").value(financialAccount.getName()))
+            .andExpect(jsonPath("$.accountType").value("DEBIT"))
+            .andExpect(jsonPath("$.currency").value("MXN"))
+            .andExpect(jsonPath("$.initialBalance").value(sameNumber(new BigDecimal("100.00"))))
+            .andExpect(jsonPath("$.initialBalanceDate").value("2026-01-01"))
+            .andExpect(jsonPath("$.asOfDate").value("2026-01-31"))
+            .andExpect(jsonPath("$.inflowTotal").value(sameNumber(new BigDecimal("50.00"))))
+            .andExpect(jsonPath("$.outflowTotal").value(sameNumber(new BigDecimal("25.00"))))
+            .andExpect(jsonPath("$.currentBalance").value(sameNumber(new BigDecimal("125.00"))))
+            .andExpect(jsonPath("$.currentDebt").doesNotExist())
+            .andExpect(jsonPath("$.missingCreditDetails").value(false));
+    }
+
+    @Test
+    @Transactional
+    void getBalanceForForeignAccountReturnsNotFoundForNormalUser() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/balance", financialAccount.getId()).param("asOfDate", "2026-01-31"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetBalanceForForeignAccount() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        financialAccount.setInitialBalance(new BigDecimal("100.00"));
+        financialAccount.setInitialBalanceDate(LocalDate.parse("2026-01-01"));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/balance", financialAccount.getId()).param("asOfDate", "2026-01-31"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.currentBalance").value(sameNumber(new BigDecimal("100.00"))));
+    }
+
+    @Test
+    @Transactional
+    void getCreditCardBalanceReturnsCurrentDebtAndAvailableCredit() throws Exception {
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        financialAccount.setInitialBalance(new BigDecimal("1000.00"));
+        financialAccount.setInitialBalanceDate(LocalDate.parse("2026-01-01"));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        createCreditAccountDetails(financialAccount, new BigDecimal("5000.00"));
+        createTransaction(financialAccount, LocalDate.parse("2026-01-10"), TransactionFlow.OUT, new BigDecimal("500.00"));
+        createTransaction(financialAccount, LocalDate.parse("2026-01-11"), TransactionFlow.IN, new BigDecimal("200.00"));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/balance", financialAccount.getId()).param("asOfDate", "2026-01-31"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accountType").value("CREDIT_CARD"))
+            .andExpect(jsonPath("$.currentBalance").doesNotExist())
+            .andExpect(jsonPath("$.currentDebt").value(sameNumber(new BigDecimal("1300.00"))))
+            .andExpect(jsonPath("$.creditLimit").value(sameNumber(new BigDecimal("5000.00"))))
+            .andExpect(jsonPath("$.availableCredit").value(sameNumber(new BigDecimal("3700.00"))))
+            .andExpect(jsonPath("$.missingCreditDetails").value(false));
+    }
+
+    @Test
+    @Transactional
+    void getCreditCardBalanceWithoutDetailsReturnsMissingCreditDetails() throws Exception {
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        financialAccount.setInitialBalance(new BigDecimal("1000.00"));
+        financialAccount.setInitialBalanceDate(LocalDate.parse("2026-01-01"));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        createTransaction(financialAccount, LocalDate.parse("2026-01-10"), TransactionFlow.OUT, new BigDecimal("500.00"));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/balance", financialAccount.getId()).param("asOfDate", "2026-01-31"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.currentDebt").value(sameNumber(new BigDecimal("1500.00"))))
+            .andExpect(jsonPath("$.creditLimit").doesNotExist())
+            .andExpect(jsonPath("$.availableCredit").doesNotExist())
+            .andExpect(jsonPath("$.missingCreditDetails").value(true));
+    }
+
+    @Test
+    @Transactional
+    void getBalanceAsOfDateFiltersTransactions() throws Exception {
+        financialAccount.setInitialBalance(new BigDecimal("100.00"));
+        financialAccount.setInitialBalanceDate(LocalDate.parse("2026-01-01"));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        createTransaction(financialAccount, LocalDate.parse("2025-12-31"), TransactionFlow.IN, new BigDecimal("1000.00"));
+        createTransaction(financialAccount, LocalDate.parse("2026-01-10"), TransactionFlow.IN, new BigDecimal("50.00"));
+        createTransaction(financialAccount, LocalDate.parse("2026-02-01"), TransactionFlow.OUT, new BigDecimal("25.00"));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/balance", financialAccount.getId()).param("asOfDate", "2026-01-31"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.inflowTotal").value(sameNumber(new BigDecimal("50.00"))))
+            .andExpect(jsonPath("$.outflowTotal").value(sameNumber(BigDecimal.ZERO)))
+            .andExpect(jsonPath("$.currentBalance").value(sameNumber(new BigDecimal("150.00"))));
+    }
+
+    @Test
+    @Transactional
+    void getBalanceForAccountWithoutTransactionsReturnsTotalsZero() throws Exception {
+        financialAccount.setInitialBalance(new BigDecimal("-25.00"));
+        financialAccount.setInitialBalanceDate(LocalDate.parse("2026-01-01"));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/balance", financialAccount.getId()).param("asOfDate", "2026-01-31"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.inflowTotal").value(sameNumber(BigDecimal.ZERO)))
+            .andExpect(jsonPath("$.outflowTotal").value(sameNumber(BigDecimal.ZERO)))
+            .andExpect(jsonPath("$.currentBalance").value(sameNumber(new BigDecimal("-25.00"))));
     }
 
     protected long getRepositoryCount() {

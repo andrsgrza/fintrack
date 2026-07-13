@@ -68,25 +68,25 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## Master summary
 
-| #   | Entity                   | DELETE                                | UPDATE guards                                                | Product rules                                         | Overall                                   |
-| --- | ------------------------ | ------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------- | ----------------------------------------- |
-| 1   | UserDashboardPreference  | Simple                                | 1:1 + JSON parse                                             | Schema, /me, upsert                                   | **Done**                                  |
-| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                | Runtime enforcement                                   | **Done**                                  |
-| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                | FA UI composition ✅; atomic backend command deferred | **Done**                                  |
-| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                | `active` soft-off                                     | **Done**                                  |
-| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                              | Default cats on signup                                | **Done**                                  |
-| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                | Import matching                                       | **Done**                                  |
-| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                       | Empty-set matching, spend                             | **Done**                                  |
-| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                               | Motor eval                                            | **Done**                                  |
-| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅              | Motor on FT create                                    | **Done**                                  |
-| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                     | Revocation runtime / expiry enforcement (fase 6)      | **Done** (11C)                            |
-| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                            | Balances, atomic create                               | **Done**                                  |
-| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                        | Rule motor, balances                                  | **Done**                                  |
-| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                                 | Runtime pipeline/idempotency                          | **Done**                                  |
-| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked    | Upload / parser (fase 6)                              | **Done** (metadata lifecycle)             |
-| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked    | API runtime handler + idempotency (fase 6)            | **Done** (11C lifecycle; runtime pending) |
-| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                        | Pipeline/count reconciliation                         | **Done**                                  |
-| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor | Balance/currentBalance read model                     | **Done**                                  |
+| #   | Entity                   | DELETE                                | UPDATE guards                                                                     | Product rules                                         | Overall                                   |
+| --- | ------------------------ | ------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------- |
+| 1   | UserDashboardPreference  | Simple                                | 1:1 + JSON parse                                                                  | Schema, /me, upsert                                   | **Done**                                  |
+| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                                     | Runtime enforcement                                   | **Done**                                  |
+| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                                     | FA UI composition ✅; atomic backend command deferred | **Done**                                  |
+| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                                     | `active` soft-off                                     | **Done**                                  |
+| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                                                   | Default cats on signup                                | **Done**                                  |
+| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                                     | Import matching                                       | **Done**                                  |
+| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                                            | Empty-set matching, spend                             | **Done**                                  |
+| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                                                    | Motor eval                                            | **Done**                                  |
+| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅                                   | Motor on FT create                                    | **Done**                                  |
+| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                                          | Revocation runtime / expiry enforcement (fase 6)      | **Done** (11C)                            |
+| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                                                 | Balances, atomic create                               | **Done**                                  |
+| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                                             | Rule motor, balances                                  | **Done**                                  |
+| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                                                      | Runtime pipeline/idempotency                          | **Done**                                  |
+| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked                         | Upload / parser (fase 6)                              | **Done** (metadata lifecycle)             |
+| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked                         | API runtime handler + idempotency (fase 6)            | **Done** (11C lifecycle; runtime pending) |
+| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                                             | Pipeline/count reconciliation                         | **Done**                                  |
+| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor + balance read model | UI/dashboard balance display                          | **Done**                                  |
 
 ---
 
@@ -1173,12 +1173,12 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 `FinancialAccount.initialBalance` is the opening position at the beginning of tracking (`posición inicial`). Its meaning depends on `accountType` and sign. It is not always an available balance and it is not always debt.
 
-| Account type  | Positive `initialBalance`  | Zero                        | Negative `initialBalance`                              | Future formula                                               |
-| ------------- | -------------------------- | --------------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
-| `DEBIT`       | Starting available balance | No balance                  | Overdraft / negative balance                           | `currentBalance = initialBalance + IN - OUT`                 |
-| `CASH`        | Starting cash on hand      | No cash recorded            | Adjustment / negative cash position                    | `currentBalance = initialBalance + IN - OUT`                 |
-| `CREDIT_CARD` | Outstanding debt           | No debt / no credit balance | Credit balance / saldo a favor                         | `currentDebt = initialBalance + OUT - IN`                    |
-| `INVESTMENT`  | Starting account value     | No value recorded           | Advanced/adjustment case; investment modeling deferred | `currentValue = initialBalance + IN - OUT`, provisional only |
+| Account type  | Positive `initialBalance`  | Zero                        | Negative `initialBalance`                              | Future formula                                                 |
+| ------------- | -------------------------- | --------------------------- | ------------------------------------------------------ | -------------------------------------------------------------- |
+| `DEBIT`       | Starting available balance | No balance                  | Overdraft / negative balance                           | `currentBalance = initialBalance + IN - OUT`                   |
+| `CASH`        | Starting cash on hand      | No cash recorded            | Adjustment / negative cash position                    | `currentBalance = initialBalance + IN - OUT`                   |
+| `CREDIT_CARD` | Outstanding debt           | No debt / no credit balance | Credit balance / saldo a favor                         | `currentDebt = initialBalance + OUT - IN`                      |
+| `INVESTMENT`  | Starting account value     | No value recorded           | Advanced/adjustment case; investment modeling deferred | `currentBalance = initialBalance + IN - OUT`, provisional only |
 
 For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available credit. It represents the card's opening position. A positive value is debt; a negative value is saldo a favor. `CreditAccountDetails.creditLimit` is used later to calculate `availableCredit`.
 
@@ -1186,12 +1186,29 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 
 `initialBalanceDate` is the date of the opening position and the start of tracking. If transactions exist, it must be `<=` earliest `FinancialTransaction.transactionDate`; use `transactionDate`, not `postingDate`. This validation is implemented.
 
+### Balance read model
+
+`GET /api/financial-accounts/{id}/balance` returns a calculated snapshot. Balances are not persisted and this pass does not add JDL/Liquibase fields.
+
+| Rule                 | Decision                                                                                                              | Status   |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- | -------- |
+| Endpoint access      | Resolve account through FinancialAccount ownership rules; normal users get `404` for foreign accounts; admin can read | **Done** |
+| `asOfDate`           | Optional; defaults to current date in service                                                                         | **Done** |
+| Transaction basis    | Include account transactions by `transactionDate`, not `postingDate`                                                  | **Done** |
+| Date range           | Inclusive `initialBalanceDate` through `asOfDate`                                                                     | **Done** |
+| Inactive accounts    | Still calculate; `active=false` is not a delete/archive                                                               | **Done** |
+| No transactions      | Return opening-position snapshot with zero inflow/outflow                                                             | **Done** |
+| `DEBIT` / `CASH`     | `currentBalance = initialBalance + IN - OUT`                                                                          | **Done** |
+| `CREDIT_CARD`        | `currentDebt = initialBalance + OUT - IN`; `availableCredit = creditLimit - currentDebt` when limit exists            | **Done** |
+| Missing card details | Return `missingCreditDetails = true`; do not fail                                                                     | **Done** |
+| `INVESTMENT`         | Provisional `currentBalance = initialBalance + IN - OUT`; valuation deferred                                          | **Done** |
+
 ### Product rules
 
 | Rule                                           | Decision                                     | Status       |
 | ---------------------------------------------- | -------------------------------------------- | ------------ |
-| `currentBalance` read model                    | Not persisted (JDL)                          | **Open**     |
-| Balance recalculation                          | Not part of this pass                        | **Deferred** |
+| `currentBalance` read model                    | Calculated backend snapshot; not persisted   | **Done**     |
+| Balance recalculation                          | No persisted recalculation in this pass      | **Deferred** |
 | Monetary scale validation for `initialBalance` | `scale <= 2`; no rounding; negatives allowed | **Done**     |
 
 ---
@@ -1205,4 +1222,4 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 
 ---
 
-_Last updated: 2026-07-12 — FinancialAccount final orchestrator delete and initialBalanceDate floor marked complete; balances/currentBalance remain deferred._
+_Last updated: 2026-07-13 — FinancialAccount backend-only balance read model marked complete; UI/dashboard display, persisted balances, statement cycles, and investment valuation remain deferred._

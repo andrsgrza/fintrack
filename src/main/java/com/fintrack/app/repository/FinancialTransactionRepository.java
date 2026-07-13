@@ -103,6 +103,8 @@ public interface FinancialTransactionRepository
     )
     Optional<LocalDate> findEarliestTransactionDateByAccountId(@Param("accountId") Long accountId);
 
+    List<FinancialTransaction> findByAccountIdAndTransactionDateBetween(Long accountId, LocalDate startDate, LocalDate endDate);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
         value = "delete from rel_financial_transaction__tags where financial_transaction_id in (select id from financial_transaction where account_id = :accountId)",
