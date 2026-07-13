@@ -1,5 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import axios from 'axios';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
@@ -8,6 +9,9 @@ import enCreditAccountDetails from 'app/../i18n/en/creditAccountDetails.json';
 import { FinancialAccountDetail } from './financial-account-detail';
 import { FinancialAccountUpdate } from './financial-account-update';
 
+jest.mock('axios');
+
+const mockAxiosGet = axios.get as jest.Mock;
 const mockDispatch = jest.fn();
 const mockCreateEntity = jest.fn(entity => ({ type: 'financialAccount/createEntity', payload: { data: { id: 99, ...entity } } }));
 const mockUpdateEntity = jest.fn(entity => ({ type: 'financialAccount/updateEntity', payload: { data: entity } }));
@@ -131,7 +135,32 @@ const renderEditForm = (accountType = 'CREDIT_CARD', creditAccountDetailsEntity 
   );
 };
 
-const renderDetail = (accountType, creditAccountDetailsEntity = {}) => {
+const buildBalance = (accountType, overrides = {}) => ({
+  accountId: 1,
+  accountName: 'Test account',
+  accountType,
+  currency: 'MXN',
+  initialBalance: 123,
+  initialBalanceDate: '2026-01-10',
+  asOfDate: '2026-02-10',
+  inflowTotal: 200,
+  outflowTotal: 50,
+  currentBalance: accountType === 'CREDIT_CARD' ? undefined : 273,
+  currentDebt: accountType === 'CREDIT_CARD' ? 73 : undefined,
+  creditLimit: accountType === 'CREDIT_CARD' ? 1000 : undefined,
+  availableCredit: accountType === 'CREDIT_CARD' ? 927 : undefined,
+  missingCreditDetails: false,
+  ...overrides,
+});
+
+const renderDetail = (accountType, creditAccountDetailsEntity = {}, balanceOverride?) => {
+  if (!mockAxiosGet.getMockImplementation()) {
+    if (balanceOverride === undefined) {
+      mockAxiosGet.mockReturnValue(new Promise(() => {}));
+    } else {
+      mockAxiosGet.mockResolvedValue({ data: buildBalance(accountType, balanceOverride) });
+    }
+  }
   mockState = {
     ...baseState,
     financialAccount: {
@@ -140,6 +169,7 @@ const renderDetail = (accountType, creditAccountDetailsEntity = {}) => {
         id: 1,
         name: 'Test account',
         accountType,
+        currency: 'MXN',
         initialBalance: 123,
         initialBalanceDate: '2026-01-10',
       },
@@ -185,6 +215,7 @@ describe('FinancialAccount opening-position labels', () => {
     mockUpdateCreditAccountDetails.mockClear();
     mockGetCreditAccountDetailsByAccountId.mockClear();
     mockResetCreditAccountDetails.mockClear();
+    mockAxiosGet.mockReset();
   });
 
   it('shows DEBIT opening-position copy on initial create render', () => {
@@ -441,6 +472,23 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByText('Credit card details')).toBeNull();
   });
 
+  it('shows DEBIT balance snapshot with current balance and hides credit-card-only fields', async () => {
+    renderDetail('DEBIT', {}, { currentBalance: 273, inflowTotal: 200, outflowTotal: 50 });
+
+    const section = await screen.findByTestId('financialAccountBalanceSection');
+
+    expect(mockAxiosGet).toHaveBeenCalledWith('api/financial-accounts/1/balance');
+    expect(within(section).getByText('Balance snapshot')).toBeTruthy();
+    expect(within(section).getByText('Current balance')).toBeTruthy();
+    expect(within(section).getByText('273 MXN')).toBeTruthy();
+    expect(within(section).getByText('Inflow total')).toBeTruthy();
+    expect(within(section).getByText('200 MXN')).toBeTruthy();
+    expect(within(section).getByText('Outflow total')).toBeTruthy();
+    expect(within(section).getByText('50 MXN')).toBeTruthy();
+    expect(within(section).queryByText('Current debt')).toBeNull();
+    expect(within(section).queryByText('Available credit')).toBeNull();
+  });
+
   it('uses the CREDIT_CARD opening-position label in detail view', () => {
     renderDetail('CREDIT_CARD', {
       id: 25,
@@ -458,6 +506,64 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.getByText('50000')).toBeTruthy();
     expect(screen.queryByText('Account')).toBeNull();
     expectNoMissingTranslations();
+  });
+
+  it('shows CREDIT_CARD balance snapshot with debt, credit limit, and available credit', async () => {
+    renderDetail(
+      'CREDIT_CARD',
+      {
+        id: 25,
+        creditLimit: 1000,
+        statementDay: 15,
+        paymentDueDay: 5,
+        annualInterestRate: 65,
+      },
+      { currentDebt: 73, creditLimit: 1000, availableCredit: 927 },
+    );
+
+    const section = await screen.findByTestId('financialAccountBalanceSection');
+
+    expect(within(section).getByText('Current debt')).toBeTruthy();
+    expect(within(section).getByText('73 MXN')).toBeTruthy();
+    expect(within(section).getByText('Credit limit')).toBeTruthy();
+    expect(within(section).getByText('1000 MXN')).toBeTruthy();
+    expect(within(section).getByText('Available credit')).toBeTruthy();
+    expect(within(section).getByText('927 MXN')).toBeTruthy();
+    expect(within(section).queryByText('Current balance')).toBeNull();
+  });
+
+  it('shows missing credit details warning in CREDIT_CARD balance snapshot', async () => {
+    renderDetail('CREDIT_CARD', {}, { creditLimit: undefined, availableCredit: undefined, missingCreditDetails: true });
+
+    const section = await screen.findByTestId('financialAccountBalanceSection');
+
+    expect(within(section).getByText('Credit card details have not been configured yet.')).toBeTruthy();
+    expect(within(section).getByText('Current debt')).toBeTruthy();
+    expect(within(section).queryByText('Available credit')).toBeNull();
+  });
+
+  it('shows balance unavailable when balance request fails but keeps account detail rendered', async () => {
+    mockAxiosGet.mockRejectedValue(new Error('balance failed'));
+    renderDetail('DEBIT');
+
+    expect(screen.getByText('Test account')).toBeTruthy();
+    expect(await screen.findByText('Balance is not available.')).toBeTruthy();
+    expect(screen.getByText('Initial balance')).toBeTruthy();
+  });
+
+  it('shows loading state while balance request is pending', async () => {
+    let resolveBalance;
+    mockAxiosGet.mockReturnValue(
+      new Promise(resolve => {
+        resolveBalance = resolve;
+      }),
+    );
+    renderDetail('DEBIT');
+
+    expect(screen.getByText('Loading balance...')).toBeTruthy();
+
+    resolveBalance({ data: buildBalance('DEBIT') });
+    await waitFor(() => expect(screen.queryByText('Loading balance...')).toBeNull());
   });
 
   it('shows a clear detail message when CREDIT_CARD details are missing', () => {

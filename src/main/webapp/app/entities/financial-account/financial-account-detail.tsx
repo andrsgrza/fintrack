@@ -14,6 +14,7 @@ import {
   reset as resetCreditAccountDetails,
 } from 'app/entities/credit-account-details/credit-account-details.reducer';
 import CreditCardDetailsViewSection from './components/credit-card-details-view-section';
+import FinancialAccountBalanceSection from './components/financial-account-balance-section';
 
 export const FinancialAccountDetail = () => {
   const dispatch = useAppDispatch();
@@ -169,6 +170,11 @@ export const FinancialAccountDetail = () => {
         {financialAccountEntity.accountType === 'CREDIT_CARD' ? (
           <div className="mt-3 mb-3">
             <CreditCardDetailsViewSection details={creditAccountDetailsEntity} accountId={financialAccountEntity.id} />
+          </div>
+        ) : null}
+        {financialAccountEntity.id ? (
+          <div className="mt-3 mb-3">
+            <FinancialAccountBalanceSection accountId={financialAccountEntity.id} />
           </div>
         ) : null}
         <Button tag={Link} to="/financial-account" replace color="info" data-cy="entityDetailsBackButton">
