@@ -226,10 +226,9 @@ public class TransactionIngestionService {
         fileIngestionRepository.deleteByTransactionIngestionId(id);
         apiIngestionRepository.deleteByTransactionIngestionId(id);
         internalTransferRepository.deleteByTransactionIngestionIdInEitherRole(id);
-        financialTransactionRepository.deleteTagLinksByTransactionIngestionId(id);
-        ingestionRecordRepository.clearFinancialTransactionByTransactionIngestionId(id);
-        financialTransactionRepository.deleteByTransactionIngestionId(id);
         ingestionRecordRepository.deleteByTransactionIngestionId(id);
+        financialTransactionRepository.deleteTagLinksByTransactionIngestionId(id);
+        financialTransactionRepository.deleteByTransactionIngestionId(id);
         transactionIngestionRepository.deleteById(id);
         return true;
     }

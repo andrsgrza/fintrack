@@ -12,10 +12,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TransactionIngestionService;
@@ -100,6 +105,12 @@ class TransactionIngestionResourceIT {
 
     @Autowired
     private TransactionIngestionRepository transactionIngestionRepository;
+
+    @Autowired
+    private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private IngestionRecordRepository ingestionRecordRepository;
 
     @Mock
     private TransactionIngestionRepository transactionIngestionRepositoryMock;
@@ -1429,6 +1440,34 @@ class TransactionIngestionResourceIT {
 
         // Validate the database contains one less item
         assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+    }
+
+    @Test
+    @Transactional
+    void deleteTransactionIngestionWithRecordLinkedToCreatedFinancialTransactionSucceeds() throws Exception {
+        insertedTransactionIngestion = transactionIngestionRepository.saveAndFlush(transactionIngestion);
+
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(transactionIngestion.getAccount());
+        financialTransaction.setTransactionIngestion(insertedTransactionIngestion);
+        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        IngestionRecord ingestionRecord = new IngestionRecord()
+            .recordIndex(12345)
+            .status(IngestionRecordStatus.CREATED)
+            .createdAt(DEFAULT_CREATED_AT)
+            .transactionIngestion(insertedTransactionIngestion)
+            .financialTransaction(financialTransaction);
+        ingestionRecord = ingestionRecordRepository.saveAndFlush(ingestionRecord);
+
+        restTransactionIngestionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, insertedTransactionIngestion.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(ingestionRecordRepository.findById(ingestionRecord.getId())).isEmpty();
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId())).isEmpty();
+        assertThat(transactionIngestionRepository.findById(insertedTransactionIngestion.getId())).isEmpty();
+        insertedTransactionIngestion = null;
     }
 
     @Test

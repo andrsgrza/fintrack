@@ -3,6 +3,7 @@ package com.fintrack.app.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -350,14 +352,22 @@ class TransactionIngestionServiceTest {
 
         assertThat(transactionIngestionService.delete(100L)).isTrue();
 
-        verify(fileIngestionRepository).deleteByTransactionIngestionId(100L);
-        verify(apiIngestionRepository).deleteByTransactionIngestionId(100L);
-        verify(internalTransferRepository).deleteByTransactionIngestionIdInEitherRole(100L);
-        verify(financialTransactionRepository).deleteTagLinksByTransactionIngestionId(100L);
-        verify(ingestionRecordRepository).clearFinancialTransactionByTransactionIngestionId(100L);
-        verify(financialTransactionRepository).deleteByTransactionIngestionId(100L);
-        verify(ingestionRecordRepository).deleteByTransactionIngestionId(100L);
-        verify(transactionIngestionRepository).deleteById(100L);
+        InOrder inOrder = inOrder(
+            fileIngestionRepository,
+            apiIngestionRepository,
+            internalTransferRepository,
+            ingestionRecordRepository,
+            financialTransactionRepository,
+            transactionIngestionRepository
+        );
+        inOrder.verify(fileIngestionRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(apiIngestionRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(internalTransferRepository).deleteByTransactionIngestionIdInEitherRole(100L);
+        inOrder.verify(ingestionRecordRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(financialTransactionRepository).deleteTagLinksByTransactionIngestionId(100L);
+        inOrder.verify(financialTransactionRepository).deleteByTransactionIngestionId(100L);
+        inOrder.verify(transactionIngestionRepository).deleteById(100L);
+        verify(ingestionRecordRepository, never()).clearFinancialTransactionByTransactionIngestionId(any());
     }
 
     private TransactionIngestionDTO validUpdateDTO() {
