@@ -164,6 +164,13 @@ const expectNoMissingTranslations = () => {
   expect(screen.queryByText(/translation-not-found\[fintrackApp\.creditAccountDetails\.composition/)).toBeNull();
 };
 
+const expectFieldBefore = (firstLabel: string, secondLabel: string) => {
+  const firstField = screen.getByLabelText(firstLabel);
+  const secondField = screen.getByLabelText(secondLabel);
+
+  expect(firstField.compareDocumentPosition(secondField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+};
+
 describe('FinancialAccount opening-position labels', () => {
   beforeAll(registerTranslations);
 
@@ -202,6 +209,16 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByLabelText('Budgets')).toBeNull();
     expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
     expect(screen.queryByText('Credit card details')).toBeNull();
+  });
+
+  it('renders secondary account fields before account type in create mode', () => {
+    renderCreateForm();
+
+    expectFieldBefore('Currency', 'Account Type');
+    expectFieldBefore('Last Four Digits', 'Account Type');
+    expectFieldBefore('Description', 'Account Type');
+    expectFieldBefore('Color', 'Account Type');
+    expectFieldBefore('Icon', 'Account Type');
   });
 
   it('changes DEBIT to CREDIT_CARD labels and resets initial balance fields', () => {

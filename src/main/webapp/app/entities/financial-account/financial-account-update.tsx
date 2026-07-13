@@ -216,26 +216,6 @@ export const FinancialAccountUpdate = () => {
                 }}
               />
               <ValidatedField
-                label={translate('fintrackApp.financialAccount.accountType')}
-                id="financial-account-accountType"
-                name="accountType"
-                data-cy="accountType"
-                type="select"
-                disabled={!isNew}
-                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                  const nextAccountType = event.target.value as keyof typeof AccountType;
-                  setSelectedAccountType(nextAccountType);
-                  setCreditCardDetailsFormValues({});
-                  resetOpeningPositionFields(event.target.form);
-                }}
-              >
-                {accountTypeValues.map(accountType => (
-                  <option value={accountType} key={accountType}>
-                    {translate(`fintrackApp.AccountType.${accountType}`)}
-                  </option>
-                ))}
-              </ValidatedField>
-              <ValidatedField
                 label={translate('fintrackApp.financialAccount.currency')}
                 id="financial-account-currency"
                 name="currency"
@@ -249,45 +229,6 @@ export const FinancialAccountUpdate = () => {
                   </option>
                 ))}
               </ValidatedField>
-              <ValidatedField
-                label={translate(getInitialBalanceLabelKey(selectedAccountType))}
-                id="financial-account-initialBalance"
-                name="initialBalance"
-                data-cy="initialBalance"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  validate: v => isNumber(v) || translate('entity.validation.number'),
-                }}
-              />
-              <FormText>
-                <Translate key={selectedAccountType} contentKey={getInitialBalanceHelpKey(selectedAccountType)}>
-                  Opening position when you started tracking this account.
-                </Translate>
-              </FormText>
-              <ValidatedField
-                label={translate('fintrackApp.financialAccount.initialBalanceDate')}
-                id="financial-account-initialBalanceDate"
-                name="initialBalanceDate"
-                data-cy="initialBalanceDate"
-                type="date"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              {selectedAccountType === 'CREDIT_CARD' ? (
-                creditAccountDetailsLoading && !isNew ? (
-                  <p>Loading...</p>
-                ) : (
-                  <CreditCardDetailsFormSection
-                    details={creditAccountDetailsEntity}
-                    values={creditCardDetailsFormValues}
-                    onFieldChange={(fieldName, value) =>
-                      setCreditCardDetailsFormValues(previousValues => ({ ...previousValues, [fieldName]: value }))
-                    }
-                  />
-                )
-              ) : null}
               <ValidatedField
                 label={translate('fintrackApp.financialAccount.lastFourDigits')}
                 id="financial-account-lastFourDigits"
@@ -331,6 +272,65 @@ export const FinancialAccountUpdate = () => {
                   maxLength: { value: 50, message: translate('entity.validation.maxlength', { max: 50 }) },
                 }}
               />
+              <ValidatedField
+                label={translate('fintrackApp.financialAccount.accountType')}
+                id="financial-account-accountType"
+                name="accountType"
+                data-cy="accountType"
+                type="select"
+                disabled={!isNew}
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                  const nextAccountType = event.target.value as keyof typeof AccountType;
+                  setSelectedAccountType(nextAccountType);
+                  setCreditCardDetailsFormValues({});
+                  resetOpeningPositionFields(event.target.form);
+                }}
+              >
+                {accountTypeValues.map(accountType => (
+                  <option value={accountType} key={accountType}>
+                    {translate(`fintrackApp.AccountType.${accountType}`)}
+                  </option>
+                ))}
+              </ValidatedField>
+              <ValidatedField
+                label={translate(getInitialBalanceLabelKey(selectedAccountType))}
+                id="financial-account-initialBalance"
+                name="initialBalance"
+                data-cy="initialBalance"
+                type="text"
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                  validate: v => isNumber(v) || translate('entity.validation.number'),
+                }}
+              />
+              <FormText>
+                <Translate key={selectedAccountType} contentKey={getInitialBalanceHelpKey(selectedAccountType)}>
+                  Opening position when you started tracking this account.
+                </Translate>
+              </FormText>
+              <ValidatedField
+                label={translate('fintrackApp.financialAccount.initialBalanceDate')}
+                id="financial-account-initialBalanceDate"
+                name="initialBalanceDate"
+                data-cy="initialBalanceDate"
+                type="date"
+                validate={{
+                  required: { value: true, message: translate('entity.validation.required') },
+                }}
+              />
+              {selectedAccountType === 'CREDIT_CARD' ? (
+                creditAccountDetailsLoading && !isNew ? (
+                  <p>Loading...</p>
+                ) : (
+                  <CreditCardDetailsFormSection
+                    details={creditAccountDetailsEntity}
+                    values={creditCardDetailsFormValues}
+                    onFieldChange={(fieldName, value) =>
+                      setCreditCardDetailsFormValues(previousValues => ({ ...previousValues, [fieldName]: value }))
+                    }
+                  />
+                )
+              ) : null}
               {!isNew ? (
                 <ValidatedField
                   label={translate('fintrackApp.financialAccount.active')}
