@@ -96,6 +96,7 @@ public class TransactionRuleService {
         LOG.debug("Request to update TransactionRule : {}", transactionRuleDTO);
         TransactionRule existingTransactionRule = findAccessibleEntity(transactionRuleDTO.getId()).orElseThrow();
         rejectCreatedAtChange(existingTransactionRule, transactionRuleDTO.getCreatedAt());
+        rejectUpdatedAtChange(existingTransactionRule, transactionRuleDTO.getUpdatedAt());
         TransactionRule transactionRule = transactionRuleMapper.toEntity(transactionRuleDTO);
         transactionRule.setUser(existingTransactionRule.getUser());
         applyRelationships(transactionRule, transactionRuleDTO, existingTransactionRule.getUser().getLogin());
@@ -131,6 +132,9 @@ public class TransactionRuleService {
                 rejectNullRequiredPatchFields(patchNode);
                 if (patchNode != null && patchNode.has("createdAt")) {
                     rejectCreatedAtChange(existingTransactionRule, transactionRuleDTO.getCreatedAt());
+                }
+                if (patchNode != null && patchNode.has("updatedAt")) {
+                    rejectUpdatedAtChange(existingTransactionRule, transactionRuleDTO.getUpdatedAt());
                 }
                 if (patchNode != null && patchNode.has("active") && Boolean.TRUE.equals(transactionRuleDTO.getActive())) {
                     validateActiveRuleHasConditions(existingTransactionRule);
@@ -356,8 +360,14 @@ public class TransactionRuleService {
     }
 
     private void rejectCreatedAtChange(TransactionRule existingTransactionRule, Instant requestedCreatedAt) {
-        if (requestedCreatedAt != null && !requestedCreatedAt.equals(existingTransactionRule.getCreatedAt())) {
+        if (requestedCreatedAt == null || !requestedCreatedAt.equals(existingTransactionRule.getCreatedAt())) {
             throw new IllegalArgumentException("createdAt cannot be changed");
+        }
+    }
+
+    private void rejectUpdatedAtChange(TransactionRule existingTransactionRule, Instant requestedUpdatedAt) {
+        if (requestedUpdatedAt == null || !requestedUpdatedAt.equals(existingTransactionRule.getUpdatedAt())) {
+            throw new IllegalArgumentException("updatedAt cannot be changed");
         }
     }
 

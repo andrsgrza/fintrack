@@ -1089,7 +1089,7 @@ class TransactionRuleResourceIT {
             .resultingDescription(UPDATED_RESULTING_DESCRIPTION)
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .updatedAt(DEFAULT_UPDATED_AT);
         TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(updatedTransactionRule);
 
         restTransactionRuleMockMvc
@@ -1126,6 +1126,63 @@ class TransactionRuleResourceIT {
             .andExpect(status().isBadRequest());
 
         assertThat(getPersistedTransactionRule(transactionRule).getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void putNullCreatedAtFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setCreatedAt(null);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void putChangingUpdatedAtFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setUpdatedAt(UPDATED_UPDATED_AT);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getUpdatedAt()).isEqualTo(DEFAULT_UPDATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void putNullUpdatedAtFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setUpdatedAt(null);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getUpdatedAt()).isEqualTo(DEFAULT_UPDATED_AT);
     }
 
     @Test
@@ -1200,7 +1257,7 @@ class TransactionRuleResourceIT {
 
         TransactionRule partialUpdatedTransactionRule = new TransactionRule();
         partialUpdatedTransactionRule.setId(transactionRule.getId());
-        partialUpdatedTransactionRule.name(UPDATED_NAME).resultingDescription(UPDATED_RESULTING_DESCRIPTION).updatedAt(UPDATED_UPDATED_AT);
+        partialUpdatedTransactionRule.name(UPDATED_NAME).resultingDescription(UPDATED_RESULTING_DESCRIPTION);
         String patchJson =
             "{\"id\":" +
             transactionRule.getId() +
@@ -1208,8 +1265,6 @@ class TransactionRuleResourceIT {
             UPDATED_NAME +
             "\",\"resultingDescription\":\"" +
             UPDATED_RESULTING_DESCRIPTION +
-            "\",\"updatedAt\":\"" +
-            UPDATED_UPDATED_AT +
             "\"}";
 
         restTransactionRuleMockMvc
@@ -1224,7 +1279,7 @@ class TransactionRuleResourceIT {
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         TransactionRule persistedTransactionRule = getPersistedTransactionRule(transactionRule);
-        assertThat(persistedTransactionRule.getUpdatedAt()).isNotEqualTo(UPDATED_UPDATED_AT);
+        assertThat(persistedTransactionRule.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
         partialUpdatedTransactionRule.setUpdatedAt(persistedTransactionRule.getUpdatedAt());
         assertTransactionRuleUpdatableFieldsEquals(
             createUpdateProxyForBean(partialUpdatedTransactionRule, transactionRule),
@@ -1252,7 +1307,7 @@ class TransactionRuleResourceIT {
             .resultingDescription(UPDATED_RESULTING_DESCRIPTION)
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .updatedAt(DEFAULT_UPDATED_AT);
 
         restTransactionRuleMockMvc
             .perform(
@@ -1267,7 +1322,7 @@ class TransactionRuleResourceIT {
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
         TransactionRule persistedTransactionRule = getPersistedTransactionRule(partialUpdatedTransactionRule);
         assertThat(persistedTransactionRule.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
-        assertThat(persistedTransactionRule.getUpdatedAt()).isNotEqualTo(UPDATED_UPDATED_AT);
+        assertThat(persistedTransactionRule.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
         partialUpdatedTransactionRule.setUpdatedAt(persistedTransactionRule.getUpdatedAt());
         assertTransactionRuleUpdatableFieldsEquals(partialUpdatedTransactionRule, persistedTransactionRule);
     }
@@ -1361,6 +1416,20 @@ class TransactionRuleResourceIT {
             .andExpect(status().isBadRequest());
 
         assertThat(getPersistedTransactionRule(transactionRule).getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void patchChangingUpdatedAtFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"updatedAt\":\"" + UPDATED_UPDATED_AT + "\"}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getUpdatedAt()).isEqualTo(DEFAULT_UPDATED_AT);
     }
 
     @Test

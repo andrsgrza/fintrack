@@ -146,6 +146,34 @@ class TransactionRuleServiceTest {
     }
 
     @Test
+    void updateShouldRejectChangedUpdatedAt() {
+        transactionRuleDTO.setUpdatedAt(Instant.parse("2026-07-12T00:00:00Z"));
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullUpdatedAt() {
+        transactionRuleDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).save(any());
+    }
+
+    @Test
     void findOneShouldReturnEmptyForAnotherUsersTransactionRule() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
