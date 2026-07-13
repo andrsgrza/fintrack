@@ -234,9 +234,9 @@ Grupo 1 #2 domain rules **Done**.
 | Parent `account` required                   | Resolved via accessible account  | Yes              | `400` invalid | **Done**       |
 | Only `CREDIT_CARD` accounts                 | On create                        | Yes              | `400` invalid | **Done**       |
 | One details per account                     | `existsByAccountId()` on create  | Yes              | `400` invalid | **Done**       |
-| `CREDIT_CARD` must have details (invariant) | Domain rule; separate CRUD today | Yes              | —             | **Documented** |
+| `CREDIT_CARD` expected to have details for full card functionality | Future/full-functionality expectation; separate CRUD today; not enforced by `FinancialAccountService` | Yes | — | **Documented** |
 
-**Future:** atomic endpoint should create `FinancialAccount` + `CreditAccountDetails` together for `CREDIT_CARD`. Do not break standalone FA create in this pass.
+**Future:** atomic endpoint may create `FinancialAccount` + `CreditAccountDetails` together for `CREDIT_CARD`, or a later guard may require details before enabling full credit-card features. Do not break standalone FA create in this pass.
 
 ### UPDATE / PATCH
 
@@ -1160,12 +1160,30 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 | `initialBalanceDate` floor `<= earliest transactionDate` | No floor when there are zero transactions; uses `transactionDate`, not `postingDate`; validates final PUT/PATCH state | **Done** |
 | `active` mutable                                         | No side effects; does not delete/unlink/block imports | **Done** |
 
+### `initialBalance` semantics
+
+`FinancialAccount.initialBalance` is the opening position at the beginning of tracking (`posición inicial`). Its meaning depends on `accountType` and sign. It is not always an available balance and it is not always debt.
+
+| Account type | Positive `initialBalance` | Zero | Negative `initialBalance` | Future formula |
+| --- | --- | --- | --- | --- |
+| `DEBIT` | Starting available balance | No balance | Overdraft / negative balance | `currentBalance = initialBalance + IN - OUT` |
+| `CASH` | Starting cash on hand | No cash recorded | Adjustment / negative cash position | `currentBalance = initialBalance + IN - OUT` |
+| `CREDIT_CARD` | Outstanding debt | No debt / no credit balance | Credit balance / saldo a favor | `currentDebt = initialBalance + OUT - IN` |
+| `INVESTMENT` | Starting account value | No value recorded | Advanced/adjustment case; investment modeling deferred | `currentValue = initialBalance + IN - OUT`, provisional only |
+
+For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available credit. It represents the card's opening position. A positive value is debt; a negative value is saldo a favor. `CreditAccountDetails.creditLimit` is used later to calculate `availableCredit`.
+
+`initialBalance` is required. Negative values are currently allowed and meaningful. Service-level monetary scale validation is proposed for a future pass; non-negative validation is not a current rule.
+
+`initialBalanceDate` is the date of the opening position and the start of tracking. If transactions exist, it must be `<=` earliest `FinancialTransaction.transactionDate`; use `transactionDate`, not `postingDate`. This validation is implemented.
+
 ### Product rules
 
 | Rule                          | Decision            | Status   |
 | ----------------------------- | ------------------- | -------- |
 | `currentBalance` read model   | Not persisted (JDL) | **Open** |
 | Balance recalculation      | Not part of this pass | **Deferred** |
+| Monetary scale validation for `initialBalance` | `scale <= 2` | **Proposed** |
 
 ---
 

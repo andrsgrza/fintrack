@@ -85,10 +85,10 @@ Companion docs:
 
 | Layer | Rules |
 |-------|-------|
-| **DTO** | `name` (1–100), `accountType`, `currency`, `initialBalance`, `initialBalanceDate`, `active`, timestamps `@NotNull`; `last4` pattern `^[0-9]{4}$`; `color` hex pattern; sizes on institution/description/icon. **`user` optional** (service assigns). |
+| **DTO** | `name` (1–100), `accountType`, `currency`, `initialBalance`, `initialBalanceDate`, `active`, timestamps `@NotNull`; `last4` pattern `^[0-9]{4}$`; `color` hex pattern; sizes on institution/description/icon. **`initialBalance` is required but has no non-negative rule; positive, zero, and negative values are currently allowed.** **`user` optional** (service assigns). |
 | **Entity** | Same as DTO + **`user` required**. |
 | **DB** | `user_id NOT NULL` FK. |
-| **Service** | Create: `user = currentUser`. Update/patch: preserve owner. **`currency` and `accountType` immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalanceDate` may not be after the earliest `FinancialTransaction.transactionDate` when transactions exist. Delete orchestrates TransactionIngestion trees, remaining FinancialTransactions, Budget account links, FinancialSubscription account nulling, CreditAccountDetails cleanup, then account delete. Scoped read/write. |
+| **Service** | Create: `user = currentUser`. Update/patch: preserve owner. **`currency` and `accountType` immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalance` is the opening position (`posición inicial`) at the beginning of tracking; sign semantics depend on `accountType` and no `>= 0` rule is enforced. `initialBalanceDate` may not be after the earliest `FinancialTransaction.transactionDate` when transactions exist. Delete orchestrates TransactionIngestion trees, remaining FinancialTransactions, Budget account links, FinancialSubscription account nulling, CreditAccountDetails cleanup, then account delete. Scoped read/write. |
 | **REST** | `@Valid` POST/PUT; PATCH **JsonNode** (`currency`/`accountType` null → `400`); `isAccessible()` on mutate; `400 invalid` on business errors. |
 | **Tests** | `FinancialAccountResourceIT` (ownership, immutability, delete orchestration, initial date floor); `FinancialAccountServiceTest` (ownership, immutability, orchestration, floor unit). PATCH IT uses minimal JSON — see [TESTING.md § FA](TESTING.md#financialaccount). |
 
@@ -109,7 +109,7 @@ Companion docs:
 | **DTO** | `creditLimit` `@DecimalMin("0")`, `statementDay`/`paymentDueDay` 1–31, timestamps, **`account` required**. Optional `annualInterestRate` ≥ 0. |
 | **Entity** | Same; **`account` required** `@JoinColumn(unique=true)`. |
 | **DB** | `account_id NOT NULL UNIQUE` (1:1). |
-| **Service** | Create: accessible account; **`accountType = CREDIT_CARD` only**; `existsByAccountId()` duplicate. Update/patch: **`account` immutable**. |
+| **Service** | Create: accessible account; **`accountType = CREDIT_CARD` only**; `existsByAccountId()` duplicate. Update/patch: **`account` immutable**. `CreditAccountDetails` does not replace `FinancialAccount.initialBalance`; `creditLimit` is card configuration and is not opening position / available credit. |
 | **REST** | `@Valid` POST/PUT; PATCH **JsonNode** (`account` null → `400`); `400 invalid` on business errors. |
 
 ### 4. Category

@@ -145,6 +145,17 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **JDL:** `user` required. Balance actual calculado, no persistido.
 
+**Official `initialBalance` semantics:** `FinancialAccount.initialBalance` is the opening position at the beginning of tracking (`posición inicial`). Its meaning depends on `accountType` and sign; it is not always available balance and it is not always debt.
+
+| Account type | Positive `initialBalance` | Zero | Negative `initialBalance` | Future formula |
+| --- | --- | --- | --- | --- |
+| `DEBIT` | Starting available balance | No balance | Overdraft / negative balance | `currentBalance = initialBalance + IN - OUT` |
+| `CASH` | Starting cash on hand | No cash recorded | Adjustment / negative cash position | `currentBalance = initialBalance + IN - OUT` |
+| `CREDIT_CARD` | Outstanding debt | No debt / no credit balance | Credit balance / saldo a favor | `currentDebt = initialBalance + OUT - IN` |
+| `INVESTMENT` | Starting account value | No value recorded | Advanced/adjustment case; investment modeling deferred | `currentValue = initialBalance + IN - OUT`, provisional only |
+
+For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available credit. `CreditAccountDetails.creditLimit` is used later to calculate `availableCredit`. Negative `initialBalance` values are currently allowed and meaningful; non-negative validation is not a current rule.
+
 #### Ownership ✅
 
 | Regla                                | Implementación                                     |
@@ -167,9 +178,10 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | Admin accede a todo                           | ✅     |                      |
 | Delete orchestration                          | ✅     | TI tree → remaining FT → budget links → subscriptions null → CAD → account |
 | `initialBalanceDate` floor                    | ✅     | no floor without txs; otherwise `<= earliest transactionDate` |
-| `initialBalance` mutable                      | ✅     | no balance recalculation |
+| `initialBalance` mutable                      | ✅     | opening position; positive/zero/negative allowed; no balance recalculation |
 | `active` mutable                              | ✅     | no side effects |
-| Balance actual = f(transacciones) + initial   | ⏳     | read model / service; out of scope |
+| Balance actual/current position formulas      | ⏳     | read model / service; formulas documented in DOMAIN-RULES; implementation out of scope |
+| Monetary scale validation for `initialBalance` | 📄     | Proposed future `scale <= 2`; no non-negative rule |
 
 #### Validations ✅
 
@@ -259,10 +271,10 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | Un account solo un details          | ✅     | `existsByAccountId` en service                        |
 | DELETE directo bloqueado            | ✅     | `400` invalid; admin no bypass; `404` si inaccessible |
 | Campos mutables (limit, days, rate) | ✅     | Sin checks de utilización ni interés                  |
-| `CREDIT_CARD` requiere details      | 📄     | Invariante documentada; atomic create **futuro**      |
-| Cascade en FA delete                | ⏳     | `FinancialAccountService` (#17)                       |
+| `CREDIT_CARD` expected to have details for full functionality | 📄 | Not enforced by `FinancialAccountService` today; atomic create / required-details guard **futuro** |
+| Cascade en FA delete                | ✅     | `FinancialAccountService` deletes details during account delete |
 
-**Fuera de scope:** cálculos de interés, statement generation, atomic FA+CAD endpoint, cascade FA delete (este pass).
+**Fuera de scope:** cálculos de interés, statement generation, atomic FA+CAD endpoint, required-details enforcement.
 
 ---
 
@@ -994,7 +1006,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-11 | UserDashboardPreference domain rules: DELETE simple; `configuration` required + parseable JSON (`{}` OK); schema/`/me`/upsert deferred.                                                                                                                                                                   |
 | 2026-07-11 | ApiAccessTokenPermission domain rules ✅: confirmatory ITs (DELETE preserves token/sibling; CREATE on REVOKED/EXPIRED; same permission different token). Service unchanged. 37 IT.                                                                                                                        |
 | 2026-07-11 | Category domain rules ✅: block delete with children; leaf delete+cleanup (FT/FS/budget/rule); parentCategory immutable; categoryType guard; child type matches parent. 103 IT + 16 service. Default categories on signup deferred.                                                                       |
-| 2026-07-11 | CreditAccountDetails domain rules ✅: direct DELETE blocked (`400` invalid; admin no bypass; foreign `404`); mutable credit fields without utilization checks; `CREDIT_CARD` requires details documented (atomic create deferred). 41 IT + 10 service.                                                    |
+| 2026-07-11 | CreditAccountDetails domain rules ✅: direct DELETE blocked (`400` invalid; admin no bypass; foreign `404`); mutable credit fields without utilization checks; `CREDIT_CARD` details expected for full functionality but not enforced by `FinancialAccountService` today (atomic create / required-details enforcement deferred). 41 IT + 10 service.                                                    |
 | 2026-07-11 | Grupo 1 delete confirmation dialogs ✅: domain-aware UX copy for UDP, AATP, Tag, Category; CAD informational-only (no confirm). i18n en/es.                                                                                                                                                               |
 | 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                     |
 | 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6. |

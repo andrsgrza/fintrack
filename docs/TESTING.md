@@ -290,7 +290,9 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 **Domain rules in service:** assign `user` on create; ignore client `user`; preserve owner on update/patch; scope all reads/writes.
 
-**Validation/domain rules in service:** `currency` and `accountType` **immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalanceDate` must be `<=` earliest transaction `transactionDate` when transactions exist. `active=false` has no side effects. DELETE is orchestrated through TransactionIngestion and FinancialTransaction delegates before account-level link cleanup. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType` null or different → `400 invalid`.
+**Validation/domain rules in service:** `currency` and `accountType` **immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalance` is the opening position (`posición inicial`) at the beginning of tracking; positive, zero, and negative values are currently allowed, with sign semantics depending on `accountType`. There is no non-negative validation today. `initialBalanceDate` must be `<=` earliest transaction `transactionDate` when transactions exist. `active=false` has no side effects. DELETE is orchestrated through TransactionIngestion and FinancialTransaction delegates before account-level link cleanup. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType` null or different → `400 invalid`.
+
+**Balance calculation status:** tests only cover persistence, mutability, filters, and `initialBalanceDate` floor. `currentBalance`, `currentDebt`, `availableCredit`, `AccountBalanceService`, investment valuation, and persisted balance/read-model calculations remain deferred/open.
 
 ### Summary counts
 
