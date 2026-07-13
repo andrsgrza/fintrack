@@ -101,4 +101,10 @@ public interface FinancialSubscriptionRepository
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "delete from rel_financial_subscription__tags where financial_subscription_id = :subscriptionId", nativeQuery = true)
     void deleteTagLinksByFinancialSubscriptionId(@Param("subscriptionId") Long subscriptionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "update FinancialSubscription financialSubscription set financialSubscription.account = null where financialSubscription.account.id = :accountId"
+    )
+    void clearAccountByAccountId(@Param("accountId") Long accountId);
 }

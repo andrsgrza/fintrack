@@ -1,6 +1,7 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.FinancialTransaction;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -96,4 +97,33 @@ public interface FinancialTransactionRepository
         "delete from FinancialTransaction financialTransaction where financialTransaction.transactionIngestion.id = :transactionIngestionId"
     )
     void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Query(
+        "select min(financialTransaction.transactionDate) from FinancialTransaction financialTransaction where financialTransaction.account.id = :accountId"
+    )
+    Optional<LocalDate> findEarliestTransactionDateByAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_financial_transaction__tags where financial_transaction_id in (select id from financial_transaction where account_id = :accountId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from FinancialTransaction financialTransaction where financialTransaction.account.id = :accountId")
+    void deleteByAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_financial_transaction__tags where financial_transaction_id in (select ft.id from financial_transaction ft join transaction_ingestion ti on ft.transaction_ingestion_id = ti.id where ti.account_id = :accountId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByTransactionIngestionAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from FinancialTransaction financialTransaction where financialTransaction.transactionIngestion.id in (select transactionIngestion.id from TransactionIngestion transactionIngestion where transactionIngestion.account.id = :accountId)"
+    )
+    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
 }

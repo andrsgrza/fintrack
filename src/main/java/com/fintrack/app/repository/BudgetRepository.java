@@ -70,6 +70,10 @@ public interface BudgetRepository
     void deleteAccountLinksByBudgetId(@Param("budgetId") Long budgetId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from rel_budget__accounts where accounts_id = :accountId", nativeQuery = true)
+    void deleteAccountLinksByAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "delete from rel_budget__categories where budget_id = :budgetId", nativeQuery = true)
     void deleteCategoryLinksByBudgetId(@Param("budgetId") Long budgetId);
 

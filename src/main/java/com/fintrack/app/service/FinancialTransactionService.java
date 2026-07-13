@@ -312,6 +312,25 @@ public class FinancialTransactionService {
         return true;
     }
 
+    /**
+     * Delete all remaining financial transactions for the given account.
+     *
+     * @param account the account whose transactions should be deleted.
+     */
+    public void deleteAllForAccount(FinancialAccount account) {
+        Long accountId = requireAccountId(account);
+        LOG.debug("Request to delete all FinancialTransactions for FinancialAccount : {}", accountId);
+        ingestionRecordRepository.markFinancialTransactionsDeletedByAccountId(
+            accountId,
+            IngestionRecordStatus.REJECTED,
+            FINANCIAL_TRANSACTION_DELETED,
+            FINANCIAL_TRANSACTION_DELETED_MESSAGE
+        );
+        internalTransferRepository.deleteByAccountIdInEitherRole(accountId);
+        financialTransactionRepository.deleteTagLinksByAccountId(accountId);
+        financialTransactionRepository.deleteByAccountId(accountId);
+    }
+
     private Stream<FinancialTransaction> accessibleTransactionStream() {
         if (currentUserService.isAdmin()) {
             return StreamSupport.stream(financialTransactionRepository.findAll().spliterator(), false);
@@ -326,6 +345,13 @@ public class FinancialTransactionService {
             return financialTransactionRepository.findOneWithEagerRelationships(id);
         }
         return financialTransactionRepository.findOneAccessibleByIdAndAccountUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private Long requireAccountId(FinancialAccount account) {
+        if (account == null || account.getId() == null) {
+            throw new IllegalArgumentException("Financial account is required");
+        }
+        return account.getId();
     }
 
     private void applyUpdate(FinancialTransaction existing, FinancialTransactionDTO dto, JsonNode updateNode) {

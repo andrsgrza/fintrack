@@ -233,6 +233,23 @@ public class TransactionIngestionService {
         return true;
     }
 
+    /**
+     * Delete all transaction ingestion trees for the given account.
+     *
+     * @param account the account whose ingestion trees should be deleted.
+     */
+    public void deleteAllForAccount(FinancialAccount account) {
+        Long accountId = requireAccountId(account);
+        LOG.debug("Request to delete all TransactionIngestions for FinancialAccount : {}", accountId);
+        fileIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
+        apiIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
+        internalTransferRepository.deleteByTransactionIngestionAccountIdInEitherRole(accountId);
+        ingestionRecordRepository.deleteByTransactionIngestionAccountId(accountId);
+        financialTransactionRepository.deleteTagLinksByTransactionIngestionAccountId(accountId);
+        financialTransactionRepository.deleteByTransactionIngestionAccountId(accountId);
+        transactionIngestionRepository.deleteByAccountId(accountId);
+    }
+
     private List<TransactionIngestion> findAccessibleEntities() {
         if (currentUserService.isAdmin()) {
             return StreamSupport.stream(transactionIngestionRepository.findAll().spliterator(), false).toList();
@@ -248,6 +265,13 @@ public class TransactionIngestionService {
             id,
             currentUserService.getCurrentUserLogin()
         );
+    }
+
+    private Long requireAccountId(FinancialAccount account) {
+        if (account == null || account.getId() == null) {
+            throw new IllegalArgumentException("Account is required");
+        }
+        return account.getId();
     }
 
     private FinancialAccount resolveAccountForCreate(FinancialAccountDTO accountDTO) {

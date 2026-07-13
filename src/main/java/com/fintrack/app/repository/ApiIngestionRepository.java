@@ -66,4 +66,8 @@ public interface ApiIngestionRepository extends JpaRepository<ApiIngestion, Long
     @Modifying
     @Query("delete from ApiIngestion apiIngestion where apiIngestion.transactionIngestion.id = :transactionIngestionId")
     void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from ApiIngestion apiIngestion where apiIngestion.transactionIngestion.account.id = :accountId")
+    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
 }

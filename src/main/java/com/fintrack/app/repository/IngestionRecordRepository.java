@@ -60,4 +60,21 @@ public interface IngestionRecordRepository extends JpaRepository<IngestionRecord
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from IngestionRecord ingestionRecord where ingestionRecord.transactionIngestion.id = :transactionIngestionId")
     void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "update IngestionRecord ingestionRecord set ingestionRecord.financialTransaction = null, ingestionRecord.status = :status, ingestionRecord.errorCode = :errorCode, ingestionRecord.errorMessage = :errorMessage where ingestionRecord.financialTransaction.id in (select financialTransaction.id from FinancialTransaction financialTransaction where financialTransaction.account.id = :accountId)"
+    )
+    void markFinancialTransactionsDeletedByAccountId(
+        @Param("accountId") Long accountId,
+        @Param("status") IngestionRecordStatus status,
+        @Param("errorCode") String errorCode,
+        @Param("errorMessage") String errorMessage
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from IngestionRecord ingestionRecord where ingestionRecord.transactionIngestion.id in (select transactionIngestion.id from TransactionIngestion transactionIngestion where transactionIngestion.account.id = :accountId)"
+    )
+    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
 }
