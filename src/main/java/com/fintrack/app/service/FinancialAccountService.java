@@ -11,6 +11,7 @@ import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedList;
@@ -90,6 +91,7 @@ public class FinancialAccountService {
         Instant now = Instant.now();
         financialAccount.setCreatedAt(now);
         financialAccount.setUpdatedAt(now);
+        validateInitialBalance(financialAccount);
         validateInitialBalanceDateFloor(financialAccount);
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
@@ -114,6 +116,7 @@ public class FinancialAccountService {
         financialAccount.setAccountType(existingFinancialAccount.getAccountType());
         financialAccount.setCreatedAt(existingFinancialAccount.getCreatedAt());
         financialAccount.setUpdatedAt(Instant.now());
+        validateInitialBalance(financialAccount);
         validateInitialBalanceDateFloor(financialAccount);
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
@@ -142,8 +145,10 @@ public class FinancialAccountService {
         return findAccessibleEntity(financialAccountDTO.getId())
             .map(existingFinancialAccount -> {
                 rejectImmutableFieldChanges(existingFinancialAccount, financialAccountDTO, patchNode);
+                rejectInvalidInitialBalancePatch(financialAccountDTO, patchNode);
                 financialAccountMapper.partialUpdate(existingFinancialAccount, financialAccountDTO);
                 existingFinancialAccount.setUpdatedAt(Instant.now());
+                validateInitialBalance(existingFinancialAccount);
                 validateInitialBalanceDateFloor(existingFinancialAccount);
                 return existingFinancialAccount;
             })
@@ -294,6 +299,25 @@ public class FinancialAccountService {
     private void rejectTimestampChange(Instant existingTimestamp, Instant requestedTimestamp, String message) {
         if (requestedTimestamp == null || !Objects.equals(existingTimestamp, requestedTimestamp)) {
             throw new IllegalArgumentException(message);
+        }
+    }
+
+    private void rejectInvalidInitialBalancePatch(FinancialAccountDTO financialAccountDTO, JsonNode patchNode) {
+        if (patchNode != null && patchNode.has("initialBalance")) {
+            validateInitialBalance(financialAccountDTO.getInitialBalance());
+        }
+    }
+
+    private void validateInitialBalance(FinancialAccount financialAccount) {
+        validateInitialBalance(financialAccount.getInitialBalance());
+    }
+
+    private void validateInitialBalance(BigDecimal initialBalance) {
+        if (initialBalance == null) {
+            throw new IllegalArgumentException("Initial balance is required");
+        }
+        if (initialBalance.scale() > 2) {
+            throw new IllegalArgumentException("Initial balance must have at most 2 decimal places");
         }
     }
 

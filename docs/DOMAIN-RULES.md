@@ -1160,6 +1160,7 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 | PUT / PATCH `createdAt`                                  | Preserve existing; explicit null or changed value → `400 invalid`; same value allowed as no-op | **Done** |
 | PUT / PATCH `updatedAt`                                  | Explicit null or changed value → `400 invalid`; same value allowed, then server sets `updatedAt = now` | **Done** |
 | `initialBalance` mutable                                 |          | **Done**     |
+| `initialBalance` monetary scale                          | Required; positive, zero, and negative values allowed; `scale <= 2`; no rounding | **Done** |
 | `initialBalanceDate` floor `<= earliest transactionDate` | No floor when there are zero transactions; uses `transactionDate`, not `postingDate`; validates final PUT/PATCH state | **Done** |
 | `active` mutable                                         | No side effects; does not delete/unlink/block imports | **Done** |
 
@@ -1178,7 +1179,7 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available credit. It represents the card's opening position. A positive value is debt; a negative value is saldo a favor. `CreditAccountDetails.creditLimit` is used later to calculate `availableCredit`.
 
-`initialBalance` is required. Negative values are currently allowed and meaningful. Service-level monetary scale validation is proposed for a future pass; non-negative validation is not a current rule.
+`initialBalance` is required. Positive, zero, and negative values are allowed and meaningful. Service validates monetary scale (`scale <= 2`) on CREATE, PUT, and final merged PATCH state. Values with more than two decimal places are rejected with `400 invalid`; they are not rounded. Non-negative validation is not a rule.
 
 `initialBalanceDate` is the date of the opening position and the start of tracking. If transactions exist, it must be `<=` earliest `FinancialTransaction.transactionDate`; use `transactionDate`, not `postingDate`. This validation is implemented.
 
@@ -1188,7 +1189,7 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 | ----------------------------- | ------------------- | -------- |
 | `currentBalance` read model   | Not persisted (JDL) | **Open** |
 | Balance recalculation      | Not part of this pass | **Deferred** |
-| Monetary scale validation for `initialBalance` | `scale <= 2` | **Proposed** |
+| Monetary scale validation for `initialBalance` | `scale <= 2`; no rounding; negatives allowed | **Done** |
 
 ---
 

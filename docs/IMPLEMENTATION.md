@@ -154,7 +154,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | `CREDIT_CARD` | Outstanding debt | No debt / no credit balance | Credit balance / saldo a favor | `currentDebt = initialBalance + OUT - IN` |
 | `INVESTMENT` | Starting account value | No value recorded | Advanced/adjustment case; investment modeling deferred | `currentValue = initialBalance + IN - OUT`, provisional only |
 
-For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available credit. `CreditAccountDetails.creditLimit` is used later to calculate `availableCredit`. Negative `initialBalance` values are currently allowed and meaningful; non-negative validation is not a current rule.
+For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available credit. `CreditAccountDetails.creditLimit` is used later to calculate `availableCredit`. Negative `initialBalance` values are allowed and meaningful; non-negative validation is not a current rule. Service validates monetary scale (`scale <= 2`) and rejects extra decimals instead of rounding.
 
 #### Ownership ✅
 
@@ -179,9 +179,9 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 | Delete orchestration                          | ✅     | TI tree → remaining FT → budget links → subscriptions null → CAD → account |
 | `initialBalanceDate` floor                    | ✅     | no floor without txs; otherwise `<= earliest transactionDate` |
 | `initialBalance` mutable                      | ✅     | opening position; positive/zero/negative allowed; no balance recalculation |
+| Monetary scale validation for `initialBalance` | ✅     | `scale <= 2`; reject without rounding; no non-negative rule |
 | `active` mutable                              | ✅     | no side effects |
 | Balance actual/current position formulas      | ⏳     | read model / service; formulas documented in DOMAIN-RULES; implementation out of scope |
-| Monetary scale validation for `initialBalance` | 📄     | Proposed future `scale <= 2`; no non-negative rule |
 
 #### Validations ✅
 
@@ -190,11 +190,11 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 | DTO `@Valid`      | ✅     | name, enums, pattern color/last4, required fields; `user` optional                      |
 | Entity JPA        | ✅     | Mismas constraints                                                                      |
 | DB Liquibase      | ✅     | `user_id NOT NULL`, FK                                                                  |
-| Service — negocio | ✅     | `currency` / `accountType` immutable; server-owned `createdAt` / `updatedAt`; owner preserve; scoped read/write; delete orchestration; initialBalanceDate floor |
+| Service — negocio | ✅     | `currency` / `accountType` immutable; server-owned `createdAt` / `updatedAt`; owner preserve; scoped read/write; delete orchestration; initialBalanceDate floor; `initialBalance` monetary scale |
 | REST              | ✅     | `@Valid` POST/PUT; **PATCH JsonNode**; `IllegalArgumentException` → `400 invalid`       |
 | UI                | ✅     | Timestamp fields hidden; `currency` / `accountType` locked on edit; account-type-specific opening-position labels |
 
-**Tests:** 118 IT + 12 service — ver [TESTING.md § FA](TESTING.md#financialaccount).
+**Tests:** 138 IT + 24 service — ver [TESTING.md § FA](TESTING.md#financialaccount).
 
 ---
 
@@ -994,6 +994,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-12 | IngestionRecord domain rules ✅: status consistency, parent final freeze, externalRecordId normalization/uniqueness, rawData immutability/log safety, direct delete blocked. 87 IT + 7 service + 1 FT helper IT. Pipeline/count reconciliation ⏳ fase 6.                                                 |
 | 2026-07-12 | FinancialTransaction domain rules ✅: JsonNode POST/PUT/PATCH, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup for IngestionRecord/InternalTransfer/tag joins. 101 IT + 10 service.              |
 | 2026-07-12 | TransactionRule CRUD/domain baseline ✅: strict server-owned `createdAt`/`updatedAt`, PUT documented as full DTO update, PATCH remains JsonNode presence-aware, delete cleanup direct via repositories. Rule engine, batch reclassification, and equal-priority tie-break remain deferred/open.           |
+| 2026-07-13 | FinancialAccount monetary scale ✅: `initialBalance` required, positive/zero/negative allowed, service rejects `scale > 2` without rounding on create/update/patch. 138 IT + 24 service. Balances/currentBalance deferred. |
 | 2026-07-12 | FinancialAccount domain rules ✅: final orchestrator delete implemented (TI tree → remaining FT → budget links → subscription account null → CAD → account), `initialBalanceDate` floor vs earliest transactionDate, `active=false` no side effects. 118 IT + 12 service. Balances/currentBalance deferred. |
 | 2026-07-10 | Added [`VALIDATIONS.md`](VALIDATIONS.md) — per-entity validation catalog across DTO, entity, DB, service, and REST layers.                                                                                                                                                                                |
 | 2026-07-10 | **Validation hardening (Tag + FinancialAccount):** Tag `name` unique per owner (trim + case-insensitive); FA `currency`/`accountType` immutable; FA PATCH JsonNode; `400 invalid` mapping. 200 tests (69+12 Tag, 108+11 FA). Docs: TESTING, VALIDATIONS, IMPLEMENTATION.                                  |

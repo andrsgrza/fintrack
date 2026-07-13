@@ -89,6 +89,11 @@ class FinancialAccountResourceIT {
     private static final BigDecimal DEFAULT_INITIAL_BALANCE = new BigDecimal(1);
     private static final BigDecimal UPDATED_INITIAL_BALANCE = new BigDecimal(2);
     private static final BigDecimal SMALLER_INITIAL_BALANCE = new BigDecimal(1 - 1);
+    private static final BigDecimal ZERO_INITIAL_BALANCE = new BigDecimal("0");
+    private static final BigDecimal VALID_NEGATIVE_INITIAL_BALANCE = new BigDecimal("-5000.25");
+    private static final BigDecimal VALID_NEGATIVE_SCALE_ZERO_INITIAL_BALANCE = new BigDecimal("-1");
+    private static final BigDecimal INVALID_INITIAL_BALANCE_SCALE_THREE = new BigDecimal("100.001");
+    private static final BigDecimal INVALID_NEGATIVE_INITIAL_BALANCE_SCALE_THREE = new BigDecimal("-5000.123");
 
     private static final LocalDate DEFAULT_INITIAL_BALANCE_DATE = LocalDate.ofEpochDay(0L);
     private static final LocalDate UPDATED_INITIAL_BALANCE_DATE = LocalDate.now(ZoneId.systemDefault());
@@ -225,6 +230,37 @@ class FinancialAccountResourceIT {
         return account;
     }
 
+    private FinancialAccountDTO createFinancialAccountWith(AccountType accountType, BigDecimal initialBalance) throws Exception {
+        financialAccount.setAccountType(accountType);
+        financialAccount.setInitialBalance(initialBalance);
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        FinancialAccountDTO returnedFinancialAccountDTO = om.readValue(
+            restFinancialAccountMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialAccountDTO.class
+        );
+        insertedFinancialAccount = getPersistedFinancialAccount(returnedFinancialAccountDTO.getId());
+        return returnedFinancialAccountDTO;
+    }
+
+    private void createFinancialAccountWithInvalidInitialBalance(BigDecimal initialBalance) throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
+        financialAccount.setInitialBalance(initialBalance);
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+
+        assertSameRepositoryCount(databaseSizeBeforeCreate);
+    }
+
     private FinancialTransaction createTransaction(FinancialAccount account, LocalDate transactionDate) {
         FinancialTransaction transaction = new FinancialTransaction()
             .transactionDate(transactionDate)
@@ -348,6 +384,59 @@ class FinancialAccountResourceIT {
         assertThat(persistedFinancialAccount.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
 
         insertedFinancialAccount = persistedFinancialAccount;
+    }
+
+    @Test
+    @Transactional
+    void createDebitFinancialAccountWithZeroInitialBalanceSucceeds() throws Exception {
+        FinancialAccountDTO returnedFinancialAccountDTO = createFinancialAccountWith(AccountType.DEBIT, ZERO_INITIAL_BALANCE);
+
+        assertThat(returnedFinancialAccountDTO.getInitialBalance()).isEqualByComparingTo(ZERO_INITIAL_BALANCE);
+        assertThat(getPersistedFinancialAccount(returnedFinancialAccountDTO.getId()).getInitialBalance()).isEqualByComparingTo(
+            ZERO_INITIAL_BALANCE
+        );
+    }
+
+    @Test
+    @Transactional
+    void createDebitFinancialAccountWithNegativeInitialBalanceSucceeds() throws Exception {
+        FinancialAccountDTO returnedFinancialAccountDTO = createFinancialAccountWith(AccountType.DEBIT, VALID_NEGATIVE_INITIAL_BALANCE);
+
+        assertThat(returnedFinancialAccountDTO.getInitialBalance()).isEqualByComparingTo(VALID_NEGATIVE_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void createCreditCardFinancialAccountWithNegativeInitialBalanceSucceeds() throws Exception {
+        FinancialAccountDTO returnedFinancialAccountDTO = createFinancialAccountWith(
+            AccountType.CREDIT_CARD,
+            VALID_NEGATIVE_INITIAL_BALANCE
+        );
+
+        assertThat(returnedFinancialAccountDTO.getInitialBalance()).isEqualByComparingTo(VALID_NEGATIVE_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void createCashFinancialAccountWithNegativeScaleZeroInitialBalanceSucceeds() throws Exception {
+        FinancialAccountDTO returnedFinancialAccountDTO = createFinancialAccountWith(
+            AccountType.CASH,
+            VALID_NEGATIVE_SCALE_ZERO_INITIAL_BALANCE
+        );
+
+        assertThat(returnedFinancialAccountDTO.getInitialBalance()).isEqualByComparingTo(VALID_NEGATIVE_SCALE_ZERO_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialAccountWithInitialBalanceScaleGreaterThanTwoFails() throws Exception {
+        createFinancialAccountWithInvalidInitialBalance(INVALID_INITIAL_BALANCE_SCALE_THREE);
+    }
+
+    @Test
+    @Transactional
+    void createFinancialAccountWithNegativeInitialBalanceScaleGreaterThanTwoFails() throws Exception {
+        createFinancialAccountWithInvalidInitialBalance(INVALID_NEGATIVE_INITIAL_BALANCE_SCALE_THREE);
     }
 
     @Test
@@ -1443,6 +1532,48 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
+    void putFinancialAccountCanChangeInitialBalanceToValidNegativeScaleTwo() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setInitialBalance(VALID_NEGATIVE_INITIAL_BALANCE);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.initialBalance").value(VALID_NEGATIVE_INITIAL_BALANCE.doubleValue()));
+
+        assertThat(getPersistedFinancialAccount(financialAccount).getInitialBalance()).isEqualByComparingTo(VALID_NEGATIVE_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountCannotChangeInitialBalanceToScaleGreaterThanTwo() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setInitialBalance(INVALID_INITIAL_BALANCE_SCALE_THREE);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+
+        em.clear();
+        assertThat(getPersistedFinancialAccount(financialAccount).getInitialBalance()).isEqualByComparingTo(DEFAULT_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
     void putNonExistingFinancialAccount() throws Exception {
         long databaseSizeBeforeUpdate = getRepositoryCount();
         financialAccount.setId(longCount.incrementAndGet());
@@ -2126,6 +2257,68 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.initialBalance").value(UPDATED_INITIAL_BALANCE.doubleValue()));
 
         assertThat(getPersistedFinancialAccount(financialAccount).getInitialBalance()).isEqualByComparingTo(UPDATED_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCanChangeInitialBalanceToValidNegativeScaleTwo() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("initialBalance", VALID_NEGATIVE_INITIAL_BALANCE);
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.initialBalance").value(VALID_NEGATIVE_INITIAL_BALANCE.doubleValue()));
+
+        assertThat(getPersistedFinancialAccount(financialAccount).getInitialBalance()).isEqualByComparingTo(VALID_NEGATIVE_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotChangeInitialBalanceToScaleGreaterThanTwo() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("initialBalance", INVALID_NEGATIVE_INITIAL_BALANCE_SCALE_THREE);
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+
+        assertThat(getPersistedFinancialAccount(financialAccount).getInitialBalance()).isEqualByComparingTo(DEFAULT_INITIAL_BALANCE);
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountOmittingInitialBalancePreservesExistingValue() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk());
+
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(financialAccount);
+        assertThat(persistedFinancialAccount.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persistedFinancialAccount.getInitialBalance()).isEqualByComparingTo(DEFAULT_INITIAL_BALANCE);
     }
 
     @Test
