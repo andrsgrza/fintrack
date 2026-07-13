@@ -6,6 +6,8 @@
         "refreshListLabel": "Refrescar lista",
         "createLabel": "Crear nuevo Financial Account",
         "createOrEditLabel": "Crear o editar Financial Account",
+        "createTitle": "Crear cuenta financiera",
+        "editTitle": "Editar cuenta financiera",
         "notFound": "Ningún Financial Accounts encontrado"
       },
       "created": "Un nuevo Financial Account ha sido creado con el identificador {{ param }}",

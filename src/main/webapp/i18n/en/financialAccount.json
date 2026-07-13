@@ -6,6 +6,8 @@
         "refreshListLabel": "Refresh list",
         "createLabel": "Create a new Financial Account",
         "createOrEditLabel": "Create or edit a Financial Account",
+        "createTitle": "Create Financial Account",
+        "editTitle": "Edit Financial Account",
         "notFound": "No Financial Accounts found"
       },
       "created": "A new Financial Account is created with identifier {{ param }}",

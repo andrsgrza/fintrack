@@ -4,11 +4,8 @@ import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getEntities as getBudgets } from 'app/entities/budget/budget.reducer';
-import { getEntities as getTransactionIngestions } from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
 import { AccountType } from 'app/shared/model/enumerations/account-type.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { createEntity, getEntity, reset, updateEntity } from './financial-account.reducer';
@@ -36,8 +33,6 @@ export const FinancialAccountUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const budgets = useAppSelector(state => state.budget.entities);
-  const transactionIngestions = useAppSelector(state => state.transactionIngestion.entities);
   const financialAccountEntity = useAppSelector(state => state.financialAccount.entity);
   const loading = useAppSelector(state => state.financialAccount.loading);
   const updating = useAppSelector(state => state.financialAccount.updating);
@@ -56,9 +51,6 @@ export const FinancialAccountUpdate = () => {
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getBudgets({}));
-    dispatch(getTransactionIngestions({}));
   }, []);
 
   useEffect(() => {
@@ -83,8 +75,7 @@ export const FinancialAccountUpdate = () => {
     const entity = {
       ...financialAccountEntity,
       ...values,
-      budgets: mapIdList(values.budgets),
-      transactionIngestions: mapIdList(values.transactionIngestions),
+      active: isNew ? true : values.active,
     };
 
     if (isNew) {
@@ -102,8 +93,6 @@ export const FinancialAccountUpdate = () => {
             accountType: 'DEBIT',
             currency: 'MXN',
             ...financialAccountEntity,
-            budgets: financialAccountEntity?.budgets?.map(e => e.id.toString()),
-            transactionIngestions: financialAccountEntity?.transactionIngestions?.map(e => e.id.toString()),
           },
     [isNew, financialAccountEntity],
   );
@@ -113,7 +102,9 @@ export const FinancialAccountUpdate = () => {
       <Row className="justify-content-center">
         <Col md="8">
           <h2 id="fintrackApp.financialAccount.home.createOrEditLabel" data-cy="FinancialAccountCreateUpdateHeading">
-            <Translate contentKey="fintrackApp.financialAccount.home.createOrEditLabel">Create or edit a FinancialAccount</Translate>
+            <Translate contentKey={isNew ? 'fintrackApp.financialAccount.home.createTitle' : 'fintrackApp.financialAccount.home.editTitle'}>
+              {isNew ? 'Create Financial Account' : 'Edit Financial Account'}
+            </Translate>
           </h2>
         </Col>
       </Row>
@@ -257,48 +248,16 @@ export const FinancialAccountUpdate = () => {
                   maxLength: { value: 50, message: translate('entity.validation.maxlength', { max: 50 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.financialAccount.active')}
-                id="financial-account-active"
-                name="active"
-                data-cy="active"
-                check
-                type="checkbox"
-              />
-              <ValidatedField
-                label={translate('fintrackApp.financialAccount.budgets')}
-                id="financial-account-budgets"
-                data-cy="budgets"
-                type="select"
-                multiple
-                name="budgets"
-              >
-                <option value="" key="0" />
-                {budgets
-                  ? budgets.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.financialAccount.transactionIngestions')}
-                id="financial-account-transactionIngestions"
-                data-cy="transactionIngestions"
-                type="select"
-                multiple
-                name="transactionIngestions"
-              >
-                <option value="" key="0" />
-                {transactionIngestions
-                  ? transactionIngestions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
+              {!isNew ? (
+                <ValidatedField
+                  label={translate('fintrackApp.financialAccount.active')}
+                  id="financial-account-active"
+                  name="active"
+                  data-cy="active"
+                  check
+                  type="checkbox"
+                />
+              ) : null}
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/financial-account" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;

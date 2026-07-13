@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
@@ -8,11 +8,22 @@ import { FinancialAccountDetail } from './financial-account-detail';
 import { FinancialAccountUpdate } from './financial-account-update';
 
 const mockDispatch = jest.fn();
+const mockCreateEntity = jest.fn(entity => ({ type: 'financialAccount/createEntity', payload: entity }));
+const mockUpdateEntity = jest.fn(entity => ({ type: 'financialAccount/updateEntity', payload: entity }));
+const mockGetEntity = jest.fn(id => ({ type: 'financialAccount/getEntity', payload: id }));
+const mockReset = jest.fn(() => ({ type: 'financialAccount/reset' }));
 let mockState;
 
 jest.mock('app/config/store', () => ({
   useAppDispatch: () => mockDispatch,
   useAppSelector: selector => selector(mockState),
+}));
+
+jest.mock('./financial-account.reducer', () => ({
+  createEntity: entity => mockCreateEntity(entity),
+  updateEntity: entity => mockUpdateEntity(entity),
+  getEntity: id => mockGetEntity(id),
+  reset: () => mockReset(),
 }));
 
 const baseState = {
@@ -112,11 +123,16 @@ describe('FinancialAccount opening-position labels', () => {
 
   beforeEach(() => {
     mockDispatch.mockClear();
+    mockCreateEntity.mockClear();
+    mockUpdateEntity.mockClear();
+    mockGetEntity.mockClear();
+    mockReset.mockClear();
   });
 
   it('shows DEBIT opening-position copy on initial create render', () => {
     renderCreateForm();
 
+    expect(screen.getByText('Create Financial Account')).toBeTruthy();
     expect(screen.getByLabelText('Initial balance')).toBeTruthy();
     expect(
       screen.getByText(
@@ -127,8 +143,13 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByText('Initial cash')).toBeNull();
     expect(screen.queryByText('Initial account value')).toBeNull();
     expect(screen.getByLabelText('Tracking start date')).toBeTruthy();
+    expect(screen.queryByLabelText('Active')).toBeNull();
+    expect((screen.getByLabelText('Account Type') as HTMLSelectElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Currency') as HTMLSelectElement).disabled).toBe(false);
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
+    expect(screen.queryByLabelText('Budgets')).toBeNull();
+    expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
   });
 
   it('changes DEBIT to CREDIT_CARD labels and resets initial balance fields', () => {
@@ -179,11 +200,27 @@ describe('FinancialAccount opening-position labels', () => {
   it('does not expose server-owned timestamps in edit mode and locks immutable selects', () => {
     renderEditForm();
 
+    expect(screen.getByText('Edit Financial Account')).toBeTruthy();
     expect(screen.getByLabelText('Opening card balance')).toBeTruthy();
+    expect(screen.getByLabelText('Active')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect((screen.getByLabelText('Account Type') as HTMLSelectElement).disabled).toBe(true);
     expect((screen.getByLabelText('Currency') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.queryByLabelText('Budgets')).toBeNull();
+    expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
+  });
+
+  it('submits active=true in create mode while the active checkbox is hidden', async () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New account' } });
+    fireEvent.change(screen.getByLabelText('Initial balance'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(mockCreateEntity).toHaveBeenCalled());
+    expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ active: true }));
   });
 
   it('changes CREDIT_CARD back to DEBIT labels and resets initial balance', () => {
