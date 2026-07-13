@@ -1156,9 +1156,14 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 | -------------------------------------------------------- | -------- | ------------ |
 | `currency` immutable                                     |          | **Done**     |
 | `accountType` immutable                                  |          | **Done**     |
+| `createdAt` / `updatedAt` server-owned                   | Create ignores client values and sets both to `now` | **Done** |
+| PUT / PATCH `createdAt`                                  | Preserve existing; explicit null or changed value → `400 invalid`; same value allowed as no-op | **Done** |
+| PUT / PATCH `updatedAt`                                  | Explicit null or changed value → `400 invalid`; same value allowed, then server sets `updatedAt = now` | **Done** |
 | `initialBalance` mutable                                 |          | **Done**     |
 | `initialBalanceDate` floor `<= earliest transactionDate` | No floor when there are zero transactions; uses `transactionDate`, not `postingDate`; validates final PUT/PATCH state | **Done** |
 | `active` mutable                                         | No side effects; does not delete/unlink/block imports | **Done** |
+
+**UI alignment:** FinancialAccount create/edit does not expose `createdAt` or `updatedAt` inputs. Edit mode treats `currency` and `accountType` as immutable selects. In create mode, changing `accountType` resets only `initialBalance` and `initialBalanceDate`; unrelated form fields are preserved.
 
 ### `initialBalance` semantics
 

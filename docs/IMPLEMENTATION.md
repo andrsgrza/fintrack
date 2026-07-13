@@ -190,8 +190,9 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 | DTO `@Valid`      | ✅     | name, enums, pattern color/last4, required fields; `user` optional                      |
 | Entity JPA        | ✅     | Mismas constraints                                                                      |
 | DB Liquibase      | ✅     | `user_id NOT NULL`, FK                                                                  |
-| Service — negocio | ✅     | `currency` / `accountType` immutable; owner preserve; scoped read/write; delete orchestration; initialBalanceDate floor |
+| Service — negocio | ✅     | `currency` / `accountType` immutable; server-owned `createdAt` / `updatedAt`; owner preserve; scoped read/write; delete orchestration; initialBalanceDate floor |
 | REST              | ✅     | `@Valid` POST/PUT; **PATCH JsonNode**; `IllegalArgumentException` → `400 invalid`       |
+| UI                | ✅     | Timestamp fields hidden; `currency` / `accountType` locked on edit; account-type-specific opening-position labels |
 
 **Tests:** 118 IT + 12 service — ver [TESTING.md § FA](TESTING.md#financialaccount).
 

@@ -4,7 +4,6 @@ import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
@@ -81,9 +80,6 @@ export const FinancialAccountUpdate = () => {
     if (values.initialBalance !== undefined && typeof values.initialBalance !== 'number') {
       values.initialBalance = Number(values.initialBalance);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
-    values.updatedAt = convertDateTimeToServer(values.updatedAt);
-
     const entity = {
       ...financialAccountEntity,
       ...values,
@@ -101,16 +97,11 @@ export const FinancialAccountUpdate = () => {
   const defaultFormValues = useMemo(
     () =>
       isNew
-        ? {
-            createdAt: displayDefaultDateTime(),
-            updatedAt: displayDefaultDateTime(),
-          }
+        ? {}
         : {
             accountType: 'DEBIT',
             currency: 'MXN',
             ...financialAccountEntity,
-            createdAt: convertDateTimeFromServer(financialAccountEntity.createdAt),
-            updatedAt: convertDateTimeFromServer(financialAccountEntity.updatedAt),
             budgets: financialAccountEntity?.budgets?.map(e => e.id.toString()),
             transactionIngestions: financialAccountEntity?.transactionIngestions?.map(e => e.id.toString()),
           },
@@ -170,6 +161,7 @@ export const FinancialAccountUpdate = () => {
                 name="accountType"
                 data-cy="accountType"
                 type="select"
+                disabled={!isNew}
                 onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                   const nextAccountType = event.target.value as keyof typeof AccountType;
                   setSelectedAccountType(nextAccountType);
@@ -188,6 +180,7 @@ export const FinancialAccountUpdate = () => {
                 name="currency"
                 data-cy="currency"
                 type="select"
+                disabled={!isNew}
               >
                 {currencyCodeValues.map(currencyCode => (
                   <option value={currencyCode} key={currencyCode}>
@@ -271,28 +264,6 @@ export const FinancialAccountUpdate = () => {
                 data-cy="active"
                 check
                 type="checkbox"
-              />
-              <ValidatedField
-                label={translate('fintrackApp.financialAccount.createdAt')}
-                id="financial-account-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.financialAccount.updatedAt')}
-                id="financial-account-updatedAt"
-                name="updatedAt"
-                data-cy="updatedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
               />
               <ValidatedField
                 label={translate('fintrackApp.financialAccount.budgets')}

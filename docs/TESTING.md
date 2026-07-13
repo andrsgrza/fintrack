@@ -290,7 +290,7 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 **Domain rules in service:** assign `user` on create; ignore client `user`; preserve owner on update/patch; scope all reads/writes.
 
-**Validation/domain rules in service:** `currency` and `accountType` **immutable** after create; `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalance` is the opening position (`posición inicial`) at the beginning of tracking; positive, zero, and negative values are currently allowed, with sign semantics depending on `accountType`. There is no non-negative validation today. `initialBalanceDate` must be `<=` earliest transaction `transactionDate` when transactions exist. `active=false` has no side effects. DELETE is orchestrated through TransactionIngestion and FinancialTransaction delegates before account-level link cleanup. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType` null or different → `400 invalid`.
+**Validation/domain rules in service:** `currency` and `accountType` **immutable** after create; `createdAt` and `updatedAt` are server-owned. Create ignores client timestamps and sets both to `now`; successful update/patch preserves `createdAt` and sets `updatedAt = now`; explicit null or changed timestamp on PUT/PATCH → `400 invalid`; same timestamp is accepted as a no-op. `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalance` is the opening position (`posición inicial`) at the beginning of tracking; positive, zero, and negative values are currently allowed, with sign semantics depending on `accountType`. There is no non-negative validation today. `initialBalanceDate` must be `<=` earliest transaction `transactionDate` when transactions exist. `active=false` has no side effects. DELETE is orchestrated through TransactionIngestion and FinancialTransaction delegates before account-level link cleanup. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType`/timestamp null or different → `400 invalid`.
 
 **Balance calculation status:** tests only cover persistence, mutability, filters, and `initialBalanceDate` floor. `currentBalance`, `currentDebt`, `availableCredit`, `AccountBalanceService`, investment valuation, and persisted balance/read-model calculations remain deferred/open.
 
@@ -298,8 +298,8 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 | Type | File | Tests | Custom vs generated |
 |------|------|-------|---------------------|
-| Integration IT | `FinancialAccountResourceIT` | **118** | Custom ownership + immutability + delete orchestration + date-floor tests, plus JHipster CRUD/filters |
-| Unit — service | `FinancialAccountServiceTest` | **12** | All custom (ownership + immutables + delete orchestration + date-floor guard) |
+| Integration IT | `FinancialAccountResourceIT` | **127** | Custom ownership + immutability + timestamp hardening + delete orchestration + date-floor tests, plus JHipster CRUD/filters |
+| Unit — service | `FinancialAccountServiceTest` | **18** | All custom (ownership + immutables + timestamp hardening + delete orchestration + date-floor guard) |
 | Unit — foundation | `CurrentUserServiceTest` | **5** | Shared; used by FA, FT, and future entities |
 | Unit — domain | `FinancialAccountTest` | **6** | Generated (JPA relations) |
 | Unit — mapper | `FinancialAccountMapperTest` | **1** | Generated |
@@ -335,7 +335,7 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `adminCanUpdateFinancialAccountOwnedByAnotherUser` | `PUT /:id` | `admin` | Account owned by other | `200`; name updated |
 | `adminCanDeleteFinancialAccountOwnedByAnotherUser` | `DELETE /:id` | `admin` | Account owned by other | `204`; row deleted |
 
-#### 1.2 Immutability & PATCH semantics (7) — ✅ custom
+#### 1.2 Immutability, timestamps & PATCH semantics (16) — ✅ custom
 
 | Test | HTTP | Setup | Expected |
 |------|------|-------|----------|
@@ -343,6 +343,11 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `patchFinancialAccountCannotChangeCurrency` | `PATCH /:id` | Minimal JSON `{"currency":"USD"}` | `400`; `error.invalid` |
 | `putFinancialAccountCannotChangeAccountType` | `PUT /:id` | DTO with different `accountType` | `400`; `error.invalid` |
 | `patchFinancialAccountCannotChangeAccountType` | `PATCH /:id` | Minimal JSON `{"accountType":"CASH"}` | `400`; `error.invalid` |
+| `putFinancialAccountCannotChangeCreatedAt` / `putFinancialAccountCannotSetCreatedAtNull` | `PUT /:id` | Changed or null `createdAt` | `400`; `error.invalid` |
+| `putFinancialAccountCannotChangeUpdatedAt` / `putFinancialAccountCannotSetUpdatedAtNull` | `PUT /:id` | Changed or null `updatedAt` | `400`; `error.invalid` |
+| `patchFinancialAccountCannotChangeCreatedAt` / `patchFinancialAccountCannotSetCreatedAtNull` | `PATCH /:id` | Changed or null `createdAt` | `400`; `error.invalid` |
+| `patchFinancialAccountCannotChangeUpdatedAt` / `patchFinancialAccountCannotSetUpdatedAtNull` | `PATCH /:id` | Changed or null `updatedAt` | `400`; `error.invalid` |
+| `patchFinancialAccountWithSameTimestampsSucceedsAndUpdatesUpdatedAt` | `PATCH /:id` | Same timestamps + mutable field | `200`; `createdAt` preserved; `updatedAt` advanced |
 | `patchFinancialAccountCanChangeInitialBalance` | `PATCH /:id` | `{"initialBalance": 2}` only | `200`; balance updated |
 | `patchFinancialAccountCanChangeInitialBalanceDate` | `PATCH /:id` | `{"initialBalanceDate":"…"}` only | `200`; date updated |
 | `patchFinancialAccountCanChangeActive` | `PATCH /:id` | `{"active": true}` only | `200`; active updated |
@@ -376,8 +381,8 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | `checkInitialBalanceIsRequired` | Missing balance → `400` |
 | `checkInitialBalanceDateIsRequired` | Missing date → `400` |
 | `checkActiveIsRequired` | Missing active → `400` |
-| `checkCreatedAtIsRequired` | Missing timestamp → `400` |
-| `checkUpdatedAtIsRequired` | Missing timestamp → `400` |
+| `createFinancialAccountWithoutCreatedAtUsesServerTimestamp` | Missing `createdAt` accepted; server sets timestamp |
+| `createFinancialAccountWithoutUpdatedAtUsesServerTimestamp` | Missing `updatedAt` accepted; server sets timestamp |
 | `deleteFinancialAccount` | Happy-path `DELETE` → `204` |
 
 #### 1.5 Read & update (14) — 🟡 JHipster generated
@@ -409,14 +414,17 @@ One test per filterable field (`name`, `institutionName`, `accountType`, `curren
 
 ### 2. Unit tests — service layer
 
-#### 2.1 `FinancialAccountServiceTest` (12) — ✅ custom
+#### 2.1 `FinancialAccountServiceTest` (18) — ✅ custom
 
 Mocks: `FinancialAccountRepository`, `FinancialAccountMapper`, `CurrentUserService`, cleanup/delegate repositories/services. No Spring context.
 
 | Test | Rule under test |
 |------|-----------------|
 | `saveShouldAssignCurrentUser` | `save()` sets `entity.user` from `CurrentUserService` |
+| `saveShouldIgnoreClientProvidedTimestamps` | `save()` overwrites client timestamps with server values |
 | `updateShouldPreserveExistingOwner` | `update()` keeps original owner after mapper |
+| `updateShouldRejectChangedCreatedAt` | `update()` rejects changed `createdAt` |
+| `updateShouldRejectNullUpdatedAt` | `update()` rejects null `updatedAt` |
 | `updateShouldFailWhenAccountIsNotAccessible` | `update()` throws when scoped lookup empty |
 | `updateShouldRejectCurrencyChange` | `update()` throws when `currency` differs |
 | `updateShouldRejectAccountTypeChange` | `update()` throws when `accountType` differs |
@@ -427,6 +435,13 @@ Mocks: `FinancialAccountRepository`, `FinancialAccountMapper`, `CurrentUserServi
 | `updateShouldRejectInitialBalanceDateAfterEarliestTransactionDate` | `initialBalanceDate` after earliest transaction date → `IllegalArgumentException` |
 | `findAllWithEagerRelationshipsShouldScopeToCurrentUser` | Non-admin list uses `findAll...ByUserLogin` |
 | `partialUpdateShouldReturnEmptyWhenAccountIsNotAccessible` | Scoped partial update → `Optional.empty()` |
+| `partialUpdateShouldRejectExplicitNullCreatedAt` | PATCH-style service call rejects `createdAt: null` |
+| `partialUpdateShouldRejectChangedUpdatedAt` | PATCH-style service call rejects changed `updatedAt` |
+| `partialUpdateShouldAllowSameTimestampsAndSetUpdatedAt` | Same timestamps accepted; `updatedAt` set by server |
+
+### 3. Frontend tests — `financial-account-opening-position.spec.tsx`
+
+The FinancialAccount UI spec covers dynamic opening-position labels/help text for create/detail views, account-type change reset behavior, preservation of unrelated create-form fields, hidden `createdAt` / `updatedAt` inputs, and disabled `accountType` / `currency` selects in edit mode.
 
 #### 2.2 `CurrentUserServiceTest` (5) — ✅ custom (shared foundation)
 

@@ -202,7 +202,9 @@ class FinancialAccountResourceIT {
     }
 
     private static User getCurrentMockUser(EntityManager em) {
-        return TestUtil.findAll(em, User.class)
+        return em
+            .createQuery("select user from User user", User.class)
+            .getResultList()
             .stream()
             .filter(user -> CURRENT_MOCK_USER_LOGIN.equals(user.getLogin()))
             .findFirst()
@@ -338,10 +340,14 @@ class FinancialAccountResourceIT {
 
         // Validate the FinancialAccount in the database
         assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
-        var returnedFinancialAccount = financialAccountMapper.toEntity(returnedFinancialAccountDTO);
-        assertFinancialAccountUpdatableFieldsEquals(returnedFinancialAccount, getPersistedFinancialAccount(returnedFinancialAccount));
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(returnedFinancialAccountDTO.getId());
+        assertFinancialAccountBusinessFieldsEquals(financialAccount, persistedFinancialAccount);
+        assertThat(persistedFinancialAccount.getCreatedAt()).isNotNull();
+        assertThat(persistedFinancialAccount.getUpdatedAt()).isNotNull();
+        assertThat(persistedFinancialAccount.getCreatedAt()).isNotEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedFinancialAccount.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
 
-        insertedFinancialAccount = returnedFinancialAccount;
+        insertedFinancialAccount = persistedFinancialAccount;
     }
 
     @Test
@@ -466,36 +472,50 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createFinancialAccountWithoutCreatedAtUsesServerTimestamp() throws Exception {
         financialAccount.setCreatedAt(null);
 
-        // Create the FinancialAccount, which fails.
         FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        long databaseSizeBeforeCreate = getRepositoryCount();
 
-        restFinancialAccountMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
-            .andExpect(status().isBadRequest());
+        var returnedFinancialAccountDTO = om.readValue(
+            restFinancialAccountMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialAccountDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(returnedFinancialAccountDTO.getId());
+        assertThat(persistedFinancialAccount.getCreatedAt()).isNotNull();
+        insertedFinancialAccount = persistedFinancialAccount;
     }
 
     @Test
     @Transactional
-    void checkUpdatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createFinancialAccountWithoutUpdatedAtUsesServerTimestamp() throws Exception {
         financialAccount.setUpdatedAt(null);
 
-        // Create the FinancialAccount, which fails.
         FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        long databaseSizeBeforeCreate = getRepositoryCount();
 
-        restFinancialAccountMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
-            .andExpect(status().isBadRequest());
+        var returnedFinancialAccountDTO = om.readValue(
+            restFinancialAccountMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialAccountDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialAccountDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(returnedFinancialAccountDTO.getId());
+        assertThat(persistedFinancialAccount.getUpdatedAt()).isNotNull();
+        insertedFinancialAccount = persistedFinancialAccount;
     }
 
     @Test
@@ -1387,6 +1407,8 @@ class FinancialAccountResourceIT {
 
         // Update the financialAccount
         FinancialAccount updatedFinancialAccount = financialAccountRepository.findById(financialAccount.getId()).orElseThrow();
+        Instant originalCreatedAt = updatedFinancialAccount.getCreatedAt();
+        Instant originalUpdatedAt = updatedFinancialAccount.getUpdatedAt();
         // Disconnect from session so that the updates on updatedFinancialAccount are not directly saved in db
         em.detach(updatedFinancialAccount);
         updatedFinancialAccount
@@ -1398,10 +1420,10 @@ class FinancialAccountResourceIT {
             .description(UPDATED_DESCRIPTION)
             .color(UPDATED_COLOR)
             .icon(UPDATED_ICON)
-            .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .active(UPDATED_ACTIVE);
         FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(updatedFinancialAccount);
+        financialAccountDTO.setCreatedAt(originalCreatedAt);
+        financialAccountDTO.setUpdatedAt(originalUpdatedAt);
 
         restFinancialAccountMockMvc
             .perform(
@@ -1413,7 +1435,10 @@ class FinancialAccountResourceIT {
 
         // Validate the FinancialAccount in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedFinancialAccountToMatchAllProperties(updatedFinancialAccount);
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(financialAccount);
+        assertFinancialAccountBusinessFieldsEquals(updatedFinancialAccount, persistedFinancialAccount);
+        assertThat(persistedFinancialAccount.getCreatedAt()).isEqualTo(originalCreatedAt);
+        assertThat(persistedFinancialAccount.getUpdatedAt()).isAfter(originalUpdatedAt);
     }
 
     @Test
@@ -1483,6 +1508,8 @@ class FinancialAccountResourceIT {
     void partialUpdateFinancialAccountWithPatch() throws Exception {
         // Initialize the database
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        Instant originalCreatedAt = financialAccount.getCreatedAt();
+        Instant originalUpdatedAt = financialAccount.getUpdatedAt();
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
@@ -1505,10 +1532,13 @@ class FinancialAccountResourceIT {
         FinancialAccount partialUpdatedFinancialAccount = new FinancialAccount();
         partialUpdatedFinancialAccount.setId(financialAccount.getId());
         partialUpdatedFinancialAccount.name(UPDATED_NAME).institutionName(UPDATED_INSTITUTION_NAME).active(UPDATED_ACTIVE);
-        assertFinancialAccountUpdatableFieldsEquals(
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(financialAccount);
+        assertFinancialAccountBusinessFieldsEquals(
             createUpdateProxyForBean(partialUpdatedFinancialAccount, financialAccount),
-            getPersistedFinancialAccount(financialAccount)
+            persistedFinancialAccount
         );
+        assertThat(persistedFinancialAccount.getCreatedAt()).isEqualTo(originalCreatedAt);
+        assertThat(persistedFinancialAccount.getUpdatedAt()).isAfter(originalUpdatedAt);
     }
 
     @Test
@@ -1516,6 +1546,8 @@ class FinancialAccountResourceIT {
     void fullUpdateFinancialAccountWithPatch() throws Exception {
         // Initialize the database
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        Instant originalCreatedAt = financialAccount.getCreatedAt();
+        Instant originalUpdatedAt = financialAccount.getUpdatedAt();
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
@@ -1529,8 +1561,6 @@ class FinancialAccountResourceIT {
         patchJson.put("color", UPDATED_COLOR);
         patchJson.put("icon", UPDATED_ICON);
         patchJson.put("active", UPDATED_ACTIVE);
-        patchJson.put("createdAt", UPDATED_CREATED_AT.toString());
-        patchJson.put("updatedAt", UPDATED_UPDATED_AT.toString());
 
         restFinancialAccountMockMvc
             .perform(
@@ -1554,13 +1584,14 @@ class FinancialAccountResourceIT {
             .description(UPDATED_DESCRIPTION)
             .color(UPDATED_COLOR)
             .icon(UPDATED_ICON)
-            .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
-        assertFinancialAccountUpdatableFieldsEquals(
+            .active(UPDATED_ACTIVE);
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(partialUpdatedFinancialAccount);
+        assertFinancialAccountBusinessFieldsEquals(
             createUpdateProxyForBean(partialUpdatedFinancialAccount, financialAccount),
-            getPersistedFinancialAccount(partialUpdatedFinancialAccount)
+            persistedFinancialAccount
         );
+        assertThat(persistedFinancialAccount.getCreatedAt()).isEqualTo(originalCreatedAt);
+        assertThat(persistedFinancialAccount.getUpdatedAt()).isAfter(originalUpdatedAt);
     }
 
     @Test
@@ -1664,7 +1695,7 @@ class FinancialAccountResourceIT {
         );
 
         assertThat(returnedFinancialAccountDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
-        insertedFinancialAccount = financialAccountMapper.toEntity(returnedFinancialAccountDTO);
+        insertedFinancialAccount = getPersistedFinancialAccount(returnedFinancialAccountDTO.getId());
     }
 
     @Test
@@ -1719,7 +1750,7 @@ class FinancialAccountResourceIT {
         );
 
         assertThat(returnedFinancialAccountDTO.getUser().getLogin()).isEqualTo(CURRENT_MOCK_USER_LOGIN);
-        insertedFinancialAccount = financialAccountMapper.toEntity(returnedFinancialAccountDTO);
+        insertedFinancialAccount = getPersistedFinancialAccount(returnedFinancialAccountDTO.getId());
     }
 
     @Test
@@ -1897,6 +1928,184 @@ class FinancialAccountResourceIT {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("error.invalid"))
             .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountCannotChangeCreatedAt() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setCreatedAt(UPDATED_CREATED_AT);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountCannotSetCreatedAtNull() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setCreatedAt(null);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountCannotChangeUpdatedAt() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setUpdatedAt(UPDATED_UPDATED_AT);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void putFinancialAccountCannotSetUpdatedAtNull() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        FinancialAccountDTO financialAccountDTO = financialAccountMapper.toDto(financialAccount);
+        financialAccountDTO.setUpdatedAt(null);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialAccountDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialAccountDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotChangeCreatedAt() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("createdAt", UPDATED_CREATED_AT.toString());
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotSetCreatedAtNull() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putNull("createdAt");
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotChangeUpdatedAt() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("updatedAt", UPDATED_UPDATED_AT.toString());
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountCannotSetUpdatedAtNull() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.putNull("updatedAt");
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialAccountWithSameTimestampsSucceedsAndUpdatesUpdatedAt() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        Instant originalCreatedAt = financialAccount.getCreatedAt();
+        Instant originalUpdatedAt = financialAccount.getUpdatedAt();
+
+        ObjectNode patchJson = om.createObjectNode();
+        patchJson.put("name", UPDATED_NAME);
+        patchJson.put("createdAt", originalCreatedAt.toString());
+        patchJson.put("updatedAt", originalUpdatedAt.toString());
+
+        restFinancialAccountMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, financialAccount.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchJson))
+            )
+            .andExpect(status().isOk());
+
+        FinancialAccount persistedFinancialAccount = getPersistedFinancialAccount(financialAccount);
+        assertThat(persistedFinancialAccount.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persistedFinancialAccount.getCreatedAt()).isEqualTo(originalCreatedAt);
+        assertThat(persistedFinancialAccount.getUpdatedAt()).isAfter(originalUpdatedAt);
     }
 
     @Test
@@ -2252,6 +2461,7 @@ class FinancialAccountResourceIT {
             )
             .andExpect(status().isOk());
 
+        financialAccountDTO = financialAccountMapper.toDto(getPersistedFinancialAccount(financialAccount));
         financialAccountDTO.setInitialBalanceDate(LocalDate.parse("2026-01-09"));
         restFinancialAccountMockMvc
             .perform(
@@ -2298,6 +2508,24 @@ class FinancialAccountResourceIT {
 
     protected FinancialAccount getPersistedFinancialAccount(FinancialAccount financialAccount) {
         return financialAccountRepository.findById(financialAccount.getId()).orElseThrow();
+    }
+
+    protected FinancialAccount getPersistedFinancialAccount(Long id) {
+        return financialAccountRepository.findById(id).orElseThrow();
+    }
+
+    protected void assertFinancialAccountBusinessFieldsEquals(FinancialAccount expected, FinancialAccount actual) {
+        assertThat(actual.getName()).isEqualTo(expected.getName());
+        assertThat(actual.getInstitutionName()).isEqualTo(expected.getInstitutionName());
+        assertThat(actual.getAccountType()).isEqualTo(expected.getAccountType());
+        assertThat(actual.getCurrency()).isEqualTo(expected.getCurrency());
+        assertThat(actual.getInitialBalance()).isEqualByComparingTo(expected.getInitialBalance());
+        assertThat(actual.getInitialBalanceDate()).isEqualTo(expected.getInitialBalanceDate());
+        assertThat(actual.getLastFourDigits()).isEqualTo(expected.getLastFourDigits());
+        assertThat(actual.getDescription()).isEqualTo(expected.getDescription());
+        assertThat(actual.getColor()).isEqualTo(expected.getColor());
+        assertThat(actual.getIcon()).isEqualTo(expected.getIcon());
+        assertThat(actual.getActive()).isEqualTo(expected.getActive());
     }
 
     protected void assertPersistedFinancialAccountToMatchAllProperties(FinancialAccount expectedFinancialAccount) {

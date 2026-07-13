@@ -54,6 +54,35 @@ const renderCreateForm = () => {
   );
 };
 
+const renderEditForm = () => {
+  mockState = {
+    ...baseState,
+    financialAccount: {
+      ...baseState.financialAccount,
+      entity: {
+        id: 1,
+        name: 'Existing account',
+        accountType: 'CREDIT_CARD',
+        currency: 'MXN',
+        initialBalance: 500,
+        initialBalanceDate: '2026-01-10',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        budgets: [],
+        transactionIngestions: [],
+      },
+    },
+  };
+
+  return render(
+    <MemoryRouter initialEntries={['/financial-account/1/edit']}>
+      <Routes>
+        <Route path="/financial-account/:id/edit" element={<FinancialAccountUpdate />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+};
+
 const renderDetail = accountType => {
   mockState = {
     ...baseState,
@@ -98,6 +127,8 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByText('Initial cash')).toBeNull();
     expect(screen.queryByText('Initial account value')).toBeNull();
     expect(screen.getByLabelText('Tracking start date')).toBeTruthy();
+    expect(screen.queryByLabelText('Created At')).toBeNull();
+    expect(screen.queryByLabelText('Updated At')).toBeNull();
   });
 
   it('changes DEBIT to CREDIT_CARD labels and resets initial balance fields', () => {
@@ -143,6 +174,16 @@ describe('FinancialAccount opening-position labels', () => {
     expect((screen.getByLabelText('Currency') as HTMLInputElement).value).toBe('USD');
     expect((screen.getByLabelText('Last Four Digits') as HTMLInputElement).value).toBe('1234');
     expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Personal checking account');
+  });
+
+  it('does not expose server-owned timestamps in edit mode and locks immutable selects', () => {
+    renderEditForm();
+
+    expect(screen.getByLabelText('Opening card balance')).toBeTruthy();
+    expect(screen.queryByLabelText('Created At')).toBeNull();
+    expect(screen.queryByLabelText('Updated At')).toBeNull();
+    expect((screen.getByLabelText('Account Type') as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Currency') as HTMLSelectElement).disabled).toBe(true);
   });
 
   it('changes CREDIT_CARD back to DEBIT labels and resets initial balance', () => {
