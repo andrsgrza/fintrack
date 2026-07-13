@@ -2,30 +2,36 @@
   "fintrackApp": {
     "creditAccountDetails": {
       "home": {
-        "title": "Credit Account Details",
+        "title": "Detalles de tarjeta de crédito",
         "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nuevo Credit Account Details",
-        "createOrEditLabel": "Crear o editar Credit Account Details",
-        "notFound": "Ningún Credit Account Details encontrado"
+        "createLabel": "Crear nuevos detalles de tarjeta de crédito",
+        "createOrEditLabel": "Crear o editar detalles de tarjeta de crédito",
+        "createTitle": "Crear detalles de tarjeta de crédito",
+        "editTitle": "Editar detalles de tarjeta de crédito",
+        "notFound": "No se encontraron detalles de tarjeta de crédito"
       },
-      "created": "Un nuevo Credit Account Details ha sido creado con el identificador {{ param }}",
-      "updated": "Un Credit Account Details ha sido actualizado con el identificador {{ param }}",
-      "deleted": "Un Credit Account Details ha sido eliminado con el identificador {{ param }}",
+      "created": "Se crearon nuevos detalles de tarjeta de crédito con el identificador {{ param }}",
+      "updated": "Se actualizaron detalles de tarjeta de crédito con el identificador {{ param }}",
+      "deleted": "Se eliminaron detalles de tarjeta de crédito con el identificador {{ param }}",
       "delete": {
         "title": "No se pueden eliminar los detalles de tarjeta de crédito",
         "message": "Los detalles de tarjeta de crédito no se pueden eliminar directamente. Estos detalles son necesarios para las cuentas de tarjeta de crédito. Para eliminarlos, debes eliminar la cuenta financiera."
       },
       "detail": {
-        "title": "Credit Account Details"
+        "title": "Detalles de tarjeta de crédito"
       },
       "id": "ID",
-      "creditLimit": "Credit Limit",
-      "statementDay": "Statement Day",
-      "paymentDueDay": "Payment Due Day",
-      "annualInterestRate": "Annual Interest Rate",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
-      "account": "Account"
+      "creditLimit": "Límite de crédito",
+      "creditLimitHelp": "Línea máxima de crédito aprobada para esta tarjeta.",
+      "statementDay": "Día de corte",
+      "statementDayHelp": "Día del mes en que cierra el periodo de corte.",
+      "paymentDueDay": "Día límite de pago",
+      "paymentDueDayHelp": "Día del mes en que vence el pago.",
+      "annualInterestRate": "Tasa anual de interés",
+      "annualInterestRateHelp": "Porcentaje anual de interés. Se usará después para cálculos de intereses.",
+      "createdAt": "Creado en",
+      "updatedAt": "Actualizado en",
+      "account": "Cuenta"
     }
   }
 }

@@ -31,6 +31,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CreditAccountDetailsServiceTest {
 
     private static final String CURRENT_USER_LOGIN = "user";
+    private static final Instant EXISTING_CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Instant EXISTING_UPDATED_AT = Instant.parse("2026-01-02T00:00:00Z");
+    private static final Instant CLIENT_CREATED_AT = Instant.parse("2000-01-01T00:00:00Z");
+    private static final Instant CLIENT_UPDATED_AT = Instant.parse("2000-01-02T00:00:00Z");
 
     @Mock
     private CreditAccountDetailsRepository creditAccountDetailsRepository;
@@ -76,8 +80,8 @@ class CreditAccountDetailsServiceTest {
         creditAccountDetails.setCreditLimit(BigDecimal.TEN);
         creditAccountDetails.setStatementDay(1);
         creditAccountDetails.setPaymentDueDay(15);
-        creditAccountDetails.setCreatedAt(Instant.now());
-        creditAccountDetails.setUpdatedAt(Instant.now());
+        creditAccountDetails.setCreatedAt(EXISTING_CREATED_AT);
+        creditAccountDetails.setUpdatedAt(EXISTING_UPDATED_AT);
         creditAccountDetails.setAccount(creditCardAccount);
 
         creditAccountDetailsDTO = new CreditAccountDetailsDTO();
@@ -85,8 +89,8 @@ class CreditAccountDetailsServiceTest {
         creditAccountDetailsDTO.setCreditLimit(BigDecimal.TEN);
         creditAccountDetailsDTO.setStatementDay(1);
         creditAccountDetailsDTO.setPaymentDueDay(15);
-        creditAccountDetailsDTO.setCreatedAt(Instant.now());
-        creditAccountDetailsDTO.setUpdatedAt(Instant.now());
+        creditAccountDetailsDTO.setCreatedAt(EXISTING_CREATED_AT);
+        creditAccountDetailsDTO.setUpdatedAt(EXISTING_UPDATED_AT);
 
         creditCardAccountDTO = new FinancialAccountDTO();
         creditCardAccountDTO.setId(10L);
@@ -108,6 +112,31 @@ class CreditAccountDetailsServiceTest {
         creditAccountDetailsService.save(creditAccountDetailsDTO);
 
         assertThat(mappedEntity.getAccount()).isEqualTo(creditCardAccount);
+        assertThat(mappedEntity.getCreatedAt()).isNotNull();
+        assertThat(mappedEntity.getUpdatedAt()).isNotNull();
+        verify(creditAccountDetailsRepository).save(mappedEntity);
+    }
+
+    @Test
+    void saveShouldIgnoreClientProvidedTimestampsAndSetServerTimestamps() {
+        CreditAccountDetails mappedEntity = new CreditAccountDetails();
+        mappedEntity.setCreatedAt(CLIENT_CREATED_AT);
+        mappedEntity.setUpdatedAt(CLIENT_UPDATED_AT);
+        creditAccountDetailsDTO.setCreatedAt(CLIENT_CREATED_AT);
+        creditAccountDetailsDTO.setUpdatedAt(CLIENT_UPDATED_AT);
+
+        when(creditAccountDetailsMapper.toEntity(creditAccountDetailsDTO)).thenReturn(mappedEntity);
+        when(financialAccountService.findAccessibleAccountEntity(10L)).thenReturn(Optional.of(creditCardAccount));
+        when(creditAccountDetailsRepository.existsByAccountId(10L)).thenReturn(false);
+        when(creditAccountDetailsRepository.save(mappedEntity)).thenReturn(creditAccountDetails);
+        when(creditAccountDetailsMapper.toDto(creditAccountDetails)).thenReturn(creditAccountDetailsDTO);
+
+        Instant beforeSave = Instant.now();
+        creditAccountDetailsService.save(creditAccountDetailsDTO);
+        Instant afterSave = Instant.now();
+
+        assertThat(mappedEntity.getCreatedAt()).isBetween(beforeSave, afterSave);
+        assertThat(mappedEntity.getUpdatedAt()).isBetween(beforeSave, afterSave);
         verify(creditAccountDetailsRepository).save(mappedEntity);
     }
 
@@ -161,6 +190,98 @@ class CreditAccountDetailsServiceTest {
     }
 
     @Test
+    void updateShouldPreserveCreatedAtAndSetUpdatedAtToNow() {
+        CreditAccountDetails mappedEntity = new CreditAccountDetails();
+        mappedEntity.setCreatedAt(EXISTING_CREATED_AT);
+        mappedEntity.setUpdatedAt(EXISTING_UPDATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+        when(creditAccountDetailsMapper.toEntity(creditAccountDetailsDTO)).thenReturn(mappedEntity);
+        when(creditAccountDetailsRepository.save(mappedEntity)).thenReturn(mappedEntity);
+        when(creditAccountDetailsMapper.toDto(mappedEntity)).thenReturn(creditAccountDetailsDTO);
+
+        Instant beforeUpdate = Instant.now();
+        creditAccountDetailsService.update(creditAccountDetailsDTO);
+        Instant afterUpdate = Instant.now();
+
+        assertThat(mappedEntity.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(mappedEntity.getUpdatedAt()).isBetween(beforeUpdate, afterUpdate);
+        verify(creditAccountDetailsRepository).save(mappedEntity);
+    }
+
+    @Test
+    void updateShouldRejectChangedCreatedAt() {
+        creditAccountDetailsDTO.setCreatedAt(CLIENT_CREATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.update(creditAccountDetailsDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullCreatedAt() {
+        creditAccountDetailsDTO.setCreatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.update(creditAccountDetailsDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectChangedUpdatedAt() {
+        creditAccountDetailsDTO.setUpdatedAt(CLIENT_UPDATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.update(creditAccountDetailsDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullUpdatedAt() {
+        creditAccountDetailsDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.update(creditAccountDetailsDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
+    }
+
+    @Test
     void partialUpdateShouldPreserveAccountWhenFieldAbsent() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         ObjectNode patchNode = objectMapper.createObjectNode();
@@ -182,6 +303,119 @@ class CreditAccountDetailsServiceTest {
 
         assertThat(result).isPresent();
         assertThat(creditAccountDetails.getAccount()).isEqualTo(creditCardAccount);
+        assertThat(creditAccountDetails.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(creditAccountDetails.getUpdatedAt()).isNotEqualTo(EXISTING_UPDATED_AT);
+    }
+
+    @Test
+    void partialUpdateShouldAllowSameTimestampsAndSetUpdatedAtToNow() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 100L);
+        patchNode.put("createdAt", EXISTING_CREATED_AT.toString());
+        patchNode.put("updatedAt", EXISTING_UPDATED_AT.toString());
+
+        creditAccountDetailsDTO.setAccount(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+        when(creditAccountDetailsRepository.save(creditAccountDetails)).thenReturn(creditAccountDetails);
+        when(creditAccountDetailsMapper.toDto(creditAccountDetails)).thenReturn(creditAccountDetailsDTO);
+
+        Instant beforePatch = Instant.now();
+        Optional<CreditAccountDetailsDTO> result = creditAccountDetailsService.partialUpdate(creditAccountDetailsDTO, patchNode);
+        Instant afterPatch = Instant.now();
+
+        assertThat(result).isPresent();
+        assertThat(creditAccountDetails.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(creditAccountDetails.getUpdatedAt()).isBetween(beforePatch, afterPatch);
+    }
+
+    @Test
+    void partialUpdateShouldRejectChangedCreatedAt() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 100L);
+        patchNode.put("createdAt", CLIENT_CREATED_AT.toString());
+        creditAccountDetailsDTO.setCreatedAt(CLIENT_CREATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.partialUpdate(creditAccountDetailsDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectNullCreatedAt() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 100L);
+        patchNode.putNull("createdAt");
+        creditAccountDetailsDTO.setCreatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.partialUpdate(creditAccountDetailsDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectChangedUpdatedAt() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 100L);
+        patchNode.put("updatedAt", CLIENT_UPDATED_AT.toString());
+        creditAccountDetailsDTO.setUpdatedAt(CLIENT_UPDATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.partialUpdate(creditAccountDetailsDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectNullUpdatedAt() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 100L);
+        patchNode.putNull("updatedAt");
+        creditAccountDetailsDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(creditAccountDetailsRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(100L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(creditAccountDetails)
+        );
+
+        assertThatThrownBy(() -> creditAccountDetailsService.partialUpdate(creditAccountDetailsDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+
+        verify(creditAccountDetailsRepository, never()).save(any());
     }
 
     @Test

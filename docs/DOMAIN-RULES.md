@@ -234,6 +234,7 @@ Grupo 1 #2 domain rules **Done**.
 | Parent `account` required                   | Resolved via accessible account  | Yes              | `400` invalid | **Done**       |
 | Only `CREDIT_CARD` accounts                 | On create                        | Yes              | `400` invalid | **Done**       |
 | One details per account                     | `existsByAccountId()` on create  | Yes              | `400` invalid | **Done**       |
+| `createdAt` / `updatedAt` server-owned      | Ignore client values; set both to `Instant.now()` | Yes | — | **Done** |
 | `CREDIT_CARD` expected to have details for full card functionality | Future/full-functionality expectation; separate CRUD today; not enforced by `FinancialAccountService` | Yes | — | **Documented** |
 
 **Future:** atomic endpoint may create `FinancialAccount` + `CreditAccountDetails` together for `CREDIT_CARD`, or a later guard may require details before enabling full credit-card features. Do not break standalone FA create in this pass.
@@ -248,6 +249,8 @@ Grupo 1 #2 domain rules **Done**.
 | `statementDay` mutable                | `1–31`                                         | Yes              | —             | **Done** |
 | `paymentDueDay` mutable               | `1–31`; no `paymentDueDay > statementDay` rule | Yes              | —             | **Done** |
 | `annualInterestRate` mutable          | `>= 0`; no interest calculations yet           | Yes              | —             | **Done** |
+| `createdAt` server-owned              | PUT/PATCH preserve existing; explicit null or changed value rejected; same value allowed as no-op | Yes | `400` invalid | **Done** |
+| `updatedAt` server-owned              | Explicit null or changed value rejected; same value allowed, then successful PUT/PATCH sets `updatedAt = now` | Yes | `400` invalid | **Done** |
 
 ### Product rules (deferred)
 

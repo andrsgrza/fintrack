@@ -1461,12 +1461,14 @@ Update delete dialog copy (en/es). Create/delete rehabilitated via API rule seed
 
 **Parent account:** DTO keeps `@NotNull` on `account`; mapper ignores it; service resolves via `FinancialAccountService.findAccessibleAccountEntity()`. Only `CREDIT_CARD` accounts accepted. Duplicate per account rejected in service. PATCH uses `JsonNode`: absent field preserves parent; different `{ id }` or `null` → `400`.
 
+**Timestamps:** `createdAt` / `updatedAt` are server-owned. Create ignores client values and accepts missing timestamps. PUT/PATCH preserve `createdAt`; explicit null or changed `createdAt`/`updatedAt` → `400 invalid`; same timestamps are accepted as no-ops before successful PUT/PATCH sets `updatedAt = now`.
+
 ### Summary counts
 
 | Type | File | Tests | Custom vs generated |
 |------|------|-------|---------------------|
-| Integration IT | `CreditAccountDetailsResourceIT` | **41** | 22 custom (ownership + domain rules) + 19 JHipster CRUD |
-| Unit — service | `CreditAccountDetailsServiceTest` | **10** | All custom |
+| Integration IT | `CreditAccountDetailsResourceIT` | **50** | Custom ownership/domain/timestamp coverage + generated CRUD baseline |
+| Unit — service | `CreditAccountDetailsServiceTest` | **21** | All custom |
 | Unit — domain | `CreditAccountDetailsTest` | **6** | Generated |
 | Unit — mapper | `CreditAccountDetailsMapperTest` | **1** | Generated |
 | Unit — DTO | `CreditAccountDetailsDTOTest` | **1** | Generated |
@@ -1489,7 +1491,7 @@ Same matrix as FinancialTransaction (GET/PUT/PATCH → 400 cross-user; GET/DELET
 
 Same matrix as FinancialTransaction (GET/PUT/PATCH → 400 cross-user; GET/DELETE → 404). **Exception:** own accessible DELETE → `400` domain invalid (not `204`).
 
-#### Parent account & domain guards (5) — ✅ custom
+#### Parent account, timestamps & domain guards (16) — ✅ custom
 
 | Test | What it checks |
 |------|----------------|
@@ -1498,6 +1500,15 @@ Same matrix as FinancialTransaction (GET/PUT/PATCH → 400 cross-user; GET/DELET
 | `createCreditAccountDetailsForAccountThatAlreadyHasDetailsFails` | Duplicate → `400` |
 | `updateCreditAccountDetailsWithDifferentAccountFails` | Immutable account on PUT → `400` |
 | `patchCreditAccountDetailsWithDifferentAccountFails` | Immutable account on PATCH → `400` |
+| `createCreditAccountDetails` | Missing timestamps accepted; server sets `createdAt`/`updatedAt` |
+| `createCreditAccountDetailsIgnoresClientProvidedTimestamps` | Client timestamps ignored on create |
+| `createCreditAccountDetailsWithoutCreatedAtSucceeds` / `createCreditAccountDetailsWithoutUpdatedAtSucceeds` | DTO timestamps optional on create |
+| `putCreditAccountDetailsWithChangedCreatedAtFails` / `putCreditAccountDetailsWithChangedUpdatedAtFails` | PUT timestamp changes rejected |
+| `putCreditAccountDetailsWithNullCreatedAtFails` / `putCreditAccountDetailsWithNullUpdatedAtFails` | PUT timestamp null rejected |
+| `partialUpdateCreditAccountDetailsWithPatch` | PATCH omitted timestamps preserves `createdAt` and sets `updatedAt=now` |
+| `fullUpdateCreditAccountDetailsWithPatch` | PATCH same timestamps accepted; `updatedAt=now` |
+| `patchCreditAccountDetailsWithChangedCreatedAtFails` / `patchCreditAccountDetailsWithChangedUpdatedAtFails` | PATCH timestamp changes rejected |
+| `patchCreditAccountDetailsWithNullCreatedAtFails` / `patchCreditAccountDetailsWithNullUpdatedAtFails` | PATCH timestamp null rejected |
 
 #### Domain rules — DELETE block & mutable fields (7) — ✅ custom
 
@@ -1518,13 +1529,13 @@ Same matrix as FinancialTransaction (GET/PUT/PATCH → 400 cross-user; GET/DELET
 | `patchCreditAccountDetailsWithoutAccountFieldPreservesParent` | Omit `account` → preserved |
 | `patchCreditAccountDetailsWithNullAccountFails` | `"account": null` → `400` |
 
-### Unit — `CreditAccountDetailsServiceTest` (10) — ✅ custom
+### Unit — `CreditAccountDetailsServiceTest` (21) — ✅ custom
 
-CREDIT_CARD validation, duplicate guard, immutable account, PATCH preserve/null, scoped `findAll`, delete not accessible, direct delete blocked when accessible.
+CREDIT_CARD validation, duplicate guard, immutable account, server-owned timestamp create/update/patch guards, PATCH preserve/null, scoped `findAll`, delete not accessible, direct delete blocked when accessible.
 
 ### E2E — `credit-account-details.cy.ts`
 
-Create rehabilitated; direct DELETE expects `400`; UI account picker filtered to `CREDIT_CARD`.
+Create rehabilitated; direct DELETE expects `400`; UI account picker filtered to `CREDIT_CARD`; create/edit hide timestamp fields and create payload does not inject fake timestamps.
 
 ### Gaps
 

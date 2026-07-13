@@ -4,7 +4,6 @@ import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
@@ -35,7 +34,9 @@ export const CreditAccountDetailsUpdate = () => {
       dispatch(getEntity(id));
     }
 
-    dispatch(getFinancialAccounts({}));
+    if (isNew) {
+      dispatch(getFinancialAccounts({}));
+    }
   }, []);
 
   useEffect(() => {
@@ -60,13 +61,10 @@ export const CreditAccountDetailsUpdate = () => {
     if (values.annualInterestRate !== undefined && typeof values.annualInterestRate !== 'number') {
       values.annualInterestRate = Number(values.annualInterestRate);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
-    values.updatedAt = convertDateTimeToServer(values.updatedAt);
-
     const entity = {
       ...creditAccountDetailsEntity,
       ...values,
-      account: financialAccounts.find(it => it.id.toString() === values.account?.toString()),
+      account: isNew ? financialAccounts.find(it => it.id.toString() === values.account?.toString()) : creditAccountDetailsEntity.account,
     };
 
     if (isNew) {
@@ -78,15 +76,9 @@ export const CreditAccountDetailsUpdate = () => {
 
   const defaultValues = () =>
     isNew
-      ? {
-          createdAt: displayDefaultDateTime(),
-          updatedAt: displayDefaultDateTime(),
-        }
+      ? {}
       : {
           ...creditAccountDetailsEntity,
-          createdAt: convertDateTimeFromServer(creditAccountDetailsEntity.createdAt),
-          updatedAt: convertDateTimeFromServer(creditAccountDetailsEntity.updatedAt),
-          account: creditAccountDetailsEntity?.account?.id,
         };
 
   return (
@@ -94,8 +86,10 @@ export const CreditAccountDetailsUpdate = () => {
       <Row className="justify-content-center">
         <Col md="8">
           <h2 id="fintrackApp.creditAccountDetails.home.createOrEditLabel" data-cy="CreditAccountDetailsCreateUpdateHeading">
-            <Translate contentKey="fintrackApp.creditAccountDetails.home.createOrEditLabel">
-              Create or edit a CreditAccountDetails
+            <Translate
+              contentKey={isNew ? 'fintrackApp.creditAccountDetails.home.createTitle' : 'fintrackApp.creditAccountDetails.home.editTitle'}
+            >
+              {isNew ? 'Create Credit Account Details' : 'Edit Credit Account Details'}
             </Translate>
           </h2>
         </Col>
@@ -128,6 +122,11 @@ export const CreditAccountDetailsUpdate = () => {
                   validate: v => isNumber(v) || translate('entity.validation.number'),
                 }}
               />
+              <FormText>
+                <Translate contentKey="fintrackApp.creditAccountDetails.creditLimitHelp">
+                  Maximum approved credit line for this card.
+                </Translate>
+              </FormText>
               <ValidatedField
                 label={translate('fintrackApp.creditAccountDetails.statementDay')}
                 id="credit-account-details-statementDay"
@@ -141,6 +140,11 @@ export const CreditAccountDetailsUpdate = () => {
                   validate: v => isNumber(v) || translate('entity.validation.number'),
                 }}
               />
+              <FormText>
+                <Translate contentKey="fintrackApp.creditAccountDetails.statementDayHelp">
+                  Day of the month when the statement period closes.
+                </Translate>
+              </FormText>
               <ValidatedField
                 label={translate('fintrackApp.creditAccountDetails.paymentDueDay')}
                 id="credit-account-details-paymentDueDay"
@@ -154,6 +158,9 @@ export const CreditAccountDetailsUpdate = () => {
                   validate: v => isNumber(v) || translate('entity.validation.number'),
                 }}
               />
+              <FormText>
+                <Translate contentKey="fintrackApp.creditAccountDetails.paymentDueDayHelp">Day of the month when payment is due.</Translate>
+              </FormText>
               <ValidatedField
                 label={translate('fintrackApp.creditAccountDetails.annualInterestRate')}
                 id="credit-account-details-annualInterestRate"
@@ -165,47 +172,32 @@ export const CreditAccountDetailsUpdate = () => {
                   validate: v => isNumber(v) || translate('entity.validation.number'),
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.creditAccountDetails.createdAt')}
-                id="credit-account-details-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.creditAccountDetails.updatedAt')}
-                id="credit-account-details-updatedAt"
-                name="updatedAt"
-                data-cy="updatedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                id="credit-account-details-account"
-                name="account"
-                data-cy="account"
-                label={translate('fintrackApp.creditAccountDetails.account')}
-                type="select"
-                required
-              >
-                <option value="" key="0" />
-                {financialAccounts
-                  ? financialAccounts
-                      .filter(otherEntity => otherEntity.accountType === 'CREDIT_CARD')
-                      .map(otherEntity => (
-                        <option value={otherEntity.id} key={otherEntity.id}>
-                          {otherEntity.name}
-                        </option>
-                      ))
-                  : null}
-              </ValidatedField>
+              <FormText>
+                <Translate contentKey="fintrackApp.creditAccountDetails.annualInterestRateHelp">
+                  Annual percentage interest rate. Used later for interest calculations.
+                </Translate>
+              </FormText>
+              {isNew ? (
+                <ValidatedField
+                  id="credit-account-details-account"
+                  name="account"
+                  data-cy="account"
+                  label={translate('fintrackApp.creditAccountDetails.account')}
+                  type="select"
+                  required
+                >
+                  <option value="" key="0" />
+                  {financialAccounts
+                    ? financialAccounts
+                        .filter(otherEntity => otherEntity.accountType === 'CREDIT_CARD')
+                        .map(otherEntity => (
+                          <option value={otherEntity.id} key={otherEntity.id}>
+                            {otherEntity.name}
+                          </option>
+                        ))
+                    : null}
+                </ValidatedField>
+              ) : null}
               <FormText>
                 <Translate contentKey="entity.validation.required">This field is required.</Translate>
               </FormText>

@@ -106,11 +106,11 @@ Companion docs:
 
 | Layer | Rules |
 |-------|-------|
-| **DTO** | `creditLimit` `@DecimalMin("0")`, `statementDay`/`paymentDueDay` 1–31, timestamps, **`account` required**. Optional `annualInterestRate` ≥ 0. |
+| **DTO** | `creditLimit` `@DecimalMin("0")`, `statementDay`/`paymentDueDay` 1–31, **`account` required**. `createdAt` / `updatedAt` are response fields and optional in request DTOs because service owns them. Optional `annualInterestRate` ≥ 0. |
 | **Entity** | Same; **`account` required** `@JoinColumn(unique=true)`. |
 | **DB** | `account_id NOT NULL UNIQUE` (1:1). |
-| **Service** | Create: accessible account; **`accountType = CREDIT_CARD` only**; `existsByAccountId()` duplicate. Update/patch: **`account` immutable**. `CreditAccountDetails` does not replace `FinancialAccount.initialBalance`; `creditLimit` is card configuration and is not opening position / available credit. |
-| **REST** | `@Valid` POST/PUT; PATCH **JsonNode** (`account` null → `400`); `400 invalid` on business errors. |
+| **Service** | Create: accessible account; **`accountType = CREDIT_CARD` only**; `existsByAccountId()` duplicate; `createdAt`/`updatedAt = now`, ignoring client timestamp values. Update/patch: **`account` immutable**; preserve `createdAt`; explicit null or changed `createdAt`/`updatedAt` → `400 invalid`; same timestamps are allowed as no-op before successful PUT/PATCH sets `updatedAt = now`. `CreditAccountDetails` does not replace `FinancialAccount.initialBalance`; `creditLimit` is card configuration and is not opening position / available credit. |
+| **REST** | `@Valid` POST/PUT; PATCH **JsonNode** (`account` null → `400`; timestamp null/change → `400`); `400 invalid` on business errors. |
 
 ### 4. Category
 
