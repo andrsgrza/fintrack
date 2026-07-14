@@ -37,7 +37,16 @@
       "noConditionsYet": "Todavía no hay condiciones.",
       "conditionsUnavailable": "Las condiciones no están disponibles.",
       "addCondition": "Agregar condición",
-      "activeRequiresCondition": "Las reglas activas requieren al menos una condición."
+      "editCondition": "Editar condición",
+      "cancelConditionEdit": "Cancelar",
+      "saveCondition": "Guardar condición",
+      "updateCondition": "Actualizar condición",
+      "deleteCondition": "Eliminar condición",
+      "confirmDeleteCondition": "¿Seguro que quieres eliminar esta condición?",
+      "conditionSaveFailed": "No se pudo guardar la condición.",
+      "conditionDeleteFailed": "No se pudo eliminar la condición.",
+      "activeRequiresCondition": "Las reglas activas requieren al menos una condición.",
+      "activeDisabledNoConditions": "Agrega al menos una condición antes de activar esta regla."
     }
   }
 }

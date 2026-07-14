@@ -1,6 +1,6 @@
 import React from 'react';
 import axios from 'axios';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
@@ -14,6 +14,9 @@ import { TransactionRuleUpdate } from './transaction-rule-update';
 jest.mock('axios');
 
 const mockAxiosGet = axios.get as jest.Mock;
+const mockAxiosPost = axios.post as jest.Mock;
+const mockAxiosPatch = axios.patch as jest.Mock;
+const mockAxiosDelete = axios.delete as jest.Mock;
 const mockDispatch = jest.fn();
 const mockGetEntity = jest.fn(id => ({ type: 'transactionRule/getEntity', payload: id }));
 const mockReset = jest.fn(() => ({ type: 'transactionRule/reset' }));
@@ -61,6 +64,7 @@ const baseState = {
   category: { entities: [] },
   financialSubscription: { entities: [] },
   tag: { entities: [] },
+  financialAccount: { entities: [] },
   transactionRule: {
     entity: baseRule,
     entities: [],
@@ -93,7 +97,16 @@ const renderCreateForm = () => {
   );
 };
 
-const renderEditForm = () => {
+const renderEditForm = (conditionsResult: any = []) => {
+  mockAxiosGet.mockImplementation((url: string) => {
+    if (url === 'api/transaction-rules/1/conditions') {
+      if (conditionsResult === 'error') {
+        return Promise.reject(new Error('conditions failed'));
+      }
+      return Promise.resolve({ data: conditionsResult });
+    }
+    return new Promise(() => {});
+  });
   mockState = baseState;
 
   return render(
@@ -130,6 +143,9 @@ describe('TransactionRule UX', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAxiosGet.mockReset();
+    mockAxiosPost.mockReset();
+    mockAxiosPatch.mockReset();
+    mockAxiosDelete.mockReset();
     registerTranslations();
   });
 
@@ -142,9 +158,7 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Active')).toBeNull();
   });
 
-  it('renders edit title, active field, and related conditions section in edit mode', () => {
-    mockAxiosGet.mockImplementation(() => new Promise(() => {}));
-
+  it('renders edit title, active field, and related conditions section in edit mode', async () => {
     renderEditForm();
 
     expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
@@ -153,6 +167,155 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Conditions' })).toBeTruthy();
+    expect(await screen.findByText('No conditions yet.')).toBeTruthy();
+  });
+
+  it('loads conditions in edit collection editor and disables active when empty', async () => {
+    renderEditForm([]);
+
+    expect(await screen.findByText('No conditions yet.')).toBeTruthy();
+    expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules/1/conditions');
+    expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText('Add at least one condition before activating this rule.')).toBeTruthy();
+  });
+
+  it('enables active when edit collection editor loads at least one condition', async () => {
+    renderEditForm([
+      {
+        id: 11,
+        position: 1,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Coffee',
+        caseSensitive: false,
+      },
+    ]);
+
+    expect(await screen.findByText('Coffee')).toBeTruthy();
+    expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('opens embedded add form without parent selector and posts condition with fixed rule id', async () => {
+    mockAxiosPost.mockResolvedValue({ data: { id: 12 } });
+    renderEditForm([]);
+
+    await screen.findByText('No conditions yet.');
+    fireEvent.click(screen.getByRole('button', { name: /add condition/i }));
+
+    expect(screen.getByRole('heading', { name: 'Add condition' })).toBeTruthy();
+    expect(screen.queryByLabelText('Transaction Rule')).toBeNull();
+    expect((screen.getByLabelText('Position') as HTMLInputElement).value).toBe('0');
+
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'Coffee' } });
+    fireEvent.click(screen.getByRole('button', { name: /save condition/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        'api/transaction-rule-conditions',
+        expect.objectContaining({
+          field: 'DESCRIPTION',
+          operator: 'EQUALS',
+          value: 'Coffee',
+          secondValue: null,
+          caseSensitive: false,
+          position: 0,
+          transactionRule: { id: 1 },
+        }),
+      ),
+    );
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+  });
+
+  it('opens embedded edit form without parent selector and patches editable condition fields only', async () => {
+    mockAxiosPatch.mockResolvedValue({ data: { id: 11 } });
+    renderEditForm([
+      {
+        id: 11,
+        position: 1,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Coffee',
+        caseSensitive: false,
+        transactionRule: { id: 1 },
+      },
+    ]);
+
+    await screen.findByText('Coffee');
+    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+
+    expect(screen.getByRole('heading', { name: 'Edit condition' })).toBeTruthy();
+    expect(screen.queryByLabelText('Transaction Rule')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'Tea' } });
+    fireEvent.click(screen.getByRole('button', { name: /update condition/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPatch).toHaveBeenCalledWith(
+        'api/transaction-rule-conditions/11',
+        expect.not.objectContaining({
+          transactionRule: expect.anything(),
+        }),
+      ),
+    );
+    expect(mockAxiosPatch.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        id: 11,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Tea',
+        position: 1,
+      }),
+    );
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+  });
+
+  it('deletes a condition after confirmation and refreshes the list', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    mockAxiosDelete.mockResolvedValue({ data: {} });
+    renderEditForm([
+      {
+        id: 11,
+        position: 1,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Coffee',
+        caseSensitive: false,
+      },
+    ]);
+
+    await screen.findByText('Coffee');
+    fireEvent.click(screen.getByRole('button', { name: /delete condition/i }));
+
+    await waitFor(() => expect(mockAxiosDelete).toHaveBeenCalledWith('api/transaction-rule-conditions/11'));
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows condition delete failure without breaking edit page', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    mockAxiosDelete.mockRejectedValue(new Error('delete failed'));
+    renderEditForm([
+      {
+        id: 11,
+        position: 1,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Coffee',
+        caseSensitive: false,
+      },
+    ]);
+
+    await screen.findByText('Coffee');
+    fireEvent.click(screen.getByRole('button', { name: /delete condition/i }));
+
+    expect(await screen.findByText('Condition could not be deleted.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
+  });
+
+  it('handles edit collection condition load failure without breaking rule edit page', async () => {
+    renderEditForm('error');
+
+    await waitFor(() => expect(screen.getByText('Conditions are not available.')).toBeTruthy());
+    expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
+    expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(true);
   });
 
   it('loads and displays related conditions on detail', async () => {

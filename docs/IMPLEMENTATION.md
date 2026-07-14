@@ -434,7 +434,10 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                              |
 | PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                            |
 | Parent-centered conditions endpoint             | ✅     | `GET /api/transaction-rules/{id}/conditions`, scoped by parent access, sorted by `position,id`                           |
-| Parent-centered read-only conditions UX         | ✅     | TransactionRule detail/edit show related conditions and add/view/edit links                                              |
+| Parent-centered conditions UX                   | ✅     | TransactionRule detail keeps read-only list; edit embeds inline add/edit/delete editor                                   |
+| Embedded condition form                         | ✅     | Reuses TransactionRuleCondition smart form section/helper; parent hidden/fixed by TransactionRule edit page              |
+| Embedded condition mutation                     | ✅     | POST includes `transactionRule: { id }`; PATCH sends editable fields only; DELETE refreshes conditions and parent state  |
+| Active toggle UX                                | ✅     | Disabled when condition list is empty or unavailable; backend still validates `active=true`                              |
 | **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                           |
 | Prioridad única                                 | ❌     | duplicate priority allowed                                                                                               |
 | Priority tie-break                              | ⏳     | definir antes del motor                                                                                                  |
@@ -447,6 +450,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                                                        |
 | Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented                                       |
 | REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`; related conditions endpoint returns `404` when parent inaccessible |
+| UI                        | ✅          | Embedded TransactionRule edit collection editor uses existing TransactionRuleCondition endpoints; no backend command endpoint yet                                                    |
 
 ---
 
@@ -467,8 +471,9 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Admin bypass lectura/CRUD                   | Admin opera conditions de rules ajenas                                                                                                 |
 | `ACCOUNT` values                            | Validar ids contra **`transactionRule.user.login`**, no admin                                                                          |
 | Smart condition form                        | UI filtra operadores por campo, tipa inputs de valor y mantiene parent read-only en edit                                               |
+| Embedded collection editor                  | TransactionRule edit manages child conditions inline without exposing parent selector                                                  |
 
-**Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI, `transaction-rule-condition-form-helpers.ts`.
+**Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI, `transaction-rule-condition-form-helpers.ts`, `transaction-rule-condition-form-section.tsx`.
 
 #### Domain rules ✅
 
@@ -484,6 +489,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                       |
 | UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text |
 | UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                |
+| Embedded parent hidden/fixed                    | ✅     | TransactionRule edit create sends current parent id; edit PATCH omits parent                  |
 | Delete dialog copy                              | ✅     | i18n en/es                                                                                    |
 | ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                  |
 
@@ -495,6 +501,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Service — parent  | ✅          | Inmutable tras create; PATCH preserve/null/same id                                                                                 |
 | Service — negocio | ✅          | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner                                                     |
 | UI helper         | ✅          | Pure helper exposes `getAllowedOperators`, field-kind checks, `requiresSecondValue`, `supportsCaseSensitive`, and value input kind |
+| UI form section   | ✅          | Shared by standalone and embedded flows; standalone still shows parent selector; embedded hides it                                 |
 | REST              | ✅          | `@Valid` POST/PUT; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400`                                                     |
 
 **Tests:** 55 IT + 11 service — ver [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).

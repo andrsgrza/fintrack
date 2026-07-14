@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
@@ -12,7 +12,7 @@ import { getEntities as getFinancialSubscriptions } from 'app/entities/financial
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
 import { createEntity, getEntity, partialUpdateEntity, reset } from './transaction-rule.reducer';
-import TransactionRuleConditionsRelatedList from './components/transaction-rule-conditions-related-list';
+import TransactionRuleConditionsCollectionEditor from './components/transaction-rule-conditions-collection-editor';
 
 export const TransactionRuleUpdate = () => {
   const dispatch = useAppDispatch();
@@ -30,6 +30,9 @@ export const TransactionRuleUpdate = () => {
   const updating = useAppSelector(state => state.transactionRule.updating);
   const updateSuccess = useAppSelector(state => state.transactionRule.updateSuccess);
   const ruleConditionLogicValues = Object.keys(RuleConditionLogic);
+  const [conditionsState, setConditionsState] = useState({ count: 0, loaded: false, failed: false });
+
+  const activeDisabled = !isNew && (!conditionsState.loaded || conditionsState.failed || conditionsState.count === 0);
 
   const handleClose = () => {
     navigate('/transaction-rule');
@@ -185,11 +188,18 @@ export const TransactionRuleUpdate = () => {
                     data-cy="active"
                     check
                     type="checkbox"
+                    disabled={activeDisabled}
                   />
                   <FormText>
-                    <Translate contentKey="fintrackApp.transactionRule.activeRequiresCondition">
-                      Active rules require at least one condition.
-                    </Translate>
+                    {activeDisabled ? (
+                      <Translate contentKey="fintrackApp.transactionRule.activeDisabledNoConditions">
+                        Add at least one condition before activating this rule.
+                      </Translate>
+                    ) : (
+                      <Translate contentKey="fintrackApp.transactionRule.activeRequiresCondition">
+                        Active rules require at least one condition.
+                      </Translate>
+                    )}
                   </FormText>
                 </>
               ) : null}
@@ -255,9 +265,15 @@ export const TransactionRuleUpdate = () => {
                 &nbsp;
                 <Translate contentKey="entity.action.save">Save</Translate>
               </Button>
-              {!isNew ? <TransactionRuleConditionsRelatedList transactionRuleId={transactionRuleEntity.id} /> : null}
             </ValidatedForm>
           )}
+          {!loading && !isNew ? (
+            <TransactionRuleConditionsCollectionEditor
+              transactionRuleId={transactionRuleEntity.id}
+              onConditionsStateChange={setConditionsState}
+              onConditionMutation={() => dispatch(getEntity(id))}
+            />
+          ) : null}
         </Col>
       </Row>
     </div>

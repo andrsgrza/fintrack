@@ -55,10 +55,12 @@ Standalone CreditAccountDetails CRUD remains available for admin/debug/direct ma
 
 ### TransactionRule + TransactionRuleCondition
 
-TransactionRule detail/edit pages show a read-only related list of TransactionRuleCondition rows. The list is loaded from `GET /api/transaction-rules/{id}/conditions`, not by fetching all conditions in the frontend.
+TransactionRule detail shows a read-only related list of TransactionRuleCondition rows. TransactionRule edit shows an embedded editable conditions collection editor. Both load conditions from `GET /api/transaction-rules/{id}/conditions`, not by fetching all conditions in the frontend.
 
-This is a parent-centered UX foundation, not a full embedded collection editor. Users can navigate to add/view/edit conditions through the existing standalone TransactionRuleCondition CRUD. The full inline rule builder and rule execution engine remain deferred.
+The TransactionRule edit collection editor supports inline add, edit, and delete through the existing TransactionRuleCondition CRUD endpoints. It does not show or edit the `transactionRule` parent field because the parent is fixed by the containing TransactionRule page. Standalone TransactionRuleCondition CRUD remains available for admin/debug/direct maintenance. Condition reorder UI and the rule execution engine remain deferred.
 
 TransactionRuleCondition create can be opened with `transactionRuleId` in the query string to preselect the parent. TransactionRuleCondition edit shows the parent as read-only because the backend treats `transactionRule` as immutable after create.
 
 The standalone TransactionRuleCondition form is a smart form, not a raw generated enum form. It filters operators by selected field, renders typed value inputs, shows `secondValue` only for `BETWEEN`, and shows `caseSensitive` only for `DESCRIPTION` / `EXTERNAL_REFERENCE`. `ACCOUNT` `EQUALS` / `NOT_EQUALS` uses an accessible FinancialAccount selector but still submits the selected account id as the string `value` expected by the backend. `IN` / `NOT_IN` inputs remain comma-separated text values in this slice.
+
+The embedded TransactionRule edit form reuses the same smart condition form section/helper behavior. Embedded create submits `transactionRule: { id: currentRuleId }`; embedded edit PATCHes only editable condition fields and does not reparent. Deleting a condition uses the existing DELETE endpoint; if the last condition is deleted, backend deactivates the parent rule and the edit page refreshes parent state. The Active toggle is disabled when conditions are empty or unavailable, with helper copy explaining that at least one condition is required.

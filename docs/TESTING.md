@@ -1329,15 +1329,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                          | Tests   | Custom vs generated                                                       |
-| --------------- | ----------------------------- | ------- | ------------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`   | **109** | Ownership/link/domain/API ergonomics custom tests + JHipster CRUD/filters |
-| Unit — service  | `TransactionRuleServiceTest`  | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards)     |
-| Unit — domain   | `TransactionRuleTest`         | **6**   | Generated                                                                 |
-| Unit — mapper   | `TransactionRuleMapperTest`   | **1**   | Generated                                                                 |
-| Unit — DTO      | `TransactionRuleDTOTest`      | **1**   | Generated                                                                 |
-| Unit — criteria | `TransactionRuleCriteriaTest` | **5**   | Generated                                                                 |
-| E2E             | `transaction-rule.cy.ts`      | **10**  | 3 ownership + 7 CRUD/navigation                                           |
+| Type            | File                           | Tests   | Custom vs generated                                                        |
+| --------------- | ------------------------------ | ------- | -------------------------------------------------------------------------- |
+| Integration IT  | `TransactionRuleResourceIT`    | **109** | Ownership/link/domain/API ergonomics custom tests + JHipster CRUD/filters  |
+| Unit — service  | `TransactionRuleServiceTest`   | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards)      |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                  |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                  |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                  |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                  |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **12**  | Create/edit titles, detail read-only conditions, embedded condition editor |
+| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                            |
 
 **Run:**
 
@@ -1390,6 +1391,18 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 | `getTransactionRuleConditionsOwnedByAnotherUserIsNotFound`               | `GET` | Normal user foreign parent → `404`                                            |
 | `adminCanGetTransactionRuleConditionsOwnedByAnotherUser`                 | `GET` | Admin can read conditions for foreign parent                                  |
 | `getTransactionRuleConditionsOnlyReturnsRequestedRuleConditions`         | `GET` | Endpoint returns only conditions belonging to requested rule                  |
+
+#### Frontend UX — `transaction-rule-ux.spec.tsx` — ✅
+
+| Area                     | What it checks                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Create/edit shell        | Create hides timestamps/active; edit shows Active and Conditions section                                |
+| Detail conditions        | Detail remains read-only and handles loaded, empty, and failed condition states                         |
+| Embedded edit collection | Edit loads conditions from `GET /api/transaction-rules/{id}/conditions`; empty state is non-breaking    |
+| Active toggle UX         | Disabled when conditions are empty or unavailable; enabled when at least one condition is loaded        |
+| Add condition            | Opens embedded smart form without parent selector; POST includes `transactionRule: { id: currentRule }` |
+| Edit condition           | Opens embedded smart form without parent selector; PATCH sends editable fields only, no reparenting     |
+| Delete condition         | Confirms, DELETEs condition, refreshes list; delete failure shows an inline error                       |
 
 #### CRUD domain lifecycle — ✅ custom
 

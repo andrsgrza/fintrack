@@ -37,7 +37,16 @@
       "noConditionsYet": "No conditions yet.",
       "conditionsUnavailable": "Conditions are not available.",
       "addCondition": "Add condition",
-      "activeRequiresCondition": "Active rules require at least one condition."
+      "editCondition": "Edit condition",
+      "cancelConditionEdit": "Cancel",
+      "saveCondition": "Save condition",
+      "updateCondition": "Update condition",
+      "deleteCondition": "Delete condition",
+      "confirmDeleteCondition": "Are you sure you want to delete this condition?",
+      "conditionSaveFailed": "Condition could not be saved.",
+      "conditionDeleteFailed": "Condition could not be deleted.",
+      "activeRequiresCondition": "Active rules require at least one condition.",
+      "activeDisabledNoConditions": "Add at least one condition before activating this rule."
     }
   }
 }
