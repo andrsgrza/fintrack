@@ -205,7 +205,6 @@ public class FinancialSubscriptionService {
 
     private void unlinkFinancialSubscriptionFromAllRelationships(Long subscriptionId) {
         financialSubscriptionRepository.clearFinancialTransactionSubscriptionReferences(subscriptionId);
-        financialSubscriptionRepository.clearTransactionRuleResultingSubscriptionReferences(subscriptionId);
         financialSubscriptionRepository.deleteTagLinksByFinancialSubscriptionId(subscriptionId);
     }
 

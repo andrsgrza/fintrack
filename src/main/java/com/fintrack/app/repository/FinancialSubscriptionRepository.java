@@ -93,12 +93,6 @@ public interface FinancialSubscriptionRepository
     void clearFinancialTransactionSubscriptionReferences(@Param("subscriptionId") Long subscriptionId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(
-        "update TransactionRule tr set tr.resultingFinancialSubscription = null, tr.active = false where tr.resultingFinancialSubscription.id = :subscriptionId"
-    )
-    void clearTransactionRuleResultingSubscriptionReferences(@Param("subscriptionId") Long subscriptionId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "delete from rel_financial_subscription__tags where financial_subscription_id = :subscriptionId", nativeQuery = true)
     void deleteTagLinksByFinancialSubscriptionId(@Param("subscriptionId") Long subscriptionId);
 

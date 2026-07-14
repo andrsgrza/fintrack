@@ -135,13 +135,6 @@
       "relationshipName": "financialTransactions",
       "relationshipSide": "right",
       "relationshipType": "one-to-many"
-    },
-    {
-      "otherEntityName": "transactionRule",
-      "otherEntityRelationshipName": "resultingFinancialSubscription",
-      "relationshipName": "transactionRules",
-      "relationshipSide": "right",
-      "relationshipType": "one-to-many"
     }
   ],
   "searchEngine": "no",

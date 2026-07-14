@@ -74,14 +74,8 @@ export const TransactionRuleDetail = () => {
           <h3 id="transaction-rule-result-heading">
             <Translate contentKey="fintrackApp.transactionRule.sections.result">Result</Translate>
           </h3>
-          <FieldRow label={translate('fintrackApp.transactionRule.resultingDescription')}>
-            {displayText(transactionRuleEntity.resultingDescription)}
-          </FieldRow>
           <FieldRow label={translate('fintrackApp.transactionRule.resultingCategory')}>
             {displayText(transactionRuleEntity.resultingCategory?.name)}
-          </FieldRow>
-          <FieldRow label={translate('fintrackApp.transactionRule.resultingFinancialSubscription')}>
-            {displayText(transactionRuleEntity.resultingFinancialSubscription?.name)}
           </FieldRow>
           <FieldRow label={translate('fintrackApp.transactionRule.resultingTags')}>{tagNames(transactionRuleEntity)}</FieldRow>
         </section>

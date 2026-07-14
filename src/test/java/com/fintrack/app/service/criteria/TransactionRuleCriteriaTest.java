@@ -80,13 +80,11 @@ class TransactionRuleCriteriaTest {
         transactionRuleCriteria.description();
         transactionRuleCriteria.priority();
         transactionRuleCriteria.conditionLogic();
-        transactionRuleCriteria.resultingDescription();
         transactionRuleCriteria.active();
         transactionRuleCriteria.createdAt();
         transactionRuleCriteria.updatedAt();
         transactionRuleCriteria.userId();
         transactionRuleCriteria.resultingCategoryId();
-        transactionRuleCriteria.resultingFinancialSubscriptionId();
         transactionRuleCriteria.resultingTagsId();
         transactionRuleCriteria.conditionsId();
         transactionRuleCriteria.distinct();
@@ -100,13 +98,11 @@ class TransactionRuleCriteriaTest {
                 condition.apply(criteria.getDescription()) &&
                 condition.apply(criteria.getPriority()) &&
                 condition.apply(criteria.getConditionLogic()) &&
-                condition.apply(criteria.getResultingDescription()) &&
                 condition.apply(criteria.getActive()) &&
                 condition.apply(criteria.getCreatedAt()) &&
                 condition.apply(criteria.getUpdatedAt()) &&
                 condition.apply(criteria.getUserId()) &&
                 condition.apply(criteria.getResultingCategoryId()) &&
-                condition.apply(criteria.getResultingFinancialSubscriptionId()) &&
                 condition.apply(criteria.getResultingTagsId()) &&
                 condition.apply(criteria.getConditionsId()) &&
                 condition.apply(criteria.getDistinct()),
@@ -125,13 +121,11 @@ class TransactionRuleCriteriaTest {
                 condition.apply(criteria.getDescription(), copy.getDescription()) &&
                 condition.apply(criteria.getPriority(), copy.getPriority()) &&
                 condition.apply(criteria.getConditionLogic(), copy.getConditionLogic()) &&
-                condition.apply(criteria.getResultingDescription(), copy.getResultingDescription()) &&
                 condition.apply(criteria.getActive(), copy.getActive()) &&
                 condition.apply(criteria.getCreatedAt(), copy.getCreatedAt()) &&
                 condition.apply(criteria.getUpdatedAt(), copy.getUpdatedAt()) &&
                 condition.apply(criteria.getUserId(), copy.getUserId()) &&
                 condition.apply(criteria.getResultingCategoryId(), copy.getResultingCategoryId()) &&
-                condition.apply(criteria.getResultingFinancialSubscriptionId(), copy.getResultingFinancialSubscriptionId()) &&
                 condition.apply(criteria.getResultingTagsId(), copy.getResultingTagsId()) &&
                 condition.apply(criteria.getConditionsId(), copy.getConditionsId()) &&
                 condition.apply(criteria.getDistinct(), copy.getDistinct()),

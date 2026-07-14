@@ -32,13 +32,11 @@
       "evaluationOrder": "Evaluation order",
       "priorityServerManagedHelp": "Rule order is managed from the rules list. New rules are added last.",
       "conditionLogic": "Condition Logic",
-      "resultingDescription": "Resulting Description",
       "active": "Active",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "user": "User",
       "resultingCategory": "Resulting Category",
-      "resultingFinancialSubscription": "Resulting Financial Subscription",
       "resultingTags": "Resulting Tags",
       "actions": "Actions",
       "updated": "Updated",
@@ -57,9 +55,7 @@
         "label": "Result",
         "empty": "No result configured",
         "category": "Category",
-        "subscription": "Subscription",
-        "tags": "Tags",
-        "description": "Description"
+        "tags": "Tags"
       },
       "sections": {
         "identity": "Identity",
@@ -77,9 +73,7 @@
       },
       "then": {
         "assignCategory": "Assign category",
-        "linkSubscription": "Link subscription",
-        "addTags": "Add tags",
-        "replaceDescription": "Replace description with"
+        "addTags": "Add tags"
       },
       "conditions": "Conditions",
       "loadingConditions": "Loading conditions...",

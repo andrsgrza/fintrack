@@ -136,13 +136,6 @@ public class FinancialSubscription implements Serializable {
     )
     private Set<FinancialTransaction> financialTransactions = new HashSet<>();
 
-    @OneToMany(fetch = FetchType.LAZY, mappedBy = "resultingFinancialSubscription")
-    @JsonIgnoreProperties(
-        value = { "user", "resultingCategory", "resultingFinancialSubscription", "resultingTags", "conditions" },
-        allowSetters = true
-    )
-    private Set<TransactionRule> transactionRules = new HashSet<>();
-
     // jhipster-needle-entity-add-field - JHipster will add fields here
 
     public Long getId() {
@@ -443,37 +436,6 @@ public class FinancialSubscription implements Serializable {
     public FinancialSubscription removeFinancialTransactions(FinancialTransaction financialTransaction) {
         this.financialTransactions.remove(financialTransaction);
         financialTransaction.setFinancialSubscription(null);
-        return this;
-    }
-
-    public Set<TransactionRule> getTransactionRules() {
-        return this.transactionRules;
-    }
-
-    public void setTransactionRules(Set<TransactionRule> transactionRules) {
-        if (this.transactionRules != null) {
-            this.transactionRules.forEach(i -> i.setResultingFinancialSubscription(null));
-        }
-        if (transactionRules != null) {
-            transactionRules.forEach(i -> i.setResultingFinancialSubscription(this));
-        }
-        this.transactionRules = transactionRules;
-    }
-
-    public FinancialSubscription transactionRules(Set<TransactionRule> transactionRules) {
-        this.setTransactionRules(transactionRules);
-        return this;
-    }
-
-    public FinancialSubscription addTransactionRules(TransactionRule transactionRule) {
-        this.transactionRules.add(transactionRule);
-        transactionRule.setResultingFinancialSubscription(this);
-        return this;
-    }
-
-    public FinancialSubscription removeTransactionRules(TransactionRule transactionRule) {
-        this.transactionRules.remove(transactionRule);
-        transactionRule.setResultingFinancialSubscription(null);
         return this;
     }
 

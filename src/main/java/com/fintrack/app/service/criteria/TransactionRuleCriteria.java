@@ -50,8 +50,6 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
 
     private RuleConditionLogicFilter conditionLogic;
 
-    private StringFilter resultingDescription;
-
     private BooleanFilter active;
 
     private InstantFilter createdAt;
@@ -61,8 +59,6 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
     private LongFilter userId;
 
     private LongFilter resultingCategoryId;
-
-    private LongFilter resultingFinancialSubscriptionId;
 
     private LongFilter resultingTagsId;
 
@@ -78,13 +74,11 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
         this.description = other.optionalDescription().map(StringFilter::copy).orElse(null);
         this.priority = other.optionalPriority().map(IntegerFilter::copy).orElse(null);
         this.conditionLogic = other.optionalConditionLogic().map(RuleConditionLogicFilter::copy).orElse(null);
-        this.resultingDescription = other.optionalResultingDescription().map(StringFilter::copy).orElse(null);
         this.active = other.optionalActive().map(BooleanFilter::copy).orElse(null);
         this.createdAt = other.optionalCreatedAt().map(InstantFilter::copy).orElse(null);
         this.updatedAt = other.optionalUpdatedAt().map(InstantFilter::copy).orElse(null);
         this.userId = other.optionalUserId().map(LongFilter::copy).orElse(null);
         this.resultingCategoryId = other.optionalResultingCategoryId().map(LongFilter::copy).orElse(null);
-        this.resultingFinancialSubscriptionId = other.optionalResultingFinancialSubscriptionId().map(LongFilter::copy).orElse(null);
         this.resultingTagsId = other.optionalResultingTagsId().map(LongFilter::copy).orElse(null);
         this.conditionsId = other.optionalConditionsId().map(LongFilter::copy).orElse(null);
         this.distinct = other.distinct;
@@ -190,25 +184,6 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
         this.conditionLogic = conditionLogic;
     }
 
-    public StringFilter getResultingDescription() {
-        return resultingDescription;
-    }
-
-    public Optional<StringFilter> optionalResultingDescription() {
-        return Optional.ofNullable(resultingDescription);
-    }
-
-    public StringFilter resultingDescription() {
-        if (resultingDescription == null) {
-            setResultingDescription(new StringFilter());
-        }
-        return resultingDescription;
-    }
-
-    public void setResultingDescription(StringFilter resultingDescription) {
-        this.resultingDescription = resultingDescription;
-    }
-
     public BooleanFilter getActive() {
         return active;
     }
@@ -304,25 +279,6 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
         this.resultingCategoryId = resultingCategoryId;
     }
 
-    public LongFilter getResultingFinancialSubscriptionId() {
-        return resultingFinancialSubscriptionId;
-    }
-
-    public Optional<LongFilter> optionalResultingFinancialSubscriptionId() {
-        return Optional.ofNullable(resultingFinancialSubscriptionId);
-    }
-
-    public LongFilter resultingFinancialSubscriptionId() {
-        if (resultingFinancialSubscriptionId == null) {
-            setResultingFinancialSubscriptionId(new LongFilter());
-        }
-        return resultingFinancialSubscriptionId;
-    }
-
-    public void setResultingFinancialSubscriptionId(LongFilter resultingFinancialSubscriptionId) {
-        this.resultingFinancialSubscriptionId = resultingFinancialSubscriptionId;
-    }
-
     public LongFilter getResultingTagsId() {
         return resultingTagsId;
     }
@@ -395,13 +351,11 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
             Objects.equals(description, that.description) &&
             Objects.equals(priority, that.priority) &&
             Objects.equals(conditionLogic, that.conditionLogic) &&
-            Objects.equals(resultingDescription, that.resultingDescription) &&
             Objects.equals(active, that.active) &&
             Objects.equals(createdAt, that.createdAt) &&
             Objects.equals(updatedAt, that.updatedAt) &&
             Objects.equals(userId, that.userId) &&
             Objects.equals(resultingCategoryId, that.resultingCategoryId) &&
-            Objects.equals(resultingFinancialSubscriptionId, that.resultingFinancialSubscriptionId) &&
             Objects.equals(resultingTagsId, that.resultingTagsId) &&
             Objects.equals(conditionsId, that.conditionsId) &&
             Objects.equals(distinct, that.distinct)
@@ -416,13 +370,11 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
             description,
             priority,
             conditionLogic,
-            resultingDescription,
             active,
             createdAt,
             updatedAt,
             userId,
             resultingCategoryId,
-            resultingFinancialSubscriptionId,
             resultingTagsId,
             conditionsId,
             distinct
@@ -438,13 +390,11 @@ public class TransactionRuleCriteria implements Serializable, Criteria {
             optionalDescription().map(f -> "description=" + f + ", ").orElse("") +
             optionalPriority().map(f -> "priority=" + f + ", ").orElse("") +
             optionalConditionLogic().map(f -> "conditionLogic=" + f + ", ").orElse("") +
-            optionalResultingDescription().map(f -> "resultingDescription=" + f + ", ").orElse("") +
             optionalActive().map(f -> "active=" + f + ", ").orElse("") +
             optionalCreatedAt().map(f -> "createdAt=" + f + ", ").orElse("") +
             optionalUpdatedAt().map(f -> "updatedAt=" + f + ", ").orElse("") +
             optionalUserId().map(f -> "userId=" + f + ", ").orElse("") +
             optionalResultingCategoryId().map(f -> "resultingCategoryId=" + f + ", ").orElse("") +
-            optionalResultingFinancialSubscriptionId().map(f -> "resultingFinancialSubscriptionId=" + f + ", ").orElse("") +
             optionalResultingTagsId().map(f -> "resultingTagsId=" + f + ", ").orElse("") +
             optionalConditionsId().map(f -> "conditionsId=" + f + ", ").orElse("") +
             optionalDistinct().map(f -> "distinct=" + f + ", ").orElse("") +

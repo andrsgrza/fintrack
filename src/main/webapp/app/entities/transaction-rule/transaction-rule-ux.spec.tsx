@@ -28,7 +28,6 @@ const mockReset = jest.fn(() => ({ type: 'transactionRule/reset' }));
 const mockCreateEntity = jest.fn(entity => ({ type: 'transactionRule/createEntity', payload: entity }));
 const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'transactionRule/partialUpdateEntity', payload: entity }));
 const mockGetCategories = jest.fn(() => ({ type: 'category/getEntities' }));
-const mockGetFinancialSubscriptions = jest.fn(() => ({ type: 'financialSubscription/getEntities' }));
 const mockGetTags = jest.fn(() => ({ type: 'tag/getEntities' }));
 let mockState;
 
@@ -49,10 +48,6 @@ jest.mock('app/entities/category/category.reducer', () => ({
   getEntities: () => mockGetCategories(),
 }));
 
-jest.mock('app/entities/financial-subscription/financial-subscription.reducer', () => ({
-  getEntities: () => mockGetFinancialSubscriptions(),
-}));
-
 jest.mock('app/entities/tag/tag.reducer', () => ({
   getEntities: () => mockGetTags(),
 }));
@@ -63,18 +58,15 @@ const baseRule = {
   description: 'Coffee shops',
   priority: 10,
   conditionLogic: 'ALL',
-  resultingDescription: 'Coffee',
   active: false,
   createdAt: dayjs('2026-07-12T10:00:00'),
   updatedAt: dayjs('2026-07-13T10:00:00'),
   resultingCategory: { id: 3, name: 'Food' },
-  resultingFinancialSubscription: { id: 4, name: 'Coffee club' },
   resultingTags: [{ id: 5, name: 'Morning' }],
 };
 
 const baseState = {
   category: { entities: [{ id: 3, name: 'Food' }] },
-  financialSubscription: { entities: [{ id: 4, name: 'Coffee club' }] },
   tag: { entities: [{ id: 5, name: 'Morning' }] },
   financialAccount: { entities: [{ id: 2, name: 'Checking account' }] },
   transactionRule: {
@@ -100,9 +92,7 @@ const createListRule = (id: number, name: string, priority: number) => ({
   id,
   name,
   priority,
-  resultingDescription: priority === 0 ? baseRule.resultingDescription : null,
   resultingCategory: priority === 0 ? baseRule.resultingCategory : null,
-  resultingFinancialSubscription: priority === 0 ? baseRule.resultingFinancialSubscription : null,
   resultingTags: priority === 0 ? baseRule.resultingTags : [],
 });
 
@@ -227,9 +217,7 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('#1')).toBeTruthy();
     expect(screen.getByText('#2')).toBeTruthy();
     expect(screen.getByText('Category: Food')).toBeTruthy();
-    expect(screen.getByText('Subscription: Coffee club')).toBeTruthy();
     expect(screen.getByText('Tags: Morning')).toBeTruthy();
-    expect(screen.getByText('Description: Coffee')).toBeTruthy();
     expect(screen.getByText('No result configured')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(2);
@@ -343,6 +331,7 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Active')).toBeNull();
     expect(screen.queryByLabelText('Priority')).toBeNull();
+    expect(screen.queryByLabelText('Resulting Financial Subscription')).toBeNull();
     expect(screen.getByRole('button', { name: /save and add conditions/i })).toBeTruthy();
     expect(screen.getByText('Rule order is managed from the rules list. New rules are added last.')).toBeTruthy();
   });
@@ -360,7 +349,7 @@ describe('TransactionRule UX', () => {
     mockDispatch.mockClear();
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New rule' } });
-    fireEvent.change(screen.getByLabelText('Resulting Description'), { target: { value: 'Normalized description' } });
+    fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: /save and add conditions/i }));
 
     await waitFor(() =>
@@ -368,11 +357,13 @@ describe('TransactionRule UX', () => {
         expect.objectContaining({
           name: 'New rule',
           active: false,
-          resultingDescription: 'Normalized description',
+          resultingCategory: { id: 3, name: 'Food' },
         }),
       ),
     );
     expect(mockCreateEntity.mock.calls[0][0]).not.toHaveProperty('priority');
+    expect(mockCreateEntity.mock.calls[0][0]).not.toHaveProperty('resulting' + 'Description');
+    expect(mockCreateEntity.mock.calls[0][0]).not.toHaveProperty('resulting' + 'FinancialSubscription');
     expect(mockDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'transactionRule/createEntity',
@@ -405,6 +396,7 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Priority')).toBeNull();
+    expect(screen.queryByLabelText('Resulting Financial Subscription')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Conditions' })).toBeNull();
     expect(screen.queryByRole('button', { name: /add condition/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /delete condition/i })).toBeNull();
@@ -418,7 +410,7 @@ describe('TransactionRule UX', () => {
     await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
     expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Coffee shops');
     expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL');
-    expect((screen.getByLabelText('Resulting Description') as HTMLInputElement).value).toBe('Coffee');
+    expect((screen.getByLabelText('Resulting Category') as HTMLSelectElement).value).toBe('3');
     expect(screen.queryByLabelText('Priority')).toBeNull();
   });
 
@@ -448,9 +440,11 @@ describe('TransactionRule UX', () => {
       ),
     );
     expect(mockPartialUpdateEntity.mock.calls[0][0]).not.toHaveProperty('priority');
+    expect(mockPartialUpdateEntity.mock.calls[0][0]).not.toHaveProperty('resulting' + 'Description');
+    expect(mockPartialUpdateEntity.mock.calls[0][0]).not.toHaveProperty('resulting' + 'FinancialSubscription');
   });
 
-  it('hydrates resulting category, subscription, tags, and active on edit', async () => {
+  it('hydrates resulting category, tags, and active on edit', async () => {
     renderEditForm([], {
       transactionRule: {
         entity: {
@@ -461,7 +455,6 @@ describe('TransactionRule UX', () => {
     });
 
     await waitFor(() => expect((screen.getByLabelText('Resulting Category') as HTMLSelectElement).value).toBe('3'));
-    expect((screen.getByLabelText('Resulting Financial Subscription') as HTMLSelectElement).value).toBe('4');
     expect(screen.getByRole('option', { name: 'Morning' })).toHaveProperty('selected', true);
     expect((screen.getByLabelText('Active') as HTMLInputElement).checked).toBe(true);
   });
@@ -546,7 +539,6 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('#11')).toBeTruthy();
     expect(screen.getByText('All conditions')).toBeTruthy();
     expect(screen.getByText('Food')).toBeTruthy();
-    expect(screen.getByText('Coffee club')).toBeTruthy();
     expect(screen.getByText('Morning')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'When' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Then' })).toBeNull();

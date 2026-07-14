@@ -32,13 +32,11 @@
       "evaluationOrder": "Orden de evaluación",
       "priorityServerManagedHelp": "El orden de las reglas se administra desde la lista de reglas. Las reglas nuevas se agregan al final.",
       "conditionLogic": "Lógica de condiciones",
-      "resultingDescription": "Descripción resultante",
       "active": "Activa",
       "createdAt": "Creada el",
       "updatedAt": "Actualizada el",
       "user": "Usuario",
       "resultingCategory": "Categoría resultante",
-      "resultingFinancialSubscription": "Suscripción financiera resultante",
       "resultingTags": "Etiquetas resultantes",
       "actions": "Acciones",
       "updated": "Actualizada",
@@ -57,9 +55,7 @@
         "label": "Resultado",
         "empty": "Sin resultado configurado",
         "category": "Categoría",
-        "subscription": "Suscripción",
-        "tags": "Etiquetas",
-        "description": "Descripción"
+        "tags": "Etiquetas"
       },
       "sections": {
         "identity": "Identidad",
@@ -77,9 +73,7 @@
       },
       "then": {
         "assignCategory": "Asignar categoría",
-        "linkSubscription": "Vincular suscripción",
-        "addTags": "Agregar etiquetas",
-        "replaceDescription": "Reemplazar descripción con"
+        "addTags": "Agregar etiquetas"
       },
       "conditions": "Condiciones",
       "loadingConditions": "Cargando condiciones...",

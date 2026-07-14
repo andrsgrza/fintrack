@@ -56,10 +56,7 @@ public class TransactionRuleCondition implements Serializable {
 
     @ManyToOne(optional = false)
     @NotNull
-    @JsonIgnoreProperties(
-        value = { "user", "resultingCategory", "resultingFinancialSubscription", "resultingTags", "conditions" },
-        allowSetters = true
-    )
+    @JsonIgnoreProperties(value = { "user", "resultingCategory", "resultingTags", "conditions" }, allowSetters = true)
     private TransactionRule transactionRule;
 
     // jhipster-needle-entity-add-field - JHipster will add fields here

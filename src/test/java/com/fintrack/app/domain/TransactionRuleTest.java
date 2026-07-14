@@ -1,7 +1,6 @@
 package com.fintrack.app.domain;
 
 import static com.fintrack.app.domain.CategoryTestSamples.*;
-import static com.fintrack.app.domain.FinancialSubscriptionTestSamples.*;
 import static com.fintrack.app.domain.TagTestSamples.*;
 import static com.fintrack.app.domain.TransactionRuleConditionTestSamples.*;
 import static com.fintrack.app.domain.TransactionRuleTestSamples.*;
@@ -38,18 +37,6 @@ class TransactionRuleTest {
 
         transactionRule.resultingCategory(null);
         assertThat(transactionRule.getResultingCategory()).isNull();
-    }
-
-    @Test
-    void resultingFinancialSubscriptionTest() {
-        TransactionRule transactionRule = getTransactionRuleRandomSampleGenerator();
-        FinancialSubscription financialSubscriptionBack = getFinancialSubscriptionRandomSampleGenerator();
-
-        transactionRule.setResultingFinancialSubscription(financialSubscriptionBack);
-        assertThat(transactionRule.getResultingFinancialSubscription()).isEqualTo(financialSubscriptionBack);
-
-        transactionRule.resultingFinancialSubscription(null);
-        assertThat(transactionRule.getResultingFinancialSubscription()).isNull();
     }
 
     @Test

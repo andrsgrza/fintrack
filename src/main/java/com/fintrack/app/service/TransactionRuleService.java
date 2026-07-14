@@ -2,16 +2,13 @@ package com.fintrack.app.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Category;
-import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.repository.CategoryRepository;
-import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
-import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
@@ -48,8 +45,6 @@ public class TransactionRuleService {
 
     private final CategoryRepository categoryRepository;
 
-    private final FinancialSubscriptionRepository financialSubscriptionRepository;
-
     private final TagRepository tagRepository;
 
     private final TransactionRuleConditionRepository transactionRuleConditionRepository;
@@ -59,7 +54,6 @@ public class TransactionRuleService {
         TransactionRuleMapper transactionRuleMapper,
         CurrentUserService currentUserService,
         CategoryRepository categoryRepository,
-        FinancialSubscriptionRepository financialSubscriptionRepository,
         TagRepository tagRepository,
         TransactionRuleConditionRepository transactionRuleConditionRepository
     ) {
@@ -67,7 +61,6 @@ public class TransactionRuleService {
         this.transactionRuleMapper = transactionRuleMapper;
         this.currentUserService = currentUserService;
         this.categoryRepository = categoryRepository;
-        this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.tagRepository = tagRepository;
         this.transactionRuleConditionRepository = transactionRuleConditionRepository;
     }
@@ -270,9 +263,6 @@ public class TransactionRuleService {
 
     private void applyRelationships(TransactionRule transactionRule, TransactionRuleDTO transactionRuleDTO, String ownerLogin) {
         transactionRule.setResultingCategory(resolveOptionalCategory(transactionRuleDTO.getResultingCategory(), ownerLogin));
-        transactionRule.setResultingFinancialSubscription(
-            resolveOptionalSubscription(transactionRuleDTO.getResultingFinancialSubscription(), ownerLogin)
-        );
         transactionRule.setResultingTags(resolveTags(transactionRuleDTO.getResultingTags(), ownerLogin));
     }
 
@@ -292,15 +282,6 @@ public class TransactionRuleService {
                     )
                 );
             }
-            if (patchNode.has("resultingFinancialSubscription")) {
-                transactionRule.setResultingFinancialSubscription(
-                    resolveOptionalSubscriptionForPatch(
-                        transactionRuleDTO.getResultingFinancialSubscription(),
-                        patchNode.get("resultingFinancialSubscription"),
-                        ownerLogin
-                    )
-                );
-            }
             if (patchNode.has("resultingTags")) {
                 transactionRule.setResultingTags(
                     resolveTagsForPatch(transactionRuleDTO.getResultingTags(), patchNode.get("resultingTags"), ownerLogin)
@@ -310,11 +291,6 @@ public class TransactionRuleService {
         }
         if (transactionRuleDTO.getResultingCategory() != null) {
             transactionRule.setResultingCategory(resolveOptionalCategory(transactionRuleDTO.getResultingCategory(), ownerLogin));
-        }
-        if (transactionRuleDTO.getResultingFinancialSubscription() != null) {
-            transactionRule.setResultingFinancialSubscription(
-                resolveOptionalSubscription(transactionRuleDTO.getResultingFinancialSubscription(), ownerLogin)
-            );
         }
         if (transactionRuleDTO.getResultingTags() != null) {
             transactionRule.setResultingTags(resolveTags(transactionRuleDTO.getResultingTags(), ownerLogin));
@@ -338,29 +314,6 @@ public class TransactionRuleService {
             return null;
         }
         return resolveOptionalCategory(categoryDTO, ownerLogin);
-    }
-
-    private FinancialSubscription resolveOptionalSubscription(FinancialSubscriptionDTO subscriptionDTO, String ownerLogin) {
-        if (subscriptionDTO == null) {
-            return null;
-        }
-        if (subscriptionDTO.getId() == null) {
-            throw new IllegalArgumentException("Financial subscription id is required");
-        }
-        return financialSubscriptionRepository
-            .findOneByIdAndUserLogin(subscriptionDTO.getId(), ownerLogin)
-            .orElseThrow(() -> new IllegalArgumentException("Financial subscription is not accessible"));
-    }
-
-    private FinancialSubscription resolveOptionalSubscriptionForPatch(
-        FinancialSubscriptionDTO subscriptionDTO,
-        JsonNode subscriptionNode,
-        String ownerLogin
-    ) {
-        if (subscriptionNode == null || subscriptionNode.isNull()) {
-            return null;
-        }
-        return resolveOptionalSubscription(subscriptionDTO, ownerLogin);
     }
 
     private Set<Tag> resolveTags(Set<TagDTO> tagDTOs, String ownerLogin) {
@@ -470,7 +423,6 @@ public class TransactionRuleService {
     private void normalizeTextFields(TransactionRule transactionRule) {
         transactionRule.setName(trimToNull(transactionRule.getName()));
         transactionRule.setDescription(trimToNull(transactionRule.getDescription()));
-        transactionRule.setResultingDescription(trimToNull(transactionRule.getResultingDescription()));
     }
 
     private String trimToNull(String value) {
@@ -490,9 +442,6 @@ public class TransactionRuleService {
         }
         if (transactionRule.getDescription() != null && transactionRule.getDescription().length() > 500) {
             throw new IllegalArgumentException("Description must be at most 500 characters");
-        }
-        if (transactionRule.getResultingDescription() != null && transactionRule.getResultingDescription().length() > 500) {
-            throw new IllegalArgumentException("Resulting description must be at most 500 characters");
         }
         if (transactionRule.getPriority() == null) {
             throw new IllegalArgumentException("Priority is required");
@@ -522,9 +471,7 @@ public class TransactionRuleService {
     private void validateHasOutput(TransactionRule transactionRule) {
         boolean hasOutput =
             transactionRule.getResultingCategory() != null ||
-            transactionRule.getResultingFinancialSubscription() != null ||
-            (transactionRule.getResultingTags() != null && !transactionRule.getResultingTags().isEmpty()) ||
-            transactionRule.getResultingDescription() != null;
+            (transactionRule.getResultingTags() != null && !transactionRule.getResultingTags().isEmpty());
         if (!hasOutput) {
             throw new IllegalArgumentException("Transaction rule must have at least one output");
         }
@@ -544,12 +491,10 @@ public class TransactionRuleService {
         String description,
         Integer priority,
         com.fintrack.app.domain.enumeration.RuleConditionLogic conditionLogic,
-        String resultingDescription,
         Boolean active,
         Instant createdAt,
         Instant updatedAt,
         Category resultingCategory,
-        FinancialSubscription resultingFinancialSubscription,
         Set<Tag> resultingTags
     ) {
         private static TransactionRuleSnapshot from(TransactionRule transactionRule) {
@@ -558,12 +503,10 @@ public class TransactionRuleService {
                 transactionRule.getDescription(),
                 transactionRule.getPriority(),
                 transactionRule.getConditionLogic(),
-                transactionRule.getResultingDescription(),
                 transactionRule.getActive(),
                 transactionRule.getCreatedAt(),
                 transactionRule.getUpdatedAt(),
                 transactionRule.getResultingCategory(),
-                transactionRule.getResultingFinancialSubscription(),
                 new HashSet<>(transactionRule.getResultingTags())
             );
         }
@@ -573,12 +516,10 @@ public class TransactionRuleService {
             transactionRule.setDescription(description);
             transactionRule.setPriority(priority);
             transactionRule.setConditionLogic(conditionLogic);
-            transactionRule.setResultingDescription(resultingDescription);
             transactionRule.setActive(active);
             transactionRule.setCreatedAt(createdAt);
             transactionRule.setUpdatedAt(updatedAt);
             transactionRule.setResultingCategory(resultingCategory);
-            transactionRule.setResultingFinancialSubscription(resultingFinancialSubscription);
             transactionRule.setResultingTags(new HashSet<>(resultingTags));
         }
     }

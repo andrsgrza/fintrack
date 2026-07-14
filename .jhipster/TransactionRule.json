@@ -3,7 +3,7 @@
     "changelogDate": "20260707174826"
   },
   "applications": ["fintrack"],
-  "documentation": "A user-owned rule evaluated only when a transaction is created.\\n\\nHigher numeric priority wins for category, subscription and description.\\nTags from every matching rule are accumulated without duplicates.",
+  "documentation": "A user-owned rule evaluated only when a transaction is created.\\n\\nHigher numeric priority wins for category.\\nTags from every matching rule are accumulated without duplicates.",
   "dto": "mapstruct",
   "fields": [
     {
@@ -31,12 +31,6 @@
       "fieldTypeDocumentation": "AUTOMATIC CLASSIFICATION ENUMS",
       "fieldValidateRules": ["required"],
       "fieldValues": "ALL,ANY"
-    },
-    {
-      "fieldName": "resultingDescription",
-      "fieldType": "String",
-      "fieldValidateRules": ["maxlength"],
-      "fieldValidateRulesMaxlength": "500"
     },
     {
       "fieldName": "active",
@@ -72,14 +66,6 @@
       "otherEntityName": "category",
       "otherEntityRelationshipName": "transactionRules",
       "relationshipName": "resultingCategory",
-      "relationshipSide": "left",
-      "relationshipType": "many-to-one"
-    },
-    {
-      "otherEntityField": "name",
-      "otherEntityName": "financialSubscription",
-      "otherEntityRelationshipName": "transactionRules",
-      "relationshipName": "resultingFinancialSubscription",
       "relationshipSide": "left",
       "relationshipType": "many-to-one"
     },

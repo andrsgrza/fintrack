@@ -13,7 +13,7 @@ import java.util.Set;
  * A DTO for the {@link com.fintrack.app.domain.TransactionRule} entity.
  */
 @Schema(
-    description = "A user-owned rule evaluated only when a transaction is created.\n\nHigher numeric priority wins for category, subscription and description.\nTags from every matching rule are accumulated without duplicates."
+    description = "A user-owned rule evaluated only when a transaction is created.\n\nHigher numeric priority wins for category.\nTags from every matching rule are accumulated without duplicates."
 )
 @SuppressWarnings("common-java:DuplicatedBlocks")
 public class TransactionRuleDTO implements Serializable {
@@ -31,8 +31,6 @@ public class TransactionRuleDTO implements Serializable {
     @NotNull
     private RuleConditionLogic conditionLogic;
 
-    private String resultingDescription;
-
     @NotNull
     private Boolean active;
 
@@ -43,8 +41,6 @@ public class TransactionRuleDTO implements Serializable {
     private UserDTO user;
 
     private CategoryDTO resultingCategory;
-
-    private FinancialSubscriptionDTO resultingFinancialSubscription;
 
     private Set<TagDTO> resultingTags = new HashSet<>();
 
@@ -88,14 +84,6 @@ public class TransactionRuleDTO implements Serializable {
         this.conditionLogic = conditionLogic;
     }
 
-    public String getResultingDescription() {
-        return resultingDescription;
-    }
-
-    public void setResultingDescription(String resultingDescription) {
-        this.resultingDescription = resultingDescription;
-    }
-
     public Boolean getActive() {
         return active;
     }
@@ -136,14 +124,6 @@ public class TransactionRuleDTO implements Serializable {
         this.resultingCategory = resultingCategory;
     }
 
-    public FinancialSubscriptionDTO getResultingFinancialSubscription() {
-        return resultingFinancialSubscription;
-    }
-
-    public void setResultingFinancialSubscription(FinancialSubscriptionDTO resultingFinancialSubscription) {
-        this.resultingFinancialSubscription = resultingFinancialSubscription;
-    }
-
     public Set<TagDTO> getResultingTags() {
         return resultingTags;
     }
@@ -182,13 +162,11 @@ public class TransactionRuleDTO implements Serializable {
             ", description='" + getDescription() + "'" +
             ", priority=" + getPriority() +
             ", conditionLogic='" + getConditionLogic() + "'" +
-            ", resultingDescription='" + getResultingDescription() + "'" +
             ", active='" + getActive() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
             ", updatedAt='" + getUpdatedAt() + "'" +
             ", user=" + getUser() +
             ", resultingCategory=" + getResultingCategory() +
-            ", resultingFinancialSubscription=" + getResultingFinancialSubscription() +
             ", resultingTags=" + getResultingTags() +
             "}";
     }

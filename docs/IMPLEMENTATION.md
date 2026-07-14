@@ -60,7 +60,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **Nota — PATCH link semantics:** el resource PATCH recibe `JsonNode`; el service usa `patchNode.has(...)` para distinguir campo **ausente** (preservar link) vs **presente** (`null`/`[]` limpia M2M; `null` limpia ManyToOne). Implementado en Budget, FinancialSubscription, TransactionRule, FinancialAccount (inmutables), etc.
 
-**Nota — TransactionRule outputs:** `resultingCategory` / `resultingFinancialSubscription` / `resultingTags` se validan contra el **dueño de la rule** (`ownerLogin`), no contra el usuario actual — admin puede editar la rule ajena pero no adjuntar outputs de otro user.
+**Nota — TransactionRule outputs:** `resultingCategory` / `resultingTags` se validan contra el **dueño de la rule** (`ownerLogin`), no contra el usuario actual — admin puede editar la rule ajena pero no adjuntar outputs de otro user.
 
 **Convención HTTP cross-user (todas las entidades con ownership):** PUT/PATCH de recurso ajeno → `400` `idnotfound`; GET/DELETE → `404`. No variar por entidad.
 
@@ -399,20 +399,20 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 ### 6. TransactionRule ✅ ✅ ✅
 
-**JDL:** `user` required; `resultingCategory` / `resultingFinancialSubscription` opcionales (ManyToOne); `resultingTags` opcional (M2M). Evaluada al crear transaction (motor ⏳).
+**JDL:** `user` required; `resultingCategory` opcional (ManyToOne); `resultingTags` opcional (M2M). Evaluada al crear transaction (motor ⏳).
 
 #### Ownership ✅
 
-| Regla                                | Implementación                                                                                 |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Create asigna `user = currentUser`   | `TransactionRuleService.save()`                                                                |
-| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` y links                                     |
-| List / criteria filtrados por user   | `TransactionRuleQueryService` + repository                                                     |
-| Get / update / patch / delete scoped | `findAccessibleEntity()` (con bag relationships)                                               |
-| Admin bypass                         | `CurrentUserService.isAdmin()`                                                                 |
-| UI sin User                          | `transaction-rule-*.tsx`                                                                       |
-| Links owned por **dueño de la rule** | `resolveOptionalCategory/Subscription/Tags` con `ownerLogin` — **sin bypass admin en outputs** |
-| PATCH links                          | `partialUpdate(dto, patchNode)` — `has("resultingCategory")` etc.                              |
+| Regla                                | Implementación                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| Create asigna `user = currentUser`   | `TransactionRuleService.save()`                                                   |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` y links                        |
+| List / criteria filtrados por user   | `TransactionRuleQueryService` + repository                                        |
+| Get / update / patch / delete scoped | `findAccessibleEntity()` (con bag relationships)                                  |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                                    |
+| UI sin User                          | `transaction-rule-*.tsx`                                                          |
+| Links owned por **dueño de la rule** | `resolveOptionalCategory/Tags` con `ownerLogin` — **sin bypass admin en outputs** |
+| PATCH links                          | `partialUpdate(dto, patchNode)` — `has("resultingCategory")` etc.                 |
 
 **Archivos:** `TransactionRuleRepository`, `TransactionRuleService`, `TransactionRuleQueryService`, `TransactionRuleResource` (PATCH con `JsonNode`), `TransactionRuleDTO`, `TransactionRuleMapper`, UI.
 
@@ -423,11 +423,11 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                                                                          |
 | No cambiar dueño en update/patch                | ✅     |                                                                                                                                                                                    |
 | Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                                                                                    |
-| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/subscription/tag                                                                                                                                |
+| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/tag                                                                                                                                             |
 | PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                                                                             |
 | Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                                                                               |
 | Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                                                                              |
-| Description/resultingDescription normalization  | ✅     | trim; blank → `null`                                                                                                                                                               |
+| Description normalization                       | ✅     | trim; blank → `null`                                                                                                                                                               |
 | Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now`                                                           |
 | Server-managed priority/order                   | ✅     | per-user 0-based consecutive ordering; create appends; update/patch preserve; delete reindexes same owner only                                                                     |
 | Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                                                                                         |
@@ -567,7 +567,7 @@ See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
 | Matching en import / tolerancia de monto                                | ⏳     | Fase 6 / motor                                    |
 | Delete confirmation UX                                                  | ✅     | `financial-subscription-delete-dialog.tsx` + i18n |
 
-**DELETE cleanup:** `FinancialTransaction.financialSubscription = null`; `TransactionRule.resultingFinancialSubscription = null` + `active = false`; `rel_financial_subscription__tags` join rows; luego `deleteById`. Account/category/tag entities survive.
+**DELETE cleanup:** `FinancialTransaction.financialSubscription = null`; `rel_financial_subscription__tags` join rows; luego `deleteById`. Account/category/tag entities survive.
 
 #### Validations ✅
 

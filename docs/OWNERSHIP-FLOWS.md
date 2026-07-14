@@ -213,7 +213,7 @@ flowchart TB
 
 ## 7. TransactionRule (Pattern A + links)
 
-**Dueño:** `user` directo. Outputs: `resultingCategory`, `resultingFinancialSubscription`, `resultingTags`.
+**Dueño:** `user` directo. Outputs: `resultingCategory`, `resultingTags`.
 
 ### Usuario normal
 
@@ -226,10 +226,10 @@ flowchart TB
 
 ### Admin
 
-| Flujo                   | Comportamiento                                                                                             |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **CRUD rule**           | Puede ver/editar/borrar rules ajenas                                                                       |
-| **Outputs (excepción)** | **No bypass:** category/subscription/tags deben ser del **dueño de la rule**, no del admin ni de otro user |
+| Flujo                   | Comportamiento                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| **CRUD rule**           | Puede ver/editar/borrar rules ajenas                                                          |
+| **Outputs (excepción)** | **No bypass:** category/tags deben ser del **dueño de la rule**, no del admin ni de otro user |
 
 ---
 

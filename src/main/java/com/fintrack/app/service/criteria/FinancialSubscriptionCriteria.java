@@ -118,8 +118,6 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
 
     private LongFilter financialTransactionsId;
 
-    private LongFilter transactionRulesId;
-
     private Boolean distinct;
 
     public FinancialSubscriptionCriteria() {}
@@ -146,7 +144,6 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
         this.categoryId = other.optionalCategoryId().map(LongFilter::copy).orElse(null);
         this.tagsId = other.optionalTagsId().map(LongFilter::copy).orElse(null);
         this.financialTransactionsId = other.optionalFinancialTransactionsId().map(LongFilter::copy).orElse(null);
-        this.transactionRulesId = other.optionalTransactionRulesId().map(LongFilter::copy).orElse(null);
         this.distinct = other.distinct;
     }
 
@@ -554,25 +551,6 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
         this.financialTransactionsId = financialTransactionsId;
     }
 
-    public LongFilter getTransactionRulesId() {
-        return transactionRulesId;
-    }
-
-    public Optional<LongFilter> optionalTransactionRulesId() {
-        return Optional.ofNullable(transactionRulesId);
-    }
-
-    public LongFilter transactionRulesId() {
-        if (transactionRulesId == null) {
-            setTransactionRulesId(new LongFilter());
-        }
-        return transactionRulesId;
-    }
-
-    public void setTransactionRulesId(LongFilter transactionRulesId) {
-        this.transactionRulesId = transactionRulesId;
-    }
-
     public Boolean getDistinct() {
         return distinct;
     }
@@ -623,7 +601,6 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
             Objects.equals(categoryId, that.categoryId) &&
             Objects.equals(tagsId, that.tagsId) &&
             Objects.equals(financialTransactionsId, that.financialTransactionsId) &&
-            Objects.equals(transactionRulesId, that.transactionRulesId) &&
             Objects.equals(distinct, that.distinct)
         );
     }
@@ -652,7 +629,6 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
             categoryId,
             tagsId,
             financialTransactionsId,
-            transactionRulesId,
             distinct
         );
     }
@@ -682,7 +658,6 @@ public class FinancialSubscriptionCriteria implements Serializable, Criteria {
             optionalCategoryId().map(f -> "categoryId=" + f + ", ").orElse("") +
             optionalTagsId().map(f -> "tagsId=" + f + ", ").orElse("") +
             optionalFinancialTransactionsId().map(f -> "financialTransactionsId=" + f + ", ").orElse("") +
-            optionalTransactionRulesId().map(f -> "transactionRulesId=" + f + ", ").orElse("") +
             optionalDistinct().map(f -> "distinct=" + f + ", ").orElse("") +
         "}";
     }

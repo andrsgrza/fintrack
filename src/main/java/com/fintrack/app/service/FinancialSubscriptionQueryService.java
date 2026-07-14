@@ -106,9 +106,6 @@ public class FinancialSubscriptionQueryService extends QueryService<FinancialSub
                 buildSpecification(criteria.getTagsId(), root -> root.join(FinancialSubscription_.tags, JoinType.LEFT).get(Tag_.id)),
                 buildSpecification(criteria.getFinancialTransactionsId(), root ->
                     root.join(FinancialSubscription_.financialTransactions, JoinType.LEFT).get(FinancialTransaction_.id)
-                ),
-                buildSpecification(criteria.getTransactionRulesId(), root ->
-                    root.join(FinancialSubscription_.transactionRules, JoinType.LEFT).get(TransactionRule_.id)
                 )
             );
             if (!currentUserService.isAdmin()) {
