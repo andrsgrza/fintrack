@@ -205,7 +205,7 @@ describe('TransactionRule UX', () => {
 
     expect(screen.getByRole('heading', { name: 'Add condition' })).toBeTruthy();
     expect(screen.queryByLabelText('Transaction Rule')).toBeNull();
-    expect((screen.getByLabelText('Position') as HTMLInputElement).value).toBe('0');
+    expect(screen.queryByLabelText('Position')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'Coffee' } });
     fireEvent.click(screen.getByRole('button', { name: /save condition/i }));
@@ -219,11 +219,11 @@ describe('TransactionRule UX', () => {
           value: 'Coffee',
           secondValue: null,
           caseSensitive: false,
-          position: 0,
           transactionRule: { id: 1 },
         }),
       ),
     );
+    expect(mockAxiosPost.mock.calls[0][1]).not.toHaveProperty('position');
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
   });
 
@@ -246,6 +246,7 @@ describe('TransactionRule UX', () => {
 
     expect(screen.getByRole('heading', { name: 'Edit condition' })).toBeTruthy();
     expect(screen.queryByLabelText('Transaction Rule')).toBeNull();
+    expect(screen.queryByLabelText('Position')).toBeNull();
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'Tea' } });
     fireEvent.click(screen.getByRole('button', { name: /update condition/i }));
 
@@ -257,13 +258,13 @@ describe('TransactionRule UX', () => {
         }),
       ),
     );
+    expect(mockAxiosPatch.mock.calls[0][1]).not.toHaveProperty('position');
     expect(mockAxiosPatch.mock.calls[0][1]).toEqual(
       expect.objectContaining({
         id: 11,
         field: 'DESCRIPTION',
         operator: 'CONTAINS',
         value: 'Tea',
-        position: 1,
       }),
     );
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
@@ -333,6 +334,7 @@ describe('TransactionRule UX', () => {
     expect(await screen.findByText('Coffee')).toBeTruthy();
     expect(screen.getAllByText('Description').length).toBeGreaterThan(0);
     expect(screen.getByText('Contains')).toBeTruthy();
+    expect(screen.queryByText('Position')).toBeNull();
     expect(screen.queryByRole('button', { name: /view/i })).toBeNull();
     expect(screen.getByRole('button', { name: /edit/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /delete condition/i })).toBeTruthy();

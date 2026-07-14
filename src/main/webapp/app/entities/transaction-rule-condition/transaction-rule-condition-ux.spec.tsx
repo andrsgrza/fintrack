@@ -125,6 +125,7 @@ describe('TransactionRuleCondition UX', () => {
 
     expect(screen.getByRole('heading', { name: 'Create Transaction Rule Condition' })).toBeTruthy();
     expect((screen.getByLabelText('Transaction Rule') as HTMLSelectElement).value).toBe('1');
+    expect(screen.queryByLabelText('Position')).toBeNull();
   });
 
   it('renders dynamic edit title and disables parent in edit mode', () => {
@@ -132,6 +133,7 @@ describe('TransactionRuleCondition UX', () => {
 
     expect(screen.getByRole('heading', { name: 'Edit Transaction Rule Condition' })).toBeTruthy();
     expect((screen.getByLabelText('Transaction Rule') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.queryByLabelText('Position')).toBeNull();
   });
 
   it('shows second value only for BETWEEN operator', () => {
@@ -258,7 +260,6 @@ describe('TransactionRuleCondition UX', () => {
 
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'ACCOUNT' } });
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: '2' } });
-    fireEvent.change(screen.getByLabelText('Position'), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
     await waitFor(() =>
@@ -271,5 +272,26 @@ describe('TransactionRuleCondition UX', () => {
         }),
       ),
     );
+    expect(mockCreateEntity.mock.calls[0][0]).not.toHaveProperty('position');
+  });
+
+  it('submits standalone edit payload without position', async () => {
+    renderEditForm();
+
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'Tea' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() =>
+      expect(mockPartialUpdateEntity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 5,
+          field: 'DESCRIPTION',
+          operator: 'CONTAINS',
+          value: 'Tea',
+          caseSensitive: false,
+        }),
+      ),
+    );
+    expect(mockPartialUpdateEntity.mock.calls[0][0]).not.toHaveProperty('position');
   });
 });

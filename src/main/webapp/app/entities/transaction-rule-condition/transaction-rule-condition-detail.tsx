@@ -62,12 +62,6 @@ export const TransactionRuleConditionDetail = () => {
           </dt>
           <dd>{transactionRuleConditionEntity.caseSensitive ? 'true' : 'false'}</dd>
           <dt>
-            <span id="position">
-              <Translate contentKey="fintrackApp.transactionRuleCondition.position">Position</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleConditionEntity.position}</dd>
-          <dt>
             <Translate contentKey="fintrackApp.transactionRuleCondition.transactionRule">Transaction Rule</Translate>
           </dt>
           <dd>{transactionRuleConditionEntity.transactionRule ? transactionRuleConditionEntity.transactionRule.name : ''}</dd>

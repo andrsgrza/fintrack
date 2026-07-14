@@ -39,7 +39,6 @@ export const TransactionRuleConditionsCollectionEditor = ({
   const [submitting, setSubmitting] = useState(false);
 
   const sortedConditions = useMemo(() => sortConditions(conditions), [conditions]);
-  const nextPosition = sortedConditions.length === 0 ? 0 : Math.max(...sortedConditions.map(condition => condition.position ?? 0)) + 1;
 
   const publishConditionsState = useCallback(
     (nextConditions: ITransactionRuleCondition[], loaded: boolean, failed: boolean) => {
@@ -109,7 +108,6 @@ export const TransactionRuleConditionsCollectionEditor = ({
       value: entity.value,
       secondValue: entity.secondValue,
       caseSensitive: entity.caseSensitive,
-      position: entity.position,
     };
     axios
       .patch<ITransactionRuleCondition>(`${apiUrl}/${entity.id}`, cleanEntity(patchEntity))
@@ -184,7 +182,6 @@ export const TransactionRuleConditionsCollectionEditor = ({
           <TransactionRuleConditionFormSection
             isNew
             fixedTransactionRuleId={transactionRuleId}
-            defaultPosition={nextPosition}
             showParentSelector={false}
             submitting={submitting}
             submitLabelKey="fintrackApp.transactionRule.saveCondition"
@@ -225,9 +222,6 @@ export const TransactionRuleConditionsCollectionEditor = ({
           <thead>
             <tr>
               <th>
-                <Translate contentKey="fintrackApp.transactionRuleCondition.position">Position</Translate>
-              </th>
-              <th>
                 <Translate contentKey="fintrackApp.transactionRuleCondition.field">Field</Translate>
               </th>
               <th>
@@ -248,7 +242,6 @@ export const TransactionRuleConditionsCollectionEditor = ({
           <tbody>
             {sortedConditions.map(condition => (
               <tr key={condition.id}>
-                <td>{condition.position}</td>
                 <td>{condition.field ? translate(`fintrackApp.TransactionRuleField.${condition.field}`) : ''}</td>
                 <td>{condition.operator ? translate(`fintrackApp.RuleOperator.${condition.operator}`) : ''}</td>
                 <td>{condition.value}</td>

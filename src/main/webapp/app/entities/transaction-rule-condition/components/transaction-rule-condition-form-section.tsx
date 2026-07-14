@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, FormText } from 'reactstrap';
-import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
+import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { useAppDispatch, useAppSelector } from 'app/config/store';
@@ -22,7 +22,6 @@ interface TransactionRuleConditionFormSectionProps {
   initialCondition?: ITransactionRuleCondition;
   isNew: boolean;
   fixedTransactionRuleId?: string | number;
-  defaultPosition?: number;
   showParentSelector?: boolean;
   parentDisabled?: boolean;
   requestedTransactionRuleId?: string | number;
@@ -37,7 +36,6 @@ export const TransactionRuleConditionFormSection = ({
   initialCondition,
   isNew,
   fixedTransactionRuleId,
-  defaultPosition,
   showParentSelector = true,
   parentDisabled = false,
   requestedTransactionRuleId,
@@ -134,14 +132,10 @@ export const TransactionRuleConditionFormSection = ({
     field: initialCondition?.field ?? TransactionRuleField.DESCRIPTION,
     operator: initialCondition?.operator ?? RuleOperator.EQUALS,
     caseSensitive: initialCondition?.caseSensitive ?? false,
-    position: initialCondition?.position ?? defaultPosition,
     transactionRule: fixedTransactionRuleId ?? initialCondition?.transactionRule?.id ?? requestedTransactionRuleId ?? undefined,
   });
 
   const saveEntity = values => {
-    const position =
-      values.position !== undefined && values.position !== null && values.position !== '' ? Number(values.position) : values.position;
-
     const entity: ITransactionRuleCondition = {
       id: initialCondition?.id ?? values.id,
       field: selectedField,
@@ -149,7 +143,6 @@ export const TransactionRuleConditionFormSection = ({
       value,
       secondValue: isBetweenOperator ? secondValue : null,
       caseSensitive: supportsCaseSensitive ? caseSensitive : false,
-      position,
     };
 
     if (isNew) {
@@ -309,18 +302,6 @@ export const TransactionRuleConditionFormSection = ({
           onChange={event => setCaseSensitive(event.target.checked)}
         />
       ) : null}
-      <ValidatedField
-        label={translate('fintrackApp.transactionRuleCondition.position')}
-        id="transaction-rule-condition-position"
-        name="position"
-        data-cy="position"
-        type="text"
-        validate={{
-          required: { value: true, message: translate('entity.validation.required') },
-          min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
-          validate: v => isNumber(v) || translate('entity.validation.number'),
-        }}
-      />
       {showParentSelector ? (
         <>
           <ValidatedField

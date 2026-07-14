@@ -1470,20 +1470,22 @@ Rehabilitated create/delete (sin selector User).
 
 **Parent rule:** DTO keeps `@NotNull` on `transactionRule`; mapper ignores it; service resolves from DB on create. PATCH uses `JsonNode`: absent field preserves parent; same `{id}` → OK; different `{id}` → `400` (even same owner); `null` → `400`.
 
+**Position:** `position` is server-managed. Create appends (`0`, then max+1) and ignores client-provided position. PUT/PATCH preserve existing position; explicit same position is a no-op; explicit changed or null position returns `400 invalid`. Delete does not reindex remaining positions.
+
 **Domain rules:** field/operator/value matrices; duplicate guard; DELETE last condition → `TransactionRule.active = false` + `updatedAt`; `ACCOUNT` ids validated vs **rule owner** (`transactionRule.user.login`).
 
 ### Summary counts
 
-| Type           | File                                              | Tests  | Custom vs generated                                                                |
-| -------------- | ------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Integration IT | `TransactionRuleConditionResourceIT`              | **55** | 35 custom (ownership + parent immutable + domain rules) + 20 JHipster CRUD/filters |
-| Unit — service | `TransactionRuleConditionServiceTest`             | **11** | All custom (ownership + validations + delete side-effect)                          |
-| Unit — domain  | `TransactionRuleConditionTest`                    | **2**  | Generated                                                                          |
-| Unit — mapper  | `TransactionRuleConditionMapperTest`              | **1**  | Generated                                                                          |
-| Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                          |
-| Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers     |
-| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **18** | Smart condition form behavior + previous parent/title visibility checks            |
-| E2E            | `transaction-rule-condition.cy.ts`                | **8**  | CRUD/navigation + delete dialog copy                                               |
+| Type           | File                                              | Tests  | Custom vs generated                                                                                   |
+| -------------- | ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionRuleConditionResourceIT`              | **62** | Custom ownership + parent immutable + server-managed position + domain rules + generated CRUD/filters |
+| Unit — service | `TransactionRuleConditionServiceTest`             | **17** | Custom ownership + validations + server-managed position + delete side-effect                         |
+| Unit — domain  | `TransactionRuleConditionTest`                    | **2**  | Generated                                                                                             |
+| Unit — mapper  | `TransactionRuleConditionMapperTest`              | **1**  | Generated                                                                                             |
+| Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                                             |
+| Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers                        |
+| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **18** | Smart condition form behavior + previous parent/title visibility checks                               |
+| E2E            | `transaction-rule-condition.cy.ts`                | **8**  | CRUD/navigation + delete dialog copy                                                                  |
 
 **Run:**
 
@@ -1525,14 +1527,19 @@ Rehabilitated create/delete (sin selector User).
 | `createTransactionRuleConditionWithRuleOwnedByAnotherUserFails`           | `POST`  | Normal user foreign parent → `400` invalid |
 | `adminCanCreateTransactionRuleConditionUnderForeignRule`                  | `POST`  | Admin foreign parent → `201`               |
 
-**Remove / replace:**
+#### Position — server-managed — ✅
 
-| Test                                                            | Action                                  |
-| --------------------------------------------------------------- | --------------------------------------- |
-| `adminCanReparentTransactionRuleConditionWithinSameOwner`       | **Remove** — reparent no longer allowed |
-| `updateTransactionRuleConditionWithRuleOwnedByAnotherUserFails` | Keep — cross-owner still `400`          |
-| `patchTransactionRuleConditionWithForeignRuleFails`             | Keep — cross-owner still `400`          |
-| `adminCannotReparentTransactionRuleConditionAcrossOwners`       | Rename/repurpose → different id fails   |
+| Test                                                                   | HTTP          | What it checks                                     |
+| ---------------------------------------------------------------------- | ------------- | -------------------------------------------------- |
+| `createWithoutPositionAssignsNextPosition`                             | `POST`        | Omitted position gets `0` for first condition      |
+| `createSecondConditionAssignsMaxPlusOneAndIgnoresClientPosition`       | `POST`        | Client position ignored; server appends max+1      |
+| `createAfterDeletingMiddleConditionAssignsMaxPlusOneWithoutReindexing` | `POST/DELETE` | Delete gap remains; next create uses current max+1 |
+| `putChangedPositionFails`                                              | `PUT`         | Changed position → `400 invalid`                   |
+| `putNullPositionFails`                                                 | `PUT`         | Explicit `position: null` → `400 invalid`          |
+| `partialUpdateTransactionRuleConditionWithPatch`                       | `PATCH`       | Omitted position preserves current position        |
+| `patchSamePositionSucceedsAndPreservesPosition`                        | `PATCH`       | Same position allowed as no-op                     |
+| `patchChangedPositionFails`                                            | `PATCH`       | Changed position → `400 invalid`                   |
+| `patchNullPositionFails`                                               | `PATCH`       | Explicit `position: null` → `400 invalid`          |
 
 #### DELETE side-effect (4) — ✅
 
@@ -1563,7 +1570,7 @@ Happy-path CRUD, required-field checks, criteria per field.
 
 ### Unit — `TransactionRuleConditionServiceTest` — ✅
 
-11 tests cover parent immutability, merged-state validation, duplicate normalization, delete deactivation, and ACCOUNT owner-login resolution.
+Service tests cover parent immutability, merged-state validation, duplicate normalization, server-managed position assignment/immutability, delete deactivation, and ACCOUNT owner-login resolution.
 
 ### Frontend smart form tests — ✅
 
@@ -1579,6 +1586,7 @@ Happy-path CRUD, required-field checks, criteria per field.
 - dynamic create/edit titles;
 - parent preselect from `transactionRuleId`;
 - parent read-only in edit;
+- position hidden from create/edit and omitted from create/edit payloads;
 - operator filtering by selected field;
 - `secondValue` only for `BETWEEN`;
 - `caseSensitive` only for text fields;

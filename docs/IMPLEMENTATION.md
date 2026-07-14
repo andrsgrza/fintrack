@@ -472,39 +472,42 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | `ACCOUNT` values                            | Validar ids contra **`transactionRule.user.login`**, no admin                                                                          |
 | Smart condition form                        | UI filtra operadores por campo, tipa inputs de valor y mantiene parent read-only en edit                                               |
 | Embedded collection editor                  | TransactionRule detail manages child conditions inline without exposing parent selector                                                |
+| `position` server-managed                   | Create appends using `max(position)+1`; create ignores client `position`; PUT/PATCH preserve and reject changed/null position          |
 
 **Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI, `transaction-rule-condition-form-helpers.ts`, `transaction-rule-condition-form-section.tsx`.
 
 #### Domain rules ✅
 
-| Regla                                           | Estado | Notas                                                                                         |
-| ----------------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
-| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                                                          |
-| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción                                                       |
-| Create en rule inactiva no reactiva             | ✅     |                                                                                               |
-| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices                                                |
-| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización                                                       |
-| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update                                                        |
-| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator                                          |
-| UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                       |
-| UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text |
-| UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                |
-| Embedded parent hidden/fixed                    | ✅     | TransactionRule detail create sends current parent id; edit PATCH omits parent                |
-| Delete dialog copy                              | ✅     | i18n en/es                                                                                    |
-| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                  |
+| Regla                                           | Estado | Notas                                                                                                  |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                                                                   |
+| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción                                                                |
+| Create en rule inactiva no reactiva             | ✅     |                                                                                                        |
+| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices                                                         |
+| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización                                                                |
+| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update                                                                 |
+| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator                                                   |
+| UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                                |
+| UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text          |
+| UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                         |
+| Embedded parent hidden/fixed                    | ✅     | TransactionRule detail create sends current parent id; edit PATCH omits parent                         |
+| Position hidden from normal UX                  | ✅     | Position is an internal server-managed order; standalone/embedded forms and normal list/detail hide it |
+| Delete dialog copy                              | ✅     | i18n en/es                                                                                             |
+| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                           |
 
 #### Validations ✅
 
-| Capa              | Estado      | Detalle                                                                                                                            |
-| ----------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| DTO `@Valid`      | ✅ JHipster | shape: field, operator, value, caseSensitive, position, transactionRule                                                            |
-| Service — parent  | ✅          | Inmutable tras create; PATCH preserve/null/same id                                                                                 |
-| Service — negocio | ✅          | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner                                                     |
-| UI helper         | ✅          | Pure helper exposes `getAllowedOperators`, field-kind checks, `requiresSecondValue`, `supportsCaseSensitive`, and value input kind |
-| UI form section   | ✅          | Shared by standalone and embedded flows; standalone still shows parent selector; embedded hides it                                 |
-| REST              | ✅          | `@Valid` POST/PUT; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400`                                                     |
+| Capa               | Estado | Detalle                                                                                                                            |
+| ------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| DTO / Entity       | ✅     | DTO accepts omitted client `position`; entity/DB still require server-assigned `position >= 0`                                     |
+| Service — parent   | ✅     | Inmutable tras create; PATCH preserve/null/same id                                                                                 |
+| Service — position | ✅     | Create appends; PUT/PATCH same value no-op; changed/null position → `400 invalid`; delete does not reindex                         |
+| Service — negocio  | ✅     | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner                                                     |
+| UI helper          | ✅     | Pure helper exposes `getAllowedOperators`, field-kind checks, `requiresSecondValue`, `supportsCaseSensitive`, and value input kind |
+| UI form section    | ✅     | Shared by standalone and embedded flows; standalone still shows parent selector; embedded hides it                                 |
+| REST               | ✅     | POST/PUT/PATCH use service validation for server-managed position; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400`     |
 
-**Tests:** 55 IT + 11 service — ver [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
+**Tests:** 62 IT + 17 service — ver [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
 
 ---
 
@@ -1014,7 +1017,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-09 | FinancialSubscription: PATCH link semantics ✅ (`JsonNode` + `has(field)`); links owned en PUT/PATCH ✅. Convención HTTP cross-user documentada en Foundation.                                                                                                                                                                                                               |
 | 2026-07-09 | TransactionRule: ownership ✅ (pattern A + links), domain rules 🟡 (outputs ⊆ rule owner, sin bypass admin en links; motor ⏳), validations ✅. Siguiente: TransactionRuleCondition.                                                                                                                                                                                         |
 | 2026-07-11 | **TransactionRuleCondition plan:** `transactionRule` immutable after create — **reparent same-owner removed**. Domain validations planned: field/operator matrices, duplicate guard, DELETE last condition → deactivate parent rule.                                                                                                                                         |
-| 2026-07-11 | **TransactionRuleCondition complete:** immutable parent, field/operator/value matrices, normalized duplicate guard, owner-scoped ACCOUNT ids, presence-aware PATCH null handling, and last-condition rule deactivation. 55 IT + 11 service tests passing.                                                                                                                    |
+| 2026-07-11 | **TransactionRuleCondition complete:** immutable parent, field/operator/value matrices, normalized duplicate guard, owner-scoped ACCOUNT ids, presence-aware PATCH null handling, and last-condition rule deactivation. Later hardened `position` as server-managed append order.                                                                                            |
 | 2026-07-09 | TransactionRuleCondition: ownership ✅ (pattern C via `transactionRule`), validations ✅ (parent required, ~~reparent same-owner~~ → **immutable parent**). Domain rules 🟡 (field/operator/value, delete side-effect). Siguiente: implement TRC domain rules.                                                                                                               |
 | 2026-07-09 | CreditAccountDetails: ownership ✅ (pattern B via `account`), validations ✅ (CREDIT_CARD only, immutable account, duplicate guard). Domain rules 🟡. Siguiente: ApiAccessToken.                                                                                                                                                                                             |
 | 2026-07-09 | ApiAccessToken: ownership ✅ (pattern A), security baseline ✅ (no `tokenHash` in reads, immutable secrets). Domain rules 🟡. Siguiente: ApiAccessTokenPermission.                                                                                                                                                                                                           |

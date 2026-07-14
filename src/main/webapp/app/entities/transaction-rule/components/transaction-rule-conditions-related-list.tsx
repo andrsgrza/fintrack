@@ -74,9 +74,6 @@ export const TransactionRuleConditionsRelatedList = ({ transactionRuleId }: Tran
           <thead>
             <tr>
               <th>
-                <Translate contentKey="fintrackApp.transactionRuleCondition.position">Position</Translate>
-              </th>
-              <th>
                 <Translate contentKey="fintrackApp.transactionRuleCondition.field">Field</Translate>
               </th>
               <th>
@@ -97,7 +94,6 @@ export const TransactionRuleConditionsRelatedList = ({ transactionRuleId }: Tran
           <tbody>
             {conditions.map(condition => (
               <tr key={condition.id}>
-                <td>{condition.position}</td>
                 <td>{condition.field ? translate(`fintrackApp.TransactionRuleField.${condition.field}`) : ''}</td>
                 <td>{condition.operator ? translate(`fintrackApp.RuleOperator.${condition.operator}`) : ''}</td>
                 <td>{condition.value}</td>

@@ -666,7 +666,9 @@ Suggested copy documented; `budget-delete-dialog.tsx` + i18n en/es.
 
 ### Mutable fields
 
-`field`, `operator`, `value`, `secondValue`, `caseSensitive`, `position`.
+Client-editable fields: `field`, `operator`, `value`, `secondValue`, `caseSensitive`.
+
+`position` is server-managed. New conditions are appended using `max(existing position for rule) + 1` (`0` for the first condition). Client-provided `position` on create is ignored. PUT/PATCH preserve the existing value; explicit same value is allowed as a no-op, explicit changed value or explicit `null` is rejected with `400 invalid`.
 
 Validate **final merged state** after PUT/PATCH (not only submitted fields). Example: PATCH operator `BETWEEN` → `EQUALS` while `secondValue` remains in DB → `400`.
 
@@ -701,7 +703,7 @@ Operators: `EQUALS`, `NOT_EQUALS`, `IN`, `NOT_IN`.
 | `value` required                     | Non-null, non-blank (trim)                                          | **Done** |
 | `secondValue` for `BETWEEN` only     | Required; `value <= secondValue` after parse                        | **Done** |
 | `secondValue` for non-`BETWEEN`      | Must be null/blank                                                  | **Done** |
-| `position` ≥ 0                       | Required, mutable; no unique position per rule                      | **Done** |
+| `position` ≥ 0                       | Server-managed append order; no unique position per rule            | **Done** |
 | `caseSensitive`                      | Required; accept as provided; execution uses only on TEXT           | **Done** |
 | PATCH required field explicit `null` | Reject `field`, `operator`, `value`, `caseSensitive`, or `position` | **Done** |
 | PATCH `secondValue: null`            | Clear optional second value before merged-state validation          | **Done** |
@@ -738,7 +740,7 @@ The standalone TransactionRuleCondition create/edit form and embedded Transactio
 
 ### Out of scope
 
-Rule execution engine; batch reclassification; unique `position`; new enum values; condition reorder UI.
+Rule execution engine; batch reclassification; unique `position`; new enum values; condition reorder UI/API.
 
 ### Product rules (deferred)
 
@@ -838,7 +840,8 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                 | **Done**     |
 | Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                | **Done**     |
 | Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                               | **Deferred** |
-| Condition reorder UI                    | No drag/drop or reorder controls yet; `position` remains editable in the inline form                           | **Deferred** |
+| Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`            | **Done**     |
+| Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                   | **Deferred** |
 | Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                                         | **Deferred** |
 
 ### Output PATCH semantics
