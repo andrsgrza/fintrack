@@ -31,6 +31,8 @@ describe('Entities reducer tests', () => {
     totalItems: 0,
     updating: false,
     updateSuccess: false,
+    ingestionRecordParentCandidates: [],
+    loadingIngestionRecordParentCandidates: false,
   };
 
   function testInitialState(state) {
