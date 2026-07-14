@@ -1,5 +1,7 @@
 package com.fintrack.app.web.rest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.CategoryQueryService;
 import com.fintrack.app.service.CategoryService;
 import com.fintrack.app.service.criteria.CategoryCriteria;
@@ -38,9 +40,12 @@ public class CategoryResource {
 
     private final CategoryQueryService categoryQueryService;
 
-    public CategoryResource(CategoryService categoryService, CategoryQueryService categoryQueryService) {
+    private final ObjectMapper objectMapper;
+
+    public CategoryResource(CategoryService categoryService, CategoryQueryService categoryQueryService, ObjectMapper objectMapper) {
         this.categoryService = categoryService;
         this.categoryQueryService = categoryQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -117,9 +122,18 @@ public class CategoryResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<CategoryDTO> partialUpdateCategory(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody CategoryDTO categoryDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update Category partially : {}, {}", id, categoryDTO);
+        LOG.debug("REST request to partial update Category partially : {}, {}", id, patchNode);
+        CategoryDTO categoryDTO;
+        try {
+            categoryDTO = objectMapper.treeToValue(patchNode, CategoryDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
+        if (categoryDTO.getId() == null) {
+            categoryDTO.setId(id);
+        }
         if (categoryDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
@@ -133,7 +147,7 @@ public class CategoryResource {
 
         Optional<CategoryDTO> result;
         try {
-            result = categoryService.partialUpdate(categoryDTO);
+            result = categoryService.partialUpdate(categoryDTO, patchNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }

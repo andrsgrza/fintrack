@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
@@ -84,6 +85,8 @@ class CategoryResourceIT {
 
     private static final Instant DEFAULT_UPDATED_AT = Instant.ofEpochMilli(0L);
     private static final Instant UPDATED_UPDATED_AT = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+    private static final Instant CLIENT_CREATED_AT = Instant.parse("2000-01-01T00:00:00Z");
+    private static final Instant CLIENT_UPDATED_AT = Instant.parse("2000-01-02T00:00:00Z");
 
     private static final String ENTITY_API_URL = "/api/categories";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
@@ -296,36 +299,97 @@ class CategoryResourceIT {
 
     @Test
     @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createCategoryWithoutCreatedAtSucceeds() throws Exception {
         category.setCreatedAt(null);
 
-        // Create the Category, which fails.
+        long databaseSizeBeforeCreate = getRepositoryCount();
         CategoryDTO categoryDTO = categoryMapper.toDto(category);
 
-        restCategoryMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
-            .andExpect(status().isBadRequest());
+        var returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        Category persistedCategory = getPersistedCategory(categoryMapper.toEntity(returnedCategoryDTO));
+        assertThat(persistedCategory.getCreatedAt()).isNotNull();
+        assertThat(persistedCategory.getCreatedAt()).isNotEqualTo(DEFAULT_CREATED_AT);
+        insertedCategory = persistedCategory;
     }
 
     @Test
     @Transactional
-    void checkUpdatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createCategoryWithoutUpdatedAtSucceeds() throws Exception {
         category.setUpdatedAt(null);
 
-        // Create the Category, which fails.
+        long databaseSizeBeforeCreate = getRepositoryCount();
         CategoryDTO categoryDTO = categoryMapper.toDto(category);
 
-        restCategoryMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
-            .andExpect(status().isBadRequest());
+        var returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        Category persistedCategory = getPersistedCategory(categoryMapper.toEntity(returnedCategoryDTO));
+        assertThat(persistedCategory.getUpdatedAt()).isNotNull();
+        assertThat(persistedCategory.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+        insertedCategory = persistedCategory;
+    }
+
+    @Test
+    @Transactional
+    void createCategoryIgnoresClientTimestamps() throws Exception {
+        category.setCreatedAt(CLIENT_CREATED_AT);
+        category.setUpdatedAt(CLIENT_UPDATED_AT);
+
+        long databaseSizeBeforeCreate = getRepositoryCount();
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+
+        var returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
+
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        Category persistedCategory = getPersistedCategory(categoryMapper.toEntity(returnedCategoryDTO));
+        assertThat(persistedCategory.getCreatedAt()).isNotEqualTo(CLIENT_CREATED_AT);
+        assertThat(persistedCategory.getUpdatedAt()).isNotEqualTo(CLIENT_UPDATED_AT);
+        insertedCategory = persistedCategory;
+    }
+
+    @Test
+    @Transactional
+    void legacyCreateCategoryWithNullTimestampsSucceeds() throws Exception {
+        category.setCreatedAt(null);
+        category.setUpdatedAt(null);
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+
+        var returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
+        insertedCategory = getPersistedCategory(categoryMapper.toEntity(returnedCategoryDTO));
     }
 
     @Test
@@ -873,9 +937,44 @@ class CategoryResourceIT {
             .color(UPDATED_COLOR)
             .icon(UPDATED_ICON)
             .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .createdAt(category.getCreatedAt())
+            .updatedAt(category.getUpdatedAt());
         CategoryDTO categoryDTO = categoryMapper.toDto(updatedCategory);
+
+        var returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(
+                    put(ENTITY_API_URL_ID, categoryDTO.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsBytes(categoryDTO))
+                )
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
+
+        // Validate the Category in the database
+        assertSameRepositoryCount(databaseSizeBeforeUpdate);
+        Category persistedCategory = getPersistedCategory(updatedCategory);
+        assertThat(persistedCategory.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persistedCategory.getDescription()).isEqualTo(UPDATED_DESCRIPTION);
+        assertThat(persistedCategory.getCategoryType()).isEqualTo(UPDATED_CATEGORY_TYPE);
+        assertThat(persistedCategory.getColor()).isEqualTo(UPDATED_COLOR);
+        assertThat(persistedCategory.getIcon()).isEqualTo(UPDATED_ICON);
+        assertThat(persistedCategory.getActive()).isEqualTo(UPDATED_ACTIVE);
+        assertThat(persistedCategory.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCategory.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+        assertThat(returnedCategoryDTO.getUpdatedAt()).isEqualTo(persistedCategory.getUpdatedAt());
+    }
+
+    @Test
+    @Transactional
+    void putCategoryWithChangedCreatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setCreatedAt(UPDATED_CREATED_AT);
 
         restCategoryMockMvc
             .perform(
@@ -883,11 +982,55 @@ class CategoryResourceIT {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(om.writeValueAsBytes(categoryDTO))
             )
-            .andExpect(status().isOk());
+            .andExpect(status().isBadRequest());
+    }
 
-        // Validate the Category in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedCategoryToMatchAllProperties(updatedCategory);
+    @Test
+    @Transactional
+    void putCategoryWithChangedUpdatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setUpdatedAt(UPDATED_UPDATED_AT);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void putCategoryWithNullCreatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setCreatedAt(null);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void putCategoryWithNullUpdatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        CategoryDTO categoryDTO = categoryMapper.toDto(category);
+        categoryDTO.setUpdatedAt(null);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -960,29 +1103,63 @@ class CategoryResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the category using partial update
-        Category partialUpdatedCategory = new Category();
-        partialUpdatedCategory.setId(category.getId());
+        // Update the category using partial update. Build explicit merge-patch JSON so
+        // omitted server-owned timestamps are not serialized as nulls.
+        ObjectNode partialUpdatedCategory = om.createObjectNode();
+        partialUpdatedCategory.put("id", category.getId());
+        partialUpdatedCategory.put("name", UPDATED_NAME);
+        partialUpdatedCategory.put("categoryType", UPDATED_CATEGORY_TYPE.toString());
+        partialUpdatedCategory.put("color", UPDATED_COLOR);
+        partialUpdatedCategory.put("active", UPDATED_ACTIVE);
 
-        partialUpdatedCategory
-            .name(UPDATED_NAME)
-            .categoryType(UPDATED_CATEGORY_TYPE)
-            .color(UPDATED_COLOR)
-            .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT);
-
-        restCategoryMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedCategory.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedCategory))
-            )
-            .andExpect(status().isOk());
+        var returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(
+                    patch(ENTITY_API_URL_ID, category.getId())
+                        .contentType("application/merge-patch+json")
+                        .content(om.writeValueAsBytes(partialUpdatedCategory))
+                )
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
 
         // Validate the Category in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertCategoryUpdatableFieldsEquals(createUpdateProxyForBean(partialUpdatedCategory, category), getPersistedCategory(category));
+        Category persistedCategory = getPersistedCategory(category);
+        assertThat(persistedCategory.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persistedCategory.getCategoryType()).isEqualTo(UPDATED_CATEGORY_TYPE);
+        assertThat(persistedCategory.getColor()).isEqualTo(UPDATED_COLOR);
+        assertThat(persistedCategory.getActive()).isEqualTo(UPDATED_ACTIVE);
+        assertThat(persistedCategory.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCategory.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+        assertThat(returnedCategoryDTO.getUpdatedAt()).isEqualTo(persistedCategory.getUpdatedAt());
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryWithSameTimestampsSucceeds() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        CategoryDTO patchPayload = new CategoryDTO();
+        patchPayload.setId(category.getId());
+        patchPayload.setCreatedAt(DEFAULT_CREATED_AT);
+        patchPayload.setUpdatedAt(DEFAULT_UPDATED_AT);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, category.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isOk());
+
+        Category persistedCategory = getPersistedCategory(category);
+        assertThat(persistedCategory.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCategory.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
     }
 
     @Test
@@ -1004,21 +1181,98 @@ class CategoryResourceIT {
             .color(UPDATED_COLOR)
             .icon(UPDATED_ICON)
             .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT);
 
-        restCategoryMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedCategory.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedCategory))
-            )
-            .andExpect(status().isOk());
+        var returnedCategoryDTO = om.readValue(
+            restCategoryMockMvc
+                .perform(
+                    patch(ENTITY_API_URL_ID, partialUpdatedCategory.getId())
+                        .contentType("application/merge-patch+json")
+                        .content(om.writeValueAsBytes(partialUpdatedCategory))
+                )
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CategoryDTO.class
+        );
 
         // Validate the Category in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertCategoryUpdatableFieldsEquals(partialUpdatedCategory, getPersistedCategory(partialUpdatedCategory));
+        Category persistedCategory = getPersistedCategory(partialUpdatedCategory);
+        assertThat(persistedCategory.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persistedCategory.getDescription()).isEqualTo(UPDATED_DESCRIPTION);
+        assertThat(persistedCategory.getCategoryType()).isEqualTo(UPDATED_CATEGORY_TYPE);
+        assertThat(persistedCategory.getColor()).isEqualTo(UPDATED_COLOR);
+        assertThat(persistedCategory.getIcon()).isEqualTo(UPDATED_ICON);
+        assertThat(persistedCategory.getActive()).isEqualTo(UPDATED_ACTIVE);
+        assertThat(persistedCategory.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCategory.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+        assertThat(returnedCategoryDTO.getUpdatedAt()).isEqualTo(persistedCategory.getUpdatedAt());
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryWithChangedCreatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        CategoryDTO patchPayload = new CategoryDTO();
+        patchPayload.setId(category.getId());
+        patchPayload.setCreatedAt(UPDATED_CREATED_AT);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, category.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryWithChangedUpdatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+        CategoryDTO patchPayload = new CategoryDTO();
+        patchPayload.setId(category.getId());
+        patchPayload.setUpdatedAt(UPDATED_UPDATED_AT);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, category.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryWithNullCreatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, category.getId())
+                    .contentType("application/merge-patch+json")
+                    .content("{\"id\":" + category.getId() + ",\"createdAt\":null}")
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void patchCategoryWithNullUpdatedAtFails() throws Exception {
+        insertedCategory = categoryRepository.saveAndFlush(category);
+
+        restCategoryMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, category.getId())
+                    .contentType("application/merge-patch+json")
+                    .content("{\"id\":" + category.getId() + ",\"updatedAt\":null}")
+            )
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -1262,19 +1516,18 @@ class CategoryResourceIT {
         insertedCategory = categoryRepository.saveAndFlush(category);
         User otherUser = createOtherUser(em);
 
-        CategoryDTO categoryDTO = new CategoryDTO();
-        categoryDTO.setId(category.getId());
-        categoryDTO.setName(UPDATED_NAME);
-        UserDTO otherUserDTO = new UserDTO();
-        otherUserDTO.setId(otherUser.getId());
-        otherUserDTO.setLogin(otherUser.getLogin());
-        categoryDTO.setUser(otherUserDTO);
+        ObjectNode categoryPatch = om.createObjectNode();
+        categoryPatch.put("id", category.getId());
+        categoryPatch.put("name", UPDATED_NAME);
+        ObjectNode otherUserPatch = categoryPatch.putObject("user");
+        otherUserPatch.put("id", otherUser.getId());
+        otherUserPatch.put("login", otherUser.getLogin());
 
         restCategoryMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, categoryDTO.getId())
+                patch(ENTITY_API_URL_ID, category.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(categoryDTO))
+                    .content(om.writeValueAsBytes(categoryPatch))
             )
             .andExpect(status().isOk());
 
@@ -1979,9 +2232,9 @@ class CategoryResourceIT {
         category.setParentCategory(parentCategory);
         insertedCategory = categoryRepository.saveAndFlush(category);
 
-        CategoryDTO patchPayload = new CategoryDTO();
-        patchPayload.setId(category.getId());
-        patchPayload.setDescription(UPDATED_DESCRIPTION);
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", category.getId());
+        patchPayload.put("description", UPDATED_DESCRIPTION);
 
         restCategoryMockMvc
             .perform(
@@ -2005,11 +2258,10 @@ class CategoryResourceIT {
         category.setParentCategory(parentCategory);
         insertedCategory = categoryRepository.saveAndFlush(category);
 
-        CategoryDTO patchPayload = new CategoryDTO();
-        patchPayload.setId(category.getId());
-        CategoryDTO parentDTO = new CategoryDTO();
-        parentDTO.setId(parentCategory.getId());
-        patchPayload.setParentCategory(parentDTO);
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", category.getId());
+        ObjectNode parentDTO = patchPayload.putObject("parentCategory");
+        parentDTO.put("id", parentCategory.getId());
 
         restCategoryMockMvc
             .perform(

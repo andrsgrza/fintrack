@@ -1,17 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
-import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
-import { getEntities as getBudgets } from 'app/entities/budget/budget.reducer';
 import { CategoryType } from 'app/shared/model/enumerations/category-type.model';
-import { createEntity, getEntity, reset, updateEntity } from './category.reducer';
+import { createEntity, getEntity, partialUpdateEntity, reset } from './category.reducer';
 
 export const CategoryUpdate = () => {
   const dispatch = useAppDispatch();
@@ -22,12 +19,18 @@ export const CategoryUpdate = () => {
   const isNew = id === undefined;
 
   const categories = useAppSelector(state => state.category.entities);
-  const budgets = useAppSelector(state => state.budget.entities);
   const categoryEntity = useAppSelector(state => state.category.entity);
   const loading = useAppSelector(state => state.category.loading);
   const updating = useAppSelector(state => state.category.updating);
   const updateSuccess = useAppSelector(state => state.category.updateSuccess);
   const categoryTypeValues = Object.keys(CategoryType);
+  const [selectedCategoryType, setSelectedCategoryType] = useState<keyof typeof CategoryType>('EXPENSE');
+
+  const hasParentCategory = Boolean(categoryEntity?.parentCategory?.id);
+  const isCategoryTypeReadOnly = !isNew && hasParentCategory;
+  const parentCategoryOptions = categories.filter(
+    otherEntity => (!categoryEntity?.id || otherEntity.id !== categoryEntity.id) && otherEntity.categoryType === selectedCategoryType,
+  );
 
   const handleClose = () => {
     navigate('/category');
@@ -41,8 +44,13 @@ export const CategoryUpdate = () => {
     }
 
     dispatch(getCategories({}));
-    dispatch(getBudgets({}));
   }, []);
+
+  useEffect(() => {
+    if (!isNew && categoryEntity?.categoryType) {
+      setSelectedCategoryType(categoryEntity.categoryType);
+    }
+  }, [categoryEntity?.categoryType, isNew]);
 
   useEffect(() => {
     if (updateSuccess) {
@@ -51,39 +59,37 @@ export const CategoryUpdate = () => {
   }, [updateSuccess]);
 
   const saveEntity = values => {
-    if (values.id !== undefined && typeof values.id !== 'number') {
-      values.id = Number(values.id);
-    }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
-    values.updatedAt = convertDateTimeToServer(values.updatedAt);
-
-    const entity = {
-      ...categoryEntity,
-      ...values,
-      parentCategory: categories.find(it => it.id.toString() === values.parentCategory?.toString()),
-      budgets: mapIdList(values.budgets),
-    };
-
     if (isNew) {
+      const entity = {
+        name: values.name,
+        categoryType: values.categoryType,
+        color: values.color,
+        icon: values.icon,
+        active: values.active ?? true,
+        parentCategory: values.parentCategory ? categories.find(it => it.id.toString() === values.parentCategory?.toString()) : null,
+      };
       dispatch(createEntity(entity));
     } else {
-      dispatch(updateEntity(entity));
+      const entity = {
+        id: categoryEntity.id,
+        name: values.name,
+        ...(!isCategoryTypeReadOnly ? { categoryType: values.categoryType } : {}),
+        color: values.color,
+        icon: values.icon,
+        active: values.active,
+      };
+      dispatch(partialUpdateEntity(entity));
     }
   };
 
   const defaultValues = () =>
     isNew
       ? {
-          createdAt: displayDefaultDateTime(),
-          updatedAt: displayDefaultDateTime(),
+          categoryType: 'EXPENSE',
+          active: true,
         }
       : {
-          categoryType: 'EXPENSE',
           ...categoryEntity,
-          createdAt: convertDateTimeFromServer(categoryEntity.createdAt),
-          updatedAt: convertDateTimeFromServer(categoryEntity.updatedAt),
-          parentCategory: categoryEntity?.parentCategory?.id,
-          budgets: categoryEntity?.budgets?.map(e => e.id.toString()),
         };
 
   return (
@@ -101,16 +107,6 @@ export const CategoryUpdate = () => {
             <p>Loading...</p>
           ) : (
             <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
-              {!isNew ? (
-                <ValidatedField
-                  name="id"
-                  required
-                  readOnly
-                  id="category-id"
-                  label={translate('global.field.id')}
-                  validate={{ required: true }}
-                />
-              ) : null}
               <ValidatedField
                 label={translate('fintrackApp.category.name')}
                 id="category-name"
@@ -124,21 +120,13 @@ export const CategoryUpdate = () => {
                 }}
               />
               <ValidatedField
-                label={translate('fintrackApp.category.description')}
-                id="category-description"
-                name="description"
-                data-cy="description"
-                type="text"
-                validate={{
-                  maxLength: { value: 300, message: translate('entity.validation.maxlength', { max: 300 }) },
-                }}
-              />
-              <ValidatedField
                 label={translate('fintrackApp.category.categoryType')}
                 id="category-categoryType"
                 name="categoryType"
                 data-cy="categoryType"
                 type="select"
+                disabled={isCategoryTypeReadOnly}
+                onChange={event => setSelectedCategoryType(event.target.value as keyof typeof CategoryType)}
               >
                 {categoryTypeValues.map(categoryType => (
                   <option value={categoryType} key={categoryType}>
@@ -177,63 +165,32 @@ export const CategoryUpdate = () => {
                 check
                 type="checkbox"
               />
-              <ValidatedField
-                label={translate('fintrackApp.category.createdAt')}
-                id="category-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.category.updatedAt')}
-                id="category-updatedAt"
-                name="updatedAt"
-                data-cy="updatedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                id="category-parentCategory"
-                name="parentCategory"
-                data-cy="parentCategory"
-                label={translate('fintrackApp.category.parentCategory')}
-                type="select"
-              >
-                <option value="" key="0" />
-                {categories
-                  ? categories
-                      .filter(otherEntity => !categoryEntity?.id || otherEntity.id !== categoryEntity.id)
-                      .map(otherEntity => (
-                        <option value={otherEntity.id} key={otherEntity.id}>
-                          {otherEntity.name}
-                        </option>
-                      ))
-                  : null}
-              </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.category.budgets')}
-                id="category-budgets"
-                data-cy="budgets"
-                type="select"
-                multiple
-                name="budgets"
-              >
-                <option value="" key="0" />
-                {budgets
-                  ? budgets.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
+              {isNew ? (
+                <ValidatedField
+                  id="category-parentCategory"
+                  name="parentCategory"
+                  data-cy="parentCategory"
+                  label={translate('fintrackApp.category.parentCategory')}
+                  type="select"
+                >
+                  <option value="" key="0" />
+                  {parentCategoryOptions.map(otherEntity => (
+                    <option value={otherEntity.id} key={otherEntity.id}>
+                      {otherEntity.name}
+                    </option>
+                  ))}
+                </ValidatedField>
+              ) : (
+                <ValidatedField
+                  label={translate('fintrackApp.category.parentCategory')}
+                  id="category-parentCategory"
+                  data-cy="parentCategory"
+                  name="parentCategoryName"
+                  type="text"
+                  value={categoryEntity?.parentCategory?.name ?? ''}
+                  disabled
+                />
+              )}
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/category" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;

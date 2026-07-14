@@ -915,6 +915,25 @@ Same matrix as Tag/FinancialAccount: create assigns current user, cross-user GET
 
 **Scope:** duplicate = same owner + same `categoryType` + same `parentCategory` (both null for roots) + same normalized `name`. Inactive categories participate.
 
+#### Timestamp lifecycle — ✅ custom
+
+`createdAt` / `updatedAt` are server-owned. Create accepts missing timestamps and ignores client-provided values. PUT/PATCH preserve `createdAt`; explicit null or changed `createdAt`/`updatedAt` returns `400 invalid`; successful PUT/PATCH sets `updatedAt = now`.
+
+| Test                                      | HTTP  | What it checks                                          |
+| ----------------------------------------- | ----- | ------------------------------------------------------- |
+| `createCategoryWithoutCreatedAtSucceeds`  | POST  | Missing `createdAt` accepted; server sets timestamp     |
+| `createCategoryWithoutUpdatedAtSucceeds`  | POST  | Missing `updatedAt` accepted; server sets timestamp     |
+| `createCategoryIgnoresClientTimestamps`   | POST  | Client timestamps ignored                               |
+| `putCategoryWithChangedCreatedAtFails`    | PUT   | Changed `createdAt` → `400`                             |
+| `putCategoryWithChangedUpdatedAtFails`    | PUT   | Changed `updatedAt` → `400`                             |
+| `putCategoryWithNullCreatedAtFails`       | PUT   | Explicit null `createdAt` → `400`                       |
+| `putCategoryWithNullUpdatedAtFails`       | PUT   | Explicit null `updatedAt` → `400`                       |
+| `patchCategoryWithSameTimestampsSucceeds` | PATCH | Same timestamps allowed as no-op before `updatedAt=now` |
+| `patchCategoryWithChangedCreatedAtFails`  | PATCH | Changed `createdAt` → `400`                             |
+| `patchCategoryWithChangedUpdatedAtFails`  | PATCH | Changed `updatedAt` → `400`                             |
+| `patchCategoryWithNullCreatedAtFails`     | PATCH | Explicit null `createdAt` → `400`                       |
+| `patchCategoryWithNullUpdatedAtFails`     | PATCH | Explicit null `updatedAt` → `400`                       |
+
 #### Domain rules — DELETE cleanup & type guards (13) — ✅ custom
 
 | Test                                                                                     | What it checks                                 |
@@ -933,15 +952,15 @@ Same matrix as Tag/FinancialAccount: create assigns current user, cross-user GET
 | `changeCategoryTypeOfUnusedLeafCategorySucceedsWhenUniquenessAndParentCompatibilityHold` | Unused leaf OK                                 |
 | `renameUsedCategorySucceedsWhenUniquenessPreserved`                                      | Used leaf rename OK                            |
 
-**Service unit:** `deleteShouldRejectWhenCategoryHasChildren`; `deleteShouldUnlinkRelationshipsBeforeDeletingCategory`; `updateShouldRejectParentCategoryChange`; `saveShouldRejectChildCategoryTypeMismatchWithParent`; `updateShouldRejectCategoryTypeChangeWhenCategoryIsInUse`.
+**Service unit:** includes ownership/delete/parent/type/name uniqueness plus timestamp lifecycle tests: create sets/ignores timestamps; update rejects null/changed timestamps and sets `updatedAt=now`; patch preserves `createdAt`, sets `updatedAt=now`, allows same timestamps, and rejects explicit null/changed timestamps.
 
 **Deprecated/replaced:** `updateCategoryCreatingCycleFails`, `patchCategoryIntoParentWhereSiblingNameExistsReturnsBadRequest`, `partialUpdateShouldRejectDuplicateWhenParentChangesIntoSiblingScope` (move no longer allowed).
 
 #### CRUD & criteria — 🟡 JHipster generated (55)
 
-Happy-path CRUD, required-field checks, criteria per field (`name`, `description`, `categoryType`, `color`, `icon`, `active`, timestamps, `userId`, `parentCategoryId`, M2M ids). Ownership filter applies on top for non-admin.
+Happy-path CRUD, required-field checks, criteria per field (`name`, `description`, `categoryType`, `color`, `icon`, `active`, timestamps, `userId`, `parentCategoryId`, M2M ids). Timestamp required-field checks are replaced by server-owned timestamp lifecycle tests. Ownership filter applies on top for non-admin.
 
-### Unit — `CategoryServiceTest` (16) — ✅ custom
+### Unit — `CategoryServiceTest` — ✅ custom
 
 | Test                                                        | Rule under test                                       |
 | ----------------------------------------------------------- | ----------------------------------------------------- |

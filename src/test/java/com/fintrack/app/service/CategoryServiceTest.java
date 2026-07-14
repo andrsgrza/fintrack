@@ -8,12 +8,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,10 @@ import org.springframework.data.domain.Pageable;
 class CategoryServiceTest {
 
     private static final String CURRENT_USER_LOGIN = "user";
+    private static final Instant EXISTING_CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Instant EXISTING_UPDATED_AT = Instant.parse("2026-01-02T00:00:00Z");
+    private static final Instant CLIENT_CREATED_AT = Instant.parse("2000-01-01T00:00:00Z");
+    private static final Instant CLIENT_UPDATED_AT = Instant.parse("2000-01-02T00:00:00Z");
 
     @Mock
     private CategoryRepository categoryRepository;
@@ -45,6 +51,7 @@ class CategoryServiceTest {
     private User currentUser;
     private Category category;
     private CategoryDTO categoryDTO;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
@@ -57,11 +64,15 @@ class CategoryServiceTest {
         category.setName("Food");
         category.setCategoryType(CategoryType.EXPENSE);
         category.setUser(currentUser);
+        category.setCreatedAt(EXISTING_CREATED_AT);
+        category.setUpdatedAt(EXISTING_UPDATED_AT);
 
         categoryDTO = new CategoryDTO();
         categoryDTO.setId(10L);
         categoryDTO.setName("Food");
         categoryDTO.setCategoryType(CategoryType.EXPENSE);
+        categoryDTO.setCreatedAt(EXISTING_CREATED_AT);
+        categoryDTO.setUpdatedAt(EXISTING_UPDATED_AT);
     }
 
     @Test
@@ -69,6 +80,8 @@ class CategoryServiceTest {
         Category mappedEntity = new Category();
         mappedEntity.setName("Food");
         mappedEntity.setCategoryType(CategoryType.EXPENSE);
+        mappedEntity.setCreatedAt(CLIENT_CREATED_AT);
+        mappedEntity.setUpdatedAt(CLIENT_UPDATED_AT);
         Category savedEntity = new Category();
         savedEntity.setId(10L);
         savedEntity.setUser(currentUser);
@@ -82,6 +95,8 @@ class CategoryServiceTest {
         categoryService.save(categoryDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getCreatedAt()).isNotNull().isNotEqualTo(CLIENT_CREATED_AT);
+        assertThat(mappedEntity.getUpdatedAt()).isNotNull().isNotEqualTo(CLIENT_UPDATED_AT);
         verify(categoryRepository).save(mappedEntity);
     }
 
@@ -103,6 +118,183 @@ class CategoryServiceTest {
         categoryService.update(categoryDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(mappedEntity.getUpdatedAt()).isNotNull().isNotEqualTo(EXISTING_UPDATED_AT);
+    }
+
+    @Test
+    void updateShouldRejectChangedCreatedAt() {
+        categoryDTO.setCreatedAt(CLIENT_CREATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() -> categoryService.update(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullCreatedAt() {
+        categoryDTO.setCreatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() -> categoryService.update(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectChangedUpdatedAt() {
+        categoryDTO.setUpdatedAt(CLIENT_UPDATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() -> categoryService.update(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullUpdatedAt() {
+        categoryDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() -> categoryService.update(categoryDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldPreserveCreatedAtAndSetUpdatedAt() {
+        categoryDTO.setName("Groceries");
+        categoryDTO.setCreatedAt(null);
+        categoryDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(categoryRepository.existsByOwnerTypeParentAndNormalizedName(2L, CategoryType.EXPENSE, null, "Groceries", 10L)).thenReturn(
+            false
+        );
+        when(categoryRepository.save(category)).thenReturn(category);
+        when(categoryMapper.toDto(category)).thenReturn(categoryDTO);
+
+        categoryService.partialUpdate(categoryDTO, objectMapper.createObjectNode().put("id", 10L).put("name", "Groceries"));
+
+        assertThat(category.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(category.getUpdatedAt()).isNotNull().isNotEqualTo(EXISTING_UPDATED_AT);
+    }
+
+    @Test
+    void partialUpdateShouldAllowSameTimestampsAsNoOp() {
+        categoryDTO.setCreatedAt(EXISTING_CREATED_AT);
+        categoryDTO.setUpdatedAt(EXISTING_UPDATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(categoryRepository.save(category)).thenReturn(category);
+        when(categoryMapper.toDto(category)).thenReturn(categoryDTO);
+
+        categoryService.partialUpdate(
+            categoryDTO,
+            objectMapper
+                .createObjectNode()
+                .put("id", 10L)
+                .put("createdAt", EXISTING_CREATED_AT.toString())
+                .put("updatedAt", EXISTING_UPDATED_AT.toString())
+        );
+
+        assertThat(category.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(category.getUpdatedAt()).isNotNull().isNotEqualTo(EXISTING_UPDATED_AT);
+    }
+
+    @Test
+    void partialUpdateShouldRejectChangedCreatedAt() {
+        categoryDTO.setCreatedAt(CLIENT_CREATED_AT);
+        categoryDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() ->
+            categoryService.partialUpdate(
+                categoryDTO,
+                objectMapper.createObjectNode().put("id", 10L).put("createdAt", CLIENT_CREATED_AT.toString())
+            )
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectNullCreatedAt() {
+        categoryDTO.setCreatedAt(null);
+        categoryDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() ->
+            categoryService.partialUpdate(categoryDTO, objectMapper.createObjectNode().put("id", 10L).putNull("createdAt"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectChangedUpdatedAt() {
+        categoryDTO.setCreatedAt(null);
+        categoryDTO.setUpdatedAt(CLIENT_UPDATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() ->
+            categoryService.partialUpdate(
+                categoryDTO,
+                objectMapper.createObjectNode().put("id", 10L).put("updatedAt", CLIENT_UPDATED_AT.toString())
+            )
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectNullUpdatedAt() {
+        categoryDTO.setCreatedAt(null);
+        categoryDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() ->
+            categoryService.partialUpdate(categoryDTO, objectMapper.createObjectNode().put("id", 10L).putNull("updatedAt"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+        verify(categoryRepository, never()).save(any());
     }
 
     @Test

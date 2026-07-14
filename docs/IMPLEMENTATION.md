@@ -316,16 +316,18 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 #### Validations ✅
 
-| Capa              | Estado      | Detalle                                                                                                                      |
-| ----------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| DTO `@Valid`      | ✅ JHipster | name, categoryType, color pattern, active, timestamps; `user` **sin** `@NotNull`                                             |
-| Entity JPA        | ✅ JHipster | `user` required                                                                                                              |
-| DB Liquibase      | ✅ JHipster | `user_id NOT NULL`, FK                                                                                                       |
-| Service — negocio | ✅          | Ownership + parent owned on create; **trim `name`**; **sibling-unique name** (owner + type + parent); inactive in uniqueness |
-| REST              | ✅          | `@Valid` en POST/PUT; `IllegalArgumentException` → `400 invalid`; DELETE domain violations → `400 invalid`                   |
-| UI                | ✅          | Sin User picker; parent picker en create                                                                                     |
+| Capa              | Estado      | Detalle                                                                                                                                                              |
+| ----------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DTO `@Valid`      | ✅ JHipster | name, categoryType, color pattern, active; timestamps optional/response-owned; `user` **sin** `@NotNull`                                                             |
+| Entity JPA        | ✅ JHipster | `user` required                                                                                                                                                      |
+| DB Liquibase      | ✅ JHipster | `user_id NOT NULL`, FK                                                                                                                                               |
+| Service — negocio | ✅          | Ownership + parent owned on create; server-owned `createdAt` / `updatedAt`; **trim `name`**; **sibling-unique name** (owner + type + parent); inactive in uniqueness |
+| REST              | ✅          | `@Valid` en POST/PUT; PATCH `JsonNode` para timestamp presence; `IllegalArgumentException` → `400 invalid`; DELETE domain violations → `400 invalid`                 |
+| UI                | ✅          | Sin User picker; sin timestamps; parent picker en create                                                                                                             |
 
-**Tests:** 103 IT + 16 service — ver [TESTING.md § Category](TESTING.md#category).
+**Timestamp lifecycle:** create accepts missing timestamps and ignores client-provided values; service sets both to `now`. PUT/PATCH preserve `createdAt`; explicit null or changed `createdAt`/`updatedAt` returns `400 invalid`; successful PUT/PATCH sets `updatedAt = now`.
+
+**Tests:** Category ResourceIT + service tests — ver [TESTING.md § Category](TESTING.md#category).
 
 #### Domain rules ✅
 

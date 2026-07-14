@@ -1,10 +1,12 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -45,6 +47,9 @@ public class CategoryService {
         LOG.debug("Request to save Category : {}", categoryDTO);
         Category category = categoryMapper.toEntity(categoryDTO);
         category.setUser(currentUserService.getCurrentUser());
+        Instant now = Instant.now();
+        category.setCreatedAt(now);
+        category.setUpdatedAt(now);
         applyParentCategoryOnCreate(category, categoryDTO.getParentCategory());
         category.setName(normalizeName(category.getName()));
         validateChildCategoryTypeMatchesParent(category);
@@ -69,9 +74,13 @@ public class CategoryService {
         LOG.debug("Request to update Category : {}", categoryDTO);
         Category existingCategory = findAccessibleEntity(categoryDTO.getId()).orElseThrow();
         validateParentCategoryImmutable(existingCategory, categoryDTO.getParentCategory());
+        rejectTimestampChange(existingCategory.getCreatedAt(), categoryDTO.getCreatedAt(), "Created at cannot be changed");
+        rejectTimestampChange(existingCategory.getUpdatedAt(), categoryDTO.getUpdatedAt(), "Updated at cannot be changed");
         Category category = categoryMapper.toEntity(categoryDTO);
         category.setUser(existingCategory.getUser());
         category.setParentCategory(existingCategory.getParentCategory());
+        category.setCreatedAt(existingCategory.getCreatedAt());
+        category.setUpdatedAt(Instant.now());
         category.setName(normalizeName(category.getName()));
         validateCategoryTypeChange(existingCategory, existingCategory.getCategoryType(), category.getCategoryType());
         validateUniqueSiblingNameForOwner(
@@ -92,6 +101,17 @@ public class CategoryService {
      * @return the persisted entity.
      */
     public Optional<CategoryDTO> partialUpdate(CategoryDTO categoryDTO) {
+        return partialUpdate(categoryDTO, null);
+    }
+
+    /**
+     * Partially update a category, applying immutable timestamp checks only when present in the patch body.
+     *
+     * @param categoryDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<CategoryDTO> partialUpdate(CategoryDTO categoryDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update Category : {}", categoryDTO);
 
         return findAccessibleEntity(categoryDTO.getId())
@@ -101,12 +121,17 @@ public class CategoryService {
                 boolean categoryTypeProvided = categoryDTO.getCategoryType() != null;
 
                 CategoryType previousCategoryType = existingCategory.getCategoryType();
+                Instant existingCreatedAt = existingCategory.getCreatedAt();
+                Instant existingUpdatedAt = existingCategory.getUpdatedAt();
 
                 if (parentProvided) {
                     validateParentCategoryImmutable(existingCategory, categoryDTO.getParentCategory());
                 }
+                rejectTimestampChanges(existingCategory, categoryDTO, patchNode);
 
                 categoryMapper.partialUpdate(existingCategory, categoryDTO);
+                existingCategory.setCreatedAt(existingCreatedAt);
+                existingCategory.setUpdatedAt(Instant.now());
                 if (nameProvided) {
                     existingCategory.setName(normalizeName(categoryDTO.getName()));
                 }
@@ -243,6 +268,30 @@ public class CategoryService {
         }
         if (!categoryType.equals(parentCategory.getCategoryType())) {
             throw new IllegalArgumentException("Child category type must match parent category type");
+        }
+    }
+
+    private void rejectTimestampChanges(Category existingCategory, CategoryDTO categoryDTO, JsonNode patchNode) {
+        if (patchNode == null) {
+            if (categoryDTO.getCreatedAt() != null) {
+                rejectTimestampChange(existingCategory.getCreatedAt(), categoryDTO.getCreatedAt(), "Created at cannot be changed");
+            }
+            if (categoryDTO.getUpdatedAt() != null) {
+                rejectTimestampChange(existingCategory.getUpdatedAt(), categoryDTO.getUpdatedAt(), "Updated at cannot be changed");
+            }
+            return;
+        }
+        if (patchNode.has("createdAt")) {
+            rejectTimestampChange(existingCategory.getCreatedAt(), categoryDTO.getCreatedAt(), "Created at cannot be changed");
+        }
+        if (patchNode.has("updatedAt")) {
+            rejectTimestampChange(existingCategory.getUpdatedAt(), categoryDTO.getUpdatedAt(), "Updated at cannot be changed");
+        }
+    }
+
+    private void rejectTimestampChange(Instant existingTimestamp, Instant requestedTimestamp, String message) {
+        if (requestedTimestamp == null || !Objects.equals(existingTimestamp, requestedTimestamp)) {
+            throw new IllegalArgumentException(message);
         }
     }
 
