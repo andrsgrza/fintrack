@@ -64,7 +64,7 @@ const baseState = {
   category: { entities: [] },
   financialSubscription: { entities: [] },
   tag: { entities: [] },
-  financialAccount: { entities: [] },
+  financialAccount: { entities: [{ id: 2, name: 'Checking account' }] },
   transactionRule: {
     entity: baseRule,
     entities: [],
@@ -241,7 +241,7 @@ describe('TransactionRule UX', () => {
       },
     ]);
 
-    await screen.findByText('Coffee');
+    await screen.findByText('Description contains "Coffee"');
     fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
     expect(screen.getByRole('heading', { name: 'Edit condition' })).toBeTruthy();
@@ -284,7 +284,7 @@ describe('TransactionRule UX', () => {
       },
     ]);
 
-    await screen.findByText('Coffee');
+    await screen.findByText('Description contains "Coffee"');
     fireEvent.click(screen.getByRole('button', { name: /delete condition/i }));
 
     await waitFor(() => expect(mockAxiosDelete).toHaveBeenCalledWith('api/transaction-rule-conditions/11'));
@@ -319,7 +319,7 @@ describe('TransactionRule UX', () => {
     await waitFor(() => expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(true));
   });
 
-  it('loads and displays related conditions on detail', async () => {
+  it('loads and displays normalized related condition summaries on detail', async () => {
     renderDetail([
       {
         id: 11,
@@ -327,17 +327,38 @@ describe('TransactionRule UX', () => {
         field: 'DESCRIPTION',
         operator: 'CONTAINS',
         value: 'Coffee',
+        caseSensitive: true,
+      },
+      {
+        id: 12,
+        position: 2,
+        field: 'AMOUNT',
+        operator: 'BETWEEN',
+        value: '20',
+        secondValue: '500',
+        caseSensitive: false,
+      },
+      {
+        id: 13,
+        position: 3,
+        field: 'ACCOUNT',
+        operator: 'EQUALS',
+        value: '2',
         caseSensitive: false,
       },
     ]);
 
-    expect(await screen.findByText('Coffee')).toBeTruthy();
-    expect(screen.getAllByText('Description').length).toBeGreaterThan(0);
-    expect(screen.getByText('Contains')).toBeTruthy();
+    expect(await screen.findByText('Description contains "Coffee" (case-sensitive)')).toBeTruthy();
+    expect(screen.getByText('Amount between 20 and 500')).toBeTruthy();
+    expect(screen.getByText('Account equals Checking account')).toBeTruthy();
+    expect(screen.queryByText('Value')).toBeNull();
+    expect(screen.queryByText('Second Value')).toBeNull();
+    expect(screen.queryByText('Case Sensitive')).toBeNull();
+    expect(screen.getByText('Condition')).toBeTruthy();
     expect(screen.queryByText('Position')).toBeNull();
     expect(screen.queryByRole('button', { name: /view/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /edit/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /delete condition/i })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /delete condition/i })).toHaveLength(3);
   });
 
   it('shows empty related conditions state on detail', async () => {

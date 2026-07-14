@@ -737,6 +737,7 @@ The standalone TransactionRuleCondition create/edit form and embedded Transactio
 | `secondValue`                       | Visible only for `BETWEEN`; hidden operators submit/clear it as `null`                                                                                                                          | **Done** |
 | `caseSensitive`                     | Visible only for text fields; hidden fields submit `false`                                                                                                                                      | **Done** |
 | Field/operator changes              | Incompatible operator/value/secondValue are cleared or reset client-side                                                                                                                        | **Done** |
+| Embedded table display              | TransactionRule detail shows a normalized condition summary; raw `value`, `secondValue`, and `caseSensitive` are not separate embedded table columns                                            | **Done** |
 
 ### Out of scope
 

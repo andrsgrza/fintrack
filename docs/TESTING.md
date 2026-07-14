@@ -1581,6 +1581,17 @@ Service tests cover parent immutability, merged-state validation, duplicate norm
 - `supportsCaseSensitive()` only for `DESCRIPTION` / `EXTERNAL_REFERENCE`.
 - `getValueInputKind()` for amount/date inputs, flow/origin selects, account selector, and `IN`/`NOT_IN` text input.
 
+`transaction-rule-condition-display.spec.ts` covers normalized embedded condition summaries:
+
+- scalar `EQUALS`;
+- `BETWEEN` with value + second value;
+- text case-sensitive suffix only when true;
+- no raw `false` display;
+- non-text conditions ignore case sensitivity in display;
+- `IN` / `NOT_IN` readable list phrases;
+- missing `secondValue` safe fallback;
+- account-id display override when account names are available.
+
 `transaction-rule-condition-ux.spec.tsx` covers:
 
 - dynamic create/edit titles;
@@ -1594,6 +1605,8 @@ Service tests cover parent immutability, merged-state validation, duplicate norm
 - `IN`/`NOT_IN` as comma-separated text with helper copy;
 - field/operator changes clearing incompatible values;
 - `ACCOUNT EQUALS` submitting the selected account id as a string and hidden `caseSensitive=false`.
+
+`transaction-rule-ux.spec.tsx` also verifies the embedded TransactionRule detail table uses the normalized `Condition` summary, does not render raw `Value` / `Second Value` / `Case Sensitive` headers, keeps Edit/Delete, and does not render View.
 
 ### E2E — `transaction-rule-condition.cy.ts`
 

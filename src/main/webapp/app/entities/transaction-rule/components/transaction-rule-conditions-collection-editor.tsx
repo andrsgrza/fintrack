@@ -5,7 +5,10 @@ import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import TransactionRuleConditionFormSection from 'app/entities/transaction-rule-condition/components/transaction-rule-condition-form-section';
+import { buildTransactionRuleConditionSummary } from 'app/entities/transaction-rule-condition/transaction-rule-condition-display';
+import { useAppSelector } from 'app/config/store';
 import { ITransactionRuleCondition } from 'app/shared/model/transaction-rule-condition.model';
+import { TransactionRuleField } from 'app/shared/model/enumerations/transaction-rule-field.model';
 import { cleanEntity } from 'app/shared/util/entity-utils';
 
 interface TransactionRuleConditionsCollectionEditorProps {
@@ -37,8 +40,18 @@ export const TransactionRuleConditionsCollectionEditor = ({
   const [editingCondition, setEditingCondition] = useState<ITransactionRuleCondition | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const financialAccounts = useAppSelector(state => state.financialAccount.entities);
 
   const sortedConditions = useMemo(() => sortConditions(conditions), [conditions]);
+  const accountNameById = useMemo<Map<string, string>>(
+    () =>
+      new Map(
+        (financialAccounts ?? [])
+          .filter(account => account.id !== undefined && typeof account.name === 'string')
+          .map(account => [account.id?.toString() ?? '', account.name as string]),
+      ),
+    [financialAccounts],
+  );
 
   const publishConditionsState = useCallback(
     (nextConditions: ITransactionRuleCondition[], loaded: boolean, failed: boolean) => {
@@ -222,19 +235,7 @@ export const TransactionRuleConditionsCollectionEditor = ({
           <thead>
             <tr>
               <th>
-                <Translate contentKey="fintrackApp.transactionRuleCondition.field">Field</Translate>
-              </th>
-              <th>
-                <Translate contentKey="fintrackApp.transactionRuleCondition.operator">Operator</Translate>
-              </th>
-              <th>
-                <Translate contentKey="fintrackApp.transactionRuleCondition.value">Value</Translate>
-              </th>
-              <th>
-                <Translate contentKey="fintrackApp.transactionRuleCondition.secondValue">Second Value</Translate>
-              </th>
-              <th>
-                <Translate contentKey="fintrackApp.transactionRuleCondition.caseSensitive">Case Sensitive</Translate>
+                <Translate contentKey="fintrackApp.transactionRuleCondition.condition">Condition</Translate>
               </th>
               <th />
             </tr>
@@ -242,11 +243,12 @@ export const TransactionRuleConditionsCollectionEditor = ({
           <tbody>
             {sortedConditions.map(condition => (
               <tr key={condition.id}>
-                <td>{condition.field ? translate(`fintrackApp.TransactionRuleField.${condition.field}`) : ''}</td>
-                <td>{condition.operator ? translate(`fintrackApp.RuleOperator.${condition.operator}`) : ''}</td>
-                <td>{condition.value}</td>
-                <td>{condition.secondValue}</td>
-                <td>{condition.caseSensitive ? 'true' : 'false'}</td>
+                <td>
+                  {buildTransactionRuleConditionSummary(condition, translate, {
+                    valueDisplay: value =>
+                      condition.field === TransactionRuleField.ACCOUNT ? (accountNameById.get(value) ?? value) : undefined,
+                  })}
+                </td>
                 <td className="text-end">
                   <Button color="primary" size="sm" onClick={() => setEditingCondition(condition)} data-cy="editConditionButton">
                     <FontAwesomeIcon icon="pencil-alt" />{' '}

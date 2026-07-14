@@ -478,22 +478,23 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 #### Domain rules ✅
 
-| Regla                                           | Estado | Notas                                                                                                  |
-| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
-| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                                                                   |
-| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción                                                                |
-| Create en rule inactiva no reactiva             | ✅     |                                                                                                        |
-| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices                                                         |
-| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización                                                                |
-| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update                                                                 |
-| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator                                                   |
-| UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                                |
-| UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text          |
-| UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                         |
-| Embedded parent hidden/fixed                    | ✅     | TransactionRule detail create sends current parent id; edit PATCH omits parent                         |
-| Position hidden from normal UX                  | ✅     | Position is an internal server-managed order; standalone/embedded forms and normal list/detail hide it |
-| Delete dialog copy                              | ✅     | i18n en/es                                                                                             |
-| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                           |
+| Regla                                           | Estado | Notas                                                                                                                    |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                                                                                     |
+| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción                                                                                  |
+| Create en rule inactiva no reactiva             | ✅     |                                                                                                                          |
+| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices                                                                           |
+| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización                                                                                  |
+| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update                                                                                   |
+| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator                                                                     |
+| UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                                                  |
+| UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text                            |
+| UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                                           |
+| Embedded condition summary table                | ✅     | TransactionRule detail table shows a normalized Condition summary instead of raw value/secondValue/caseSensitive columns |
+| Embedded parent hidden/fixed                    | ✅     | TransactionRule detail create sends current parent id; edit PATCH omits parent                                           |
+| Position hidden from normal UX                  | ✅     | Position is an internal server-managed order; standalone/embedded forms and normal list/detail hide it                   |
+| Delete dialog copy                              | ✅     | i18n en/es                                                                                                               |
+| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                                             |
 
 #### Validations ✅
 
