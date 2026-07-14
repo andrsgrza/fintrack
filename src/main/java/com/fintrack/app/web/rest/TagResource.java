@@ -1,5 +1,7 @@
 package com.fintrack.app.web.rest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TagQueryService;
 import com.fintrack.app.service.TagService;
 import com.fintrack.app.service.criteria.TagCriteria;
@@ -38,9 +40,12 @@ public class TagResource {
 
     private final TagQueryService tagQueryService;
 
-    public TagResource(TagService tagService, TagQueryService tagQueryService) {
+    private final ObjectMapper objectMapper;
+
+    public TagResource(TagService tagService, TagQueryService tagQueryService, ObjectMapper objectMapper) {
         this.tagService = tagService;
         this.tagQueryService = tagQueryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -115,9 +120,18 @@ public class TagResource {
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<TagDTO> partialUpdateTag(
         @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody TagDTO tagDTO
+        @NotNull @RequestBody JsonNode patchNode
     ) throws URISyntaxException {
-        LOG.debug("REST request to partial update Tag partially : {}, {}", id, tagDTO);
+        LOG.debug("REST request to partial update Tag partially : {}, {}", id, patchNode);
+        TagDTO tagDTO;
+        try {
+            tagDTO = objectMapper.treeToValue(patchNode, TagDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
+        if (tagDTO.getId() == null) {
+            tagDTO.setId(id);
+        }
         if (tagDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
@@ -131,7 +145,7 @@ public class TagResource {
 
         Optional<TagDTO> result;
         try {
-            result = tagService.partialUpdate(tagDTO);
+            result = tagService.partialUpdate(tagDTO, patchNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }

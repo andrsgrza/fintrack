@@ -53,6 +53,14 @@ Do **not** assert `$.title` — JHipster responds with `title: "Bad Request"`; t
   -Dtest=TagResourceIT,TagServiceTest,CurrentUserServiceTest test
 ```
 
+**Tag timestamp/UX hardening (server-owned timestamps + simple CRUD UI):**
+
+```bash
+./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
+  -Dtest=TagResourceIT,TagServiceTest test
+npm run jest -- tag
+```
+
 **Validation hardening — Tag + FinancialAccount (2026-07-10):**
 
 ```bash
@@ -698,21 +706,24 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their tags. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules:** DELETE allowed when in use — unlink from `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags` (join rows only), then delete tag. Related entities survive. `active=false` keeps links. See [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
+**Domain rules:** DELETE allowed when in use — unlink from `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags` (join rows only), then delete tag. Related entities survive. `active=false` keeps links. `createdAt` / `updatedAt` are server-owned: create ignores client timestamps; PUT/PATCH preserve `createdAt`, reject changed/null timestamp fields, and set `updatedAt = now`. See [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
+
+**Frontend UX:** Tag create/edit shows only `name`, `description`, `color`, `active`. It does not show/send `user`, `createdAt`, `updatedAt`, or relationship editors. Edit uses PATCH with editable fields only so existing relationships survive. Detail/list show clean catalog fields and do not show raw relationship IDs; related read-only lists are deferred.
 
 **Validation rules in service:** trim `name` on persist; **`name` unique per owner** (case-insensitive via `existsByUserIdAndNormalizedName`); uniqueness checked against **tag owner**, not current user (admin CRUD ajeno OK). **Inactive tags participate in uniqueness** (query does not filter `active`).
 
 ### Summary counts
 
-| Type            | File              | Tests  | Custom vs generated                                                           |
-| --------------- | ----------------- | ------ | ----------------------------------------------------------------------------- |
-| Integration IT  | `TagResourceIT`   | **78** | 30 custom (16 ownership + 5 uniqueness + 9 domain) + 48 JHipster CRUD/filters |
-| Unit — service  | `TagServiceTest`  | **12** | All custom (ownership + uniqueness)                                           |
-| Unit — domain   | `TagTest`         | **5**  | Generated                                                                     |
-| Unit — mapper   | `TagMapperTest`   | **1**  | Generated                                                                     |
-| Unit — DTO      | `TagDTOTest`      | **1**  | Generated                                                                     |
-| Unit — criteria | `TagCriteriaTest` | **5**  | Generated                                                                     |
-| E2E             | `tag.cy.ts`       | **10** | 3 ownership + 7 CRUD/navigation                                               |
+| Type            | File              | Tests  | Custom vs generated                                                                               |
+| --------------- | ----------------- | ------ | ------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TagResourceIT`   | **89** | 41 custom (ownership + uniqueness + timestamp lifecycle + delete domain) + generated CRUD/filters |
+| Unit — service  | `TagServiceTest`  | **22** | All custom (ownership + uniqueness + timestamp lifecycle)                                         |
+| Unit — domain   | `TagTest`         | **5**  | Generated                                                                                         |
+| Unit — mapper   | `TagMapperTest`   | **1**  | Generated                                                                                         |
+| Unit — DTO      | `TagDTOTest`      | **1**  | Generated                                                                                         |
+| Unit — criteria | `TagCriteriaTest` | **5**  | Generated                                                                                         |
+| Frontend unit   | `tag-ux.spec.tsx` | **6**  | Create/edit/detail/list UX cleanup                                                                |
+| E2E             | `tag.cy.ts`       | **10** | 3 ownership + 7 CRUD/navigation                                                                   |
 
 **Run:**
 
@@ -761,6 +772,24 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 **Note:** `createSameTagNameForDifferentUserSucceeds` cannot send a different `user` in the payload — service always assigns `currentUser`. The test authenticates as user B for the second `POST`.
 
+#### Timestamp lifecycle (16) — ✅ custom/generated replacement
+
+| Test                                        | HTTP         | Expected                                                             |
+| ------------------------------------------- | ------------ | -------------------------------------------------------------------- |
+| `createTagWithoutCreatedAtSucceeds`         | `POST`       | `201`; server sets `createdAt`                                       |
+| `createTagWithoutUpdatedAtSucceeds`         | `POST`       | `201`; server sets `updatedAt`                                       |
+| `createTagIgnoresClientTimestamps`          | `POST`       | Client timestamps ignored                                            |
+| `legacyCreateTagWithNullTimestampsSucceeds` | `POST`       | Legacy generated-style null timestamps accepted on create            |
+| `putExistingTag`                            | `PUT /:id`   | Same timestamps accepted; `createdAt` preserved; `updatedAt` changed |
+| `putTagWithChangedCreatedAtFails`           | `PUT /:id`   | `400 invalid`                                                        |
+| `putTagWithNullCreatedAtFails`              | `PUT /:id`   | `400 invalid`                                                        |
+| `putTagWithChangedUpdatedAtFails`           | `PUT /:id`   | `400 invalid`                                                        |
+| `putTagWithNullUpdatedAtFails`              | `PUT /:id`   | `400 invalid`                                                        |
+| `partialUpdateTagWithPatch`                 | `PATCH /:id` | Omitted timestamps preserved/updated server-side                     |
+| `fullUpdateTagWithPatch`                    | `PATCH /:id` | Editable fields changed; timestamps server-managed                   |
+| `patchTagWithSameTimestampsSucceeds`        | `PATCH /:id` | Same timestamps accepted as no-op, `updatedAt` reset                 |
+| `patchTagWithChanged/Null...Fails`          | `PATCH /:id` | Explicit changed/null timestamps rejected                            |
+
 #### Domain rules — DELETE M2M unlink (9) — ✅ custom
 
 | Test                                                                  | What it checks                                |
@@ -781,7 +810,18 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 Happy-path CRUD, required-field checks, criteria per field (`name`, `description`, `color`, `active`, timestamps, `userId`, M2M ids). Ownership filter applies on top for non-admin.
 
-### Unit — `TagServiceTest` (12) — ✅ custom
+### Frontend — `tag-ux.spec.tsx` (6) — ✅ custom
+
+| Test area     | What it checks                                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Create form   | Shows `name`, `description`, `color`, `active`; hides timestamps/user/relationship editors; active defaults true |
+| Create submit | Sends editable fields only; no fake timestamps or relationships                                                  |
+| Edit form     | Shows editable fields only; hides generated/relationship fields                                                  |
+| Edit submit   | Uses `partialUpdateEntity`/PATCH with editable fields only                                                       |
+| Detail        | Shows clean tag fields; no ID/timestamps/raw relationship IDs                                                    |
+| List          | Shows catalog columns; name links to detail; no ID/timestamps/user/relationship columns                          |
+
+### Unit — `TagServiceTest` (22) — ✅ custom
 
 | Test                                                    | Rule under test                                                       |
 | ------------------------------------------------------- | --------------------------------------------------------------------- |

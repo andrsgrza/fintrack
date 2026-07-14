@@ -19,10 +19,10 @@
         "title": "Tag"
       },
       "id": "ID",
-      "name": "Name",
-      "description": "Description",
+      "name": "Nombre",
+      "description": "Descripción",
       "color": "Color",
-      "active": "Active",
+      "active": "Activa",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "user": "User",

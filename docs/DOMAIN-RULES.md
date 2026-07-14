@@ -276,7 +276,7 @@ Grupo 1 #2 domain rules **Done**.
 ## 4. Tag
 
 **Pattern:** A — direct `user`. **Relationships:** M2M inverse — `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags`.  
-**Status:** **Done** (ownership + validations + DELETE M2M unlink).
+**Status:** **Done** (ownership + validations + server-owned timestamps + CRUD UX cleanup + DELETE M2M unlink).
 
 ### Baseline **Done** (ownership + validations)
 
@@ -286,6 +286,20 @@ Grupo 1 #2 domain rules **Done**.
 | `name` trim + per-owner uniqueness  | Case/trim-insensitive `existsByUserIdAndNormalizedName()` |
 | Uniqueness vs tag owner (not actor) | Admin edits foreign tag validated against foreign owner   |
 | REST `IllegalArgumentException`     | `400` `error.invalid` `params=tag`                        |
+
+### CREATE / UPDATE / PATCH
+
+| Rule                             | Decision                                                                                  | Status   |
+| -------------------------------- | ----------------------------------------------------------------------------------------- | -------- |
+| Create/edit UX fields            | Tag form exposes only `name`, `description`, `color`, `active`                            | **Done** |
+| Relationship editors             | Not shown in Tag create/edit; manage links from owning flows/entities                     | **Done** |
+| Detail/list relationship display | Do not show raw relationship IDs; related read-only lists are deferred                    | **Done** |
+| `createdAt` / `updatedAt`        | Server-owned                                                                              | **Done** |
+| CREATE timestamps                | Client timestamps ignored; service sets both to `now`                                     | **Done** |
+| PUT timestamps                   | Same timestamp values allowed; changed/null timestamps rejected; `updatedAt` reset to now | **Done** |
+| PATCH timestamps                 | `JsonNode` presence-aware for timestamps; omitted preserves, changed/null rejected        | **Done** |
+| Successful PUT/PATCH             | Preserve `createdAt`; set `updatedAt = now`                                               | **Done** |
+| Ownership                        | Client cannot change `user`; create assigns current user; update/patch preserve owner     | **Done** |
 
 ### DELETE
 

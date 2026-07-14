@@ -1,18 +1,12 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
-import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getEntities as getFinancialTransactions } from 'app/entities/financial-transaction/financial-transaction.reducer';
-import { getEntities as getTransactionRules } from 'app/entities/transaction-rule/transaction-rule.reducer';
-import { getEntities as getFinancialSubscriptions } from 'app/entities/financial-subscription/financial-subscription.reducer';
-import { getEntities as getBudgets } from 'app/entities/budget/budget.reducer';
-import { createEntity, getEntity, reset, updateEntity } from './tag.reducer';
+import { createEntity, getEntity, partialUpdateEntity, reset } from './tag.reducer';
 
 export const TagUpdate = () => {
   const dispatch = useAppDispatch();
@@ -22,10 +16,6 @@ export const TagUpdate = () => {
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
-  const financialTransactions = useAppSelector(state => state.financialTransaction.entities);
-  const transactionRules = useAppSelector(state => state.transactionRule.entities);
-  const financialSubscriptions = useAppSelector(state => state.financialSubscription.entities);
-  const budgets = useAppSelector(state => state.budget.entities);
   const tagEntity = useAppSelector(state => state.tag.entity);
   const loading = useAppSelector(state => state.tag.loading);
   const updating = useAppSelector(state => state.tag.updating);
@@ -41,11 +31,6 @@ export const TagUpdate = () => {
     } else {
       dispatch(getEntity(id));
     }
-
-    dispatch(getFinancialTransactions({}));
-    dispatch(getTransactionRules({}));
-    dispatch(getFinancialSubscriptions({}));
-    dispatch(getBudgets({}));
   }, []);
 
   useEffect(() => {
@@ -58,39 +43,37 @@ export const TagUpdate = () => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
-    values.updatedAt = convertDateTimeToServer(values.updatedAt);
 
     const entity = {
-      ...tagEntity,
-      ...values,
-      financialTransactions: mapIdList(values.financialTransactions),
-      transactionRules: mapIdList(values.transactionRules),
-      subscriptions: mapIdList(values.subscriptions),
-      budgets: mapIdList(values.budgets),
+      name: values.name,
+      description: values.description,
+      color: values.color,
+      active: values.active,
     };
 
     if (isNew) {
       dispatch(createEntity(entity));
     } else {
-      dispatch(updateEntity(entity));
+      dispatch(
+        partialUpdateEntity({
+          id: tagEntity.id,
+          ...entity,
+        }),
+      );
     }
   };
 
   const defaultValues = () =>
     isNew
       ? {
-          createdAt: displayDefaultDateTime(),
-          updatedAt: displayDefaultDateTime(),
+          active: true,
         }
       : {
-          ...tagEntity,
-          createdAt: convertDateTimeFromServer(tagEntity.createdAt),
-          updatedAt: convertDateTimeFromServer(tagEntity.updatedAt),
-          financialTransactions: tagEntity?.financialTransactions?.map(e => e.id.toString()),
-          transactionRules: tagEntity?.transactionRules?.map(e => e.id.toString()),
-          subscriptions: tagEntity?.subscriptions?.map(e => e.id.toString()),
-          budgets: tagEntity?.budgets?.map(e => e.id.toString()),
+          id: tagEntity.id,
+          name: tagEntity.name,
+          description: tagEntity.description,
+          color: tagEntity.color,
+          active: tagEntity.active,
         };
 
   return (
@@ -108,16 +91,6 @@ export const TagUpdate = () => {
             <p>Loading...</p>
           ) : (
             <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
-              {!isNew ? (
-                <ValidatedField
-                  name="id"
-                  required
-                  readOnly
-                  id="tag-id"
-                  label={translate('global.field.id')}
-                  validate={{ required: true }}
-                />
-              ) : null}
               <ValidatedField
                 label={translate('fintrackApp.tag.name')}
                 id="tag-name"
@@ -161,96 +134,6 @@ export const TagUpdate = () => {
                 check
                 type="checkbox"
               />
-              <ValidatedField
-                label={translate('fintrackApp.tag.createdAt')}
-                id="tag-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.tag.updatedAt')}
-                id="tag-updatedAt"
-                name="updatedAt"
-                data-cy="updatedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.tag.financialTransactions')}
-                id="tag-financialTransactions"
-                data-cy="financialTransactions"
-                type="select"
-                multiple
-                name="financialTransactions"
-              >
-                <option value="" key="0" />
-                {financialTransactions
-                  ? financialTransactions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.tag.transactionRules')}
-                id="tag-transactionRules"
-                data-cy="transactionRules"
-                type="select"
-                multiple
-                name="transactionRules"
-              >
-                <option value="" key="0" />
-                {transactionRules
-                  ? transactionRules.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.tag.subscriptions')}
-                id="tag-subscriptions"
-                data-cy="subscriptions"
-                type="select"
-                multiple
-                name="subscriptions"
-              >
-                <option value="" key="0" />
-                {financialSubscriptions
-                  ? financialSubscriptions.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.tag.budgets')}
-                id="tag-budgets"
-                data-cy="budgets"
-                type="select"
-                multiple
-                name="budgets"
-              >
-                <option value="" key="0" />
-                {budgets
-                  ? budgets.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.id}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/tag" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;
