@@ -797,16 +797,32 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 
 ### UPDATE / PATCH
 
-| Rule                         | Decision                                                                                       | Status   |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
-| Outputs ⊆ rule owner         |                                                                                                | **Done** |
-| `user` immutable             | Client payload cannot change owner                                                             | **Done** |
-| Mutable fields               | `name`, `description`, `priority`, `conditionLogic`, `resultingDescription`, `active`, outputs | **Done** |
-| PUT contract                 | Full DTO update; not presence-aware partial semantics                                          | **Done** |
-| Conditions inline            | TransactionRule create/update/patch never creates, updates, or deletes conditions inline       | **Done** |
-| Conditions owner             | Conditions are managed only through `TransactionRuleCondition`                                 | **Done** |
-| PATCH required scalar `null` | `name`, `priority`, `conditionLogic`, `active`, `createdAt`, `updatedAt` null → `400 invalid`  | **Done** |
-| PATCH output link semantics  | JsonNode presence-aware                                                                        | **Done** |
+| Rule                         | Decision                                                                                      | Status   |
+| ---------------------------- | --------------------------------------------------------------------------------------------- | -------- |
+| Outputs ⊆ rule owner         |                                                                                               | **Done** |
+| `user` immutable             | Client payload cannot change owner                                                            | **Done** |
+| Mutable fields               | `name`, `description`, `conditionLogic`, `resultingDescription`, `active`, outputs            | **Done** |
+| `priority` server-managed    | Omitted on PUT/PATCH preserves; same value is a no-op; explicit null/changed value → `400`    | **Done** |
+| PUT contract                 | Full DTO update, except server-managed `priority` may be omitted and preserved                | **Done** |
+| Conditions inline            | TransactionRule create/update/patch never creates, updates, or deletes conditions inline      | **Done** |
+| Conditions owner             | Conditions are managed only through `TransactionRuleCondition`                                | **Done** |
+| PATCH required scalar `null` | `name`, `priority`, `conditionLogic`, `active`, `createdAt`, `updatedAt` null → `400 invalid` | **Done** |
+| PATCH output link semantics  | JsonNode presence-aware                                                                       | **Done** |
+
+### Priority / evaluation order
+
+| Rule                             | Decision                                                                                | Status       |
+| -------------------------------- | --------------------------------------------------------------------------------------- | ------------ |
+| Server-managed                   | Users cannot edit `priority` as a free numeric field                                    | **Done**     |
+| Scope                            | Unique/consecutive per owner/user, not global                                           | **Done**     |
+| Internal numbering               | Stored 0-based: `0, 1, 2, ...`                                                          | **Done**     |
+| Create                           | Ignore client-supplied priority; append with `max(priority for user) + 1`, or `0` first | **Done**     |
+| Delete                           | Reindex remaining rules for the same owner/user only                                    | **Done**     |
+| Delete ordering                  | Reindex preserves existing order by `priority ASC, id ASC`                              | **Done**     |
+| UI display                       | Shows 1-based order (`#1`, `#2`, ...) and does not submit priority from create/edit     | **Done**     |
+| Reorder UI/API                   | Future explicit user-facing way to change priority                                      | **Deferred** |
+| Rule engine evaluation           | Future engine evaluates active rules by `priority ASC`                                  | **Deferred** |
+| Admin-specific cross-user design | Not designed in this slice                                                              | **Deferred** |
 
 ### Output requirements
 
@@ -834,13 +850,13 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Rule                                    | Decision                                                                                                           | Status       |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------ |
 | Related conditions endpoint             | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule                             | **Done**     |
-| Related condition ordering              | Sort by `position ASC`, then `id ASC`                                                                              | **Done**     |
+| Related condition ordering              | Sort by `position ASC`, then `id ASC`; distinct from TransactionRule priority/order                                | **Done**     |
 | Related condition access                | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all                           | **Done**     |
 | Create flow                             | Create saves an inactive parent first, then redirects to detail so conditions can be added after the parent exists | **Done**     |
 | Create page children                    | No embedded condition editor and no client-side draft conditions on create                                         | **Done**     |
 | Rule detail condition collection editor | Inline create/update/delete using existing TransactionRuleCondition endpoints                                      | **Done**     |
 | Rule edit general-fields page           | No embedded condition editor; includes Manage conditions link and background condition count for Active safety     | **Done**     |
-| Rule list/detail semantic summaries     | List/detail avoid raw generated field dumps and show status, condition logic, outputs, compact sections, metadata  | **Done**     |
+| Rule list/detail semantic summaries     | List/detail avoid raw generated field dumps and show read-only order, status, condition logic, outputs, metadata   | **Done**     |
 | View/edit layout parity                 | Detail and edit share Identity → Matching logic → Result → Status/Metadata ordering; detail manages conditions     | **Done**     |
 | Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                     | **Done**     |
 | Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                    | **Done**     |
@@ -893,16 +909,16 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### Product rules
 
-| Rule                                                     | Decision                                                                  | Status       |
-| -------------------------------------------------------- | ------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only                           | JDL                                                                       | **Deferred** |
-| Higher `priority` wins category/subscription/description | JDL                                                                       | **Deferred** |
-| Tags union from all matching rules                       | JDL                                                                       | **Deferred** |
-| Duplicate priorities                                     | Allowed                                                                   | **Done**     |
-| Manual FT fields override rule outputs                   |                                                                           | **Open**     |
-| Priority ties                                            | Define equal-priority tie-break before implementing rule execution engine | **Open**     |
-| Rule execution engine                                    | Not part of CRUD domain-rule pass                                         | **Deferred** |
-| Batch reclassification                                   | Not part of CRUD domain-rule pass                                         | **Deferred** |
+| Rule                                   | Decision                                                                      | Status       |
+| -------------------------------------- | ----------------------------------------------------------------------------- | ------------ |
+| Evaluate on FT **create** only         | JDL                                                                           | **Deferred** |
+| Lower `priority` evaluates earlier     | Future engine uses `priority ASC`; first matching active rule applies outputs | **Deferred** |
+| Tags union from all matching rules     | JDL                                                                           | **Deferred** |
+| Duplicate priorities                   | Not allowed by service-managed per-user consecutive ordering                  | **Done**     |
+| Manual rule reorder                    | Move up / Move down sends full ordered ids; backend validates exact owner set | **Done**     |
+| Manual FT fields override rule outputs |                                                                               | **Open**     |
+| Rule execution engine                  | Not part of CRUD domain-rule pass                                             | **Deferred** |
+| Batch reclassification                 | Not part of CRUD domain-rule pass                                             | **Deferred** |
 
 ---
 

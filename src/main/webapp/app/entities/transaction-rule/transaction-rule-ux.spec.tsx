@@ -1,6 +1,6 @@
 import React from 'react';
 import axios from 'axios';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import dayjs from 'dayjs';
@@ -18,6 +18,7 @@ jest.mock('axios');
 
 const mockAxiosGet = axios.get as jest.Mock;
 const mockAxiosPost = axios.post as jest.Mock;
+const mockAxiosPut = axios.put as jest.Mock;
 const mockAxiosPatch = axios.patch as jest.Mock;
 const mockAxiosDelete = axios.delete as jest.Mock;
 const mockDispatch = jest.fn();
@@ -94,25 +95,23 @@ const registerTranslations = () => {
   TranslatorContext.setLocale('en');
 };
 
-const renderList = () => {
+const createListRule = (id: number, name: string, priority: number) => ({
+  ...baseRule,
+  id,
+  name,
+  priority,
+  resultingDescription: priority === 0 ? baseRule.resultingDescription : null,
+  resultingCategory: priority === 0 ? baseRule.resultingCategory : null,
+  resultingFinancialSubscription: priority === 0 ? baseRule.resultingFinancialSubscription : null,
+  resultingTags: priority === 0 ? baseRule.resultingTags : [],
+});
+
+const renderList = (entities: any[] = [createListRule(1, 'Coffee rule', 0), createListRule(2, 'Rent rule', 1)]) => {
   mockState = {
     ...baseState,
     transactionRule: {
       ...baseState.transactionRule,
-      entities: [
-        baseRule,
-        {
-          ...baseRule,
-          id: 2,
-          name: 'Rent rule',
-          conditionLogic: 'ANY',
-          active: true,
-          resultingDescription: null,
-          resultingCategory: null,
-          resultingFinancialSubscription: null,
-          resultingTags: [],
-        },
-      ],
+      entities,
     },
   };
 
@@ -200,6 +199,7 @@ describe('TransactionRule UX', () => {
     jest.clearAllMocks();
     mockAxiosGet.mockReset();
     mockAxiosPost.mockReset();
+    mockAxiosPut.mockReset();
     mockAxiosPatch.mockReset();
     mockAxiosDelete.mockReset();
     mockCreateEntity.mockClear();
@@ -208,13 +208,14 @@ describe('TransactionRule UX', () => {
   });
 
   it('renders product-oriented list columns and keeps row actions', () => {
-    renderList();
+    renderList([createListRule(1, 'Coffee rule', 0), { ...createListRule(2, 'Rent rule', 1), conditionLogic: 'ANY', active: true }]);
 
+    expect(mockGetEntities).toHaveBeenCalledWith({ sort: 'priority,asc&sort=id,asc' });
     expect(screen.queryByRole('columnheader', { name: /id/i })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: /created at/i })).toBeNull();
     expect(screen.getByRole('columnheader', { name: /name/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /status/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: /priority/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /order/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /conditions/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /result/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /updated/i })).toBeTruthy();
@@ -223,6 +224,8 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('Active')).toBeTruthy();
     expect(screen.getByText('All conditions')).toBeTruthy();
     expect(screen.getByText('Any condition')).toBeTruthy();
+    expect(screen.getByText('#1')).toBeTruthy();
+    expect(screen.getByText('#2')).toBeTruthy();
     expect(screen.getByText('Category: Food')).toBeTruthy();
     expect(screen.getByText('Subscription: Coffee club')).toBeTruthy();
     expect(screen.getByText('Tags: Morning')).toBeTruthy();
@@ -231,6 +234,102 @@ describe('TransactionRule UX', () => {
     expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(2);
+    expect(screen.queryByLabelText('Priority')).toBeNull();
+  });
+
+  it('renders rules in priority ascending order even when raw entities are unsorted', () => {
+    renderList([createListRule(3, 'Rule C', 2), createListRule(2, 'Rule B', 1), createListRule(1, 'Rule A', 0)]);
+
+    const rows = screen.getAllByRole('row').slice(1);
+
+    expect(within(rows[0]).getByRole('link', { name: 'Rule A' })).toBeTruthy();
+    expect(within(rows[0]).getByText('#1')).toBeTruthy();
+    expect(within(rows[1]).getByRole('link', { name: 'Rule B' })).toBeTruthy();
+    expect(within(rows[1]).getByText('#2')).toBeTruthy();
+    expect(within(rows[2]).getByRole('link', { name: 'Rule C' })).toBeTruthy();
+    expect(within(rows[2]).getByText('#3')).toBeTruthy();
+  });
+
+  it('renders only possible move controls and keeps row actions', () => {
+    renderList([createListRule(1, 'Rule A', 0), createListRule(2, 'Rule B', 1), createListRule(3, 'Rule C', 2)]);
+
+    const moveUpButtons = screen.getAllByRole('button', { name: /move up/i });
+    const moveDownButtons = screen.getAllByRole('button', { name: /move down/i });
+    const rows = screen.getAllByRole('row').slice(1);
+
+    expect(moveUpButtons).toHaveLength(2);
+    expect(moveDownButtons).toHaveLength(2);
+    expect(within(rows[0]).queryByRole('button', { name: /move up/i })).toBeNull();
+    expect(within(rows[0]).getByRole('button', { name: /move down/i })).toBeTruthy();
+    expect(within(rows[1]).getByRole('button', { name: /move up/i })).toBeTruthy();
+    expect(within(rows[1]).getByRole('button', { name: /move down/i })).toBeTruthy();
+    expect(within(rows[2]).getByRole('button', { name: /move up/i })).toBeTruthy();
+    expect(within(rows[2]).queryByRole('button', { name: /move down/i })).toBeNull();
+    expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(3);
+    expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(3);
+  });
+
+  it('renders no reorder buttons for a single-row list', () => {
+    renderList([createListRule(1, 'Only rule', 0)]);
+
+    expect(screen.queryByRole('button', { name: /move up/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /move down/i })).toBeNull();
+    expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(1);
+  });
+
+  it('clicking move up on the last row sends the full swapped priority order and reloads', async () => {
+    mockAxiosPut.mockResolvedValue({ data: [] });
+    renderList([createListRule(1, 'Rule A', 0), createListRule(2, 'Rule B', 1), createListRule(3, 'Rule C', 2)]);
+    mockGetEntities.mockClear();
+
+    fireEvent.click(within(screen.getAllByRole('row')[3]).getByRole('button', { name: /move up/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPut).toHaveBeenCalledWith('api/transaction-rules/reorder', {
+        orderedIds: [1, 3, 2],
+      }),
+    );
+    await waitFor(() => expect(mockGetEntities).toHaveBeenCalledWith({ sort: 'priority,asc&sort=id,asc' }));
+  });
+
+  it('clicking move down on the first row sends the full swapped priority order and reloads', async () => {
+    mockAxiosPut.mockResolvedValue({ data: [] });
+    renderList([createListRule(1, 'Rule A', 0), createListRule(2, 'Rule B', 1), createListRule(3, 'Rule C', 2)]);
+    mockGetEntities.mockClear();
+
+    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: /move down/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPut).toHaveBeenCalledWith('api/transaction-rules/reorder', {
+        orderedIds: [2, 1, 3],
+      }),
+    );
+    await waitFor(() => expect(mockGetEntities).toHaveBeenCalledWith({ sort: 'priority,asc&sort=id,asc' }));
+  });
+
+  it('uses the priority ascending array for reorder even when raw entities are reversed', async () => {
+    mockAxiosPut.mockResolvedValue({ data: [] });
+    renderList([createListRule(3, 'Rule C', 2), createListRule(2, 'Rule B', 1), createListRule(1, 'Rule A', 0)]);
+
+    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: /move down/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPut).toHaveBeenCalledWith('api/transaction-rules/reorder', {
+        orderedIds: [2, 1, 3],
+      }),
+    );
+  });
+
+  it('shows a reorder error when move request fails', async () => {
+    mockAxiosPut.mockRejectedValue(new Error('reorder failed'));
+    renderList();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /move down/i })[0]);
+
+    expect(await screen.findByText('Could not reorder rules.')).toBeTruthy();
   });
 
   it('renders create title, hides timestamps, and hides active in create mode', () => {
@@ -243,7 +342,9 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Active')).toBeNull();
+    expect(screen.queryByLabelText('Priority')).toBeNull();
     expect(screen.getByRole('button', { name: /save and add conditions/i })).toBeTruthy();
+    expect(screen.getByText('Rule order is managed from the rules list. New rules are added last.')).toBeTruthy();
   });
 
   it('does not render the embedded conditions editor in create mode', () => {
@@ -259,7 +360,6 @@ describe('TransactionRule UX', () => {
     mockDispatch.mockClear();
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New rule' } });
-    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Resulting Description'), { target: { value: 'Normalized description' } });
     fireEvent.click(screen.getByRole('button', { name: /save and add conditions/i }));
 
@@ -272,6 +372,7 @@ describe('TransactionRule UX', () => {
         }),
       ),
     );
+    expect(mockCreateEntity.mock.calls[0][0]).not.toHaveProperty('priority');
     expect(mockDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'transactionRule/createEntity',
@@ -303,6 +404,7 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('Active rules require at least one condition.')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
+    expect(screen.queryByLabelText('Priority')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Conditions' })).toBeNull();
     expect(screen.queryByRole('button', { name: /add condition/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /delete condition/i })).toBeNull();
@@ -315,9 +417,37 @@ describe('TransactionRule UX', () => {
 
     await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
     expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Coffee shops');
-    expect((screen.getByLabelText('Priority') as HTMLInputElement).value).toBe('10');
     expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL');
     expect((screen.getByLabelText('Resulting Description') as HTMLInputElement).value).toBe('Coffee');
+    expect(screen.queryByLabelText('Priority')).toBeNull();
+  });
+
+  it('submits edited rules without priority', async () => {
+    renderEditForm([
+      {
+        id: 11,
+        position: 1,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Coffee',
+        caseSensitive: false,
+      },
+    ]);
+    mockPartialUpdateEntity.mockClear();
+
+    await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Updated description' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(mockPartialUpdateEntity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          description: 'Updated description',
+        }),
+      ),
+    );
+    expect(mockPartialUpdateEntity.mock.calls[0][0]).not.toHaveProperty('priority');
   });
 
   it('hydrates resulting category, subscription, tags, and active on edit', async () => {
@@ -412,7 +542,8 @@ describe('TransactionRule UX', () => {
     expect(screen.getByRole('heading', { name: 'Result' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Status / Metadata' })).toBeTruthy();
     expect(screen.getByText('Inactive')).toBeTruthy();
-    expect(screen.getByText('10')).toBeTruthy();
+    expect(screen.getByText('Evaluation order:')).toBeTruthy();
+    expect(screen.getByText('#11')).toBeTruthy();
     expect(screen.getByText('All conditions')).toBeTruthy();
     expect(screen.getByText('Food')).toBeTruthy();
     expect(screen.getByText('Coffee club')).toBeTruthy();

@@ -8,6 +8,7 @@ import com.fintrack.app.service.TransactionRuleService;
 import com.fintrack.app.service.criteria.TransactionRuleCriteria;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
+import com.fintrack.app.service.dto.TransactionRuleReorderRequestDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -83,6 +84,25 @@ public class TransactionRuleResource {
     }
 
     /**
+     * {@code PUT /transaction-rules/reorder} : Reorder the current user's transactionRules.
+     *
+     * @param request the full desired order of the current user's transactionRule ids.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the reordered transactionRules.
+     */
+    @PutMapping("/reorder")
+    public ResponseEntity<List<TransactionRuleDTO>> reorderTransactionRules(
+        @RequestBody(required = false) TransactionRuleReorderRequestDTO request
+    ) {
+        LOG.debug("REST request to reorder TransactionRules : {}", request == null ? null : request.getOrderedIds());
+        try {
+            List<TransactionRuleDTO> result = transactionRuleService.reorder(request == null ? null : request.getOrderedIds());
+            return ResponseEntity.ok().body(result);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    /**
      * {@code PUT  /transaction-rules/:id} : Updates an existing transactionRule.
      *
      * @param id the id of the transactionRuleDTO to save.
@@ -95,8 +115,14 @@ public class TransactionRuleResource {
     @PutMapping("/{id}")
     public ResponseEntity<TransactionRuleDTO> updateTransactionRule(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody TransactionRuleDTO transactionRuleDTO
+        @NotNull @RequestBody JsonNode requestNode
     ) throws URISyntaxException {
+        TransactionRuleDTO transactionRuleDTO;
+        try {
+            transactionRuleDTO = objectMapper.treeToValue(requestNode, TransactionRuleDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid update payload", ENTITY_NAME, "invalid");
+        }
         LOG.debug("REST request to update TransactionRule : {}, {}", id, transactionRuleDTO);
         if (transactionRuleDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
@@ -110,7 +136,7 @@ public class TransactionRuleResource {
         }
 
         try {
-            transactionRuleDTO = transactionRuleService.update(transactionRuleDTO);
+            transactionRuleDTO = transactionRuleService.update(transactionRuleDTO, requestNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }

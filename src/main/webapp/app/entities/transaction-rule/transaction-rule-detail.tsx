@@ -21,6 +21,8 @@ const displayText = (value?: string | number | null) => {
   return value;
 };
 
+const displayOrder = (priority?: number | null) => (priority === undefined || priority === null ? emptyValue() : `#${priority + 1}`);
+
 const tagNames = (rule: ITransactionRule) =>
   rule.resultingTags
     ?.map(tag => tag.name)
@@ -56,7 +58,9 @@ export const TransactionRuleDetail = () => {
           </h3>
           <FieldRow label={translate('fintrackApp.transactionRule.name')}>{displayText(transactionRuleEntity.name)}</FieldRow>
           <FieldRow label={translate('fintrackApp.transactionRule.description')}>{displayText(transactionRuleEntity.description)}</FieldRow>
-          <FieldRow label={translate('fintrackApp.transactionRule.priority')}>{displayText(transactionRuleEntity.priority)}</FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.evaluationOrder')}>
+            {displayOrder(transactionRuleEntity.priority)}
+          </FieldRow>
         </section>
         <section className="mb-4" aria-labelledby="transaction-rule-matching-heading">
           <h3 id="transaction-rule-matching-heading">

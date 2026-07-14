@@ -74,6 +74,11 @@ public interface TransactionRuleRepository
         @Param("excludeId") Long excludeId
     );
 
+    @Query("select max(transactionRule.priority) from TransactionRule transactionRule where transactionRule.user.id = :userId")
+    Integer findMaxPriorityByUserId(@Param("userId") Long userId);
+
+    List<TransactionRule> findByUserIdOrderByPriorityAscIdAsc(Long userId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "delete from rel_transaction_rule__resulting_tags where transaction_rule_id = :ruleId", nativeQuery = true)
     void deleteResultingTagsByRuleId(@Param("ruleId") Long ruleId);

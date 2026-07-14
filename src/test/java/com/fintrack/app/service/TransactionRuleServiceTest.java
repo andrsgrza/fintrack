@@ -24,6 +24,7 @@ import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -106,6 +107,7 @@ class TransactionRuleServiceTest {
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
+        when(transactionRuleRepository.findMaxPriorityByUserId(currentUser.getId())).thenReturn(null);
         when(transactionRuleRepository.existsByUserLoginAndNormalizedName(CURRENT_USER_LOGIN, "amazon rule", null)).thenReturn(false);
         when(transactionRuleRepository.save(mappedEntity)).thenReturn(savedEntity);
         when(transactionRuleMapper.toDto(savedEntity)).thenReturn(transactionRuleDTO);
@@ -113,12 +115,58 @@ class TransactionRuleServiceTest {
         transactionRuleService.save(transactionRuleDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getPriority()).isZero();
         verify(transactionRuleRepository).save(mappedEntity);
+    }
+
+    @Test
+    void saveShouldAppendPriorityForCurrentUser() {
+        TransactionRule mappedEntity = validMappedRule(null);
+        mappedEntity.setPriority(99);
+        TransactionRule savedEntity = validMappedRule(10L);
+        savedEntity.setUser(currentUser);
+        savedEntity.setPriority(3);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
+        when(transactionRuleRepository.findMaxPriorityByUserId(currentUser.getId())).thenReturn(2);
+        when(transactionRuleRepository.existsByUserLoginAndNormalizedName(CURRENT_USER_LOGIN, "amazon rule", null)).thenReturn(false);
+        when(transactionRuleRepository.save(mappedEntity)).thenReturn(savedEntity);
+        when(transactionRuleMapper.toDto(savedEntity)).thenReturn(transactionRuleDTO);
+
+        transactionRuleService.save(transactionRuleDTO);
+
+        assertThat(mappedEntity.getPriority()).isEqualTo(3);
+    }
+
+    @Test
+    void saveShouldUseIndependentPrioritySequencePerUser() {
+        User otherUser = new User();
+        otherUser.setId(99L);
+        otherUser.setLogin(OTHER_USER_LOGIN);
+        TransactionRule mappedEntity = validMappedRule(null);
+        TransactionRule savedEntity = validMappedRule(10L);
+        savedEntity.setUser(otherUser);
+
+        when(currentUserService.getCurrentUser()).thenReturn(otherUser);
+        when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
+        when(transactionRuleRepository.findMaxPriorityByUserId(otherUser.getId())).thenReturn(null);
+        when(transactionRuleRepository.existsByUserLoginAndNormalizedName(OTHER_USER_LOGIN, "amazon rule", null)).thenReturn(false);
+        when(transactionRuleRepository.save(mappedEntity)).thenReturn(savedEntity);
+        when(transactionRuleMapper.toDto(savedEntity)).thenReturn(transactionRuleDTO);
+
+        transactionRuleService.save(transactionRuleDTO);
+
+        assertThat(mappedEntity.getPriority()).isZero();
+        verify(transactionRuleRepository).findMaxPriorityByUserId(otherUser.getId());
+        verify(transactionRuleRepository, never()).findMaxPriorityByUserId(currentUser.getId());
     }
 
     @Test
     void updateShouldPreserveExistingOwner() {
         TransactionRule mappedEntity = validMappedRule(10L);
+        mappedEntity.setPriority(null);
+        transactionRuleDTO.setPriority(null);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -133,6 +181,41 @@ class TransactionRuleServiceTest {
         transactionRuleService.update(transactionRuleDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getPriority()).isEqualTo(transactionRule.getPriority());
+    }
+
+    @Test
+    void updateShouldAllowSamePriorityAsNoOp() {
+        TransactionRule mappedEntity = validMappedRule(10L);
+        transactionRuleDTO.setPriority(transactionRule.getPriority());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRule)
+        );
+        when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
+        when(transactionRuleRepository.existsByUserLoginAndNormalizedName(CURRENT_USER_LOGIN, "amazon rule", 10L)).thenReturn(false);
+        when(transactionRuleRepository.save(mappedEntity)).thenReturn(transactionRule);
+        when(transactionRuleMapper.toDto(transactionRule)).thenReturn(transactionRuleDTO);
+
+        transactionRuleService.update(transactionRuleDTO);
+
+        assertThat(mappedEntity.getPriority()).isEqualTo(transactionRule.getPriority());
+    }
+
+    @Test
+    void updateShouldRejectChangedPriority() {
+        transactionRuleDTO.setPriority(99);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).save(any());
     }
 
     @Test
@@ -212,11 +295,121 @@ class TransactionRuleServiceTest {
         when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
             Optional.of(transactionRule)
         );
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(List.of());
 
         assertThat(transactionRuleService.delete(10L)).isTrue();
         verify(transactionRuleConditionRepository).deleteByTransactionRuleId(10L);
         verify(transactionRuleRepository).deleteResultingTagsByRuleId(10L);
         verify(transactionRuleRepository).deleteById(10L);
+        verify(transactionRuleRepository).flush();
+        verify(transactionRuleRepository).findByUserIdOrderByPriorityAscIdAsc(currentUser.getId());
+    }
+
+    @Test
+    void deleteShouldReindexRemainingRulesForOwner() {
+        TransactionRule firstRemainingRule = validMappedRule(11L);
+        firstRemainingRule.setPriority(0);
+        TransactionRule secondRemainingRule = validMappedRule(12L);
+        secondRemainingRule.setPriority(2);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(transactionRule)
+        );
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(
+            List.of(firstRemainingRule, secondRemainingRule)
+        );
+
+        assertThat(transactionRuleService.delete(10L)).isTrue();
+
+        assertThat(firstRemainingRule.getPriority()).isZero();
+        assertThat(secondRemainingRule.getPriority()).isEqualTo(1);
+        verify(transactionRuleRepository).saveAll(List.of(firstRemainingRule, secondRemainingRule));
+    }
+
+    @Test
+    void reorderShouldUpdatePrioritiesInRequestedOrder() {
+        TransactionRule firstRule = validMappedRule(11L);
+        firstRule.setPriority(0);
+        TransactionRule secondRule = validMappedRule(12L);
+        secondRule.setPriority(1);
+        TransactionRule thirdRule = validMappedRule(13L);
+        thirdRule.setPriority(2);
+
+        TransactionRuleDTO firstDTO = new TransactionRuleDTO();
+        firstDTO.setId(11L);
+        TransactionRuleDTO secondDTO = new TransactionRuleDTO();
+        secondDTO.setId(12L);
+        TransactionRuleDTO thirdDTO = new TransactionRuleDTO();
+        thirdDTO.setId(13L);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(
+            List.of(firstRule, secondRule, thirdRule)
+        );
+        when(transactionRuleMapper.toDto(List.of(thirdRule, firstRule, secondRule))).thenReturn(List.of(thirdDTO, firstDTO, secondDTO));
+
+        List<TransactionRuleDTO> result = transactionRuleService.reorder(List.of(13L, 11L, 12L));
+
+        assertThat(thirdRule.getPriority()).isZero();
+        assertThat(firstRule.getPriority()).isEqualTo(1);
+        assertThat(secondRule.getPriority()).isEqualTo(2);
+        assertThat(result).containsExactly(thirdDTO, firstDTO, secondDTO);
+        verify(transactionRuleRepository).saveAll(List.of(thirdRule, firstRule, secondRule));
+    }
+
+    @Test
+    void reorderShouldRejectNullOrderedIds() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(List.of(transactionRule));
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(null)).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectEmptyOrderedIdsWhenUserHasRules() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(List.of(transactionRule));
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of())).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectDuplicateIds() {
+        TransactionRule secondRule = validMappedRule(12L);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(
+            List.of(transactionRule, secondRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of(10L, 10L))).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectMissingExistingRule() {
+        TransactionRule secondRule = validMappedRule(12L);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(
+            List.of(transactionRule, secondRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of(10L))).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectUnknownOrForeignRuleId() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(List.of(transactionRule));
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of(10L, 999L))).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
     }
 
     @Test
