@@ -1,7 +1,6 @@
 package com.fintrack.app.web.rest;
 
 import static com.fintrack.app.domain.TagAsserts.*;
-import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
@@ -11,6 +10,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialSubscription;
@@ -268,36 +268,97 @@ class TagResourceIT {
 
     @Test
     @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createTagWithoutCreatedAtSucceeds() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
         tag.setCreatedAt(null);
 
-        // Create the Tag, which fails.
         TagDTO tagDTO = tagMapper.toDto(tag);
 
-        restTagMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
-            .andExpect(status().isBadRequest());
+        TagDTO returnedTagDTO = om.readValue(
+            restTagMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TagDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        Tag persistedTag = getPersistedTag(tagMapper.toEntity(returnedTagDTO));
+        assertThat(persistedTag.getCreatedAt()).isNotNull();
+        insertedTag = persistedTag;
     }
 
     @Test
     @Transactional
-    void checkUpdatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createTagWithoutUpdatedAtSucceeds() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
         tag.setUpdatedAt(null);
 
-        // Create the Tag, which fails.
         TagDTO tagDTO = tagMapper.toDto(tag);
 
-        restTagMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
-            .andExpect(status().isBadRequest());
+        TagDTO returnedTagDTO = om.readValue(
+            restTagMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TagDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        Tag persistedTag = getPersistedTag(tagMapper.toEntity(returnedTagDTO));
+        assertThat(persistedTag.getUpdatedAt()).isNotNull();
+        insertedTag = persistedTag;
+    }
+
+    @Test
+    @Transactional
+    void createTagIgnoresClientTimestamps() throws Exception {
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setCreatedAt(UPDATED_CREATED_AT);
+        tagDTO.setUpdatedAt(UPDATED_UPDATED_AT);
+
+        TagDTO returnedTagDTO = om.readValue(
+            restTagMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TagDTO.class
+        );
+
+        Tag persistedTag = getPersistedTag(tagMapper.toEntity(returnedTagDTO));
+        assertThat(persistedTag.getCreatedAt()).isNotEqualTo(UPDATED_CREATED_AT);
+        assertThat(persistedTag.getUpdatedAt()).isNotEqualTo(UPDATED_UPDATED_AT);
+        insertedTag = persistedTag;
+    }
+
+    @Test
+    @Transactional
+    void legacyCreateTagWithNullTimestampsSucceeds() throws Exception {
+        tag.setCreatedAt(null);
+        tag.setUpdatedAt(null);
+
+        TagDTO tagDTO = tagMapper.toDto(tag);
+
+        TagDTO returnedTagDTO = om.readValue(
+            restTagMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TagDTO.class
+        );
+
+        Tag persistedTag = getPersistedTag(tagMapper.toEntity(returnedTagDTO));
+        assertThat(persistedTag.getCreatedAt()).isNotNull();
+        assertThat(persistedTag.getUpdatedAt()).isNotNull();
+        insertedTag = persistedTag;
     }
 
     @Test
@@ -794,8 +855,8 @@ class TagResourceIT {
             .description(UPDATED_DESCRIPTION)
             .color(UPDATED_COLOR)
             .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT);
         TagDTO tagDTO = tagMapper.toDto(updatedTag);
 
         restTagMockMvc
@@ -804,7 +865,65 @@ class TagResourceIT {
 
         // Validate the Tag in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedTagToMatchAllProperties(updatedTag);
+        Tag persistedTag = getPersistedTag(tag);
+        assertThat(persistedTag.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persistedTag.getDescription()).isEqualTo(UPDATED_DESCRIPTION);
+        assertThat(persistedTag.getColor()).isEqualTo(UPDATED_COLOR);
+        assertThat(persistedTag.getActive()).isEqualTo(UPDATED_ACTIVE);
+        assertThat(persistedTag.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedTag.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void putTagWithChangedCreatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setCreatedAt(UPDATED_CREATED_AT);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void putTagWithNullCreatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setCreatedAt(null);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void putTagWithChangedUpdatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setUpdatedAt(UPDATED_UPDATED_AT);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void putTagWithNullUpdatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+        TagDTO tagDTO = tagMapper.toDto(tag);
+        tagDTO.setUpdatedAt(null);
+
+        restTagMockMvc
+            .perform(put(ENTITY_API_URL_ID, tagDTO.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagDTO)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
     }
 
     @Test
@@ -873,15 +992,15 @@ class TagResourceIT {
 
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
-        // Update the tag using partial update
-        Tag partialUpdatedTag = new Tag();
-        partialUpdatedTag.setId(tag.getId());
-
-        partialUpdatedTag.description(UPDATED_DESCRIPTION).updatedAt(UPDATED_UPDATED_AT);
+        // Update the tag using partial update. Build explicit merge-patch JSON so
+        // omitted server-owned timestamps are not serialized as nulls.
+        ObjectNode partialUpdatedTag = om.createObjectNode();
+        partialUpdatedTag.put("id", tag.getId());
+        partialUpdatedTag.put("description", UPDATED_DESCRIPTION);
 
         restTagMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTag.getId())
+                patch(ENTITY_API_URL_ID, tag.getId())
                     .contentType("application/merge-patch+json")
                     .content(om.writeValueAsBytes(partialUpdatedTag))
             )
@@ -890,7 +1009,13 @@ class TagResourceIT {
         // Validate the Tag in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertTagUpdatableFieldsEquals(createUpdateProxyForBean(partialUpdatedTag, tag), getPersistedTag(tag));
+        Tag persistedTag = getPersistedTag(tag);
+        assertThat(persistedTag.getName()).isEqualTo(DEFAULT_NAME);
+        assertThat(persistedTag.getDescription()).isEqualTo(UPDATED_DESCRIPTION);
+        assertThat(persistedTag.getColor()).isEqualTo(DEFAULT_COLOR);
+        assertThat(persistedTag.getActive()).isEqualTo(DEFAULT_ACTIVE);
+        assertThat(persistedTag.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedTag.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
     }
 
     @Test
@@ -902,20 +1027,16 @@ class TagResourceIT {
         long databaseSizeBeforeUpdate = getRepositoryCount();
 
         // Update the tag using partial update
-        Tag partialUpdatedTag = new Tag();
-        partialUpdatedTag.setId(tag.getId());
-
-        partialUpdatedTag
-            .name(UPDATED_NAME)
-            .description(UPDATED_DESCRIPTION)
-            .color(UPDATED_COLOR)
-            .active(UPDATED_ACTIVE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+        ObjectNode partialUpdatedTag = om.createObjectNode();
+        partialUpdatedTag.put("id", tag.getId());
+        partialUpdatedTag.put("name", UPDATED_NAME);
+        partialUpdatedTag.put("description", UPDATED_DESCRIPTION);
+        partialUpdatedTag.put("color", UPDATED_COLOR);
+        partialUpdatedTag.put("active", UPDATED_ACTIVE);
 
         restTagMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTag.getId())
+                patch(ENTITY_API_URL_ID, tag.getId())
                     .contentType("application/merge-patch+json")
                     .content(om.writeValueAsBytes(partialUpdatedTag))
             )
@@ -924,7 +1045,112 @@ class TagResourceIT {
         // Validate the Tag in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertTagUpdatableFieldsEquals(partialUpdatedTag, getPersistedTag(partialUpdatedTag));
+        Tag persistedTag = getPersistedTag(tag);
+        assertThat(persistedTag.getName()).isEqualTo(UPDATED_NAME);
+        assertThat(persistedTag.getDescription()).isEqualTo(UPDATED_DESCRIPTION);
+        assertThat(persistedTag.getColor()).isEqualTo(UPDATED_COLOR);
+        assertThat(persistedTag.getActive()).isEqualTo(UPDATED_ACTIVE);
+        assertThat(persistedTag.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedTag.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void patchTagWithSameTimestampsSucceeds() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", tag.getId());
+        patchPayload.put("createdAt", DEFAULT_CREATED_AT.toString());
+        patchPayload.put("updatedAt", DEFAULT_UPDATED_AT.toString());
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, tag.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isOk());
+
+        Tag persistedTag = getPersistedTag(tag);
+        assertThat(persistedTag.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedTag.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void patchTagWithChangedCreatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", tag.getId());
+        patchPayload.put("createdAt", UPDATED_CREATED_AT.toString());
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, tag.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void patchTagWithNullCreatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", tag.getId());
+        patchPayload.putNull("createdAt");
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, tag.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void patchTagWithChangedUpdatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", tag.getId());
+        patchPayload.put("updatedAt", UPDATED_UPDATED_AT.toString());
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, tag.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void patchTagWithNullUpdatedAtFails() throws Exception {
+        insertedTag = tagRepository.saveAndFlush(tag);
+
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", tag.getId());
+        patchPayload.putNull("updatedAt");
+
+        restTagMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, tag.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchPayload))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
     }
 
     @Test
@@ -1102,13 +1328,13 @@ class TagResourceIT {
         tag.setUser(createOtherUser(em));
         insertedTag = tagRepository.saveAndFlush(tag);
 
-        TagDTO tagDTO = new TagDTO();
-        tagDTO.setId(tag.getId());
-        tagDTO.setName(UPDATED_NAME);
+        ObjectNode tagDTO = om.createObjectNode();
+        tagDTO.put("id", tag.getId());
+        tagDTO.put("name", UPDATED_NAME);
 
         restTagMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, tagDTO.getId()).contentType("application/merge-patch+json").content(om.writeValueAsBytes(tagDTO))
+                patch(ENTITY_API_URL_ID, tag.getId()).contentType("application/merge-patch+json").content(om.writeValueAsBytes(tagDTO))
             )
             .andExpect(status().isBadRequest());
     }
@@ -1152,17 +1378,16 @@ class TagResourceIT {
         insertedTag = tagRepository.saveAndFlush(tag);
         User otherUser = createOtherUser(em);
 
-        TagDTO tagDTO = new TagDTO();
-        tagDTO.setId(tag.getId());
-        tagDTO.setName(UPDATED_NAME);
-        UserDTO otherUserDTO = new UserDTO();
-        otherUserDTO.setId(otherUser.getId());
-        otherUserDTO.setLogin(otherUser.getLogin());
-        tagDTO.setUser(otherUserDTO);
+        ObjectNode tagDTO = om.createObjectNode();
+        tagDTO.put("id", tag.getId());
+        tagDTO.put("name", UPDATED_NAME);
+        ObjectNode otherUserDTO = tagDTO.putObject("user");
+        otherUserDTO.put("id", otherUser.getId());
+        otherUserDTO.put("login", otherUser.getLogin());
 
         restTagMockMvc
             .perform(
-                patch(ENTITY_API_URL_ID, tagDTO.getId()).contentType("application/merge-patch+json").content(om.writeValueAsBytes(tagDTO))
+                patch(ENTITY_API_URL_ID, tag.getId()).contentType("application/merge-patch+json").content(om.writeValueAsBytes(tagDTO))
             )
             .andExpect(status().isOk());
 
@@ -1312,9 +1537,9 @@ class TagResourceIT {
         secondTag.name("Viajes");
         insertedTag = tagRepository.saveAndFlush(secondTag);
 
-        Tag patchPayload = new Tag();
-        patchPayload.setId(secondTag.getId());
-        patchPayload.setName(" COMIDA ");
+        ObjectNode patchPayload = om.createObjectNode();
+        patchPayload.put("id", secondTag.getId());
+        patchPayload.put("name", " COMIDA ");
 
         restTagMockMvc
             .perform(

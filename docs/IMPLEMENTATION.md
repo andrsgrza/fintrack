@@ -356,15 +356,16 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 #### Ownership ✅
 
-| Regla                                | Implementación                                                                      |
-| ------------------------------------ | ----------------------------------------------------------------------------------- |
-| Create asigna `user = currentUser`   | `TagService.save()`                                                                 |
-| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user`                                  |
-| List / criteria filtrados por user   | `TagQueryService` + repository                                                      |
-| Get / update / patch / delete scoped | `findAccessibleEntity()`                                                            |
-| Admin bypass                         | `CurrentUserService.isAdmin()`                                                      |
-| UI sin User                          | `tag-*.tsx`                                                                         |
-| Link validation (FT)                 | `findOneByIdAndUserLogin` — usado por `FinancialTransactionService` al asignar tags |
+| Regla                                | Implementación                                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Create asigna `user = currentUser`   | `TagService.save()`                                                                                          |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user`                                                           |
+| Timestamps server-owned              | Create ignora timestamps cliente; PUT/PATCH preservan `createdAt` y setean `updatedAt = now`                 |
+| List / criteria filtrados por user   | `TagQueryService` + repository                                                                               |
+| Get / update / patch / delete scoped | `findAccessibleEntity()`                                                                                     |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                                                               |
+| UI catálogo simple                   | Create/edit sólo `name`, `description`, `color`, `active`; list/detail sin IDs técnicos ni relaciones crudas |
+| Link validation (FT)                 | `findOneByIdAndUserLogin` — usado por `FinancialTransactionService` al asignar tags                          |
 
 **Archivos:** `TagRepository`, `TagService`, `TagQueryService`, `TagResource`, `TagDTO`, `TagMapper`, UI.
 
@@ -372,13 +373,13 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 | Capa              | Estado | Detalle                                                                                                      |
 | ----------------- | ------ | ------------------------------------------------------------------------------------------------------------ |
-| DTO `@Valid`      | ✅     | name, color pattern, active, timestamps; `user` **sin** `@NotNull` (asignado en service)                     |
+| DTO `@Valid`      | ✅     | name, color pattern, active; timestamps opcionales en DTO porque son server-owned; `user` **sin** `@NotNull` |
 | Entity JPA        | ✅     | `user` required                                                                                              |
 | DB Liquibase      | ✅     | `user_id NOT NULL`, FK                                                                                       |
-| Service — negocio | ✅     | **Trim `name`**; **`name` unique per owner** (case-insensitive query); uniqueness vs **tag owner** not actor |
-| REST              | ✅     | `@Valid` POST/PUT; PATCH DTO; `IllegalArgumentException` → `400 invalid`                                     |
+| Service — negocio | ✅     | **Trim `name`**; **`name` unique per owner**; timestamps server-owned; uniqueness vs **tag owner** not actor |
+| REST              | ✅     | `@Valid` POST/PUT; PATCH `JsonNode` for timestamp presence; `IllegalArgumentException` → `400 invalid`       |
 
-**Tests:** 78 IT + 12 service — ver [TESTING.md § Tag](TESTING.md#tag).
+**Tests:** Tag Resource/Service + frontend UX — ver [TESTING.md § Tag](TESTING.md#tag).
 
 #### Domain rules ✅
 
@@ -388,6 +389,8 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Cleanup join tables por `tagId`                | ✅     | 4 tablas: FT, TransactionRule, FinancialSubscription, Budget (`@Modifying` + flush/clear) |
 | `active=false` sin borrar links                | ✅     | Alternativa a delete; no requerido antes de delete                                        |
 | `name`/`color`/`description`/`active` mutables | ✅     | Uniqueness sin filtrar por `active`                                                       |
+| `createdAt`/`updatedAt` server-owned           | ✅     | Cliente no controla timestamps; PUT/PATCH rechazan cambios/null explícitos                |
+| Relaciones no editables desde Tag UI           | ✅     | Se preservan; se gestionan desde FT/rules/subscriptions/budgets                           |
 | Soft delete                                    | ❌     | Fuera de scope                                                                            |
 
 **Implementado en:** `TagService.delete()` + `TagRepository` `@Modifying` (una transacción). Ver [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).

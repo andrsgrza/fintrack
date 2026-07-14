@@ -8,11 +8,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.TagMapper;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,10 @@ import org.springframework.data.domain.Pageable;
 class TagServiceTest {
 
     private static final String CURRENT_USER_LOGIN = "user";
+    private static final Instant EXISTING_CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Instant EXISTING_UPDATED_AT = Instant.parse("2026-01-02T00:00:00Z");
+    private static final Instant CLIENT_CREATED_AT = Instant.parse("2000-01-01T00:00:00Z");
+    private static final Instant CLIENT_UPDATED_AT = Instant.parse("2000-01-02T00:00:00Z");
 
     @Mock
     private TagRepository tagRepository;
@@ -44,6 +51,7 @@ class TagServiceTest {
     private User currentUser;
     private Tag tag;
     private TagDTO tagDTO;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
@@ -55,16 +63,24 @@ class TagServiceTest {
         tag.setId(10L);
         tag.setName("Travel");
         tag.setUser(currentUser);
+        tag.setCreatedAt(EXISTING_CREATED_AT);
+        tag.setUpdatedAt(EXISTING_UPDATED_AT);
 
         tagDTO = new TagDTO();
         tagDTO.setId(10L);
         tagDTO.setName("Travel");
+        tagDTO.setCreatedAt(EXISTING_CREATED_AT);
+        tagDTO.setUpdatedAt(EXISTING_UPDATED_AT);
+
+        objectMapper = new ObjectMapper();
     }
 
     @Test
     void saveShouldAssignCurrentUser() {
         Tag mappedEntity = new Tag();
         mappedEntity.setName("Travel");
+        mappedEntity.setCreatedAt(CLIENT_CREATED_AT);
+        mappedEntity.setUpdatedAt(CLIENT_UPDATED_AT);
         Tag savedEntity = new Tag();
         savedEntity.setId(10L);
         savedEntity.setUser(currentUser);
@@ -79,6 +95,8 @@ class TagServiceTest {
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
         assertThat(mappedEntity.getName()).isEqualTo("Travel");
+        assertThat(mappedEntity.getCreatedAt()).isNotNull().isNotEqualTo(CLIENT_CREATED_AT);
+        assertThat(mappedEntity.getUpdatedAt()).isNotNull().isNotEqualTo(CLIENT_UPDATED_AT);
         verify(tagRepository).save(mappedEntity);
     }
 
@@ -99,6 +117,153 @@ class TagServiceTest {
         tagService.update(tagDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(mappedEntity.getUpdatedAt()).isNotNull().isNotEqualTo(EXISTING_UPDATED_AT);
+    }
+
+    @Test
+    void updateShouldRejectChangedCreatedAt() {
+        tagDTO.setCreatedAt(CLIENT_CREATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.update(tagDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullCreatedAt() {
+        tagDTO.setCreatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.update(tagDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectChangedUpdatedAt() {
+        tagDTO.setUpdatedAt(CLIENT_UPDATED_AT);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.update(tagDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullUpdatedAt() {
+        tagDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.update(tagDTO)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldPreserveCreatedAtAndSetUpdatedAt() {
+        tagDTO.setCreatedAt(null);
+        tagDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+        when(tagRepository.save(tag)).thenReturn(tag);
+        when(tagMapper.toDto(tag)).thenReturn(tagDTO);
+
+        tagService.partialUpdate(tagDTO, objectMapper.createObjectNode().put("id", 10L).put("description", "Updated"));
+
+        assertThat(tag.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(tag.getUpdatedAt()).isNotNull().isNotEqualTo(EXISTING_UPDATED_AT);
+        verify(tagRepository).save(tag);
+    }
+
+    @Test
+    void partialUpdateShouldAllowSameTimestampsAsNoOp() {
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 10L);
+        patchNode.put("createdAt", EXISTING_CREATED_AT.toString());
+        patchNode.put("updatedAt", EXISTING_UPDATED_AT.toString());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+        when(tagRepository.save(tag)).thenReturn(tag);
+        when(tagMapper.toDto(tag)).thenReturn(tagDTO);
+
+        tagService.partialUpdate(tagDTO, patchNode);
+
+        assertThat(tag.getCreatedAt()).isEqualTo(EXISTING_CREATED_AT);
+        assertThat(tag.getUpdatedAt()).isNotNull().isNotEqualTo(EXISTING_UPDATED_AT);
+    }
+
+    @Test
+    void partialUpdateShouldRejectChangedCreatedAt() {
+        tagDTO.setCreatedAt(CLIENT_CREATED_AT);
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 10L);
+        patchNode.put("createdAt", CLIENT_CREATED_AT.toString());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.partialUpdate(tagDTO, patchNode)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectNullCreatedAt() {
+        tagDTO.setCreatedAt(null);
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 10L);
+        patchNode.putNull("createdAt");
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.partialUpdate(tagDTO, patchNode)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectChangedUpdatedAt() {
+        tagDTO.setUpdatedAt(CLIENT_UPDATED_AT);
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 10L);
+        patchNode.put("updatedAt", CLIENT_UPDATED_AT.toString());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.partialUpdate(tagDTO, patchNode)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectNullUpdatedAt() {
+        tagDTO.setUpdatedAt(null);
+        ObjectNode patchNode = objectMapper.createObjectNode();
+        patchNode.put("id", 10L);
+        patchNode.putNull("updatedAt");
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.partialUpdate(tagDTO, patchNode)).isInstanceOf(IllegalArgumentException.class);
+        verify(tagRepository, never()).save(any());
     }
 
     @Test

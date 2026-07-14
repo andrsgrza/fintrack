@@ -1,9 +1,12 @@
 package com.fintrack.app.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.TagMapper;
+import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +46,9 @@ public class TagService {
         LOG.debug("Request to save Tag : {}", tagDTO);
         Tag tag = tagMapper.toEntity(tagDTO);
         tag.setUser(currentUserService.getCurrentUser());
+        Instant now = Instant.now();
+        tag.setCreatedAt(now);
+        tag.setUpdatedAt(now);
         tag.setName(normalizeName(tag.getName()));
         validateUniqueNameForOwner(tag.getUser().getId(), tag.getName(), null);
         tag = tagRepository.save(tag);
@@ -58,10 +64,14 @@ public class TagService {
     public TagDTO update(TagDTO tagDTO) {
         LOG.debug("Request to update Tag : {}", tagDTO);
         Tag existingTag = findAccessibleEntity(tagDTO.getId()).orElseThrow();
+        rejectTimestampChange(existingTag.getCreatedAt(), tagDTO.getCreatedAt(), "Created at cannot be changed");
+        rejectTimestampChange(existingTag.getUpdatedAt(), tagDTO.getUpdatedAt(), "Updated at cannot be changed");
         Tag tag = tagMapper.toEntity(tagDTO);
         tag.setName(normalizeName(tag.getName()));
         validateUniqueNameForOwner(existingTag.getUser().getId(), tag.getName(), existingTag.getId());
         tag.setUser(existingTag.getUser());
+        tag.setCreatedAt(existingTag.getCreatedAt());
+        tag.setUpdatedAt(Instant.now());
         tag = tagRepository.save(tag);
         return tagMapper.toDto(tag);
     }
@@ -73,11 +83,28 @@ public class TagService {
      * @return the persisted entity.
      */
     public Optional<TagDTO> partialUpdate(TagDTO tagDTO) {
+        return partialUpdate(tagDTO, null);
+    }
+
+    /**
+     * Partially update a tag, applying immutable timestamp checks only when present in the patch body.
+     *
+     * @param tagDTO the entity to update partially.
+     * @param patchNode the raw patch payload.
+     * @return the persisted entity.
+     */
+    public Optional<TagDTO> partialUpdate(TagDTO tagDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update Tag : {}", tagDTO);
 
         return findAccessibleEntity(tagDTO.getId())
             .map(existingTag -> {
+                Instant existingCreatedAt = existingTag.getCreatedAt();
+                Instant existingUpdatedAt = existingTag.getUpdatedAt();
+
+                rejectTimestampChanges(existingTag, tagDTO, patchNode);
                 tagMapper.partialUpdate(existingTag, tagDTO);
+                existingTag.setCreatedAt(existingCreatedAt);
+                existingTag.setUpdatedAt(Instant.now());
                 if (tagDTO.getName() != null) {
                     existingTag.setName(normalizeName(tagDTO.getName()));
                     validateUniqueNameForOwner(existingTag.getUser().getId(), existingTag.getName(), existingTag.getId());
@@ -155,6 +182,30 @@ public class TagService {
             return tagRepository.findOneWithEagerRelationships(id);
         }
         return tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private void rejectTimestampChanges(Tag existingTag, TagDTO tagDTO, JsonNode patchNode) {
+        if (patchNode == null) {
+            if (tagDTO.getCreatedAt() != null) {
+                rejectTimestampChange(existingTag.getCreatedAt(), tagDTO.getCreatedAt(), "Created at cannot be changed");
+            }
+            if (tagDTO.getUpdatedAt() != null) {
+                rejectTimestampChange(existingTag.getUpdatedAt(), tagDTO.getUpdatedAt(), "Updated at cannot be changed");
+            }
+            return;
+        }
+        if (patchNode.has("createdAt")) {
+            rejectTimestampChange(existingTag.getCreatedAt(), tagDTO.getCreatedAt(), "Created at cannot be changed");
+        }
+        if (patchNode.has("updatedAt")) {
+            rejectTimestampChange(existingTag.getUpdatedAt(), tagDTO.getUpdatedAt(), "Updated at cannot be changed");
+        }
+    }
+
+    private void rejectTimestampChange(Instant existingTimestamp, Instant requestedTimestamp, String message) {
+        if (requestedTimestamp == null || !Objects.equals(existingTimestamp, requestedTimestamp)) {
+            throw new IllegalArgumentException(message);
+        }
     }
 
     private String normalizeName(String name) {
