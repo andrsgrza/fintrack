@@ -16,16 +16,51 @@
         "message": "Esto eliminará esta condición de regla. La regla en sí no se eliminará. Si era la última condición, la regla se desactivará para evitar que coincida con todas las transacciones. Esta acción no se puede deshacer."
       },
       "detail": {
-        "title": "Transaction Rule Condition"
+        "title": "Condición de regla"
       },
+      "createTitle": "Crear condición",
+      "editTitle": "Editar condición",
       "id": "ID",
-      "field": "Field",
-      "operator": "Operator",
-      "value": "Value",
-      "secondValue": "Second Value",
-      "caseSensitive": "Case Sensitive",
-      "position": "Position",
-      "transactionRule": "Transaction Rule"
+      "field": "Campo",
+      "operator": "Operador",
+      "value": "Valor",
+      "secondValue": "Segundo valor",
+      "caseSensitive": "Sensible a mayúsculas",
+      "position": "Posición",
+      "condition": "Condición",
+      "transactionRule": "Regla",
+      "summary": {
+        "unknownField": "Condición",
+        "missingValue": "—",
+        "caseSensitiveSuffix": "(sensible a mayúsculas)",
+        "equals": "{{field}} igual a {{value}}",
+        "notEquals": "{{field}} distinto de {{value}}",
+        "contains": "{{field}} contiene {{value}}",
+        "notContains": "{{field}} no contiene {{value}}",
+        "startsWith": "{{field}} empieza con {{value}}",
+        "endsWith": "{{field}} termina con {{value}}",
+        "regex": "{{field}} coincide con {{value}}",
+        "greaterThan": "{{field}} mayor que {{value}}",
+        "greaterThanOrEqual": "{{field}} mayor o igual que {{value}}",
+        "lessThan": "{{field}} menor que {{value}}",
+        "lessThanOrEqual": "{{field}} menor o igual que {{value}}",
+        "before": "{{field}} antes de {{value}}",
+        "after": "{{field}} después de {{value}}",
+        "between": "{{field}} entre {{value}} y {{secondValue}}",
+        "in": "{{field}} es uno de {{value}}",
+        "notIn": "{{field}} no es uno de {{value}}",
+        "fallback": "{{field}} {{value}}"
+      },
+      "help": {
+        "AMOUNT": "Usa valores decimales separados por coma, ej. 100.00,250.50",
+        "TRANSACTION_DATE": "Usa fechas separadas por coma en formato YYYY-MM-DD.",
+        "POSTING_DATE": "Usa fechas separadas por coma en formato YYYY-MM-DD.",
+        "FLOW": "Usa valores separados por coma: IN,OUT",
+        "ORIGIN": "Usa valores separados por coma: MANUAL,FILE_IMPORT,API",
+        "ACCOUNT": "Usa IDs de cuenta separados por coma.",
+        "DESCRIPTION": "Usa textos separados por coma.",
+        "EXTERNAL_REFERENCE": "Usa textos separados por coma."
+      }
     }
   }
 }

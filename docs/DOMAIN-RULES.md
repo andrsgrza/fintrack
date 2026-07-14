@@ -631,19 +631,19 @@ Suggested copy documented; `budget-delete-dialog.tsx` + i18n en/es.
 
 ### DELETE
 
-| Rule                              | Decision                                                             | Applies to admin | Error | Status       |
-| --------------------------------- | -------------------------------------------------------------------- | ---------------- | ----- | ------------ |
-| Delete allowed                    | Delete only `TransactionRuleCondition` row                           | Yes              | —     | **Done**     |
-| Do not delete parent rule         | `TransactionRule` survives                                           | Yes              | —     | **Done**     |
-| Do not delete FT / financial data | —                                                                    | Yes              | —     | **Done**     |
-| Last condition on parent          | `TransactionRule.active = false`; update `updatedAt`                 | Yes              | —     | **Done**     |
-| Count before delete               | `count(conditions where rule_id = parentId)`; if `== 1` → deactivate | Yes              | —     | **Done**     |
-| Single transaction                | Delete + optional parent update                                      | Yes              | —     | **Done**     |
-| Parent already inactive           | Stays `false`                                                        | Yes              | —     | **Done**     |
-| Create on inactive rule           | Does **not** auto-reactivate parent                                  | Yes              | —     | **Done**     |
-| Foreign user DELETE               | `404`                                                                | —                | `404` | **Done**     |
-| Admin DELETE foreign              | `204`                                                                | Yes              | —     | **Done**     |
-| Parent rule DELETE cascade        | Belongs to `TransactionRuleService` (#9)                             | —                | —     | **Deferred** |
+| Rule                              | Decision                                                             | Applies to admin | Error | Status   |
+| --------------------------------- | -------------------------------------------------------------------- | ---------------- | ----- | -------- |
+| Delete allowed                    | Delete only `TransactionRuleCondition` row                           | Yes              | —     | **Done** |
+| Do not delete parent rule         | `TransactionRule` survives                                           | Yes              | —     | **Done** |
+| Do not delete FT / financial data | —                                                                    | Yes              | —     | **Done** |
+| Last condition on parent          | `TransactionRule.active = false`; update `updatedAt`                 | Yes              | —     | **Done** |
+| Count before delete               | `count(conditions where rule_id = parentId)`; if `== 1` → deactivate | Yes              | —     | **Done** |
+| Single transaction                | Delete + optional parent update                                      | Yes              | —     | **Done** |
+| Parent already inactive           | Stays `false`                                                        | Yes              | —     | **Done** |
+| Create on inactive rule           | Does **not** auto-reactivate parent                                  | Yes              | —     | **Done** |
+| Foreign user DELETE               | `404`                                                                | —                | `404` | **Done** |
+| Admin DELETE foreign              | `204`                                                                | Yes              | —     | **Done** |
+| Parent rule DELETE cleanup        | `TransactionRuleService.delete` bulk deletes child conditions        | Yes              | —     | **Done** |
 
 ### CREATE — parent `transactionRule`
 
@@ -666,7 +666,9 @@ Suggested copy documented; `budget-delete-dialog.tsx` + i18n en/es.
 
 ### Mutable fields
 
-`field`, `operator`, `value`, `secondValue`, `caseSensitive`, `position`.
+Client-editable fields: `field`, `operator`, `value`, `secondValue`, `caseSensitive`.
+
+`position` is server-managed. New conditions are appended using `max(existing position for rule) + 1` (`0` for the first condition). Client-provided `position` on create is ignored. PUT/PATCH preserve the existing value; explicit same value is allowed as a no-op, explicit changed value or explicit `null` is rejected with `400 invalid`.
 
 Validate **final merged state** after PUT/PATCH (not only submitted fields). Example: PATCH operator `BETWEEN` → `EQUALS` while `secondValue` remains in DB → `400`.
 
@@ -701,7 +703,7 @@ Operators: `EQUALS`, `NOT_EQUALS`, `IN`, `NOT_IN`.
 | `value` required                     | Non-null, non-blank (trim)                                          | **Done** |
 | `secondValue` for `BETWEEN` only     | Required; `value <= secondValue` after parse                        | **Done** |
 | `secondValue` for non-`BETWEEN`      | Must be null/blank                                                  | **Done** |
-| `position` ≥ 0                       | Required, mutable; no unique position per rule                      | **Done** |
+| `position` ≥ 0                       | Server-managed append order; no unique position per rule            | **Done** |
 | `caseSensitive`                      | Required; accept as provided; execution uses only on TEXT           | **Done** |
 | PATCH required field explicit `null` | Reject `field`, `operator`, `value`, `caseSensitive`, or `position` | **Done** |
 | PATCH `secondValue: null`            | Clear optional second value before merged-state validation          | **Done** |
@@ -720,9 +722,26 @@ Block exact duplicate inside same `TransactionRule`: same `field`, `operator`, n
 
 Suggested copy: _"This will delete this rule condition. The rule itself will not be deleted. If this was the last condition, the rule will be disabled to prevent it from matching every transaction. This action cannot be undone."_
 
+### UX — smart condition form
+
+The standalone TransactionRuleCondition create/edit form and embedded TransactionRule detail condition editor are no longer raw generated enum forms. They guide the user toward combinations accepted by the backend:
+
+| Field type                          | UI behavior                                                                                                                                                                                     | Status   |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `DESCRIPTION`, `EXTERNAL_REFERENCE` | Shows only text operators; value is text; `caseSensitive` is visible                                                                                                                            | **Done** |
+| `AMOUNT`                            | Shows numeric/list operators; value is number except `IN`/`NOT_IN` text list; `BETWEEN` second value is number                                                                                  | **Done** |
+| `TRANSACTION_DATE`, `POSTING_DATE`  | Shows date/list operators; value is date except `IN`/`NOT_IN` text list; `BETWEEN` second value is date                                                                                         | **Done** |
+| `FLOW`                              | Shows enum operators; `EQUALS`/`NOT_EQUALS` use an `IN`/`OUT` select; `IN`/`NOT_IN` remain comma-separated text                                                                                 | **Done** |
+| `ORIGIN`                            | Shows enum operators; `EQUALS`/`NOT_EQUALS` use a `MANUAL`/`FILE_IMPORT`/`API` select; `IN`/`NOT_IN` remain comma-separated text                                                                | **Done** |
+| `ACCOUNT`                           | Shows account operators; `EQUALS`/`NOT_EQUALS` use an accessible FinancialAccount selector and submit the selected account id as a string; `IN`/`NOT_IN` remain comma-separated account id text | **Done** |
+| `secondValue`                       | Visible only for `BETWEEN`; hidden operators submit/clear it as `null`                                                                                                                          | **Done** |
+| `caseSensitive`                     | Visible only for text fields; hidden fields submit `false`                                                                                                                                      | **Done** |
+| Field/operator changes              | Incompatible operator/value/secondValue are cleared or reset client-side                                                                                                                        | **Done** |
+| Embedded table display              | TransactionRule detail shows a normalized condition summary; raw `value`, `secondValue`, and `caseSensitive` are not separate embedded table columns                                            | **Done** |
+
 ### Out of scope
 
-Rule execution engine; batch reclassification; unique `position`; new enum values; condition reorder UI.
+Rule execution engine; batch reclassification; unique `position`; new enum values; condition reorder UI/API.
 
 ### Product rules (deferred)
 
@@ -809,6 +828,29 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Create condition under inactive rule | Does not auto-reactivate                        | Yes              | —             | **Done** in TRC |
 
 **UI/API flow:** create inactive draft → add conditions through `TransactionRuleCondition` → activate rule.
+
+### Parent-centered UX / API
+
+| Rule                                    | Decision                                                                                                           | Status       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------ |
+| Related conditions endpoint             | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule                             | **Done**     |
+| Related condition ordering              | Sort by `position ASC`, then `id ASC`                                                                              | **Done**     |
+| Related condition access                | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all                           | **Done**     |
+| Create flow                             | Create saves an inactive parent first, then redirects to detail so conditions can be added after the parent exists | **Done**     |
+| Create page children                    | No embedded condition editor and no client-side draft conditions on create                                         | **Done**     |
+| Rule detail condition collection editor | Inline create/update/delete using existing TransactionRuleCondition endpoints                                      | **Done**     |
+| Rule edit general-fields page           | No embedded condition editor; includes Manage conditions link and background condition count for Active safety     | **Done**     |
+| Rule list/detail semantic summaries     | List/detail avoid raw generated field dumps and show status, condition logic, outputs, compact sections, metadata  | **Done**     |
+| View/edit layout parity                 | Detail and edit share Identity → Matching logic → Result → Status/Metadata ordering; detail manages conditions     | **Done**     |
+| Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                     | **Done**     |
+| Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                    | **Done**     |
+| Add condition side effect               | Adding a condition does not auto-activate the parent rule                                                          | **Done**     |
+| Create-with-conditions command          | Atomic parent+conditions command endpoint                                                                          | **Deferred** |
+| Draft child collection on create        | Client-side draft conditions before parent id exists                                                               | **Deferred** |
+| Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                                   | **Deferred** |
+| Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`                | **Done**     |
+| Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                       | **Deferred** |
+| Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                                             | **Deferred** |
 
 ### Output PATCH semantics
 

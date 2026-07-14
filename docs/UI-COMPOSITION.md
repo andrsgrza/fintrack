@@ -1,12 +1,88 @@
 # UI Composition Conventions
 
-## Default
+## Purpose
 
-Generated CRUD pages are the default. Preserve them when they match the domain workflow.
+This document defines how we compose generated JHipster CRUD screens with custom embedded UI.
+
+The goal is to keep generated CRUD pages useful while avoiding duplicated, inconsistent, or over-customized pages.
+
+## Default rule
+
+Generated CRUD pages are the default.
+
+Preserve generated CRUD pages when they match the domain workflow.
+
+Do not create custom pages just because the generated page looks basic. Extend only when the domain workflow requires it.
 
 ## Extend, do not recreate
 
-When a generated page is mostly correct, extend it with small embedded sections instead of creating a new page.
+When a generated page is mostly correct, extend it with small contextual components instead of creating a completely new page.
+
+Prefer:
+
+- small reusable form sections;
+- read-only view sections;
+- collection editors;
+- related lists.
+
+Avoid:
+
+- duplicating full CRUD page logic;
+- embedding complete generated CRUD pages inside other pages;
+- creating parallel screens for the same workflow without a clear reason.
+
+## Standalone CRUD vs embedded UI
+
+Standalone CRUD pages and embedded UI serve different purposes.
+
+### Standalone CRUD page
+
+A standalone CRUD page is a full route/page for one entity.
+
+Examples:
+
+- `credit-account-details-update.tsx`
+- `transaction-rule-condition-update.tsx`
+- `transaction-rule-condition-detail.tsx`
+
+Standalone CRUD remains useful for:
+
+- admin/debug;
+- direct maintenance;
+- generated fallback;
+- deep links;
+- development/testing.
+
+### Embedded UI
+
+Embedded UI is not a full CRUD page placed inside another page.
+
+Embedded UI is a contextual component designed for the parent workflow.
+
+Examples:
+
+- `credit-account-details-form-section.tsx`
+- `credit-account-details-view-section.tsx`
+- `transaction-rule-conditions-collection-editor.tsx`
+- `transaction-rule-condition-form-section.tsx`
+
+Embedded UI should hide or fix parent context instead of asking the user to select it again.
+
+## Never embed complete CRUD pages
+
+Do not embed complete generated CRUD pages inside parent pages.
+
+Do not place a full child `*-update.tsx`, `*-detail.tsx`, or route-driven CRUD page inside a parent page.
+
+Instead, extract the reusable part into a contextual component.
+
+Examples:
+
+- Do not embed `credit-account-details-update.tsx` inside `financial-account-update.tsx`.
+- Do use `credit-account-details-form-section.tsx`.
+
+- Do not embed `transaction-rule-condition-update.tsx` inside `transaction-rule-detail.tsx`.
+- Do use `transaction-rule-condition-form-section.tsx` inside `transaction-rule-conditions-collection-editor.tsx`.
 
 ## Embedded child sections
 
@@ -14,41 +90,441 @@ A child entity may be embedded in a parent create/edit/detail page when:
 
 - the child is a natural part of the parent concept;
 - the child does not make sense without the parent;
-- the user expects to manage both together.
+- the user expects to manage both together;
+- the parent provides necessary context;
+- exposing the child as an independent choice would confuse the workflow.
 
 When embedded, the child section must not show or edit the parent relationship field.
 
+The parent is fixed by the containing page.
+
+Examples:
+
+- FinancialAccount embeds CreditAccountDetails without an account selector.
+- TransactionRule embeds TransactionRuleConditions without a transactionRule selector.
+
 ## Standalone child CRUD
 
-Standalone CRUD pages may still exist for child entities. They are useful for admin/debug/direct maintenance, but they are not always the main product flow.
+Standalone CRUD pages may still exist for child entities.
+
+They are useful for:
+
+- admin/debug;
+- direct maintenance;
+- generated fallback;
+- deep links.
+
+However, standalone child CRUD is not always the main product flow.
+
+When a child is naturally managed from a parent page, the parent page may become the preferred product workflow.
 
 ## Related lists
 
-Large or historical relationships should not be edited from the parent edit page. They may appear as read-only sections in the parent detail page.
+Large, historical, or high-volume relationships should not usually be edited from the parent edit page.
+
+They may appear as read-only sections in the parent detail page.
+
+Use a related list when:
+
+- the parent should show context;
+- the child should not be edited inline;
+- editing would create too much complexity;
+- the child is historical or transactional.
+
+Use a collection editor when:
+
+- the child is naturally managed as part of the parent;
+- inline add/edit/delete is expected;
+- the child has no meaningful standalone workflow for normal users.
+
+## View/Edit layout parity
+
+For primary admin/product CRUD screens that need custom UX, detail and edit should share the same conceptual layout.
+
+The detail page shows values.
+
+The edit page shows inputs in the same groups and approximate order.
+
+This keeps navigation predictable: when a user clicks Edit from detail or list, they should feel they are editing the same object, not entering an unrelated generated form.
+
+Use the same main groups and approximate order whenever possible.
+
+Example section order:
+
+- Identity
+- Matching / configuration
+- Result / output
+- Status
+- Metadata
+- Child collections, when applicable
+
+Detail-only metadata can remain read-only.
+
+Edit-only controls can remain editable.
+
+Child collection editors remain where the product workflow needs them.
+
+Avoid:
+
+- detail pages that read like long documents;
+- detail pages with narrative headings that do not map to editable fields;
+- edit pages whose grouping differs significantly from detail;
+- edit pages that make the user re-orient after clicking Edit.
+
+Prefer compact detail pages for admin/product entities.
+
+Detail should be scannable.
+
+Edit should mirror detail, replacing values with inputs.
+
+If a detail section exists, the equivalent editable fields should appear in the same relative place on edit, unless the fields are read-only, server-managed, or only make sense in detail.
+
+TransactionRule applies this pattern: detail and edit share Identity → Matching logic → Result → Status / Metadata ordering. Detail shows values and embedded conditions. Edit shows inputs plus a Manage conditions link.
+
+## Edit form hydration
+
+Edit forms must hydrate from the current entity when opened from either list or detail.
+
+When visiting `/entity/:id/edit`, existing values must populate correctly after the entity loads.
+
+This includes:
+
+- scalar fields;
+- booleans;
+- selects;
+- relationship selects;
+- multi-select relationships;
+- optional fields.
+
+Do not accept an edit screen that renders empty inputs for an existing entity.
+
+When using JHipster `ValidatedForm`, be careful with composition.
+
+`ValidatedField` components should remain registered with the form.
+
+In this project, the safest default is to keep `ValidatedField` components as direct children of the `ValidatedForm`, using headings and layout wrappers only where they do not break react-hook-form registration/default-value hydration.
+
+If deeper form composition is required, pass form methods explicitly and add tests proving edit hydration works.
+
+Required tests for customized edit pages:
+
+- edit opened by route id loads existing values;
+- edit opened from detail loads existing values;
+- relationship selects hydrate correctly;
+- multi-select relationships hydrate correctly;
+- boolean fields hydrate correctly;
+- create mode still starts with correct defaults.
 
 ## Backend orchestration
 
-Start with frontend orchestration only when the flow is simple and failure is acceptable.
+Start with frontend orchestration only when:
 
-Use a backend command endpoint when the operation must be atomic or when frontend orchestration would leak domain logic.
+- the flow is simple;
+- partial failure is acceptable;
+- the frontend is not leaking complex domain logic;
+- backend invariants still protect correctness.
 
-## Components
+Use a backend command endpoint when:
+
+- the operation must be atomic;
+- multiple entities must be changed as one domain action;
+- frontend orchestration would leak domain rules;
+- partial failure would leave confusing or invalid state.
+
+## Component naming
 
 Embedded sections must be extracted into components.
 
-Naming:
+Use these names:
 
-- `*FormSection.tsx` for embedded editable child sections.
-- `*ViewSection.tsx` for embedded read-only child sections.
-- `*CollectionEditor.tsx` for embedded editable child collections.
-- `*RelatedList.tsx` for read-only related lists.
+- `*form-section.tsx`
+
+  - embedded editable child section;
+  - reusable fields for create/edit;
+  - useful for 1:1 children or shared form slices.
+
+- `*view-section.tsx`
+
+  - embedded read-only child section;
+  - useful for detail pages.
+
+- `*collection-editor.tsx`
+
+  - embedded editable child collection;
+  - supports inline add/edit/delete for a 1:N child.
+
+- `*related-list.tsx`
+
+  - read-only related list;
+  - useful for large/historical relationships.
+
+## Embedded table display
+
+Embedded tables should be user-facing, not raw database/model dumps.
+
+When a child model has technical fields that only make sense together, prefer a readable summary column.
+
+Avoid showing raw technical columns when they create noise.
+
+Examples:
+
+- TransactionRuleCondition has `value`, `secondValue`, and `caseSensitive`.
+- In the embedded TransactionRule conditions table, these are shown as one readable condition summary instead of three raw columns.
+
+Preferred embedded display:
+
+- `Amount between 20 and 500`
+- `Description contains "UBER"`
+- `Description contains "Uber" (case-sensitive)`
+- `Flow is not Income`
+- `Flujo no es Ingreso`
+
+Raw model fields may still exist in the backend and DTO. They do not need to appear as separate embedded UI columns.
+
+Enum values should be translated for user-facing summaries.
+
+For example, TransactionRuleCondition may store `FLOW = IN` or `FLOW = OUT`, but summaries should display the same user-facing labels used by FinancialTransaction:
+
+- EN: `Income` / `Expense`
+- ES: `Ingreso` / `Gasto`
 
 ## Implemented cases
 
-### FinancialAccount + CreditAccountDetails
+## FinancialAccount + CreditAccountDetails
 
-`CREDIT_CARD` FinancialAccount create/edit embeds CreditAccountDetails fields as a child form section, without exposing the `account` relationship selector. FinancialAccount detail embeds a read-only CreditAccountDetails view section.
+### Relationship type
 
-This is frontend orchestration today: FinancialAccount is saved first, then CreditAccountDetails is created or updated for the saved account. Atomic backend command endpoint remains deferred.
+`FinancialAccount` to `CreditAccountDetails` is a 1:1 child-style relationship for credit card accounts.
+
+CreditAccountDetails is only meaningful for `CREDIT_CARD` accounts.
+
+### UI pattern used
+
+This uses the 1:1 embedded section pattern.
+
+FinancialAccount create/edit embeds CreditAccountDetails fields when `accountType = CREDIT_CARD`.
+
+FinancialAccount detail embeds a read-only CreditAccountDetails view section.
+
+### Components used
+
+- `credit-account-details-form-section.tsx`
+- `credit-account-details-view-section.tsx`
+
+### What we did not do
+
+We did not embed the full generated CreditAccountDetails CRUD pages inside FinancialAccount.
+
+We did not embed:
+
+- `credit-account-details-update.tsx`
+- `credit-account-details-detail.tsx`
+
+### Parent relationship behavior
+
+The embedded CreditAccountDetails section does not show or edit the `account` relationship selector.
+
+The parent FinancialAccount is fixed by the containing FinancialAccount workflow.
+
+### Orchestration
+
+This is frontend orchestration today.
+
+FinancialAccount is saved first, then CreditAccountDetails is created or updated for the saved account.
+
+Atomic backend command endpoint remains deferred.
+
+### Standalone CRUD
 
 Standalone CreditAccountDetails CRUD remains available for admin/debug/direct maintenance.
+
+## TransactionRule + TransactionRuleCondition
+
+### Relationship type
+
+`TransactionRule` to `TransactionRuleCondition` is a 1:N child collection.
+
+A condition belongs to one rule. In normal product usage, conditions are managed in the context of their parent rule.
+
+### UI pattern used
+
+This uses the editable child collection pattern.
+
+TransactionRule detail/view shows the embedded editable conditions collection editor.
+
+TransactionRule edit is reserved for general TransactionRule fields and provides a "Manage conditions" link back to detail.
+
+TransactionRule create saves only the parent rule. It does not embed a child collection editor because conditions require a persisted parent id.
+
+The create flow is:
+
+1. create an inactive TransactionRule parent;
+2. redirect to TransactionRule detail for the saved rule;
+3. add conditions from the embedded detail collection editor;
+4. activate the rule from edit when at least one condition exists.
+
+TransactionRule list/detail use product-oriented summaries instead of generated field dumps.
+
+The list shows:
+
+- name;
+- translated status;
+- priority;
+- translated condition logic;
+- result summary;
+- updated timestamp;
+- actions.
+
+Detail uses compact sections aligned with edit:
+
+- Identity;
+- Matching logic;
+- Result;
+- Status / Metadata;
+- embedded Conditions.
+
+TransactionRule detail and edit follow View/Edit layout parity.
+
+Both screens use the same conceptual grouping:
+
+- Identity;
+- Matching logic;
+- Result;
+- Status / Metadata.
+
+Detail shows values in those groups.
+
+Edit shows inputs in those groups.
+
+TransactionRule detail additionally owns the embedded Conditions editor.
+
+TransactionRule edit does not render the embedded Conditions editor; it only provides a Manage conditions link back to detail.
+
+TransactionRule create also does not render the embedded Conditions editor, does not maintain client-side draft conditions, hides the Active toggle, and submits `active=false`.
+
+### Components used
+
+- `transaction-rule-conditions-collection-editor.tsx`
+- `transaction-rule-condition-form-section.tsx`
+
+### What we did not do
+
+We did not embed the full generated TransactionRuleCondition CRUD pages inside TransactionRule.
+
+We did not embed:
+
+- `transaction-rule-condition-update.tsx`
+- `transaction-rule-condition-detail.tsx`
+
+The embedded editor reuses the condition form section, not the standalone CRUD page.
+
+We also did not implement a create-with-conditions command endpoint or client-side draft child collection on TransactionRule create. Those remain deferred until there is a deliberate atomic parent+children command design.
+
+### Parent relationship behavior
+
+The embedded TransactionRuleCondition form does not show or edit the `transactionRule` parent selector.
+
+The parent TransactionRule is fixed by the containing TransactionRule detail page.
+
+Embedded create submits the current rule as the fixed parent.
+
+Embedded edit PATCHes only editable condition fields and does not reparent.
+
+### Condition loading
+
+Both the detail editor and the edit-page Active safety check load conditions from:
+
+`GET /api/transaction-rules/{id}/conditions`
+
+The frontend does not fetch all TransactionRuleConditions and filter client-side for this workflow.
+
+### Inline actions
+
+The TransactionRule detail collection editor supports:
+
+- inline add;
+- inline edit;
+- inline delete.
+
+The embedded table does not show a View button because the condition is already visible in the parent context.
+
+Standalone detail routes remain available for direct maintenance/debug.
+
+### Embedded table display
+
+The embedded TransactionRuleCondition table shows a normalized `Condition` summary plus actions.
+
+It does not expose raw technical child fields as separate embedded columns:
+
+- no raw `value` column;
+- no raw `secondValue` column;
+- no raw `caseSensitive` true/false column;
+- no `position` column.
+
+Examples:
+
+- `Description contains "Uber"`
+- `Description contains "Uber" (case-sensitive)`
+- `Amount between 20 and 500`
+- `Flow is not Income` / `Flujo no es Ingreso`
+
+The raw model fields still exist in DTO/backend persistence and are still edited through the smart form where appropriate.
+
+### Position behavior
+
+TransactionRuleCondition `position` is server-managed.
+
+Embedded and standalone forms do not show or submit `position`.
+
+New conditions are appended server-side with:
+
+`max(position) + 1`
+
+Deleting conditions does not reindex remaining positions.
+
+Position controls stable display/evaluation order inside a rule.
+
+Position does not affect `ALL` / `ANY` logical semantics.
+
+`TransactionRule.priority` orders rules relative to each other.
+
+`TransactionRuleCondition.position` orders conditions inside one rule.
+
+Condition reorder UI/API remains deferred.
+
+### Smart form behavior
+
+The standalone TransactionRuleCondition form is a smart form, not a raw generated enum form.
+
+It:
+
+- filters operators by selected field;
+- renders typed value inputs;
+- shows `secondValue` only for `BETWEEN`;
+- shows `caseSensitive` only for `DESCRIPTION` / `EXTERNAL_REFERENCE`;
+- uses an accessible FinancialAccount selector for `ACCOUNT` `EQUALS` / `NOT_EQUALS`;
+- still submits the selected account id as the string `value` expected by the backend;
+- keeps `IN` / `NOT_IN` as comma-separated text in this slice.
+
+The embedded TransactionRule detail editor reuses the same smart condition form section/helper behavior.
+
+### Delete behavior
+
+Deleting a condition uses the existing DELETE endpoint.
+
+If the last condition is deleted, the backend deactivates the parent rule.
+
+Adding a condition does not automatically activate the parent rule.
+
+The TransactionRule detail page refreshes parent state after condition mutations.
+
+### Deferred
+
+Deferred for this workflow:
+
+- create-with-conditions command endpoint;
+- client-side draft child collection on parent create;
+- row-positioned inline edit;
+- condition reorder UI/API;
+- rule execution engine;
+- atomic backend command endpoint.

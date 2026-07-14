@@ -1329,15 +1329,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                          | Tests   | Custom vs generated                                                   |
-| --------------- | ----------------------------- | ------- | --------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`   | **104** | Ownership/link/domain custom tests + JHipster CRUD/filters            |
-| Unit — service  | `TransactionRuleServiceTest`  | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards) |
-| Unit — domain   | `TransactionRuleTest`         | **6**   | Generated                                                             |
-| Unit — mapper   | `TransactionRuleMapperTest`   | **1**   | Generated                                                             |
-| Unit — DTO      | `TransactionRuleDTOTest`      | **1**   | Generated                                                             |
-| Unit — criteria | `TransactionRuleCriteriaTest` | **5**   | Generated                                                             |
-| E2E             | `transaction-rule.cy.ts`      | **10**  | 3 ownership + 7 CRUD/navigation                                       |
+| Type            | File                           | Tests   | Custom vs generated                                                                                                               |
+| --------------- | ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TransactionRuleResourceIT`    | **109** | Ownership/link/domain/API ergonomics custom tests + JHipster CRUD/filters                                                         |
+| Unit — service  | `TransactionRuleServiceTest`   | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards)                                                             |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                         |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                         |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                         |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                         |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **20**  | Product-oriented list/detail summaries, create inactive flow, edit hydration, grouped edit form, detail embedded condition editor |
+| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                   |
 
 **Run:**
 
@@ -1380,6 +1381,33 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 | Test                                                      | HTTP  | What it checks                                           |
 | --------------------------------------------------------- | ----- | -------------------------------------------------------- |
 | `adminCannotAttachCurrentUsersCategoryToAnotherUsersRule` | `PUT` | Admin cannot mix rule owner with another user's category |
+
+#### Parent-centered conditions endpoint (5) — ✅ custom
+
+| Test                                                                     | HTTP  | What it checks                                                                |
+| ------------------------------------------------------------------------ | ----- | ----------------------------------------------------------------------------- |
+| `getTransactionRuleConditionsReturnsOwnConditionsSorted`                 | `GET` | Own parent returns related conditions sorted by `position ASC`, then `id ASC` |
+| `getTransactionRuleConditionsReturnsEmptyListWhenOwnRuleHasNoConditions` | `GET` | Own parent with no conditions returns `200 []`                                |
+| `getTransactionRuleConditionsOwnedByAnotherUserIsNotFound`               | `GET` | Normal user foreign parent → `404`                                            |
+| `adminCanGetTransactionRuleConditionsOwnedByAnotherUser`                 | `GET` | Admin can read conditions for foreign parent                                  |
+| `getTransactionRuleConditionsOnlyReturnsRequestedRuleConditions`         | `GET` | Endpoint returns only conditions belonging to requested rule                  |
+
+#### Frontend UX — `transaction-rule-ux.spec.tsx` — ✅
+
+| Area                       | What it checks                                                                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product list               | List hides generated ID/created columns, shows Name/Status/Priority/Conditions/Result/Updated/Actions                                                    |
+| Compact detail             | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                         |
+| Create flow                | Create hides timestamps/active/embedded conditions, shows Save and add conditions, submits `active=false`, and redirects create success to detail        |
+| Create/edit shell          | Create is parent-only; edit shows Active and Manage conditions link                                                                                      |
+| Edit hydration             | Edit waits for the requested entity and hydrates scalar fields, category, subscription, multi-select tags, and active                                    |
+| Edit general fields        | Edit is grouped into identity/matching/result/status; `ValidatedField`s remain direct form children; condition controls are not embedded                 |
+| Embedded detail collection | Detail loads conditions from `GET /api/transaction-rules/{id}/conditions`; empty state is non-breaking                                                   |
+| Active toggle UX           | Disabled when conditions are empty or unavailable; enabled when at least one condition is loaded                                                         |
+| Add condition              | Detail opens embedded smart form without parent selector; POST includes `transactionRule: { id: currentRule }`; frontend does not auto-activate the rule |
+| Edit condition             | Detail opens embedded smart form without parent selector; PATCH sends editable fields only, no reparenting                                               |
+| Delete condition           | Detail confirms, DELETEs condition, refreshes list; delete failure shows an inline error                                                                 |
+| Embedded table actions     | No View action; Edit/Delete remain because condition values are already visible in the table                                                             |
 
 #### CRUD domain lifecycle — ✅ custom
 
@@ -1446,18 +1474,22 @@ Rehabilitated create/delete (sin selector User).
 
 **Parent rule:** DTO keeps `@NotNull` on `transactionRule`; mapper ignores it; service resolves from DB on create. PATCH uses `JsonNode`: absent field preserves parent; same `{id}` → OK; different `{id}` → `400` (even same owner); `null` → `400`.
 
+**Position:** `position` is server-managed. Create appends (`0`, then max+1) and ignores client-provided position. PUT/PATCH preserve existing position; explicit same position is a no-op; explicit changed or null position returns `400 invalid`. Delete does not reindex remaining positions.
+
 **Domain rules:** field/operator/value matrices; duplicate guard; DELETE last condition → `TransactionRule.active = false` + `updatedAt`; `ACCOUNT` ids validated vs **rule owner** (`transactionRule.user.login`).
 
 ### Summary counts
 
-| Type           | File                                  | Tests  | Custom vs generated                                                                |
-| -------------- | ------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Integration IT | `TransactionRuleConditionResourceIT`  | **55** | 35 custom (ownership + parent immutable + domain rules) + 20 JHipster CRUD/filters |
-| Unit — service | `TransactionRuleConditionServiceTest` | **11** | All custom (ownership + validations + delete side-effect)                          |
-| Unit — domain  | `TransactionRuleConditionTest`        | **2**  | Generated                                                                          |
-| Unit — mapper  | `TransactionRuleConditionMapperTest`  | **1**  | Generated                                                                          |
-| Unit — DTO     | `TransactionRuleConditionDTOTest`     | **1**  | Generated                                                                          |
-| E2E            | `transaction-rule-condition.cy.ts`    | **8**  | CRUD/navigation + delete dialog copy                                               |
+| Type           | File                                              | Tests  | Custom vs generated                                                                                   |
+| -------------- | ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionRuleConditionResourceIT`              | **62** | Custom ownership + parent immutable + server-managed position + domain rules + generated CRUD/filters |
+| Unit — service | `TransactionRuleConditionServiceTest`             | **17** | Custom ownership + validations + server-managed position + delete side-effect                         |
+| Unit — domain  | `TransactionRuleConditionTest`                    | **2**  | Generated                                                                                             |
+| Unit — mapper  | `TransactionRuleConditionMapperTest`              | **1**  | Generated                                                                                             |
+| Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                                             |
+| Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers                        |
+| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **18** | Smart condition form behavior + previous parent/title visibility checks                               |
+| E2E            | `transaction-rule-condition.cy.ts`                | **8**  | CRUD/navigation + delete dialog copy                                                                  |
 
 **Run:**
 
@@ -1499,14 +1531,19 @@ Rehabilitated create/delete (sin selector User).
 | `createTransactionRuleConditionWithRuleOwnedByAnotherUserFails`           | `POST`  | Normal user foreign parent → `400` invalid |
 | `adminCanCreateTransactionRuleConditionUnderForeignRule`                  | `POST`  | Admin foreign parent → `201`               |
 
-**Remove / replace:**
+#### Position — server-managed — ✅
 
-| Test                                                            | Action                                  |
-| --------------------------------------------------------------- | --------------------------------------- |
-| `adminCanReparentTransactionRuleConditionWithinSameOwner`       | **Remove** — reparent no longer allowed |
-| `updateTransactionRuleConditionWithRuleOwnedByAnotherUserFails` | Keep — cross-owner still `400`          |
-| `patchTransactionRuleConditionWithForeignRuleFails`             | Keep — cross-owner still `400`          |
-| `adminCannotReparentTransactionRuleConditionAcrossOwners`       | Rename/repurpose → different id fails   |
+| Test                                                                   | HTTP          | What it checks                                     |
+| ---------------------------------------------------------------------- | ------------- | -------------------------------------------------- |
+| `createWithoutPositionAssignsNextPosition`                             | `POST`        | Omitted position gets `0` for first condition      |
+| `createSecondConditionAssignsMaxPlusOneAndIgnoresClientPosition`       | `POST`        | Client position ignored; server appends max+1      |
+| `createAfterDeletingMiddleConditionAssignsMaxPlusOneWithoutReindexing` | `POST/DELETE` | Delete gap remains; next create uses current max+1 |
+| `putChangedPositionFails`                                              | `PUT`         | Changed position → `400 invalid`                   |
+| `putNullPositionFails`                                                 | `PUT`         | Explicit `position: null` → `400 invalid`          |
+| `partialUpdateTransactionRuleConditionWithPatch`                       | `PATCH`       | Omitted position preserves current position        |
+| `patchSamePositionSucceedsAndPreservesPosition`                        | `PATCH`       | Same position allowed as no-op                     |
+| `patchChangedPositionFails`                                            | `PATCH`       | Changed position → `400 invalid`                   |
+| `patchNullPositionFails`                                               | `PATCH`       | Explicit `position: null` → `400 invalid`          |
 
 #### DELETE side-effect (4) — ✅
 
@@ -1537,7 +1574,43 @@ Happy-path CRUD, required-field checks, criteria per field.
 
 ### Unit — `TransactionRuleConditionServiceTest` — ✅
 
-11 tests cover parent immutability, merged-state validation, duplicate normalization, delete deactivation, and ACCOUNT owner-login resolution.
+Service tests cover parent immutability, merged-state validation, duplicate normalization, server-managed position assignment/immutability, delete deactivation, and ACCOUNT owner-login resolution.
+
+### Frontend smart form tests — ✅
+
+`transaction-rule-condition-form-helpers.spec.ts` covers:
+
+- `getAllowedOperators()` for text, enum, amount, date, and account fields.
+- `requiresSecondValue()` only for `BETWEEN`.
+- `supportsCaseSensitive()` only for `DESCRIPTION` / `EXTERNAL_REFERENCE`.
+- `getValueInputKind()` for amount/date inputs, flow/origin selects, account selector, and `IN`/`NOT_IN` text input.
+
+`transaction-rule-condition-display.spec.ts` covers normalized embedded condition summaries:
+
+- scalar `EQUALS`;
+- `BETWEEN` with value + second value;
+- text case-sensitive suffix only when true;
+- no raw `false` display;
+- non-text conditions ignore case sensitivity in display;
+- `IN` / `NOT_IN` readable list phrases;
+- missing `secondValue` safe fallback;
+- account-id display override when account names are available.
+
+`transaction-rule-condition-ux.spec.tsx` covers:
+
+- dynamic create/edit titles;
+- parent preselect from `transactionRuleId`;
+- parent read-only in edit;
+- position hidden from create/edit and omitted from create/edit payloads;
+- operator filtering by selected field;
+- `secondValue` only for `BETWEEN`;
+- `caseSensitive` only for text fields;
+- typed value inputs for amount/date/flow/origin/account;
+- `IN`/`NOT_IN` as comma-separated text with helper copy;
+- field/operator changes clearing incompatible values;
+- `ACCOUNT EQUALS` submitting the selected account id as a string and hidden `caseSensitive=false`.
+
+`transaction-rule-ux.spec.tsx` also verifies the embedded TransactionRule detail table uses the normalized `Condition` summary, does not render raw `Value` / `Second Value` / `Case Sensitive` headers, keeps Edit/Delete, and does not render View.
 
 ### E2E — `transaction-rule-condition.cy.ts`
 

@@ -119,18 +119,26 @@ public class TransactionRuleConditionService {
     public TransactionRuleConditionDTO save(TransactionRuleConditionDTO transactionRuleConditionDTO) {
         LOG.debug("Request to save TransactionRuleCondition : {}", transactionRuleConditionDTO);
         TransactionRuleCondition transactionRuleCondition = transactionRuleConditionMapper.toEntity(transactionRuleConditionDTO);
-        transactionRuleCondition.setTransactionRule(resolveTransactionRuleForCreate(transactionRuleConditionDTO.getTransactionRule()));
+        TransactionRule transactionRule = resolveTransactionRuleForCreate(transactionRuleConditionDTO.getTransactionRule());
+        transactionRuleCondition.setTransactionRule(transactionRule);
+        transactionRuleCondition.setPosition(nextPositionForRule(transactionRule.getId()));
         validateCondition(transactionRuleCondition, null);
         transactionRuleCondition = transactionRuleConditionRepository.save(transactionRuleCondition);
         return transactionRuleConditionMapper.toDto(transactionRuleCondition);
     }
 
     public TransactionRuleConditionDTO update(TransactionRuleConditionDTO transactionRuleConditionDTO) {
+        return update(transactionRuleConditionDTO, null);
+    }
+
+    public TransactionRuleConditionDTO update(TransactionRuleConditionDTO transactionRuleConditionDTO, JsonNode requestNode) {
         LOG.debug("Request to update TransactionRuleCondition : {}", transactionRuleConditionDTO);
         TransactionRuleCondition existingTransactionRuleCondition = findAccessibleEntity(transactionRuleConditionDTO.getId()).orElseThrow();
         TransactionRuleCondition transactionRuleCondition = transactionRuleConditionMapper.toEntity(transactionRuleConditionDTO);
         enforceImmutableTransactionRule(existingTransactionRuleCondition, transactionRuleConditionDTO.getTransactionRule(), true);
+        enforceImmutablePosition(existingTransactionRuleCondition, transactionRuleConditionDTO.getPosition(), requestNode);
         transactionRuleCondition.setTransactionRule(existingTransactionRuleCondition.getTransactionRule());
+        transactionRuleCondition.setPosition(existingTransactionRuleCondition.getPosition());
         validateCondition(transactionRuleCondition, existingTransactionRuleCondition.getId());
         transactionRuleCondition = transactionRuleConditionRepository.save(transactionRuleCondition);
         return transactionRuleConditionMapper.toDto(transactionRuleCondition);
@@ -152,7 +160,10 @@ public class TransactionRuleConditionService {
                     throw new IllegalArgumentException("Transaction rule cannot be null");
                 }
                 rejectNullRequiredPatchFields(patchNode);
+                enforceImmutablePosition(existingTransactionRuleCondition, transactionRuleConditionDTO.getPosition(), patchNode);
+                Integer preservedPosition = existingTransactionRuleCondition.getPosition();
                 transactionRuleConditionMapper.partialUpdate(existingTransactionRuleCondition, transactionRuleConditionDTO);
+                existingTransactionRuleCondition.setPosition(preservedPosition);
                 applyNullableFieldsForPartialUpdate(existingTransactionRuleCondition, patchNode);
                 applyTransactionRuleForPartialUpdate(existingTransactionRuleCondition, transactionRuleConditionDTO, patchNode);
                 validateCondition(existingTransactionRuleCondition, existingTransactionRuleCondition.getId());
@@ -215,6 +226,27 @@ public class TransactionRuleConditionService {
         return findAccessibleEntity(id).map(transactionRuleConditionMapper::toDto);
     }
 
+    /**
+     * Get all conditions for an accessible transaction rule.
+     *
+     * @param transactionRuleId the id of the parent transaction rule.
+     * @return conditions ordered by position, then id, or empty when the parent rule is inaccessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<List<TransactionRuleConditionDTO>> findByTransactionRuleId(Long transactionRuleId) {
+        LOG.debug("Request to get TransactionRuleConditions for TransactionRule : {}", transactionRuleId);
+        if (findAccessibleTransactionRule(transactionRuleId).isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            transactionRuleConditionRepository
+                .findByTransactionRuleIdOrderByPositionAscIdAsc(transactionRuleId)
+                .stream()
+                .map(transactionRuleConditionMapper::toDto)
+                .collect(Collectors.toCollection(LinkedList::new))
+        );
+    }
+
     @Transactional(readOnly = true)
     public boolean isAccessible(Long id) {
         return findAccessibleEntity(id).isPresent();
@@ -251,6 +283,13 @@ public class TransactionRuleConditionService {
         );
     }
 
+    private Optional<TransactionRule> findAccessibleTransactionRule(Long id) {
+        if (currentUserService.isAdmin()) {
+            return transactionRuleRepository.findOneWithEagerRelationships(id);
+        }
+        return transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
     private void applyTransactionRuleForPartialUpdate(
         TransactionRuleCondition transactionRuleCondition,
         TransactionRuleConditionDTO transactionRuleConditionDTO,
@@ -276,6 +315,13 @@ public class TransactionRuleConditionService {
         );
     }
 
+    private Integer nextPositionForRule(Long transactionRuleId) {
+        return transactionRuleConditionRepository
+            .findMaxPositionByTransactionRuleId(transactionRuleId)
+            .map(position -> position + 1)
+            .orElse(0);
+    }
+
     private void enforceImmutableTransactionRule(
         TransactionRuleCondition existingCondition,
         TransactionRuleDTO requestedRuleDTO,
@@ -293,6 +339,21 @@ public class TransactionRuleConditionService {
         }
     }
 
+    private void enforceImmutablePosition(TransactionRuleCondition existingCondition, Integer requestedPosition, JsonNode requestNode) {
+        if (requestNode != null && !requestNode.has("position")) {
+            return;
+        }
+        if (requestNode != null && requestNode.has("position") && requestNode.get("position").isNull()) {
+            throw new IllegalArgumentException("Position cannot be null");
+        }
+        if (requestedPosition == null) {
+            return;
+        }
+        if (!requestedPosition.equals(existingCondition.getPosition())) {
+            throw new IllegalArgumentException("Position cannot be changed");
+        }
+    }
+
     private Optional<TransactionRule> findAccessibleRule(Long id) {
         if (currentUserService.isAdmin()) {
             return transactionRuleRepository.findOneWithToOneRelationships(id);
@@ -302,6 +363,7 @@ public class TransactionRuleConditionService {
 
     private void validateCondition(TransactionRuleCondition condition, Long excludeId) {
         validatePosition(condition.getPosition());
+        validateRequiredFields(condition);
         validateValuePresent(condition.getValue());
         validateFieldOperatorCompatibility(condition.getField(), condition.getOperator());
         validateSecondValueRules(condition);
@@ -315,9 +377,24 @@ public class TransactionRuleConditionService {
         }
     }
 
+    private void validateRequiredFields(TransactionRuleCondition condition) {
+        if (condition.getField() == null) {
+            throw new IllegalArgumentException("Field is required");
+        }
+        if (condition.getOperator() == null) {
+            throw new IllegalArgumentException("Operator is required");
+        }
+        if (condition.getCaseSensitive() == null) {
+            throw new IllegalArgumentException("Case sensitive is required");
+        }
+    }
+
     private void validateValuePresent(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("Value is required");
+        }
+        if (value.length() > 1000) {
+            throw new IllegalArgumentException("Value must be less than or equal to 1000 characters");
         }
     }
 
@@ -341,6 +418,10 @@ public class TransactionRuleConditionService {
     private void validateSecondValueRules(TransactionRuleCondition condition) {
         boolean isBetween = condition.getOperator() == RuleOperator.BETWEEN;
         boolean hasSecondValue = !isBlank(condition.getSecondValue());
+
+        if (condition.getSecondValue() != null && condition.getSecondValue().length() > 1000) {
+            throw new IllegalArgumentException("Second value must be less than or equal to 1000 characters");
+        }
 
         if (isBetween) {
             if (!hasSecondValue) {

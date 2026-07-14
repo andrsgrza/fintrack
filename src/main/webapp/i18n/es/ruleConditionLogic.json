@@ -2,8 +2,8 @@
   "fintrackApp": {
     "RuleConditionLogic": {
       "null": "",
-      "ALL": "ALL",
-      "ANY": "ANY"
+      "ALL": "Todas las condiciones",
+      "ANY": "Cualquier condición"
     }
   }
 }

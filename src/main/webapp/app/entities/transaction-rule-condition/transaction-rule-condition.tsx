@@ -112,10 +112,6 @@ export const TransactionRuleCondition = () => {
                   <Translate contentKey="fintrackApp.transactionRuleCondition.caseSensitive">Case Sensitive</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('caseSensitive')} />
                 </th>
-                <th className="hand" onClick={sort('position')}>
-                  <Translate contentKey="fintrackApp.transactionRuleCondition.position">Position</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('position')} />
-                </th>
                 <th>
                   <Translate contentKey="fintrackApp.transactionRuleCondition.transactionRule">Transaction Rule</Translate>{' '}
                   <FontAwesomeIcon icon="sort" />
@@ -140,7 +136,6 @@ export const TransactionRuleCondition = () => {
                   <td>{transactionRuleCondition.value}</td>
                   <td>{transactionRuleCondition.secondValue}</td>
                   <td>{transactionRuleCondition.caseSensitive ? 'true' : 'false'}</td>
-                  <td>{transactionRuleCondition.position}</td>
                   <td>
                     {transactionRuleCondition.transactionRule ? (
                       <Link to={`/transaction-rule/${transactionRuleCondition.transactionRule.id}`}>

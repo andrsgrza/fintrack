@@ -418,33 +418,42 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 #### Domain rules ✅ (CRUD/domain baseline)
 
-| Regla                                           | Estado | Notas                                                                                                                    |
-| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                |
-| No cambiar dueño en update/patch                | ✅     |                                                                                                                          |
-| Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                          |
-| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/subscription/tag                                                                      |
-| PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                   |
-| Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                     |
-| Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                    |
-| Description/resultingDescription normalization  | ✅     | trim; blank → `null`                                                                                                     |
-| Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now` |
-| Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                               |
-| Rule requiere al menos un output                | ✅     | final merged state                                                                                                       |
-| Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                              |
-| PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                            |
-| **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                           |
-| Prioridad única                                 | ❌     | duplicate priority allowed                                                                                               |
-| Priority tie-break                              | ⏳     | definir antes del motor                                                                                                  |
+| Regla                                           | Estado | Notas                                                                                                                                                  |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                                              |
+| No cambiar dueño en update/patch                | ✅     |                                                                                                                                                        |
+| Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                                                        |
+| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/subscription/tag                                                                                                    |
+| PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                                                 |
+| Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                                                   |
+| Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                                                  |
+| Description/resultingDescription normalization  | ✅     | trim; blank → `null`                                                                                                                                   |
+| Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now`                               |
+| Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                                                             |
+| Rule requiere al menos un output                | ✅     | final merged state                                                                                                                                     |
+| Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                                                            |
+| PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                                                          |
+| Parent-centered conditions endpoint             | ✅     | `GET /api/transaction-rules/{id}/conditions`, scoped by parent access, sorted by `position,id`                                                         |
+| Parent-centered conditions UX                   | ✅     | TransactionRule detail embeds inline add/edit/delete editor; edit remains general rule fields only                                                     |
+| Create flow                                     | ✅     | Create hides Active/conditions, submits `active=false`, and redirects to detail for condition management after parent id exists                        |
+| Embedded condition form                         | ✅     | Reuses TransactionRuleCondition smart form section/helper; parent hidden/fixed by TransactionRule detail page                                          |
+| Embedded condition mutation                     | ✅     | POST includes `transactionRule: { id }`; adding does not auto-activate; PATCH sends editable fields only; DELETE refreshes conditions and parent state |
+| Active toggle UX                                | ✅     | Edit page background-loads condition count and disables Active when empty/unavailable; backend still validates `active=true`                           |
+| Product-oriented rule UX                        | ✅     | List/detail use translated status, condition logic, output/result summaries, compact view/edit layout parity, and metadata                             |
+| Edit form hydration                             | ✅     | Edit waits for the requested entity before mounting the JHipster `ValidatedForm`; fields stay direct children for registration/defaults                |
+| **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                                                         |
+| Prioridad única                                 | ❌     | duplicate priority allowed                                                                                                                             |
+| Priority tie-break                              | ⏳     | definir antes del motor                                                                                                                                |
 
 #### Validations ✅
 
-| Capa                      | Estado      | Detalle                                                                                                                                        |
-| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| DTO `@Valid`              | ✅ JHipster | name, priority, enums, dates; `user` opcional en payload                                                                                       |
-| Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                  |
-| Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented |
-| REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`                               |
+| Capa                      | Estado      | Detalle                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DTO `@Valid`              | ✅ JHipster | name, priority, enums, dates; `user` opcional en payload                                                                                                                                                                                                                                                                                                 |
+| Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                                                                                                                                                                                                                            |
+| Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented                                                                                                                                                                                                           |
+| REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`; related conditions endpoint returns `404` when parent inaccessible                                                                                                                                                                     |
+| UI                        | ✅          | Create saves inactive parent then redirects to detail; list/detail use compact semantic summaries; detail/edit share identity/matching/result/status layout; edit preserves JHipster direct-field hydration; detail embeds TransactionRuleCondition editor via existing endpoints; no backend command endpoint or create-time draft child collection yet |
 
 ---
 
@@ -461,36 +470,48 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | **`transactionRule` inmutable tras create** | PUT/PATCH otro `{id}` → `400` (incluso mismo owner); mismo id → OK; `null` → `400`; PATCH ausente → preservar; mover = delete + create |
 | ~~Reparent same-owner~~                     | **Eliminado** — reemplazado por inmutabilidad total                                                                                    |
 | PATCH `transactionRule`                     | Ausente → preservar; mismo `{id}` → OK; otro `{id}` → `400`; `null` → `400`                                                            |
-| UI mantiene selector                        | `transaction-rule-condition-*.tsx` — DTO sigue `@NotNull` en `transactionRule` (solo create)                                           |
+| UI mantiene selector                        | Create mantiene selector; edit lo muestra read-only/disabled; query param `transactionRuleId` puede preseleccionar padre               |
 | Admin bypass lectura/CRUD                   | Admin opera conditions de rules ajenas                                                                                                 |
 | `ACCOUNT` values                            | Validar ids contra **`transactionRule.user.login`**, no admin                                                                          |
+| Smart condition form                        | UI filtra operadores por campo, tipa inputs de valor y mantiene parent read-only en edit                                               |
+| Embedded collection editor                  | TransactionRule detail manages child conditions inline without exposing parent selector                                                |
+| `position` server-managed                   | Create appends using `max(position)+1`; create ignores client `position`; PUT/PATCH preserve and reject changed/null position          |
 
-**Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI.
+**Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI, `transaction-rule-condition-form-helpers.ts`, `transaction-rule-condition-form-section.tsx`.
 
 #### Domain rules ✅
 
-| Regla                                           | Estado | Notas                                                |
-| ----------------------------------------------- | ------ | ---------------------------------------------------- |
-| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                 |
-| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción              |
-| Create en rule inactiva no reactiva             | ✅     |                                                      |
-| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices       |
-| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización              |
-| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update               |
-| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator |
-| Delete dialog copy                              | ✅     | i18n en/es                                           |
-| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                         |
+| Regla                                           | Estado | Notas                                                                                                                    |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                                                                                     |
+| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción                                                                                  |
+| Create en rule inactiva no reactiva             | ✅     |                                                                                                                          |
+| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices                                                                           |
+| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización                                                                                  |
+| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update                                                                                   |
+| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator                                                                     |
+| UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                                                  |
+| UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text                            |
+| UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                                           |
+| Embedded condition summary table                | ✅     | TransactionRule detail table shows a normalized Condition summary instead of raw value/secondValue/caseSensitive columns |
+| Embedded parent hidden/fixed                    | ✅     | TransactionRule detail create sends current parent id; edit PATCH omits parent                                           |
+| Position hidden from normal UX                  | ✅     | Position is an internal server-managed order; standalone/embedded forms and normal list/detail hide it                   |
+| Delete dialog copy                              | ✅     | i18n en/es                                                                                                               |
+| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                                             |
 
 #### Validations ✅
 
-| Capa              | Estado      | Detalle                                                                        |
-| ----------------- | ----------- | ------------------------------------------------------------------------------ |
-| DTO `@Valid`      | ✅ JHipster | shape: field, operator, value, caseSensitive, position, transactionRule        |
-| Service — parent  | ✅          | Inmutable tras create; PATCH preserve/null/same id                             |
-| Service — negocio | ✅          | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner |
-| REST              | ✅          | `@Valid` POST/PUT; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400` |
+| Capa               | Estado | Detalle                                                                                                                            |
+| ------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| DTO / Entity       | ✅     | DTO accepts omitted client `position`; entity/DB still require server-assigned `position >= 0`                                     |
+| Service — parent   | ✅     | Inmutable tras create; PATCH preserve/null/same id                                                                                 |
+| Service — position | ✅     | Create appends; PUT/PATCH same value no-op; changed/null position → `400 invalid`; delete does not reindex                         |
+| Service — negocio  | ✅     | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner                                                     |
+| UI helper          | ✅     | Pure helper exposes `getAllowedOperators`, field-kind checks, `requiresSecondValue`, `supportsCaseSensitive`, and value input kind |
+| UI form section    | ✅     | Shared by standalone and embedded flows; standalone still shows parent selector; embedded hides it                                 |
+| REST               | ✅     | POST/PUT/PATCH use service validation for server-managed position; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400`     |
 
-**Tests:** 55 IT + 11 service — ver [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
+**Tests:** 62 IT + 17 service — ver [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
 
 ---
 
@@ -1000,7 +1021,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-09 | FinancialSubscription: PATCH link semantics ✅ (`JsonNode` + `has(field)`); links owned en PUT/PATCH ✅. Convención HTTP cross-user documentada en Foundation.                                                                                                                                                                                                               |
 | 2026-07-09 | TransactionRule: ownership ✅ (pattern A + links), domain rules 🟡 (outputs ⊆ rule owner, sin bypass admin en links; motor ⏳), validations ✅. Siguiente: TransactionRuleCondition.                                                                                                                                                                                         |
 | 2026-07-11 | **TransactionRuleCondition plan:** `transactionRule` immutable after create — **reparent same-owner removed**. Domain validations planned: field/operator matrices, duplicate guard, DELETE last condition → deactivate parent rule.                                                                                                                                         |
-| 2026-07-11 | **TransactionRuleCondition complete:** immutable parent, field/operator/value matrices, normalized duplicate guard, owner-scoped ACCOUNT ids, presence-aware PATCH null handling, and last-condition rule deactivation. 55 IT + 11 service tests passing.                                                                                                                    |
+| 2026-07-11 | **TransactionRuleCondition complete:** immutable parent, field/operator/value matrices, normalized duplicate guard, owner-scoped ACCOUNT ids, presence-aware PATCH null handling, and last-condition rule deactivation. Later hardened `position` as server-managed append order.                                                                                            |
 | 2026-07-09 | TransactionRuleCondition: ownership ✅ (pattern C via `transactionRule`), validations ✅ (parent required, ~~reparent same-owner~~ → **immutable parent**). Domain rules 🟡 (field/operator/value, delete side-effect). Siguiente: implement TRC domain rules.                                                                                                               |
 | 2026-07-09 | CreditAccountDetails: ownership ✅ (pattern B via `account`), validations ✅ (CREDIT_CARD only, immutable account, duplicate guard). Domain rules 🟡. Siguiente: ApiAccessToken.                                                                                                                                                                                             |
 | 2026-07-09 | ApiAccessToken: ownership ✅ (pattern A), security baseline ✅ (no `tokenHash` in reads, immutable secrets). Domain rules 🟡. Siguiente: ApiAccessTokenPermission.                                                                                                                                                                                                           |

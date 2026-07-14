@@ -34,8 +34,6 @@ public class TransactionRuleConditionDTO implements Serializable {
     @NotNull
     private Boolean caseSensitive;
 
-    @NotNull
-    @Min(value = 0)
     private Integer position;
 
     @NotNull

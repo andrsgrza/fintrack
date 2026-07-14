@@ -17,6 +17,10 @@
       "detail": {
         "title": "Transaction Rule"
       },
+      "createTitle": "Create Transaction Rule",
+      "editTitle": "Edit Transaction Rule",
+      "saveAndAddConditions": "Save and add conditions",
+      "createInactiveHelp": "Rules are saved inactive first. Add conditions from the rule detail page, then activate the rule when ready.",
       "id": "ID",
       "name": "Name",
       "description": "Description",
@@ -30,7 +34,63 @@
       "resultingCategory": "Resulting Category",
       "resultingFinancialSubscription": "Resulting Financial Subscription",
       "resultingTags": "Resulting Tags",
-      "conditions": "Conditions"
+      "actions": "Actions",
+      "updated": "Updated",
+      "emptyValue": "—",
+      "status": {
+        "label": "Status",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "conditionSummary": {
+        "label": "Conditions",
+        "all": "All conditions",
+        "any": "Any condition"
+      },
+      "result": {
+        "label": "Result",
+        "empty": "No result configured",
+        "category": "Category",
+        "subscription": "Subscription",
+        "tags": "Tags",
+        "description": "Description"
+      },
+      "sections": {
+        "identity": "Identity",
+        "matching": "Matching logic",
+        "result": "Result",
+        "status": "Status",
+        "statusMetadata": "Status / Metadata",
+        "when": "When",
+        "then": "Then",
+        "metadata": "Metadata"
+      },
+      "when": {
+        "all": "Apply when all conditions match.",
+        "any": "Apply when any condition matches."
+      },
+      "then": {
+        "assignCategory": "Assign category",
+        "linkSubscription": "Link subscription",
+        "addTags": "Add tags",
+        "replaceDescription": "Replace description with"
+      },
+      "conditions": "Conditions",
+      "loadingConditions": "Loading conditions...",
+      "noConditionsYet": "No conditions yet.",
+      "conditionsUnavailable": "Conditions are not available.",
+      "manageConditions": "Manage conditions",
+      "addCondition": "Add condition",
+      "editCondition": "Edit condition",
+      "cancelConditionEdit": "Cancel",
+      "saveCondition": "Save condition",
+      "updateCondition": "Update condition",
+      "deleteCondition": "Delete condition",
+      "confirmDeleteCondition": "Are you sure you want to delete this condition?",
+      "conditionSaveFailed": "Condition could not be saved.",
+      "conditionDeleteFailed": "Condition could not be deleted.",
+      "activeRequiresCondition": "Active rules require at least one condition.",
+      "activeDisabledNoConditions": "Add at least one condition before activating this rule."
     }
   }
 }

@@ -2,22 +2,22 @@
   "fintrackApp": {
     "RuleOperator": {
       "null": "",
-      "EQUALS": "EQUALS",
-      "NOT_EQUALS": "NOT_EQUALS",
-      "CONTAINS": "CONTAINS",
-      "NOT_CONTAINS": "NOT_CONTAINS",
-      "STARTS_WITH": "STARTS_WITH",
-      "ENDS_WITH": "ENDS_WITH",
+      "EQUALS": "Igual a",
+      "NOT_EQUALS": "Distinto de",
+      "CONTAINS": "Contiene",
+      "NOT_CONTAINS": "No contiene",
+      "STARTS_WITH": "Empieza con",
+      "ENDS_WITH": "Termina con",
       "REGEX": "REGEX",
-      "GREATER_THAN": "GREATER_THAN",
-      "GREATER_THAN_OR_EQUAL": "GREATER_THAN_OR_EQUAL",
-      "LESS_THAN": "LESS_THAN",
-      "LESS_THAN_OR_EQUAL": "LESS_THAN_OR_EQUAL",
-      "BEFORE": "BEFORE",
-      "AFTER": "AFTER",
-      "BETWEEN": "BETWEEN",
-      "IN": "IN",
-      "NOT_IN": "NOT_IN"
+      "GREATER_THAN": "Mayor que",
+      "GREATER_THAN_OR_EQUAL": "Mayor o igual que",
+      "LESS_THAN": "Menor que",
+      "LESS_THAN_OR_EQUAL": "Menor o igual que",
+      "BEFORE": "Antes de",
+      "AFTER": "Después de",
+      "BETWEEN": "Entre",
+      "IN": "En la lista",
+      "NOT_IN": "No está en la lista"
     }
   }
 }

@@ -38,6 +38,13 @@ public interface TransactionRuleConditionRepository extends JpaRepository<Transa
 
     long countByTransactionRuleId(Long transactionRuleId);
 
+    List<TransactionRuleCondition> findByTransactionRuleIdOrderByPositionAscIdAsc(Long transactionRuleId);
+
+    @Query(
+        "select max(transactionRuleCondition.position) from TransactionRuleCondition transactionRuleCondition where transactionRuleCondition.transactionRule.id = :transactionRuleId"
+    )
+    Optional<Integer> findMaxPositionByTransactionRuleId(@Param("transactionRuleId") Long transactionRuleId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     void deleteByTransactionRuleId(Long transactionRuleId);
 

@@ -2,14 +2,14 @@
   "fintrackApp": {
     "TransactionRuleField": {
       "null": "",
-      "DESCRIPTION": "DESCRIPTION",
-      "AMOUNT": "AMOUNT",
-      "FLOW": "FLOW",
-      "EXTERNAL_REFERENCE": "EXTERNAL_REFERENCE",
-      "ORIGIN": "ORIGIN",
-      "TRANSACTION_DATE": "TRANSACTION_DATE",
-      "POSTING_DATE": "POSTING_DATE",
-      "ACCOUNT": "ACCOUNT"
+      "DESCRIPTION": "Descripción",
+      "AMOUNT": "Monto",
+      "FLOW": "Flujo",
+      "EXTERNAL_REFERENCE": "Referencia externa",
+      "ORIGIN": "Origen",
+      "TRANSACTION_DATE": "Fecha de transacción",
+      "POSTING_DATE": "Fecha de contabilización",
+      "ACCOUNT": "Cuenta"
     }
   }
 }

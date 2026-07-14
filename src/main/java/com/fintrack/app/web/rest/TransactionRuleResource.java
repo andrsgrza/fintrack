@@ -2,9 +2,11 @@ package com.fintrack.app.web.rest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fintrack.app.service.TransactionRuleConditionService;
 import com.fintrack.app.service.TransactionRuleQueryService;
 import com.fintrack.app.service.TransactionRuleService;
 import com.fintrack.app.service.criteria.TransactionRuleCriteria;
+import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
@@ -40,15 +42,19 @@ public class TransactionRuleResource {
 
     private final TransactionRuleQueryService transactionRuleQueryService;
 
+    private final TransactionRuleConditionService transactionRuleConditionService;
+
     private final ObjectMapper objectMapper;
 
     public TransactionRuleResource(
         TransactionRuleService transactionRuleService,
         TransactionRuleQueryService transactionRuleQueryService,
+        TransactionRuleConditionService transactionRuleConditionService,
         ObjectMapper objectMapper
     ) {
         this.transactionRuleService = transactionRuleService;
         this.transactionRuleQueryService = transactionRuleQueryService;
+        this.transactionRuleConditionService = transactionRuleConditionService;
         this.objectMapper = objectMapper;
     }
 
@@ -198,6 +204,18 @@ public class TransactionRuleResource {
         LOG.debug("REST request to get TransactionRule : {}", id);
         Optional<TransactionRuleDTO> transactionRuleDTO = transactionRuleService.findOne(id);
         return ResponseUtil.wrapOrNotFound(transactionRuleDTO);
+    }
+
+    /**
+     * {@code GET  /transaction-rules/:id/conditions} : get the conditions for the "id" transactionRule.
+     *
+     * @param id the id of the parent transactionRule.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the ordered condition list, or {@code 404 (Not Found)} when the parent rule is inaccessible.
+     */
+    @GetMapping("/{id}/conditions")
+    public ResponseEntity<List<TransactionRuleConditionDTO>> getTransactionRuleConditions(@PathVariable("id") Long id) {
+        LOG.debug("REST request to get TransactionRuleConditions for TransactionRule : {}", id);
+        return ResponseUtil.wrapOrNotFound(transactionRuleConditionService.findByTransactionRuleId(id));
     }
 
     /**

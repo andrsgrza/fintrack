@@ -83,8 +83,14 @@ public class TransactionRuleConditionResource {
     @PutMapping("/{id}")
     public ResponseEntity<TransactionRuleConditionDTO> updateTransactionRuleCondition(
         @PathVariable(value = "id", required = false) final Long id,
-        @Valid @RequestBody TransactionRuleConditionDTO transactionRuleConditionDTO
+        @NotNull @RequestBody JsonNode requestNode
     ) throws URISyntaxException {
+        TransactionRuleConditionDTO transactionRuleConditionDTO;
+        try {
+            transactionRuleConditionDTO = objectMapper.treeToValue(requestNode, TransactionRuleConditionDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid update payload", ENTITY_NAME, "invalid");
+        }
         LOG.debug("REST request to update TransactionRuleCondition : {}, {}", id, transactionRuleConditionDTO);
         if (transactionRuleConditionDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
@@ -98,7 +104,7 @@ public class TransactionRuleConditionResource {
         }
 
         try {
-            transactionRuleConditionDTO = transactionRuleConditionService.update(transactionRuleConditionDTO);
+            transactionRuleConditionDTO = transactionRuleConditionService.update(transactionRuleConditionDTO, requestNode);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
