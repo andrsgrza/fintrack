@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -1843,6 +1844,191 @@ class TransactionRuleResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[0].id").value(earlierRule.getId().intValue()))
             .andExpect(jsonPath("$.[1].id").value(laterRule.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesUpdatesPrioritiesAndListOrder() throws Exception {
+        TransactionRule firstRule = createEntity(em);
+        firstRule.setName("REORDER_FIRST_RULE");
+        firstRule.setPriority(0);
+        firstRule = transactionRuleRepository.saveAndFlush(firstRule);
+
+        TransactionRule secondRule = createEntity(em);
+        secondRule.setName("REORDER_SECOND_RULE");
+        secondRule.setPriority(1);
+        secondRule = transactionRuleRepository.saveAndFlush(secondRule);
+
+        TransactionRule thirdRule = createEntity(em);
+        thirdRule.setName("REORDER_THIRD_RULE");
+        thirdRule.setPriority(2);
+        thirdRule = transactionRuleRepository.saveAndFlush(thirdRule);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/reorder")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"orderedIds\":[" + thirdRule.getId() + "," + firstRule.getId() + "," + secondRule.getId() + "]}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[0].id").value(thirdRule.getId().intValue()))
+            .andExpect(jsonPath("$.[0].priority").value(0))
+            .andExpect(jsonPath("$.[1].id").value(firstRule.getId().intValue()))
+            .andExpect(jsonPath("$.[1].priority").value(1))
+            .andExpect(jsonPath("$.[2].id").value(secondRule.getId().intValue()))
+            .andExpect(jsonPath("$.[2].priority").value(2));
+
+        assertThat(transactionRuleRepository.findById(thirdRule.getId()).orElseThrow().getPriority()).isZero();
+        assertThat(transactionRuleRepository.findById(firstRule.getId()).orElseThrow().getPriority()).isEqualTo(1);
+        assertThat(transactionRuleRepository.findById(secondRule.getId()).orElseThrow().getPriority()).isEqualTo(2);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=priority,asc&sort=id,asc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[0].id").value(thirdRule.getId().intValue()))
+            .andExpect(jsonPath("$.[1].id").value(firstRule.getId().intValue()))
+            .andExpect(jsonPath("$.[2].id").value(secondRule.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesWithDuplicateIdFails() throws Exception {
+        TransactionRule firstRule = createEntity(em);
+        firstRule.setName("DUPLICATE_REORDER_FIRST_RULE");
+        firstRule.setPriority(0);
+        firstRule = transactionRuleRepository.saveAndFlush(firstRule);
+
+        TransactionRule secondRule = createEntity(em);
+        secondRule.setName("DUPLICATE_REORDER_SECOND_RULE");
+        secondRule.setPriority(1);
+        secondRule = transactionRuleRepository.saveAndFlush(secondRule);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/reorder")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"orderedIds\":[" + firstRule.getId() + "," + firstRule.getId() + "]}")
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesWithMissingExistingIdFails() throws Exception {
+        TransactionRule firstRule = createEntity(em);
+        firstRule.setName("MISSING_REORDER_FIRST_RULE");
+        firstRule.setPriority(0);
+        firstRule = transactionRuleRepository.saveAndFlush(firstRule);
+
+        TransactionRule secondRule = createEntity(em);
+        secondRule.setName("MISSING_REORDER_SECOND_RULE");
+        secondRule.setPriority(1);
+        transactionRuleRepository.saveAndFlush(secondRule);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/reorder")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"orderedIds\":[" + firstRule.getId() + "]}")
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesWithUnknownIdFails() throws Exception {
+        TransactionRule firstRule = createEntity(em);
+        firstRule.setName("UNKNOWN_REORDER_FIRST_RULE");
+        firstRule.setPriority(0);
+        firstRule = transactionRuleRepository.saveAndFlush(firstRule);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/reorder")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"orderedIds\":[" + firstRule.getId() + ",999999]}")
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesWithForeignIdFails() throws Exception {
+        User otherUser = createOtherUser(em);
+
+        TransactionRule ownRule = createEntity(em);
+        ownRule.setName("FOREIGN_REORDER_OWN_RULE");
+        ownRule.setPriority(0);
+        ownRule = transactionRuleRepository.saveAndFlush(ownRule);
+
+        TransactionRule foreignRule = createEntity(em);
+        foreignRule.setName("FOREIGN_REORDER_FOREIGN_RULE");
+        foreignRule.setPriority(0);
+        foreignRule.setUser(otherUser);
+        foreignRule = transactionRuleRepository.saveAndFlush(foreignRule);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/reorder")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"orderedIds\":[" + ownRule.getId() + "," + foreignRule.getId() + "]}")
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesWithNullPayloadFails() throws Exception {
+        restTransactionRuleMockMvc
+            .perform(put(ENTITY_API_URL + "/reorder").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesWithEmptyIdsFailsWhenUserHasRules() throws Exception {
+        TransactionRule ownRule = createEntity(em);
+        ownRule.setName("EMPTY_REORDER_OWN_RULE");
+        ownRule.setPriority(0);
+        transactionRuleRepository.saveAndFlush(ownRule);
+
+        restTransactionRuleMockMvc
+            .perform(put(ENTITY_API_URL + "/reorder").contentType(MediaType.APPLICATION_JSON).content("{\"orderedIds\":[]}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void reorderTransactionRulesDoesNotAffectAnotherUsersRules() throws Exception {
+        User otherUser = createOtherUser(em);
+
+        TransactionRule ownFirstRule = createEntity(em);
+        ownFirstRule.setName("REORDER_OWN_FIRST_RULE");
+        ownFirstRule.setPriority(0);
+        ownFirstRule = transactionRuleRepository.saveAndFlush(ownFirstRule);
+
+        TransactionRule ownSecondRule = createEntity(em);
+        ownSecondRule.setName("REORDER_OWN_SECOND_RULE");
+        ownSecondRule.setPriority(1);
+        ownSecondRule = transactionRuleRepository.saveAndFlush(ownSecondRule);
+
+        TransactionRule otherUsersRule = createEntity(em);
+        otherUsersRule.setName("REORDER_OTHER_USER_RULE");
+        otherUsersRule.setPriority(7);
+        otherUsersRule.setUser(otherUser);
+        otherUsersRule = transactionRuleRepository.saveAndFlush(otherUsersRule);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/reorder")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"orderedIds\":[" + ownSecondRule.getId() + "," + ownFirstRule.getId() + "]}")
+            )
+            .andExpect(status().isOk());
+
+        assertThat(transactionRuleRepository.findById(ownSecondRule.getId()).orElseThrow().getPriority()).isZero();
+        assertThat(transactionRuleRepository.findById(ownFirstRule.getId()).orElseThrow().getPriority()).isEqualTo(1);
+        assertThat(transactionRuleRepository.findById(otherUsersRule.getId()).orElseThrow().getPriority()).isEqualTo(7);
     }
 
     @Test

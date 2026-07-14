@@ -329,6 +329,90 @@ class TransactionRuleServiceTest {
     }
 
     @Test
+    void reorderShouldUpdatePrioritiesInRequestedOrder() {
+        TransactionRule firstRule = validMappedRule(11L);
+        firstRule.setPriority(0);
+        TransactionRule secondRule = validMappedRule(12L);
+        secondRule.setPriority(1);
+        TransactionRule thirdRule = validMappedRule(13L);
+        thirdRule.setPriority(2);
+
+        TransactionRuleDTO firstDTO = new TransactionRuleDTO();
+        firstDTO.setId(11L);
+        TransactionRuleDTO secondDTO = new TransactionRuleDTO();
+        secondDTO.setId(12L);
+        TransactionRuleDTO thirdDTO = new TransactionRuleDTO();
+        thirdDTO.setId(13L);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(
+            List.of(firstRule, secondRule, thirdRule)
+        );
+        when(transactionRuleMapper.toDto(List.of(thirdRule, firstRule, secondRule))).thenReturn(List.of(thirdDTO, firstDTO, secondDTO));
+
+        List<TransactionRuleDTO> result = transactionRuleService.reorder(List.of(13L, 11L, 12L));
+
+        assertThat(thirdRule.getPriority()).isZero();
+        assertThat(firstRule.getPriority()).isEqualTo(1);
+        assertThat(secondRule.getPriority()).isEqualTo(2);
+        assertThat(result).containsExactly(thirdDTO, firstDTO, secondDTO);
+        verify(transactionRuleRepository).saveAll(List.of(thirdRule, firstRule, secondRule));
+    }
+
+    @Test
+    void reorderShouldRejectNullOrderedIds() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(List.of(transactionRule));
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(null)).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectEmptyOrderedIdsWhenUserHasRules() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(List.of(transactionRule));
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of())).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectDuplicateIds() {
+        TransactionRule secondRule = validMappedRule(12L);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(
+            List.of(transactionRule, secondRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of(10L, 10L))).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectMissingExistingRule() {
+        TransactionRule secondRule = validMappedRule(12L);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(
+            List.of(transactionRule, secondRule)
+        );
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of(10L))).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reorderShouldRejectUnknownOrForeignRuleId() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser.getId())).thenReturn(List.of(transactionRule));
+
+        assertThatThrownBy(() -> transactionRuleService.reorder(List.of(10L, 999L))).isInstanceOf(IllegalArgumentException.class);
+        verify(transactionRuleRepository, never()).saveAll(any());
+    }
+
+    @Test
     void findAllWithEagerRelationshipsShouldScopeToCurrentUser() {
         Page<TransactionRule> page = new PageImpl<>(java.util.List.of(transactionRule));
         Pageable pageable = Pageable.unpaged();

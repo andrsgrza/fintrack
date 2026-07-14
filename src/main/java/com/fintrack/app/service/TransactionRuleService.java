@@ -17,9 +17,13 @@ import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -236,6 +240,27 @@ public class TransactionRuleService {
         return true;
     }
 
+    /**
+     * Reorder the current user's transaction rules.
+     *
+     * @param orderedIds the complete desired order of the current user's rule ids.
+     * @return the reordered rules.
+     */
+    public List<TransactionRuleDTO> reorder(List<Long> orderedIds) {
+        LOG.debug("Request to reorder TransactionRules : {}", orderedIds);
+        Long ownerId = currentUserService.getCurrentUser().getId();
+        List<TransactionRule> currentRules = transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(ownerId);
+        validateReorderIds(orderedIds, currentRules);
+
+        Map<Long, TransactionRule> rulesById = currentRules.stream().collect(Collectors.toMap(TransactionRule::getId, Function.identity()));
+        List<TransactionRule> orderedRules = orderedIds.stream().map(rulesById::get).toList();
+        for (int index = 0; index < orderedRules.size(); index++) {
+            orderedRules.get(index).setPriority(index);
+        }
+        transactionRuleRepository.saveAll(orderedRules);
+        return transactionRuleMapper.toDto(orderedRules);
+    }
+
     private Optional<TransactionRule> findAccessibleEntity(Long id) {
         if (currentUserService.isAdmin()) {
             return transactionRuleRepository.findOneWithEagerRelationships(id);
@@ -403,6 +428,23 @@ public class TransactionRuleService {
             }
         }
         transactionRuleRepository.saveAll(rules);
+    }
+
+    private void validateReorderIds(List<Long> orderedIds, List<TransactionRule> currentRules) {
+        if (orderedIds == null) {
+            throw new IllegalArgumentException("orderedIds is required");
+        }
+        if (!currentRules.isEmpty() && orderedIds.isEmpty()) {
+            throw new IllegalArgumentException("orderedIds cannot be empty");
+        }
+        Set<Long> requestedIds = new LinkedHashSet<>(orderedIds);
+        if (requestedIds.size() != orderedIds.size()) {
+            throw new IllegalArgumentException("orderedIds cannot contain duplicates");
+        }
+        Set<Long> currentIds = currentRules.stream().map(TransactionRule::getId).collect(Collectors.toSet());
+        if (!requestedIds.equals(currentIds)) {
+            throw new IllegalArgumentException("orderedIds must contain each current user transaction rule exactly once");
+        }
     }
 
     private void rejectCreatedAtChange(TransactionRule existingTransactionRule, Instant requestedCreatedAt) {

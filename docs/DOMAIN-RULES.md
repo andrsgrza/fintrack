@@ -915,6 +915,7 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 | Lower `priority` evaluates earlier     | Future engine uses `priority ASC`; first matching active rule applies outputs | **Deferred** |
 | Tags union from all matching rules     | JDL                                                                           | **Deferred** |
 | Duplicate priorities                   | Not allowed by service-managed per-user consecutive ordering                  | **Done**     |
+| Manual rule reorder                    | Move up / Move down sends full ordered ids; backend validates exact owner set | **Done**     |
 | Manual FT fields override rule outputs |                                                                               | **Open**     |
 | Rule execution engine                  | Not part of CRUD domain-rule pass                                             | **Deferred** |
 | Batch reclassification                 | Not part of CRUD domain-rule pass                                             | **Deferred** |

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { Link } from 'react-router-dom';
 import { Button, Table } from 'reactstrap';
-import { TextFormat, Translate, getSortState, translate } from 'react-jhipster';
+import { TextFormat, Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
+import { faArrowDown, faArrowUp } from '@fortawesome/free-solid-svg-icons';
 import { APP_DATE_FORMAT } from 'app/config/constants';
-import { ASC, DESC } from 'app/shared/util/pagination.constants';
-import { overrideSortStateWithQueryParams } from 'app/shared/util/entity-utils';
+import { ASC } from 'app/shared/util/pagination.constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities } from './transaction-rule.reducer';
@@ -19,54 +19,55 @@ import {
 export const TransactionRule = () => {
   const dispatch = useAppDispatch();
 
-  const pageLocation = useLocation();
-  const navigate = useNavigate();
-
-  const [sortState, setSortState] = useState(overrideSortStateWithQueryParams(getSortState(pageLocation, 'priority'), pageLocation.search));
+  const [reordering, setReordering] = useState(false);
+  const [reorderError, setReorderError] = useState(false);
 
   const transactionRuleList = useAppSelector(state => state.transactionRule.entities);
   const loading = useAppSelector(state => state.transactionRule.loading);
+  const orderedTransactionRuleList = [...transactionRuleList].sort((firstRule, secondRule) => {
+    const firstPriority = firstRule.priority ?? Number.MAX_SAFE_INTEGER;
+    const secondPriority = secondRule.priority ?? Number.MAX_SAFE_INTEGER;
+    if (firstPriority !== secondPriority) {
+      return firstPriority - secondPriority;
+    }
+    return (firstRule.id ?? Number.MAX_SAFE_INTEGER) - (secondRule.id ?? Number.MAX_SAFE_INTEGER);
+  });
 
   const getAllEntities = () => {
     dispatch(
       getEntities({
-        sort:
-          sortState.sort === 'priority' ? `${sortState.sort},${sortState.order}&sort=id,${ASC}` : `${sortState.sort},${sortState.order}`,
+        sort: `priority,${ASC}&sort=id,${ASC}`,
       }),
     );
   };
 
   const sortEntities = () => {
     getAllEntities();
-    const endURL = `?sort=${sortState.sort},${sortState.order}`;
-    if (pageLocation.search !== endURL) {
-      navigate(`${pageLocation.pathname}${endURL}`);
-    }
   };
 
   useEffect(() => {
     sortEntities();
-  }, [sortState.order, sortState.sort]);
-
-  const sort = p => () => {
-    setSortState({
-      ...sortState,
-      order: sortState.order === ASC ? DESC : ASC,
-      sort: p,
-    });
-  };
+  }, []);
 
   const handleSyncList = () => {
     sortEntities();
   };
 
-  const getSortIconByFieldName = (fieldName: string) => {
-    const sortFieldName = sortState.sort;
-    const order = sortState.order;
-    if (sortFieldName !== fieldName) {
-      return faSort;
+  const reorderRules = async (fromIndex: number, toIndex: number) => {
+    const nextRules = [...orderedTransactionRuleList];
+    const [movedRule] = nextRules.splice(fromIndex, 1);
+    nextRules.splice(toIndex, 0, movedRule);
+
+    setReorderError(false);
+    setReordering(true);
+    try {
+      await axios.put('api/transaction-rules/reorder', { orderedIds: nextRules.map(rule => rule.id) });
+      getAllEntities();
+    } catch (error) {
+      setReorderError(true);
+    } finally {
+      setReordering(false);
     }
-    return order === ASC ? faSortUp : faSortDown;
   };
 
   return (
@@ -86,32 +87,32 @@ export const TransactionRule = () => {
         </div>
       </h2>
       <div className="table-responsive">
-        {transactionRuleList && transactionRuleList.length > 0 ? (
+        {reorderError ? (
+          <div className="alert alert-danger" role="alert">
+            <Translate contentKey="fintrackApp.transactionRule.reorderFailed">Could not reorder rules.</Translate>
+          </div>
+        ) : null}
+        {orderedTransactionRuleList && orderedTransactionRuleList.length > 0 ? (
           <Table responsive>
             <thead>
               <tr>
-                <th className="hand" onClick={sort('name')}>
-                  <Translate contentKey="fintrackApp.transactionRule.name">Name</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('name')} />
+                <th>
+                  <Translate contentKey="fintrackApp.transactionRule.name">Name</Translate>
                 </th>
-                <th className="hand" onClick={sort('active')}>
-                  <Translate contentKey="fintrackApp.transactionRule.status.label">Status</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('active')} />
+                <th>
+                  <Translate contentKey="fintrackApp.transactionRule.status.label">Status</Translate>
                 </th>
-                <th className="hand" onClick={sort('priority')}>
-                  <Translate contentKey="fintrackApp.transactionRule.order">Order</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('priority')} />
+                <th>
+                  <Translate contentKey="fintrackApp.transactionRule.order">Order</Translate>
                 </th>
-                <th className="hand" onClick={sort('conditionLogic')}>
-                  <Translate contentKey="fintrackApp.transactionRule.conditionSummary.label">Conditions</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('conditionLogic')} />
+                <th>
+                  <Translate contentKey="fintrackApp.transactionRule.conditionSummary.label">Conditions</Translate>
                 </th>
                 <th>
                   <Translate contentKey="fintrackApp.transactionRule.result.label">Result</Translate>
                 </th>
-                <th className="hand" onClick={sort('updatedAt')}>
-                  <Translate contentKey="fintrackApp.transactionRule.updated">Updated</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
+                <th>
+                  <Translate contentKey="fintrackApp.transactionRule.updated">Updated</Translate>
                 </th>
                 <th className="text-end">
                   <Translate contentKey="fintrackApp.transactionRule.actions">Actions</Translate>
@@ -119,7 +120,7 @@ export const TransactionRule = () => {
               </tr>
             </thead>
             <tbody>
-              {transactionRuleList.map((transactionRule, i) => (
+              {orderedTransactionRuleList.map((transactionRule, i) => (
                 <tr key={`entity-${i}`} data-cy="entityTable">
                   <td>
                     <Link to={`/transaction-rule/${transactionRule.id}`}>{transactionRule.name}</Link>
@@ -151,6 +152,34 @@ export const TransactionRule = () => {
                   </td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">
+                      {i > 0 ? (
+                        <Button
+                          color="secondary"
+                          size="sm"
+                          onClick={() => reorderRules(i, i - 1)}
+                          disabled={reordering}
+                          data-cy="entityMoveUpButton"
+                        >
+                          <FontAwesomeIcon icon={faArrowUp} />{' '}
+                          <span className="d-none d-md-inline">
+                            <Translate contentKey="fintrackApp.transactionRule.moveUp">Move up</Translate>
+                          </span>
+                        </Button>
+                      ) : null}
+                      {i < orderedTransactionRuleList.length - 1 ? (
+                        <Button
+                          color="secondary"
+                          size="sm"
+                          onClick={() => reorderRules(i, i + 1)}
+                          disabled={reordering}
+                          data-cy="entityMoveDownButton"
+                        >
+                          <FontAwesomeIcon icon={faArrowDown} />{' '}
+                          <span className="d-none d-md-inline">
+                            <Translate contentKey="fintrackApp.transactionRule.moveDown">Move down</Translate>
+                          </span>
+                        </Button>
+                      ) : null}
                       <Button
                         tag={Link}
                         to={`/transaction-rule/${transactionRule.id}`}

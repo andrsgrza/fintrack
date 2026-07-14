@@ -8,6 +8,7 @@ import com.fintrack.app.service.TransactionRuleService;
 import com.fintrack.app.service.criteria.TransactionRuleCriteria;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
+import com.fintrack.app.service.dto.TransactionRuleReorderRequestDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -80,6 +81,25 @@ public class TransactionRuleResource {
         return ResponseEntity.created(new URI("/api/transaction-rules/" + transactionRuleDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, transactionRuleDTO.getId().toString()))
             .body(transactionRuleDTO);
+    }
+
+    /**
+     * {@code PUT /transaction-rules/reorder} : Reorder the current user's transactionRules.
+     *
+     * @param request the full desired order of the current user's transactionRule ids.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the reordered transactionRules.
+     */
+    @PutMapping("/reorder")
+    public ResponseEntity<List<TransactionRuleDTO>> reorderTransactionRules(
+        @RequestBody(required = false) TransactionRuleReorderRequestDTO request
+    ) {
+        LOG.debug("REST request to reorder TransactionRules : {}", request == null ? null : request.getOrderedIds());
+        try {
+            List<TransactionRuleDTO> result = transactionRuleService.reorder(request == null ? null : request.getOrderedIds());
+            return ResponseEntity.ok().body(result);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
     }
 
     /**
