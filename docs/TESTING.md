@@ -1503,11 +1503,20 @@ See [RULE-ENGINE.md](RULE-ENGINE.md). No Rule Engine tests exist yet because the
 
 Planned areas:
 
-- pure evaluator unit tests for active-rule filtering and `priority ASC` evaluation;
-- condition evaluator tests for `ALL` / `ANY` short-circuit semantics;
+- pure evaluator unit tests that ignore inactive rules;
+- pure evaluator unit tests that ignore rules without conditions;
+- pure evaluator unit tests that respect `priority ASC` evaluation;
+- condition evaluator tests where `ALL` requires all conditions true;
+- condition evaluator tests where `ANY` requires at least one condition true;
 - field/operator/value tests that reuse the TransactionRuleCondition validation matrix;
-- output suggestion tests for category and tags;
-- conflict tests where explicit transaction values differ from rule suggestions;
+- output suggestion tests where category first matching output wins;
+- conflict tests where explicit transaction category differs from rule category suggestion;
+- no-conflict tests where explicit transaction category equals rule category suggestion;
+- tag tests where tags accumulate across matching rules;
+- tag tests where duplicate tag suggestions are de-duped;
+- tag tests where existing transaction tags are preserved;
+- tag tests where a later duplicate tag output is skipped;
+- regression tests confirming no description/subscription outputs exist;
 - mode tests for `PREVIEW_ONLY`, `FILL_EMPTY_ONLY`, and future confirmation/override modes;
 - resource/service integration tests once rule application on create exists;
 - no-mutation tests for preview evaluation;

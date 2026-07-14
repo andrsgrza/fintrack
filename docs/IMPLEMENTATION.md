@@ -445,7 +445,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Priority/order UX                               | ✅     | List/detail show read-only 1-based order; list forces `priority ASC, id ASC`, exposes only possible Move up / Move down controls, and create/edit do not render or submit priority |
 | Manual reorder endpoint                         | ✅     | `PUT /api/transaction-rules/reorder` accepts full current-user ordered ids, validates exact membership, and normalizes priorities to `0..n`                                        |
 | Edit form hydration                             | ✅     | Edit waits for the requested entity before mounting the JHipster `ValidatedForm`; fields stay direct children for registration/defaults                                            |
-| Rule Engine design                              | 📝     | Design-only contract in [`RULE-ENGINE.md`](RULE-ENGINE.md); no execution service implemented yet                                                                                   |
+| Rule Engine design                              | 📝     | Design-only contract in [`RULE-ENGINE.md`](RULE-ENGINE.md); v1 `RuleEvaluationResult` supports category/tag suggestions only; no execution service implemented yet                 |
 | **Ejecución al crear transaction**              | ⏳     | Future Rule Engine phase 2 — apply on create with fill-empty behavior                                                                                                              |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                             |
 
@@ -463,7 +463,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
 
-1. Pure evaluator service returning `RuleEvaluationResult`; no mutation, no UI.
+1. Pure evaluator service returning `RuleEvaluationResult`; category/tag suggestions only; no mutation, no UI.
 2. Apply on `FinancialTransaction` create using fill-empty-only behavior.
 3. Preview UI for manual transaction create/edit.
 4. Reevaluate one transaction.

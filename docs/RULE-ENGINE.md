@@ -16,12 +16,45 @@ Not implemented yet:
 - bulk reclassification;
 - rule execution audit log.
 
-The engine should evaluate user-defined `TransactionRule`s against `FinancialTransaction`-like input and produce suggested or applied outputs for:
+The engine should evaluate user-defined `TransactionRule`s against `FinancialTransaction`-like input and produce suggestions for:
 
 - category assignment;
 - tag assignment.
 
 Subscription and description assignment are deliberately not outputs in the current TransactionRule model. They can be reconsidered in a later rule-engine slice.
+
+## Implemented vs designed vs deferred
+
+### Implemented today
+
+- TransactionRule CRUD/domain rules.
+- TransactionRuleCondition CRUD/domain rules.
+- Server-managed rule priority/order.
+- Server-managed condition position.
+- TransactionRule v1 outputs:
+  - `resultingCategory`;
+  - `resultingTags`.
+
+### Designed but not implemented
+
+- pure rule evaluation;
+- `RuleEvaluationResult`;
+- category/tag suggestions;
+- conflict/skipped-output reporting;
+- future apply modes.
+
+### Deferred
+
+- Java evaluator service implementation;
+- public REST preview endpoint;
+- automatic apply-on-create;
+- manual preview UI;
+- transaction reevaluation;
+- bulk reevaluation;
+- condition-level explanation UI;
+- rule match audit log;
+- description replacement output;
+- financial subscription/subscription output.
 
 ## Current implemented foundation
 
@@ -119,13 +152,30 @@ Collection output:
 
 ### Category
 
-The first matching rule with `resultingCategory` can suggest a category.
+Category is scalar.
+
+The first active matching rule with `resultingCategory` decides the category suggestion.
+
+Later matching rules that also propose a category do not replace the earlier suggestion.
+
+If debug/explanation details are enabled, later category outputs should be recorded as skipped with:
+
+```text
+CATEGORY_ALREADY_SUGGESTED_BY_HIGHER_PRIORITY_RULE
+```
 
 If the transaction has no explicit category, the category can be auto-filled in modes that allow mutation.
 
-If the transaction already has a different explicit category, the engine must not silently override it. It should produce a conflict or suggestion.
+If the evaluated transaction/draft already has an explicit category:
+
+- same category as the rule suggestion: no conflict;
+- different category: do not override automatically; return a conflict.
+
+The evaluator itself never mutates the transaction.
 
 ### Tags
+
+Tags are collection outputs.
 
 Matching rules can suggest tags.
 
@@ -135,37 +185,167 @@ Duplicate tags are removed.
 
 Explicit existing tags are preserved.
 
-Auto-apply may add suggested tags without removing existing tags, depending on evaluation mode and the final source/override policy.
+For v1 design, suggested tags that already exist on the transaction should still appear in evaluation details with:
+
+```text
+alreadyPresent = true
+```
+
+Future apply logic must not re-add duplicates.
+
+If two matching rules suggest the same tag:
+
+- the first matching rule is the source suggestion;
+- later duplicate outputs may be skipped with `TAG_ALREADY_SUGGESTED`.
+
+Auto-apply may add suggested tags without removing existing tags, depending on evaluation mode.
 
 ### Deferred outputs
 
-Subscription and description mutations are not TransactionRule outputs in the current model. If they return later, they should be introduced as explicit rule-engine design work with clear conflict behavior and transaction validation.
+Subscription and description mutations are not TransactionRule outputs in the current model.
+
+Do not include these in `RuleEvaluationResult` v1:
+
+- `resultingDescription`;
+- `financialSubscription`;
+- subscription output;
+- description replacement output.
+
+If they return later, they should be introduced as explicit rule-engine design work with clear conflict behavior and transaction validation.
 
 ## Suggestions vs mutation
 
 The engine should be designed around evaluation results first, not direct mutation.
 
-Preferred conceptual API:
+Intended conceptual API:
 
 ```text
-evaluate(transactionDraft) -> RuleEvaluationResult
+TransactionRuleEvaluationService.evaluate(transactionDraft) -> RuleEvaluationResult
 ```
 
-`RuleEvaluationResult` should be able to contain:
+The evaluator must not mutate `FinancialTransaction`.
+
+The evaluator only returns:
 
 - matched rules;
-- condition match details, if useful later;
 - suggested outputs;
 - conflicts;
-- skipped outputs with reasons.
+- skipped outputs;
+- optional condition-level details for future explanation/debug.
 
 Applying suggestions should be a separate step.
 
-Preferred conceptual API:
+Deferred conceptual API:
 
 ```text
 applyEvaluation(transaction, evaluation, mode)
 ```
+
+### Proposed `RuleEvaluationResult` shape
+
+This is not Java code yet. It is the conceptual shape implementation should follow.
+
+```text
+RuleEvaluationResult
+  evaluatedTransactionId: Long | null
+  evaluatedAt: Instant | null
+  mode: EvaluationMode | null
+  matchedRules: List<RuleMatchResult>
+  suggestedCategory: CategorySuggestion | null
+  suggestedTags: List<TagSuggestion>
+  conflicts: List<RuleOutputConflict>
+  skippedOutputs: List<SkippedRuleOutput>
+  hasSuggestions: derived boolean
+  hasConflicts: derived boolean
+```
+
+`evaluatedTransactionId` is optional because preview may evaluate an unsaved draft/new transaction.
+
+`evaluatedAt` is optional for phase 1. It becomes more useful if the result is persisted, returned by a REST preview endpoint, or used for audit/debug later.
+
+`mode` is optional for phase 1 pure preview. The result should still be compatible with future apply modes.
+
+### `RuleMatchResult`
+
+```text
+RuleMatchResult
+  ruleId: Long
+  ruleName: String
+  priority: Integer
+  conditionLogic: ALL | ANY
+  proposedOutputs: Set<CATEGORY | TAGS>
+  matched: true
+  conditionResults: deferred optional details
+```
+
+`matchedRules` should include active eligible rules whose conditions matched. Whether matched rules with no configured outputs are included remains an open decision.
+
+### `CategorySuggestion`
+
+```text
+CategorySuggestion
+  categoryId: Long
+  categoryName: String
+  sourceRuleId: Long
+  sourceRuleName: String
+  conflictsWithCurrentValue: boolean
+  currentCategoryId: Long | null
+  currentCategoryName: String | null
+```
+
+### `TagSuggestion`
+
+```text
+TagSuggestion
+  tagId: Long
+  tagName: String
+  sourceRuleId: Long
+  sourceRuleName: String
+  alreadyPresent: boolean
+  duplicateOfEarlierSuggestion: boolean
+```
+
+For v1 design, tags already present on the transaction appear in `suggestedTags` with `alreadyPresent=true`, rather than disappearing entirely. Apply logic still must not add duplicates.
+
+### `RuleOutputConflict`
+
+```text
+RuleOutputConflict
+  field: CATEGORY | TAGS
+  currentValueId: Long | null
+  currentValueLabel: String | null
+  suggestedValueId: Long | null
+  suggestedValueLabel: String | null
+  sourceRuleId: Long
+  sourceRuleName: String
+  reason: String
+```
+
+`TAGS` conflicts are not expected in v1 fill-empty/additive behavior, but the field is included so the structure can grow without reshaping the result.
+
+### `SkippedRuleOutput`
+
+```text
+SkippedRuleOutput
+  field: CATEGORY | TAGS
+  sourceRuleId: Long
+  sourceRuleName: String
+  reason: SkippedRuleOutputReason
+```
+
+Potential skip reasons:
+
+- `RULE_INACTIVE`;
+- `RULE_HAS_NO_CONDITIONS`;
+- `RULE_DID_NOT_MATCH`;
+- `CATEGORY_ALREADY_SUGGESTED_BY_HIGHER_PRIORITY_RULE`;
+- `CATEGORY_CONFLICTS_WITH_EXPLICIT_VALUE`;
+- `TAG_ALREADY_PRESENT`;
+- `TAG_ALREADY_SUGGESTED`;
+- `OUTPUT_INVALID_FOR_TRANSACTION`;
+- `OUTPUT_NOT_CONFIGURED`.
+
+Not all skip reasons need to be exposed in v1 UI. They are primarily useful for tests, logs, and future explain/debug behavior.
 
 ## Evaluation modes
 
@@ -177,17 +357,22 @@ applyEvaluation(transaction, evaluation, mode)
 
 ### FILL_EMPTY_ONLY
 
-- apply suggestions only to empty or unset fields;
-- do not override explicit user values.
+- future apply mode;
+- category applies only if empty;
+- tags are added without removing existing tags;
+- no override.
 
 ### OVERRIDE_WITH_CONFIRMATION
 
-- allow the user to accept conflicting suggestions explicitly.
+- future UI-driven apply mode;
+- conflicts can be applied only if the user accepts.
 
 ### FORCE_OVERRIDE
 
 - future system/admin/bulk mode;
-- not part of v1.
+- not v1.
+
+`RuleEvaluationResult` should support these future modes, but implementation phase 1 only needs `PREVIEW_ONLY` evaluation semantics.
 
 ## Create/update/reevaluate lifecycle
 
@@ -225,20 +410,28 @@ It should not be implemented until preview/apply behavior is mature.
 
 ## Explicit user input vs rule suggestions
 
-Explicit user input wins by default.
+Explicit user/source values win by default.
 
-Rules should not silently override values the user explicitly chose.
+For v1 design:
+
+- if a transaction draft already has category, that category is treated as explicit;
+- if a transaction draft already has tags, those tags are treated as explicit existing tags;
+- the evaluator can still return suggestions/conflicts;
+- the evaluator does not override.
+
+Manual create/update:
+
+- user-selected category/tags are explicit.
+
+Import/API:
+
+- source-provided category/tags are also treated as explicit for v1;
+- richer source policy is deferred.
 
 If a rule conflicts with explicit input:
 
 - record a conflict or suggestion;
 - require confirmation before applying the override.
-
-For imports/API, fields may be source-provided rather than user-confirmed.
-
-The first implementation should still avoid destructive overrides unless a field is empty.
-
-Richer source/override policy remains deferred.
 
 ## Rule matching fields/operators
 
@@ -291,8 +484,7 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 - implement pure evaluator service;
 - no mutation;
-- no UI;
-- tests only;
+- backend tests only;
 - evaluate a transaction-like draft;
 - return `RuleEvaluationResult`;
 - support active rules ordered by priority;
@@ -341,11 +533,12 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 ## Open decisions
 
-- Whether subscription or description outputs should return in a future rule-engine slice.
-- Whether API/import source values count as explicit values.
-- Whether tag suggestions should auto-apply when existing tags are present.
-- Whether multiple matching rules can contribute outputs in v1 or only in the pure evaluator phase.
-- Final shape of `RuleEvaluationResult` DTO.
+- Whether `RuleEvaluationResult` becomes a public REST DTO or remains an internal service result first.
+- Whether condition-level details are included in phase 1 or deferred.
+- Whether `matchedRules` should include matched rules with no outputs or only matched output-producing rules.
+- Whether `skippedOutputs` are always populated or only in debug/explain mode.
+- Whether tag suggestions that are already present should also appear in `skippedOutputs` or only in `suggestedTags` with `alreadyPresent=true`.
+- Exact Java package and class names when implemented later.
+- Whether evaluation needs a dedicated `TransactionDraft` abstraction or can use `FinancialTransactionDTO` initially.
 - Where preview UI will live.
-- Whether condition match details are needed in v1 or only for later explanation UI.
-- How to represent conflicts and skipped outputs consistently in REST responses.
+- How to represent conflicts and skipped outputs consistently in REST responses if/when exposed.
