@@ -369,7 +369,7 @@ The list shows:
 
 - name;
 - translated status;
-- priority;
+- read-only order;
 - translated condition logic;
 - result summary;
 - updated timestamp;
@@ -486,9 +486,13 @@ Position controls stable display/evaluation order inside a rule.
 
 Position does not affect `ALL` / `ANY` logical semantics.
 
-`TransactionRule.priority` orders rules relative to each other.
+`TransactionRule.priority` orders rules relative to each other for the same owner/user.
+
+TransactionRule priority/order is server-managed, unique/consecutive per user, reindexed on rule delete, stored 0-based, and displayed 1-based in the UI.
 
 `TransactionRuleCondition.position` orders conditions inside one rule.
+
+Unlike TransactionRule priority, TransactionRuleCondition position does not reindex on delete.
 
 Condition reorder UI/API remains deferred.
 
@@ -525,6 +529,7 @@ Deferred for this workflow:
 - create-with-conditions command endpoint;
 - client-side draft child collection on parent create;
 - row-positioned inline edit;
+- TransactionRule reorder endpoint / drag-and-drop UI;
 - condition reorder UI/API;
 - rule execution engine;
 - atomic backend command endpoint.

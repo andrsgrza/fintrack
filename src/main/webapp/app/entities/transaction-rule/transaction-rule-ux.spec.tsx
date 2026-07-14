@@ -210,11 +210,12 @@ describe('TransactionRule UX', () => {
   it('renders product-oriented list columns and keeps row actions', () => {
     renderList();
 
+    expect(mockGetEntities).toHaveBeenCalledWith({ sort: 'priority,asc&sort=id,asc' });
     expect(screen.queryByRole('columnheader', { name: /id/i })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: /created at/i })).toBeNull();
     expect(screen.getByRole('columnheader', { name: /name/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /status/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: /priority/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /order/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /conditions/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /result/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /updated/i })).toBeTruthy();
@@ -223,6 +224,7 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('Active')).toBeTruthy();
     expect(screen.getByText('All conditions')).toBeTruthy();
     expect(screen.getByText('Any condition')).toBeTruthy();
+    expect(screen.getAllByText('#11')).toHaveLength(2);
     expect(screen.getByText('Category: Food')).toBeTruthy();
     expect(screen.getByText('Subscription: Coffee club')).toBeTruthy();
     expect(screen.getByText('Tags: Morning')).toBeTruthy();
@@ -243,7 +245,9 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Active')).toBeNull();
+    expect(screen.queryByLabelText('Priority')).toBeNull();
     expect(screen.getByRole('button', { name: /save and add conditions/i })).toBeTruthy();
+    expect(screen.getByText('Rule order is managed from the rules list. New rules are added last.')).toBeTruthy();
   });
 
   it('does not render the embedded conditions editor in create mode', () => {
@@ -259,7 +263,6 @@ describe('TransactionRule UX', () => {
     mockDispatch.mockClear();
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New rule' } });
-    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Resulting Description'), { target: { value: 'Normalized description' } });
     fireEvent.click(screen.getByRole('button', { name: /save and add conditions/i }));
 
@@ -272,6 +275,7 @@ describe('TransactionRule UX', () => {
         }),
       ),
     );
+    expect(mockCreateEntity.mock.calls[0][0]).not.toHaveProperty('priority');
     expect(mockDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'transactionRule/createEntity',
@@ -303,6 +307,7 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('Active rules require at least one condition.')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
+    expect(screen.queryByLabelText('Priority')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Conditions' })).toBeNull();
     expect(screen.queryByRole('button', { name: /add condition/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /delete condition/i })).toBeNull();
@@ -315,9 +320,37 @@ describe('TransactionRule UX', () => {
 
     await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
     expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Coffee shops');
-    expect((screen.getByLabelText('Priority') as HTMLInputElement).value).toBe('10');
     expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL');
     expect((screen.getByLabelText('Resulting Description') as HTMLInputElement).value).toBe('Coffee');
+    expect(screen.queryByLabelText('Priority')).toBeNull();
+  });
+
+  it('submits edited rules without priority', async () => {
+    renderEditForm([
+      {
+        id: 11,
+        position: 1,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Coffee',
+        caseSensitive: false,
+      },
+    ]);
+    mockPartialUpdateEntity.mockClear();
+
+    await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Updated description' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(mockPartialUpdateEntity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          description: 'Updated description',
+        }),
+      ),
+    );
+    expect(mockPartialUpdateEntity.mock.calls[0][0]).not.toHaveProperty('priority');
   });
 
   it('hydrates resulting category, subscription, tags, and active on edit', async () => {
@@ -412,7 +445,8 @@ describe('TransactionRule UX', () => {
     expect(screen.getByRole('heading', { name: 'Result' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Status / Metadata' })).toBeTruthy();
     expect(screen.getByText('Inactive')).toBeTruthy();
-    expect(screen.getByText('10')).toBeTruthy();
+    expect(screen.getByText('Evaluation order:')).toBeTruthy();
+    expect(screen.getByText('#11')).toBeTruthy();
     expect(screen.getByText('All conditions')).toBeTruthy();
     expect(screen.getByText('Food')).toBeTruthy();
     expect(screen.getByText('Coffee club')).toBeTruthy();

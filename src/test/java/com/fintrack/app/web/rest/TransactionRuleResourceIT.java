@@ -239,6 +239,60 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
+    void createFirstTransactionRuleAssignsPriorityZero() throws Exception {
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setPriority(99);
+
+        TransactionRuleDTO returnedTransactionRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
+
+        assertThat(returnedTransactionRuleDTO.getPriority()).isZero();
+        insertedTransactionRule = transactionRuleMapper.toEntity(returnedTransactionRuleDTO);
+    }
+
+    @Test
+    @Transactional
+    void createSecondTransactionRuleForSameUserAssignsPriorityOne() throws Exception {
+        TransactionRule firstRule = createEntity(em);
+        firstRule.setName("FIRST_RULE");
+        TransactionRuleDTO firstRuleDTO = transactionRuleMapper.toDto(firstRule);
+        TransactionRuleDTO returnedFirstRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(firstRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
+
+        TransactionRule secondRule = createEntity(em);
+        secondRule.setName("SECOND_RULE");
+        secondRule.setPriority(99);
+        TransactionRuleDTO secondRuleDTO = transactionRuleMapper.toDto(secondRule);
+        TransactionRuleDTO returnedSecondRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(secondRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
+
+        assertThat(returnedFirstRuleDTO.getPriority()).isZero();
+        assertThat(returnedSecondRuleDTO.getPriority()).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional
     void createTransactionRuleWithExistingId() throws Exception {
         // Create the TransactionRule with an existing ID
         transactionRule.setId(1L);
@@ -274,19 +328,24 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
-    void checkPriorityIsRequired() throws Exception {
+    void createTransactionRuleWithoutPriorityUsesServerManagedPriority() throws Exception {
         long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
         transactionRule.setPriority(null);
-
-        // Create the TransactionRule, which fails.
         TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
 
-        restTransactionRuleMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
-            .andExpect(status().isBadRequest());
+        TransactionRuleDTO returnedTransactionRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeTest);
+        assertThat(returnedTransactionRuleDTO.getPriority()).isZero();
+        insertedTransactionRule = transactionRuleMapper.toEntity(returnedTransactionRuleDTO);
     }
 
     @Test
@@ -1088,7 +1147,6 @@ class TransactionRuleResourceIT {
         updatedTransactionRule
             .name(UPDATED_NAME)
             .description(UPDATED_DESCRIPTION)
-            .priority(UPDATED_PRIORITY)
             .conditionLogic(UPDATED_CONDITION_LOGIC)
             .resultingDescription(UPDATED_RESULTING_DESCRIPTION)
             .active(DEFAULT_ACTIVE)
@@ -1111,6 +1169,99 @@ class TransactionRuleResourceIT {
         assertThat(persistedTransactionRule.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
         updatedTransactionRule.setUpdatedAt(persistedTransactionRule.getUpdatedAt());
         assertPersistedTransactionRuleToMatchAllProperties(updatedTransactionRule);
+    }
+
+    @Test
+    @Transactional
+    void putOmittingPriorityPreservesExistingPriority() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String putJson =
+            "{\"id\":" +
+            transactionRule.getId() +
+            ",\"name\":\"" +
+            UPDATED_NAME +
+            "\",\"description\":\"" +
+            UPDATED_DESCRIPTION +
+            "\",\"conditionLogic\":\"" +
+            UPDATED_CONDITION_LOGIC +
+            "\",\"resultingDescription\":\"" +
+            UPDATED_RESULTING_DESCRIPTION +
+            "\",\"active\":false,\"createdAt\":\"" +
+            DEFAULT_CREATED_AT +
+            "\",\"updatedAt\":\"" +
+            DEFAULT_UPDATED_AT +
+            "\"}";
+
+        restTransactionRuleMockMvc
+            .perform(put(ENTITY_API_URL_ID, transactionRule.getId()).contentType(MediaType.APPLICATION_JSON).content(putJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.priority").value(DEFAULT_PRIORITY));
+
+        assertThat(getPersistedTransactionRule(transactionRule).getPriority()).isEqualTo(DEFAULT_PRIORITY);
+    }
+
+    @Test
+    @Transactional
+    void putSamePrioritySucceeds() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setName(UPDATED_NAME);
+        transactionRuleDTO.setPriority(DEFAULT_PRIORITY);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.priority").value(DEFAULT_PRIORITY));
+    }
+
+    @Test
+    @Transactional
+    void putChangedPriorityFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setPriority(UPDATED_PRIORITY);
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getPriority()).isEqualTo(DEFAULT_PRIORITY);
+    }
+
+    @Test
+    @Transactional
+    void putNullPriorityFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String putJson =
+            "{\"id\":" +
+            transactionRule.getId() +
+            ",\"name\":\"" +
+            DEFAULT_NAME +
+            "\",\"priority\":null,\"conditionLogic\":\"" +
+            DEFAULT_CONDITION_LOGIC +
+            "\",\"resultingDescription\":\"" +
+            DEFAULT_RESULTING_DESCRIPTION +
+            "\",\"active\":false,\"createdAt\":\"" +
+            DEFAULT_CREATED_AT +
+            "\",\"updatedAt\":\"" +
+            DEFAULT_UPDATED_AT +
+            "\"}";
+
+        restTransactionRuleMockMvc
+            .perform(put(ENTITY_API_URL_ID, transactionRule.getId()).contentType(MediaType.APPLICATION_JSON).content(putJson))
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getPriority()).isEqualTo(DEFAULT_PRIORITY);
     }
 
     @Test
@@ -1306,7 +1457,7 @@ class TransactionRuleResourceIT {
         partialUpdatedTransactionRule
             .name(UPDATED_NAME)
             .description(UPDATED_DESCRIPTION)
-            .priority(UPDATED_PRIORITY)
+            .priority(DEFAULT_PRIORITY)
             .conditionLogic(UPDATED_CONDITION_LOGIC)
             .resultingDescription(UPDATED_RESULTING_DESCRIPTION)
             .active(DEFAULT_ACTIVE)
@@ -1329,6 +1480,33 @@ class TransactionRuleResourceIT {
         assertThat(persistedTransactionRule.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
         partialUpdatedTransactionRule.setUpdatedAt(persistedTransactionRule.getUpdatedAt());
         assertTransactionRuleUpdatableFieldsEquals(partialUpdatedTransactionRule, persistedTransactionRule);
+    }
+
+    @Test
+    @Transactional
+    void patchSamePrioritySucceeds() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"priority\":" + DEFAULT_PRIORITY + "}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.priority").value(DEFAULT_PRIORITY));
+    }
+
+    @Test
+    @Transactional
+    void patchChangedPriorityFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"priority\":" + UPDATED_PRIORITY + "}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getPriority()).isEqualTo(DEFAULT_PRIORITY);
     }
 
     @Test
@@ -1548,6 +1726,61 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
+    void deleteMiddleTransactionRuleReindexesSameUsersRules() throws Exception {
+        TransactionRule firstRule = createEntity(em);
+        firstRule.setName("FIRST_RULE");
+        firstRule.setPriority(0);
+        firstRule = transactionRuleRepository.saveAndFlush(firstRule);
+
+        TransactionRule middleRule = createEntity(em);
+        middleRule.setName("MIDDLE_RULE");
+        middleRule.setPriority(1);
+        middleRule = transactionRuleRepository.saveAndFlush(middleRule);
+
+        TransactionRule lastRule = createEntity(em);
+        lastRule.setName("LAST_RULE");
+        lastRule.setPriority(2);
+        lastRule = transactionRuleRepository.saveAndFlush(lastRule);
+
+        restTransactionRuleMockMvc
+            .perform(delete(ENTITY_API_URL_ID, middleRule.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(transactionRuleRepository.findById(firstRule.getId()).orElseThrow().getPriority()).isZero();
+        assertThat(transactionRuleRepository.findById(lastRule.getId()).orElseThrow().getPriority()).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional
+    void deleteTransactionRuleDoesNotReindexOtherUsersRules() throws Exception {
+        User otherUser = createOtherUser(em);
+
+        TransactionRule ownFirstRule = createEntity(em);
+        ownFirstRule.setName("OWN_FIRST_RULE");
+        ownFirstRule.setPriority(0);
+        ownFirstRule = transactionRuleRepository.saveAndFlush(ownFirstRule);
+
+        TransactionRule ownSecondRule = createEntity(em);
+        ownSecondRule.setName("OWN_SECOND_RULE");
+        ownSecondRule.setPriority(1);
+        ownSecondRule = transactionRuleRepository.saveAndFlush(ownSecondRule);
+
+        TransactionRule otherUsersRule = createEntity(em);
+        otherUsersRule.setName("OTHER_USER_RULE");
+        otherUsersRule.setPriority(7);
+        otherUsersRule.setUser(otherUser);
+        otherUsersRule = transactionRuleRepository.saveAndFlush(otherUsersRule);
+
+        restTransactionRuleMockMvc
+            .perform(delete(ENTITY_API_URL_ID, ownFirstRule.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(transactionRuleRepository.findById(ownSecondRule.getId()).orElseThrow().getPriority()).isZero();
+        assertThat(transactionRuleRepository.findById(otherUsersRule.getId()).orElseThrow().getPriority()).isEqualTo(7);
+    }
+
+    @Test
+    @Transactional
     void createTransactionRuleAssignsCurrentUser() throws Exception {
         User otherUser = createOtherUser(em);
         TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
@@ -1590,6 +1823,26 @@ class TransactionRuleResourceIT {
             .perform(get(ENTITY_API_URL + "?sort=id,desc"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(transactionRule.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
+    void getAllTransactionRulesCanBeOrderedByPriorityThenId() throws Exception {
+        TransactionRule laterRule = createEntity(em);
+        laterRule.setName("LATER_RULE");
+        laterRule.setPriority(2);
+        laterRule = transactionRuleRepository.saveAndFlush(laterRule);
+
+        TransactionRule earlierRule = createEntity(em);
+        earlierRule.setName("EARLIER_RULE");
+        earlierRule.setPriority(0);
+        earlierRule = transactionRuleRepository.saveAndFlush(earlierRule);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL + "?sort=priority,asc&sort=id,asc"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[0].id").value(earlierRule.getId().intValue()))
+            .andExpect(jsonPath("$.[1].id").value(laterRule.getId().intValue()));
     }
 
     @Test

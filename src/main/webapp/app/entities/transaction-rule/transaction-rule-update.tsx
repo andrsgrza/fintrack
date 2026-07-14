@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Col, FormText, Row } from 'reactstrap';
-import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
+import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { mapIdList } from 'app/shared/util/entity-utils';
@@ -82,11 +82,9 @@ export const TransactionRuleUpdate = () => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
-    if (values.priority !== undefined && typeof values.priority !== 'number') {
-      values.priority = Number(values.priority);
-    }
+    const { priority, ...submittedValues } = values;
     const entity = {
-      ...values,
+      ...submittedValues,
       id: isNew ? undefined : transactionRuleEntity.id,
       active: isNew ? false : values.active,
       resultingCategory: values.resultingCategory ? categories.find(it => it.id.toString() === values.resultingCategory?.toString()) : null,
@@ -141,6 +139,11 @@ export const TransactionRuleUpdate = () => {
                   </Translate>
                 </FormText>
               ) : null}
+              <FormText className="d-block mb-3">
+                <Translate contentKey="fintrackApp.transactionRule.priorityServerManagedHelp">
+                  Rule order is managed from the rules list. New rules are added last.
+                </Translate>
+              </FormText>
               {!isNew ? (
                 <ValidatedField
                   name="id"
@@ -174,18 +177,6 @@ export const TransactionRuleUpdate = () => {
                 type="text"
                 validate={{
                   maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionRule.priority')}
-                id="transaction-rule-priority"
-                name="priority"
-                data-cy="priority"
-                type="text"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                  min: { value: 0, message: translate('entity.validation.min', { min: 0 }) },
-                  validate: v => isNumber(v) || translate('entity.validation.number'),
                 }}
               />
               <h3 id="transaction-rule-matching-heading" className="mt-4">

@@ -7,6 +7,7 @@ import com.fintrack.app.service.criteria.TransactionRuleCriteria;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
 import jakarta.persistence.criteria.JoinType;
+import java.util.Comparator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,9 +53,16 @@ public class TransactionRuleQueryService extends QueryService<TransactionRule> {
     public List<TransactionRuleDTO> findByCriteria(TransactionRuleCriteria criteria) {
         LOG.debug("find by criteria : {}", criteria);
         final Specification<TransactionRule> specification = createSpecification(criteria);
-        return transactionRuleMapper.toDto(
+        List<TransactionRuleDTO> transactionRules = transactionRuleMapper.toDto(
             transactionRuleRepository.fetchBagRelationships(transactionRuleRepository.findAll(specification))
         );
+        transactionRules.sort(
+            Comparator.comparing(TransactionRuleDTO::getPriority, Comparator.nullsLast(Integer::compareTo)).thenComparing(
+                TransactionRuleDTO::getId,
+                Comparator.nullsLast(Long::compareTo)
+            )
+        );
+        return transactionRules;
     }
 
     /**

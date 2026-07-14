@@ -1329,16 +1329,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                           | Tests   | Custom vs generated                                                                                                               |
-| --------------- | ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`    | **109** | Ownership/link/domain/API ergonomics custom tests + JHipster CRUD/filters                                                         |
-| Unit — service  | `TransactionRuleServiceTest`   | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards)                                                             |
-| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                         |
-| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                         |
-| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                         |
-| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                         |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **20**  | Product-oriented list/detail summaries, create inactive flow, edit hydration, grouped edit form, detail embedded condition editor |
-| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                   |
+| Type            | File                           | Tests   | Custom vs generated                                                                                                                                        |
+| --------------- | ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TransactionRuleResourceIT`    | **120** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order + JHipster CRUD/filters                                                  |
+| Unit — service  | `TransactionRuleServiceTest`   | **19**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order)                                                       |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                  |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                  |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                  |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                  |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **21**  | Product-oriented list/detail summaries, server-managed order UX, create inactive flow, edit hydration, grouped edit form, detail embedded condition editor |
+| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                            |
 
 **Run:**
 
@@ -1394,53 +1394,66 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 
 #### Frontend UX — `transaction-rule-ux.spec.tsx` — ✅
 
-| Area                       | What it checks                                                                                                                                           |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Product list               | List hides generated ID/created columns, shows Name/Status/Priority/Conditions/Result/Updated/Actions                                                    |
-| Compact detail             | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                         |
-| Create flow                | Create hides timestamps/active/embedded conditions, shows Save and add conditions, submits `active=false`, and redirects create success to detail        |
-| Create/edit shell          | Create is parent-only; edit shows Active and Manage conditions link                                                                                      |
-| Edit hydration             | Edit waits for the requested entity and hydrates scalar fields, category, subscription, multi-select tags, and active                                    |
-| Edit general fields        | Edit is grouped into identity/matching/result/status; `ValidatedField`s remain direct form children; condition controls are not embedded                 |
-| Embedded detail collection | Detail loads conditions from `GET /api/transaction-rules/{id}/conditions`; empty state is non-breaking                                                   |
-| Active toggle UX           | Disabled when conditions are empty or unavailable; enabled when at least one condition is loaded                                                         |
-| Add condition              | Detail opens embedded smart form without parent selector; POST includes `transactionRule: { id: currentRule }`; frontend does not auto-activate the rule |
-| Edit condition             | Detail opens embedded smart form without parent selector; PATCH sends editable fields only, no reparenting                                               |
-| Delete condition           | Detail confirms, DELETEs condition, refreshes list; delete failure shows an inline error                                                                 |
-| Embedded table actions     | No View action; Edit/Delete remain because condition values are already visible in the table                                                             |
+| Area                       | What it checks                                                                                                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product list               | List hides generated ID/created columns, requests `priority ASC, id ASC`, and shows Name/Status/Order/Conditions/Result/Updated/Actions                                     |
+| Compact detail             | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                                            |
+| Create flow                | Create hides timestamps/active/priority/embedded conditions, shows Save and add conditions, submits `active=false` without priority, and redirects create success to detail |
+| Create/edit shell          | Create is parent-only; edit shows Active and Manage conditions link                                                                                                         |
+| Server-managed order       | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                               |
+| Edit hydration             | Edit waits for the requested entity and hydrates scalar fields, category, subscription, multi-select tags, and active                                                       |
+| Edit general fields        | Edit is grouped into identity/matching/result/status; `ValidatedField`s remain direct form children; condition controls are not embedded                                    |
+| Embedded detail collection | Detail loads conditions from `GET /api/transaction-rules/{id}/conditions`; empty state is non-breaking                                                                      |
+| Active toggle UX           | Disabled when conditions are empty or unavailable; enabled when at least one condition is loaded                                                                            |
+| Add condition              | Detail opens embedded smart form without parent selector; POST includes `transactionRule: { id: currentRule }`; frontend does not auto-activate the rule                    |
+| Edit condition             | Detail opens embedded smart form without parent selector; PATCH sends editable fields only, no reparenting                                                                  |
+| Delete condition           | Detail confirms, DELETEs condition, refreshes list; delete failure shows an inline error                                                                                    |
+| Embedded table actions     | No View action; Edit/Delete remain because condition values are already visible in the table                                                                                |
 
 #### CRUD domain lifecycle — ✅ custom
 
-| Test                                                         | HTTP     | What it checks                                                                          |
-| ------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------- |
-| `createTransactionRuleWithoutCreatedAtUsesServerTimestamp`   | `POST`   | Server owns `createdAt`                                                                 |
-| `createTransactionRuleWithoutUpdatedAtUsesServerTimestamp`   | `POST`   | Server owns `updatedAt`                                                                 |
-| `createTransactionRuleNormalizesTextFields`                  | `POST`   | Trim name/description/resultingDescription                                              |
-| `createTransactionRuleWithBlankNameFails`                    | `POST`   | Name blank after trim → `400`                                                           |
-| `createTransactionRuleWithDuplicateNameForSameOwnerFails`    | `POST`   | Name unique per owner, case/trim-insensitive                                            |
-| `createTransactionRuleWithSameNameForDifferentOwnerSucceeds` | `POST`   | Name uniqueness owner-scoped                                                            |
-| `createTransactionRuleWithNoOutputsFails`                    | `POST`   | At least one output required                                                            |
-| `createActiveTransactionRuleWithZeroConditionsFails`         | `POST`   | Active rule requires conditions                                                         |
-| `patchRequiredFieldsWithNullFails`                           | `PATCH`  | Required scalar nulls rejected                                                          |
-| `patchChangingCreatedAtFails`                                | `PATCH`  | `createdAt` immutable                                                                   |
-| `putChangingCreatedAtFails` / `putNullCreatedAtFails`        | `PUT`    | `createdAt` explicit changed/null → `400`                                               |
-| `putChangingUpdatedAtFails` / `putNullUpdatedAtFails`        | `PUT`    | `updatedAt` explicit changed/null → `400`                                               |
-| `patchChangingUpdatedAtFails`                                | `PATCH`  | `updatedAt` explicit changed → `400`; explicit null covered by required-field null test |
-| `partialUpdateTransactionRuleWithPatch`                      | `PATCH`  | Omitting `updatedAt` succeeds and server sets `updatedAt=now`                           |
-| `patchActiveTrueWithZeroConditionsFails`                     | `PATCH`  | Reactivation without conditions rejected                                                |
-| `patchActiveTrueWithConditionSucceeds`                       | `PATCH`  | Reactivation allowed when condition exists                                              |
-| `patchClearingAllOutputsFails`                               | `PATCH`  | Final merged state must retain at least one output                                      |
-| `patchTransactionRuleWithCategoryObjectMissingIdFails`       | `PATCH`  | Relationship object requires id                                                         |
-| `patchTransactionRuleWithTagObjectMissingIdFails`            | `PATCH`  | Tag objects require id                                                                  |
-| `deleteTransactionRuleDeletesConditionsAndTagJoinsOnly`      | `DELETE` | Deletes conditions + join rows; preserves output entities                               |
+| Test                                                            | HTTP     | What it checks                                                                          |
+| --------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------- |
+| `createTransactionRuleWithoutCreatedAtUsesServerTimestamp`      | `POST`   | Server owns `createdAt`                                                                 |
+| `createTransactionRuleWithoutUpdatedAtUsesServerTimestamp`      | `POST`   | Server owns `updatedAt`                                                                 |
+| `createTransactionRuleNormalizesTextFields`                     | `POST`   | Trim name/description/resultingDescription                                              |
+| `createTransactionRuleWithBlankNameFails`                       | `POST`   | Name blank after trim → `400`                                                           |
+| `createTransactionRuleWithDuplicateNameForSameOwnerFails`       | `POST`   | Name unique per owner, case/trim-insensitive                                            |
+| `createTransactionRuleWithSameNameForDifferentOwnerSucceeds`    | `POST`   | Name uniqueness owner-scoped                                                            |
+| `createFirstTransactionRuleAssignsPriorityZero`                 | `POST`   | First rule for user gets server priority `0`; client priority ignored                   |
+| `createSecondTransactionRuleForSameUserAssignsPriorityOne`      | `POST`   | New rule appends after existing same-user rules                                         |
+| `createTransactionRuleWithoutPriorityUsesServerManagedPriority` | `POST`   | Client may omit priority; service assigns it                                            |
+| `createTransactionRuleWithNoOutputsFails`                       | `POST`   | At least one output required                                                            |
+| `createActiveTransactionRuleWithZeroConditionsFails`            | `POST`   | Active rule requires conditions                                                         |
+| `putOmittingPriorityPreservesExistingPriority`                  | `PUT`    | Priority omitted on PUT is preserved                                                    |
+| `putSamePrioritySucceeds`                                       | `PUT`    | Same priority in PUT is a no-op                                                         |
+| `putChangedPriorityFails`                                       | `PUT`    | Changed priority rejected                                                               |
+| `putNullPriorityFails`                                          | `PUT`    | Explicit null priority rejected                                                         |
+| `patchSamePrioritySucceeds`                                     | `PATCH`  | Same priority in PATCH is a no-op                                                       |
+| `patchChangedPriorityFails`                                     | `PATCH`  | Changed priority rejected                                                               |
+| `patchRequiredFieldsWithNullFails`                              | `PATCH`  | Required scalar nulls rejected                                                          |
+| `patchChangingCreatedAtFails`                                   | `PATCH`  | `createdAt` immutable                                                                   |
+| `putChangingCreatedAtFails` / `putNullCreatedAtFails`           | `PUT`    | `createdAt` explicit changed/null → `400`                                               |
+| `putChangingUpdatedAtFails` / `putNullUpdatedAtFails`           | `PUT`    | `updatedAt` explicit changed/null → `400`                                               |
+| `patchChangingUpdatedAtFails`                                   | `PATCH`  | `updatedAt` explicit changed → `400`; explicit null covered by required-field null test |
+| `partialUpdateTransactionRuleWithPatch`                         | `PATCH`  | Omitting `updatedAt` succeeds and server sets `updatedAt=now`                           |
+| `patchActiveTrueWithZeroConditionsFails`                        | `PATCH`  | Reactivation without conditions rejected                                                |
+| `patchActiveTrueWithConditionSucceeds`                          | `PATCH`  | Reactivation allowed when condition exists                                              |
+| `patchClearingAllOutputsFails`                                  | `PATCH`  | Final merged state must retain at least one output                                      |
+| `patchTransactionRuleWithCategoryObjectMissingIdFails`          | `PATCH`  | Relationship object requires id                                                         |
+| `patchTransactionRuleWithTagObjectMissingIdFails`               | `PATCH`  | Tag objects require id                                                                  |
+| `deleteTransactionRuleDeletesConditionsAndTagJoinsOnly`         | `DELETE` | Deletes conditions + join rows; preserves output entities                               |
+| `deleteMiddleTransactionRuleReindexesSameUsersRules`            | `DELETE` | Same owner priorities become consecutive after delete                                   |
+| `deleteTransactionRuleDoesNotReindexOtherUsersRules`            | `DELETE` | Other users' priorities are not reindexed                                               |
+| `getAllTransactionRulesCanBeOrderedByPriorityThenId`            | `GET`    | Criteria list responses are sorted by `priority ASC, id ASC`                            |
 
 #### CRUD & criteria — 🟡 JHipster generated (58)
 
 Happy-path CRUD, required-field checks, criteria per field.
 
-### Unit — `TransactionRuleServiceTest` (14) — ✅ custom
+### Unit — `TransactionRuleServiceTest` (19) — ✅ custom
 
-Ownership matrix + link rejection + `updateShouldResolveCategoryOwnedByRuleOwner` + `updateShouldRejectSubscriptionNotOwnedByRuleOwner` + strict `updatedAt` update guards.
+Ownership matrix + link rejection + `updateShouldResolveCategoryOwnedByRuleOwner` + `updateShouldRejectSubscriptionNotOwnedByRuleOwner` + strict `updatedAt` update guards + server-managed priority assignment/preservation/reindexing.
 
 ### E2E — `transaction-rule.cy.ts`
 
@@ -1458,11 +1471,11 @@ Rehabilitated create/delete (sin selector User).
 
 ### Gaps
 
-| Priority | Layer   | Test                                        | Status  |
-| -------- | ------- | ------------------------------------------- | ------- |
-| Medium   | IT      | Rule engine on FT create                    | ⏳      |
-| Low      | E2E     | UI table isolation                          | ⏳      |
-| Medium   | Product | Equal-priority tie-break before rule engine | ⏳ open |
+| Priority | Layer   | Test                                         | Status      |
+| -------- | ------- | -------------------------------------------- | ----------- |
+| Medium   | IT      | Rule engine on FT create                     | ⏳          |
+| Low      | E2E     | UI table isolation                           | ⏳          |
+| Medium   | Product | Explicit reorder endpoint / drag-and-drop UI | ⏳ deferred |
 
 ---
 
@@ -2400,7 +2413,7 @@ Copy this block when hardening the next entity:
 | 2026-07-09 | FinancialSubscription                 | 123 IT (16 ownership + 4 links + 103 generated), 12 service unit, 10 E2E; pattern A + link validation. Total ownership suites: ~620 backend tests.                                                                                                                                                                                        |
 | 2026-07-09 | FinancialSubscription                 | +5 IT (PATCH preserve/clear links, PUT/PATCH foreign links); 128 IT (16 ownership + 9 links + 103 generated). PATCH uses `JsonNode` for field presence. Total ownership suites: ~625 backend tests.                                                                                                                                       |
 | 2026-07-09 | TransactionRule                       | 85 IT (16 ownership + 10 links + 1 owner-scoped admin + 58 generated), 12 service unit, 10 E2E; outputs validated against rule owner. Total ownership suites: ~722 backend tests.                                                                                                                                                         |
-| 2026-07-12 | TransactionRule CRUD/domain baseline  | 104 IT, 14 service unit; strict server-owned timestamps, PUT full DTO contract, PATCH JsonNode semantics, output/condition/name rules, delete cleanup. Rule engine and tie-break deferred.                                                                                                                                                |
+| 2026-07-12 | TransactionRule CRUD/domain baseline  | 104 IT, 14 service unit initially; strict server-owned timestamps, server-managed priority/order added later, PATCH JsonNode semantics, output/condition/name rules, delete cleanup. Rule engine and explicit reorder UI/API deferred.                                                                                                    |
 | 2026-07-11 | TransactionRuleCondition              | Plan: parent immutable (reparent removed); field/operator/value validations; DELETE last condition → deactivate rule. Tests to remove reparent ITs and add ~25+ domain ITs.                                                                                                                                                               |
 | 2026-07-09 | TransactionRuleCondition              | 36 IT (16 ownership + ~~reparent~~ + 20 generated), 10 service unit, 8 E2E; pattern C via parent. Total ownership suites: ~768 backend tests.                                                                                                                                                                                             |
 | 2026-07-09 | CreditAccountDetails                  | 36 IT (16 ownership/domain + 20 generated), 9 service unit, 8 E2E; pattern B via account, immutable parent, CREDIT_CARD only. Total ownership suites: ~813 backend tests.                                                                                                                                                                 |

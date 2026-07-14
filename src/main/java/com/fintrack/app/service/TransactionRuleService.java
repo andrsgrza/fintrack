@@ -17,6 +17,7 @@ import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -78,6 +79,7 @@ public class TransactionRuleService {
         TransactionRule transactionRule = transactionRuleMapper.toEntity(transactionRuleDTO);
         transactionRule.setUser(currentUserService.getCurrentUser());
         applyRelationships(transactionRule, transactionRuleDTO, transactionRule.getUser().getLogin());
+        transactionRule.setPriority(nextPriorityForUser(transactionRule.getUser().getId()));
         Instant now = Instant.now();
         transactionRule.setCreatedAt(now);
         transactionRule.setUpdatedAt(now);
@@ -93,12 +95,25 @@ public class TransactionRuleService {
      * @return the persisted entity.
      */
     public TransactionRuleDTO update(TransactionRuleDTO transactionRuleDTO) {
+        return update(transactionRuleDTO, null);
+    }
+
+    /**
+     * Update a transactionRule.
+     *
+     * @param transactionRuleDTO the entity to save.
+     * @param requestNode the raw PUT payload, used to distinguish omitted priority from explicit null.
+     * @return the persisted entity.
+     */
+    public TransactionRuleDTO update(TransactionRuleDTO transactionRuleDTO, JsonNode requestNode) {
         LOG.debug("Request to update TransactionRule : {}", transactionRuleDTO);
         TransactionRule existingTransactionRule = findAccessibleEntity(transactionRuleDTO.getId()).orElseThrow();
+        rejectPriorityChange(existingTransactionRule, transactionRuleDTO.getPriority(), requestNode != null && requestNode.has("priority"));
         rejectCreatedAtChange(existingTransactionRule, transactionRuleDTO.getCreatedAt());
         rejectUpdatedAtChange(existingTransactionRule, transactionRuleDTO.getUpdatedAt());
         TransactionRule transactionRule = transactionRuleMapper.toEntity(transactionRuleDTO);
         transactionRule.setUser(existingTransactionRule.getUser());
+        transactionRule.setPriority(existingTransactionRule.getPriority());
         applyRelationships(transactionRule, transactionRuleDTO, existingTransactionRule.getUser().getLogin());
         transactionRule.setCreatedAt(existingTransactionRule.getCreatedAt());
         transactionRule.setUpdatedAt(Instant.now());
@@ -135,6 +150,9 @@ public class TransactionRuleService {
                 }
                 if (patchNode != null && patchNode.has("updatedAt")) {
                     rejectUpdatedAtChange(existingTransactionRule, transactionRuleDTO.getUpdatedAt());
+                }
+                if (patchNode != null && patchNode.has("priority")) {
+                    rejectPriorityChange(existingTransactionRule, transactionRuleDTO.getPriority(), true);
                 }
                 if (patchNode != null && patchNode.has("active") && Boolean.TRUE.equals(transactionRuleDTO.getActive())) {
                     validateActiveRuleHasConditions(existingTransactionRule);
@@ -211,7 +229,10 @@ public class TransactionRuleService {
         }
         transactionRuleConditionRepository.deleteByTransactionRuleId(id);
         transactionRuleRepository.deleteResultingTagsByRuleId(id);
+        Long ownerId = transactionRule.get().getUser().getId();
         transactionRuleRepository.deleteById(id);
+        transactionRuleRepository.flush();
+        reindexPriorities(ownerId);
         return true;
     }
 
@@ -357,6 +378,31 @@ public class TransactionRuleService {
         if (patchNode.has(fieldName) && patchNode.get(fieldName).isNull()) {
             throw new IllegalArgumentException(fieldName + " cannot be null");
         }
+    }
+
+    private Integer nextPriorityForUser(Long userId) {
+        Integer maxPriority = transactionRuleRepository.findMaxPriorityByUserId(userId);
+        return maxPriority == null ? 0 : maxPriority + 1;
+    }
+
+    private void rejectPriorityChange(TransactionRule existingTransactionRule, Integer requestedPriority, boolean priorityPresent) {
+        if (priorityPresent && requestedPriority == null) {
+            throw new IllegalArgumentException("Priority cannot be null");
+        }
+        if (requestedPriority != null && !requestedPriority.equals(existingTransactionRule.getPriority())) {
+            throw new IllegalArgumentException("Priority is server-managed");
+        }
+    }
+
+    private void reindexPriorities(Long ownerId) {
+        List<TransactionRule> rules = transactionRuleRepository.findByUserIdOrderByPriorityAscIdAsc(ownerId);
+        for (int index = 0; index < rules.size(); index++) {
+            TransactionRule rule = rules.get(index);
+            if (!Integer.valueOf(index).equals(rule.getPriority())) {
+                rule.setPriority(index);
+            }
+        }
+        transactionRuleRepository.saveAll(rules);
     }
 
     private void rejectCreatedAtChange(TransactionRule existingTransactionRule, Instant requestedCreatedAt) {

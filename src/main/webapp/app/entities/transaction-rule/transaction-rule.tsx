@@ -22,7 +22,7 @@ export const TransactionRule = () => {
   const pageLocation = useLocation();
   const navigate = useNavigate();
 
-  const [sortState, setSortState] = useState(overrideSortStateWithQueryParams(getSortState(pageLocation, 'id'), pageLocation.search));
+  const [sortState, setSortState] = useState(overrideSortStateWithQueryParams(getSortState(pageLocation, 'priority'), pageLocation.search));
 
   const transactionRuleList = useAppSelector(state => state.transactionRule.entities);
   const loading = useAppSelector(state => state.transactionRule.loading);
@@ -30,7 +30,8 @@ export const TransactionRule = () => {
   const getAllEntities = () => {
     dispatch(
       getEntities({
-        sort: `${sortState.sort},${sortState.order}`,
+        sort:
+          sortState.sort === 'priority' ? `${sortState.sort},${sortState.order}&sort=id,${ASC}` : `${sortState.sort},${sortState.order}`,
       }),
     );
   };
@@ -98,7 +99,7 @@ export const TransactionRule = () => {
                   <FontAwesomeIcon icon={getSortIconByFieldName('active')} />
                 </th>
                 <th className="hand" onClick={sort('priority')}>
-                  <Translate contentKey="fintrackApp.transactionRule.priority">Priority</Translate>{' '}
+                  <Translate contentKey="fintrackApp.transactionRule.order">Order</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('priority')} />
                 </th>
                 <th className="hand" onClick={sort('conditionLogic')}>
@@ -124,7 +125,11 @@ export const TransactionRule = () => {
                     <Link to={`/transaction-rule/${transactionRule.id}`}>{transactionRule.name}</Link>
                   </td>
                   <td>{formatTransactionRuleStatus(transactionRule, translate)}</td>
-                  <td>{transactionRule.priority}</td>
+                  <td>
+                    {transactionRule.priority === undefined || transactionRule.priority === null
+                      ? null
+                      : `#${transactionRule.priority + 1}`}
+                  </td>
                   <td>{formatTransactionRuleConditionLogic(transactionRule.conditionLogic, translate)}</td>
                   <td>
                     {buildTransactionRuleResultSummary(transactionRule, translate).length > 0 ? (

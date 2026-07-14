@@ -25,7 +25,6 @@ public class TransactionRuleDTO implements Serializable {
 
     private String description;
 
-    @NotNull
     @Min(value = 0)
     private Integer priority;
 
