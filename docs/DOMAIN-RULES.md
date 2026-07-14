@@ -387,27 +387,30 @@ Grupo 1 #2 domain rules **Done**.
 
 ### UPDATE / PATCH
 
-| Rule                                                | Decision                                           | Applies to admin | Error         | Status   |
-| --------------------------------------------------- | -------------------------------------------------- | ---------------- | ------------- | -------- |
-| `parentCategory` immutable after create             | No move/merge                                      | Yes              | `400` invalid | **Done** |
-| PATCH omit `parentCategory`                         | Preserves existing parent                          | Yes              | —             | **Done** |
-| Same `parentCategory` / no-op                       | Allowed                                            | Yes              | —             | **Done** |
-| `categoryType` mutable only if unused               | See “in use” below                                 | Yes              | `400` invalid | **Done** |
-| Child `categoryType` == parent                      | On create; on type change when has parent          | Yes              | `400` invalid | **Done** |
-| `name` / `color` / `description` / `active` mutable | Sibling uniqueness applies                         | Yes              | `400` invalid | **Done** |
-| Inactive in uniqueness                              | `active=false` still blocks duplicate sibling name | Yes              | `400` invalid | **Done** |
-| Sibling-unique `name`                               | See VALIDATIONS.md                                 | Yes              | `400` invalid | **Done** |
+| Rule                                                | Decision                                                      | Applies to admin | Error                                  | Status   |
+| --------------------------------------------------- | ------------------------------------------------------------- | ---------------- | -------------------------------------- | -------- |
+| `parentCategory` immutable after create             | No move/merge                                                 | Yes              | `400` invalid                          | **Done** |
+| PATCH omit `parentCategory`                         | Preserves existing parent                                     | Yes              | —                                      | **Done** |
+| Same `parentCategory` / no-op                       | Allowed                                                       | Yes              | —                                      | **Done** |
+| `categoryType` mutable only if unused               | See “in use” below                                            | Yes              | `400` invalid                          | **Done** |
+| Child `categoryType` == parent                      | On create; on type change when has parent                     | Yes              | `400` invalid                          | **Done** |
+| `name` / `color` / `description` / `active` mutable | Sibling uniqueness applies                                    | Yes              | `400` invalid                          | **Done** |
+| Inactive in uniqueness                              | `active=false` still blocks duplicate sibling name            | Yes              | `400` invalid                          | **Done** |
+| Sibling-unique `name`                               | See VALIDATIONS.md                                            | Yes              | `400` invalid                          | **Done** |
+| `createdAt` server-owned                            | Preserve existing on PUT/PATCH                                | Yes              | `400` invalid if explicit null/changed | **Done** |
+| `updatedAt` server-owned                            | Same timestamp allowed as no-op; successful update sets `now` | Yes              | `400` invalid if explicit null/changed | **Done** |
 
 **Category is “in use” for `categoryType` change if:** direct children; `FinancialTransaction.category`; `FinancialSubscription.category`; `Budget.categories`; `TransactionRule.resultingCategory`.
 
 ### CREATE
 
-| Rule                                     | Decision | Status   |
-| ---------------------------------------- | -------- | -------- |
-| `parentCategory` accessible + same owner |          | **Done** |
-| No self-parent                           |          | **Done** |
-| Child `categoryType` matches parent      |          | **Done** |
-| Sibling-scope uniqueness                 |          | **Done** |
+| Rule                                     | Decision                                          | Status   |
+| ---------------------------------------- | ------------------------------------------------- | -------- |
+| `parentCategory` accessible + same owner |                                                   | **Done** |
+| No self-parent                           |                                                   | **Done** |
+| Child `categoryType` matches parent      |                                                   | **Done** |
+| Sibling-scope uniqueness                 |                                                   | **Done** |
+| `createdAt` / `updatedAt` server-owned   | Client values ignored; service sets both to `now` | **Done** |
 
 ### Contrasts (intentional)
 

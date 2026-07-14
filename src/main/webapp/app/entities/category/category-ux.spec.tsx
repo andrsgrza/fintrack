@@ -200,7 +200,7 @@ describe('Category CRUD UX cleanup', () => {
     expect(Array.from(parentSelect.options).map(option => option.textContent)).toEqual(['', 'Salary']);
   });
 
-  it('create submit sends current-user-owned catalog fields and hidden timestamp defaults', async () => {
+  it('create submit sends current-user-owned catalog fields without fake timestamps', async () => {
     renderCreateForm();
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Fuel' } });
@@ -217,9 +217,9 @@ describe('Category CRUD UX cleanup', () => {
     expect(payload.icon).toBe('gas-pump');
     expect(payload.active).toBe(true);
     expect(payload.parentCategory).toEqual(expect.objectContaining({ id: 1, name: 'Transport' }));
-    expect(payload.createdAt).toBeTruthy();
-    expect(payload.updatedAt).toBeTruthy();
     expect(payload).not.toHaveProperty('user');
+    expect(payload).not.toHaveProperty('createdAt');
+    expect(payload).not.toHaveProperty('updatedAt');
     expect(payload).not.toHaveProperty('budgets');
   });
 

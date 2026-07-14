@@ -4,7 +4,6 @@ import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
@@ -61,15 +60,12 @@ export const CategoryUpdate = () => {
 
   const saveEntity = values => {
     if (isNew) {
-      const now = displayDefaultDateTime();
       const entity = {
         name: values.name,
         categoryType: values.categoryType,
         color: values.color,
         icon: values.icon,
         active: values.active ?? true,
-        createdAt: convertDateTimeToServer(now),
-        updatedAt: convertDateTimeToServer(now),
         parentCategory: values.parentCategory ? categories.find(it => it.id.toString() === values.parentCategory?.toString()) : null,
       };
       dispatch(createEntity(entity));
