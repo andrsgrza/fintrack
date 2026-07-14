@@ -1,14 +1,37 @@
 import React, { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button, Col, Row } from 'reactstrap';
-import { TextFormat, Translate } from 'react-jhipster';
+import { TextFormat, Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { APP_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
+import { ITransactionRule } from 'app/shared/model/transaction-rule.model';
 import { getEntity } from './transaction-rule.reducer';
 import TransactionRuleConditionsCollectionEditor from './components/transaction-rule-conditions-collection-editor';
+import { formatTransactionRuleConditionLogic, formatTransactionRuleStatus } from './transaction-rule-display';
+
+const emptyValue = () => translate('fintrackApp.transactionRule.emptyValue');
+
+const displayText = (value?: string | number | null) => {
+  if (value === undefined || value === null || value === '') {
+    return emptyValue();
+  }
+  return value;
+};
+
+const tagNames = (rule: ITransactionRule) =>
+  rule.resultingTags
+    ?.map(tag => tag.name)
+    .filter(Boolean)
+    .join(', ') || emptyValue();
+
+const FieldRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <p className="mb-1">
+    <strong>{label}:</strong> {children}
+  </p>
+);
 
 export const TransactionRuleDetail = () => {
   const dispatch = useAppDispatch();
@@ -20,97 +43,66 @@ export const TransactionRuleDetail = () => {
   }, []);
 
   const transactionRuleEntity = useAppSelector(state => state.transactionRule.entity);
+
   return (
     <Row>
       <Col md="8">
         <h2 data-cy="transactionRuleDetailsHeading">
-          <Translate contentKey="fintrackApp.transactionRule.detail.title">TransactionRule</Translate>
+          {transactionRuleEntity.name || <Translate contentKey="fintrackApp.transactionRule.detail.title">Transaction Rule</Translate>}
         </h2>
-        <dl className="jh-entity-details">
-          <dt>
-            <span id="id">
-              <Translate contentKey="global.field.id">ID</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleEntity.id}</dd>
-          <dt>
-            <span id="name">
-              <Translate contentKey="fintrackApp.transactionRule.name">Name</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleEntity.name}</dd>
-          <dt>
-            <span id="description">
-              <Translate contentKey="fintrackApp.transactionRule.description">Description</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleEntity.description}</dd>
-          <dt>
-            <span id="priority">
-              <Translate contentKey="fintrackApp.transactionRule.priority">Priority</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleEntity.priority}</dd>
-          <dt>
-            <span id="conditionLogic">
-              <Translate contentKey="fintrackApp.transactionRule.conditionLogic">Condition Logic</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleEntity.conditionLogic}</dd>
-          <dt>
-            <span id="resultingDescription">
-              <Translate contentKey="fintrackApp.transactionRule.resultingDescription">Resulting Description</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleEntity.resultingDescription}</dd>
-          <dt>
-            <span id="active">
-              <Translate contentKey="fintrackApp.transactionRule.active">Active</Translate>
-            </span>
-          </dt>
-          <dd>{transactionRuleEntity.active ? 'true' : 'false'}</dd>
-          <dt>
-            <span id="createdAt">
-              <Translate contentKey="fintrackApp.transactionRule.createdAt">Created At</Translate>
-            </span>
-          </dt>
-          <dd>
+        <section className="mb-4" aria-labelledby="transaction-rule-identity-heading">
+          <h3 id="transaction-rule-identity-heading">
+            <Translate contentKey="fintrackApp.transactionRule.sections.identity">Identity</Translate>
+          </h3>
+          <FieldRow label={translate('fintrackApp.transactionRule.name')}>{displayText(transactionRuleEntity.name)}</FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.description')}>{displayText(transactionRuleEntity.description)}</FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.priority')}>{displayText(transactionRuleEntity.priority)}</FieldRow>
+        </section>
+        <section className="mb-4" aria-labelledby="transaction-rule-matching-heading">
+          <h3 id="transaction-rule-matching-heading">
+            <Translate contentKey="fintrackApp.transactionRule.sections.matching">Matching logic</Translate>
+          </h3>
+          <FieldRow label={translate('fintrackApp.transactionRule.conditionLogic')}>
+            {formatTransactionRuleConditionLogic(transactionRuleEntity.conditionLogic, translate)}
+          </FieldRow>
+        </section>
+        <section className="mb-4" aria-labelledby="transaction-rule-result-heading">
+          <h3 id="transaction-rule-result-heading">
+            <Translate contentKey="fintrackApp.transactionRule.sections.result">Result</Translate>
+          </h3>
+          <FieldRow label={translate('fintrackApp.transactionRule.resultingDescription')}>
+            {displayText(transactionRuleEntity.resultingDescription)}
+          </FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.resultingCategory')}>
+            {displayText(transactionRuleEntity.resultingCategory?.name)}
+          </FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.resultingFinancialSubscription')}>
+            {displayText(transactionRuleEntity.resultingFinancialSubscription?.name)}
+          </FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.resultingTags')}>{tagNames(transactionRuleEntity)}</FieldRow>
+        </section>
+        <section className="mb-4" aria-labelledby="transaction-rule-status-metadata-heading">
+          <h3 id="transaction-rule-status-metadata-heading">
+            <Translate contentKey="fintrackApp.transactionRule.sections.statusMetadata">Status / Metadata</Translate>
+          </h3>
+          <FieldRow label={translate('fintrackApp.transactionRule.status.label')}>
+            {formatTransactionRuleStatus(transactionRuleEntity, translate)}
+          </FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.createdAt')}>
             {transactionRuleEntity.createdAt ? (
               <TextFormat value={transactionRuleEntity.createdAt} type="date" format={APP_DATE_FORMAT} />
-            ) : null}
-          </dd>
-          <dt>
-            <span id="updatedAt">
-              <Translate contentKey="fintrackApp.transactionRule.updatedAt">Updated At</Translate>
-            </span>
-          </dt>
-          <dd>
+            ) : (
+              emptyValue()
+            )}
+          </FieldRow>
+          <FieldRow label={translate('fintrackApp.transactionRule.updatedAt')}>
             {transactionRuleEntity.updatedAt ? (
               <TextFormat value={transactionRuleEntity.updatedAt} type="date" format={APP_DATE_FORMAT} />
-            ) : null}
-          </dd>
-          <dt>
-            <Translate contentKey="fintrackApp.transactionRule.resultingCategory">Resulting Category</Translate>
-          </dt>
-          <dd>{transactionRuleEntity.resultingCategory ? transactionRuleEntity.resultingCategory.name : ''}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.transactionRule.resultingFinancialSubscription">Resulting Financial Subscription</Translate>
-          </dt>
-          <dd>{transactionRuleEntity.resultingFinancialSubscription ? transactionRuleEntity.resultingFinancialSubscription.name : ''}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.transactionRule.resultingTags">Resulting Tags</Translate>
-          </dt>
-          <dd>
-            {transactionRuleEntity.resultingTags
-              ? transactionRuleEntity.resultingTags.map((val, i) => (
-                  <span key={val.id}>
-                    <a>{val.name}</a>
-                    {transactionRuleEntity.resultingTags && i === transactionRuleEntity.resultingTags.length - 1 ? '' : ', '}
-                  </span>
-                ))
-              : null}
-          </dd>
-        </dl>
+            ) : (
+              emptyValue()
+            )}
+          </FieldRow>
+        </section>
         <TransactionRuleConditionsCollectionEditor
           transactionRuleId={transactionRuleEntity.id}
           onConditionMutation={() => dispatch(getEntity(id))}

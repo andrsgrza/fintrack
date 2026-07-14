@@ -831,19 +831,21 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 
 ### Parent-centered UX / API
 
-| Rule                                    | Decision                                                                                                       | Status       |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------ |
-| Related conditions endpoint             | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule                         | **Done**     |
-| Related condition ordering              | Sort by `position ASC`, then `id ASC`                                                                          | **Done**     |
-| Related condition access                | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all                       | **Done**     |
-| Rule detail condition collection editor | Inline create/update/delete using existing TransactionRuleCondition endpoints                                  | **Done**     |
-| Rule edit general-fields page           | No embedded condition editor; includes Manage conditions link and background condition count for Active safety | **Done**     |
-| Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                 | **Done**     |
-| Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                | **Done**     |
-| Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                               | **Deferred** |
-| Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`            | **Done**     |
-| Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                   | **Deferred** |
-| Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                                         | **Deferred** |
+| Rule                                    | Decision                                                                                                          | Status       |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------ |
+| Related conditions endpoint             | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule                            | **Done**     |
+| Related condition ordering              | Sort by `position ASC`, then `id ASC`                                                                             | **Done**     |
+| Related condition access                | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all                          | **Done**     |
+| Rule detail condition collection editor | Inline create/update/delete using existing TransactionRuleCondition endpoints                                     | **Done**     |
+| Rule edit general-fields page           | No embedded condition editor; includes Manage conditions link and background condition count for Active safety    | **Done**     |
+| Rule list/detail semantic summaries     | List/detail avoid raw generated field dumps and show status, condition logic, outputs, compact sections, metadata | **Done**     |
+| View/edit layout parity                 | Detail and edit share Identity → Matching logic → Result → Status/Metadata ordering; detail manages conditions    | **Done**     |
+| Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                    | **Done**     |
+| Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                   | **Done**     |
+| Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                                  | **Deferred** |
+| Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`               | **Done**     |
+| Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                      | **Deferred** |
+| Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                                            | **Deferred** |
 
 ### Output PATCH semantics
 

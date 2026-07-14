@@ -32,6 +32,47 @@
       "resultingCategory": "Categoría resultante",
       "resultingFinancialSubscription": "Suscripción financiera resultante",
       "resultingTags": "Etiquetas resultantes",
+      "actions": "Acciones",
+      "updated": "Actualizada",
+      "emptyValue": "—",
+      "status": {
+        "label": "Estado",
+        "active": "Activa",
+        "inactive": "Inactiva"
+      },
+      "conditionSummary": {
+        "label": "Condiciones",
+        "all": "Todas las condiciones",
+        "any": "Cualquier condición"
+      },
+      "result": {
+        "label": "Resultado",
+        "empty": "Sin resultado configurado",
+        "category": "Categoría",
+        "subscription": "Suscripción",
+        "tags": "Etiquetas",
+        "description": "Descripción"
+      },
+      "sections": {
+        "identity": "Identidad",
+        "matching": "Lógica de coincidencia",
+        "result": "Resultado",
+        "status": "Estado",
+        "statusMetadata": "Estado / Metadatos",
+        "when": "Cuando",
+        "then": "Entonces",
+        "metadata": "Metadatos"
+      },
+      "when": {
+        "all": "Aplicar cuando todas las condiciones coincidan.",
+        "any": "Aplicar cuando cualquier condición coincida."
+      },
+      "then": {
+        "assignCategory": "Asignar categoría",
+        "linkSubscription": "Vincular suscripción",
+        "addTags": "Agregar etiquetas",
+        "replaceDescription": "Reemplazar descripción con"
+      },
       "conditions": "Condiciones",
       "loadingConditions": "Cargando condiciones...",
       "noConditionsYet": "Todavía no hay condiciones.",

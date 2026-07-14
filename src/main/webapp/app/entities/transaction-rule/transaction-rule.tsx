@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Table } from 'reactstrap';
-import { TextFormat, Translate, getSortState } from 'react-jhipster';
+import { TextFormat, Translate, getSortState, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
 import { APP_DATE_FORMAT } from 'app/config/constants';
@@ -10,6 +10,11 @@ import { overrideSortStateWithQueryParams } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities } from './transaction-rule.reducer';
+import {
+  buildTransactionRuleResultSummary,
+  formatTransactionRuleConditionLogic,
+  formatTransactionRuleStatus,
+} from './transaction-rule-display';
 
 export const TransactionRule = () => {
   const dispatch = useAppDispatch();
@@ -84,110 +89,60 @@ export const TransactionRule = () => {
           <Table responsive>
             <thead>
               <tr>
-                <th className="hand" onClick={sort('id')}>
-                  <Translate contentKey="fintrackApp.transactionRule.id">ID</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('id')} />
-                </th>
                 <th className="hand" onClick={sort('name')}>
                   <Translate contentKey="fintrackApp.transactionRule.name">Name</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('name')} />
                 </th>
-                <th className="hand" onClick={sort('description')}>
-                  <Translate contentKey="fintrackApp.transactionRule.description">Description</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('description')} />
+                <th className="hand" onClick={sort('active')}>
+                  <Translate contentKey="fintrackApp.transactionRule.status.label">Status</Translate>{' '}
+                  <FontAwesomeIcon icon={getSortIconByFieldName('active')} />
                 </th>
                 <th className="hand" onClick={sort('priority')}>
                   <Translate contentKey="fintrackApp.transactionRule.priority">Priority</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('priority')} />
                 </th>
                 <th className="hand" onClick={sort('conditionLogic')}>
-                  <Translate contentKey="fintrackApp.transactionRule.conditionLogic">Condition Logic</Translate>{' '}
+                  <Translate contentKey="fintrackApp.transactionRule.conditionSummary.label">Conditions</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('conditionLogic')} />
                 </th>
-                <th className="hand" onClick={sort('resultingDescription')}>
-                  <Translate contentKey="fintrackApp.transactionRule.resultingDescription">Resulting Description</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('resultingDescription')} />
-                </th>
-                <th className="hand" onClick={sort('active')}>
-                  <Translate contentKey="fintrackApp.transactionRule.active">Active</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('active')} />
-                </th>
-                <th className="hand" onClick={sort('createdAt')}>
-                  <Translate contentKey="fintrackApp.transactionRule.createdAt">Created At</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('createdAt')} />
+                <th>
+                  <Translate contentKey="fintrackApp.transactionRule.result.label">Result</Translate>
                 </th>
                 <th className="hand" onClick={sort('updatedAt')}>
-                  <Translate contentKey="fintrackApp.transactionRule.updatedAt">Updated At</Translate>{' '}
+                  <Translate contentKey="fintrackApp.transactionRule.updated">Updated</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
                 </th>
-                <th>
-                  <Translate contentKey="fintrackApp.transactionRule.resultingCategory">Resulting Category</Translate>{' '}
-                  <FontAwesomeIcon icon="sort" />
+                <th className="text-end">
+                  <Translate contentKey="fintrackApp.transactionRule.actions">Actions</Translate>
                 </th>
-                <th>
-                  <Translate contentKey="fintrackApp.transactionRule.resultingFinancialSubscription">
-                    Resulting Financial Subscription
-                  </Translate>{' '}
-                  <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.transactionRule.resultingTags">Resulting Tags</Translate>{' '}
-                  <FontAwesomeIcon icon="sort" />
-                </th>
-                <th />
               </tr>
             </thead>
             <tbody>
               {transactionRuleList.map((transactionRule, i) => (
                 <tr key={`entity-${i}`} data-cy="entityTable">
                   <td>
-                    <Button tag={Link} to={`/transaction-rule/${transactionRule.id}`} color="link" size="sm">
-                      {transactionRule.id}
-                    </Button>
+                    <Link to={`/transaction-rule/${transactionRule.id}`}>{transactionRule.name}</Link>
                   </td>
-                  <td>{transactionRule.name}</td>
-                  <td>{transactionRule.description}</td>
+                  <td>{formatTransactionRuleStatus(transactionRule, translate)}</td>
                   <td>{transactionRule.priority}</td>
+                  <td>{formatTransactionRuleConditionLogic(transactionRule.conditionLogic, translate)}</td>
                   <td>
-                    <Translate contentKey={`fintrackApp.RuleConditionLogic.${transactionRule.conditionLogic}`} />
-                  </td>
-                  <td>{transactionRule.resultingDescription}</td>
-                  <td>{transactionRule.active ? 'true' : 'false'}</td>
-                  <td>
-                    {transactionRule.createdAt ? (
-                      <TextFormat type="date" value={transactionRule.createdAt} format={APP_DATE_FORMAT} />
-                    ) : null}
+                    {buildTransactionRuleResultSummary(transactionRule, translate).length > 0 ? (
+                      buildTransactionRuleResultSummary(transactionRule, translate).map(result => (
+                        <div key={result}>
+                          <small>{result}</small>
+                        </div>
+                      ))
+                    ) : (
+                      <small>
+                        <Translate contentKey="fintrackApp.transactionRule.result.empty">No result configured</Translate>
+                      </small>
+                    )}
                   </td>
                   <td>
                     {transactionRule.updatedAt ? (
                       <TextFormat type="date" value={transactionRule.updatedAt} format={APP_DATE_FORMAT} />
                     ) : null}
-                  </td>
-                  <td>
-                    {transactionRule.resultingCategory ? (
-                      <Link to={`/category/${transactionRule.resultingCategory.id}`}>{transactionRule.resultingCategory.name}</Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
-                  <td>
-                    {transactionRule.resultingFinancialSubscription ? (
-                      <Link to={`/financial-subscription/${transactionRule.resultingFinancialSubscription.id}`}>
-                        {transactionRule.resultingFinancialSubscription.name}
-                      </Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
-                  <td>
-                    {transactionRule.resultingTags
-                      ? transactionRule.resultingTags.map((val, j) => (
-                          <span key={j}>
-                            <Link to={`/tag/${val.id}`}>{val.name}</Link>
-                            {j === transactionRule.resultingTags.length - 1 ? '' : ', '}
-                          </span>
-                        ))
-                      : null}
                   </td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">

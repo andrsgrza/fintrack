@@ -34,6 +34,8 @@ export const TransactionRuleUpdate = () => {
   const [conditionsState, setConditionsState] = useState({ count: 0, loaded: false, failed: false });
 
   const activeDisabled = !isNew && (!conditionsState.loaded || conditionsState.failed || conditionsState.count === 0);
+  const isEntityLoaded = isNew || transactionRuleEntity?.id?.toString() === id;
+  const formKey = isNew ? 'new' : `transaction-rule-${transactionRuleEntity?.id ?? 'loading'}`;
 
   const handleClose = () => {
     navigate('/transaction-rule');
@@ -124,10 +126,10 @@ export const TransactionRuleUpdate = () => {
       </Row>
       <Row className="justify-content-center">
         <Col md="8">
-          {loading ? (
+          {loading || !isEntityLoaded ? (
             <p>Loading...</p>
           ) : (
-            <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
+            <ValidatedForm key={formKey} defaultValues={defaultValues()} onSubmit={saveEntity}>
               {!isNew ? (
                 <ValidatedField
                   name="id"
@@ -138,6 +140,9 @@ export const TransactionRuleUpdate = () => {
                   validate={{ required: true }}
                 />
               ) : null}
+              <h3 id="transaction-rule-identity-heading" className="mt-4">
+                <Translate contentKey="fintrackApp.transactionRule.sections.identity">Identity</Translate>
+              </h3>
               <ValidatedField
                 label={translate('fintrackApp.transactionRule.name')}
                 id="transaction-rule-name"
@@ -172,6 +177,9 @@ export const TransactionRuleUpdate = () => {
                   validate: v => isNumber(v) || translate('entity.validation.number'),
                 }}
               />
+              <h3 id="transaction-rule-matching-heading" className="mt-4">
+                <Translate contentKey="fintrackApp.transactionRule.sections.matching">Matching logic</Translate>
+              </h3>
               <ValidatedField
                 label={translate('fintrackApp.transactionRule.conditionLogic')}
                 id="transaction-rule-conditionLogic"
@@ -185,6 +193,16 @@ export const TransactionRuleUpdate = () => {
                   </option>
                 ))}
               </ValidatedField>
+              {!isNew ? (
+                <Button tag={Link} to={`/transaction-rule/${transactionRuleEntity.id}`} color="secondary" data-cy="manageConditionsButton">
+                  <FontAwesomeIcon icon="list" />
+                  &nbsp;
+                  <Translate contentKey="fintrackApp.transactionRule.manageConditions">Manage conditions</Translate>
+                </Button>
+              ) : null}
+              <h3 id="transaction-rule-result-heading" className="mt-4">
+                <Translate contentKey="fintrackApp.transactionRule.sections.result">Result</Translate>
+              </h3>
               <ValidatedField
                 label={translate('fintrackApp.transactionRule.resultingDescription')}
                 id="transaction-rule-resultingDescription"
@@ -195,31 +213,6 @@ export const TransactionRuleUpdate = () => {
                   maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
                 }}
               />
-              {!isNew ? (
-                <>
-                  <ValidatedField
-                    label={translate('fintrackApp.transactionRule.active')}
-                    id="transaction-rule-active"
-                    name="active"
-                    data-cy="active"
-                    check
-                    type="checkbox"
-                    disabled={activeDisabled}
-                  />
-                  <FormText>
-                    <Translate contentKey="fintrackApp.transactionRule.activeRequiresCondition">
-                      Active rules require at least one condition.
-                    </Translate>
-                  </FormText>
-                  {activeDisabled ? (
-                    <FormText>
-                      <Translate contentKey="fintrackApp.transactionRule.activeDisabledNoConditions">
-                        Add at least one condition before activating this rule.
-                      </Translate>
-                    </FormText>
-                  ) : null}
-                </>
-              ) : null}
               <ValidatedField
                 id="transaction-rule-resultingCategory"
                 name="resultingCategory"
@@ -269,6 +262,36 @@ export const TransactionRuleUpdate = () => {
                     ))
                   : null}
               </ValidatedField>
+              {!isNew ? (
+                <h3 id="transaction-rule-status-heading" className="mt-4">
+                  <Translate contentKey="fintrackApp.transactionRule.sections.status">Status</Translate>
+                </h3>
+              ) : null}
+              {!isNew ? (
+                <ValidatedField
+                  label={translate('fintrackApp.transactionRule.active')}
+                  id="transaction-rule-active"
+                  name="active"
+                  data-cy="active"
+                  check
+                  type="checkbox"
+                  disabled={activeDisabled}
+                />
+              ) : null}
+              {!isNew ? (
+                <FormText>
+                  <Translate contentKey="fintrackApp.transactionRule.activeRequiresCondition">
+                    Active rules require at least one condition.
+                  </Translate>
+                </FormText>
+              ) : null}
+              {!isNew && activeDisabled ? (
+                <FormText>
+                  <Translate contentKey="fintrackApp.transactionRule.activeDisabledNoConditions">
+                    Add at least one condition before activating this rule.
+                  </Translate>
+                </FormText>
+              ) : null}
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/transaction-rule" replace color="info">
                 <FontAwesomeIcon icon="arrow-left" />
                 &nbsp;
@@ -282,21 +305,6 @@ export const TransactionRuleUpdate = () => {
                 &nbsp;
                 <Translate contentKey="entity.action.save">Save</Translate>
               </Button>
-              {!isNew ? (
-                <>
-                  &nbsp;
-                  <Button
-                    tag={Link}
-                    to={`/transaction-rule/${transactionRuleEntity.id}`}
-                    color="secondary"
-                    data-cy="manageConditionsButton"
-                  >
-                    <FontAwesomeIcon icon="list" />
-                    &nbsp;
-                    <Translate contentKey="fintrackApp.transactionRule.manageConditions">Manage conditions</Translate>
-                  </Button>
-                </>
-              ) : null}
             </ValidatedForm>
           )}
         </Col>

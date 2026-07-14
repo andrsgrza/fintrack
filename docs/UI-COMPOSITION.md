@@ -137,6 +137,84 @@ Use a collection editor when:
 - inline add/edit/delete is expected;
 - the child has no meaningful standalone workflow for normal users.
 
+## View/Edit layout parity
+
+For primary admin/product CRUD screens that need custom UX, detail and edit should share the same conceptual layout.
+
+The detail page shows values.
+
+The edit page shows inputs in the same groups and approximate order.
+
+This keeps navigation predictable: when a user clicks Edit from detail or list, they should feel they are editing the same object, not entering an unrelated generated form.
+
+Use the same main groups and approximate order whenever possible.
+
+Example section order:
+
+- Identity
+- Matching / configuration
+- Result / output
+- Status
+- Metadata
+- Child collections, when applicable
+
+Detail-only metadata can remain read-only.
+
+Edit-only controls can remain editable.
+
+Child collection editors remain where the product workflow needs them.
+
+Avoid:
+
+- detail pages that read like long documents;
+- detail pages with narrative headings that do not map to editable fields;
+- edit pages whose grouping differs significantly from detail;
+- edit pages that make the user re-orient after clicking Edit.
+
+Prefer compact detail pages for admin/product entities.
+
+Detail should be scannable.
+
+Edit should mirror detail, replacing values with inputs.
+
+If a detail section exists, the equivalent editable fields should appear in the same relative place on edit, unless the fields are read-only, server-managed, or only make sense in detail.
+
+TransactionRule applies this pattern: detail and edit share Identity → Matching logic → Result → Status / Metadata ordering. Detail shows values and embedded conditions. Edit shows inputs plus a Manage conditions link.
+
+## Edit form hydration
+
+Edit forms must hydrate from the current entity when opened from either list or detail.
+
+When visiting `/entity/:id/edit`, existing values must populate correctly after the entity loads.
+
+This includes:
+
+- scalar fields;
+- booleans;
+- selects;
+- relationship selects;
+- multi-select relationships;
+- optional fields.
+
+Do not accept an edit screen that renders empty inputs for an existing entity.
+
+When using JHipster `ValidatedForm`, be careful with composition.
+
+`ValidatedField` components should remain registered with the form.
+
+In this project, the safest default is to keep `ValidatedField` components as direct children of the `ValidatedForm`, using headings and layout wrappers only where they do not break react-hook-form registration/default-value hydration.
+
+If deeper form composition is required, pass form methods explicitly and add tests proving edit hydration works.
+
+Required tests for customized edit pages:
+
+- edit opened by route id loads existing values;
+- edit opened from detail loads existing values;
+- relationship selects hydrate correctly;
+- multi-select relationships hydrate correctly;
+- boolean fields hydrate correctly;
+- create mode still starts with correct defaults.
+
 ## Backend orchestration
 
 Start with frontend orchestration only when:
@@ -176,6 +254,7 @@ Use these names:
   - supports inline add/edit/delete for a 1:N child.
 
 - `*related-list.tsx`
+
   - read-only related list;
   - useful for large/historical relationships.
 
@@ -190,16 +269,24 @@ Avoid showing raw technical columns when they create noise.
 Examples:
 
 - TransactionRuleCondition has `value`, `secondValue`, and `caseSensitive`.
-- In the embedded TransactionRule conditions table, these should be shown as one readable condition summary instead of three raw columns.
+- In the embedded TransactionRule conditions table, these are shown as one readable condition summary instead of three raw columns.
 
 Preferred embedded display:
 
 - `Amount between 20 and 500`
 - `Description contains "UBER"`
 - `Description contains "Uber" (case-sensitive)`
-- `Flow is not IN`
+- `Flow is not Income`
+- `Flujo no es Ingreso`
 
 Raw model fields may still exist in the backend and DTO. They do not need to appear as separate embedded UI columns.
+
+Enum values should be translated for user-facing summaries.
+
+For example, TransactionRuleCondition may store `FLOW = IN` or `FLOW = OUT`, but summaries should display the same user-facing labels used by FinancialTransaction:
+
+- EN: `Income` / `Expense`
+- ES: `Ingreso` / `Gasto`
 
 ## Implemented cases
 
@@ -267,6 +354,43 @@ TransactionRule detail/view shows the embedded editable conditions collection ed
 
 TransactionRule edit is reserved for general TransactionRule fields and provides a "Manage conditions" link back to detail.
 
+TransactionRule list/detail use product-oriented summaries instead of generated field dumps.
+
+The list shows:
+
+- name;
+- translated status;
+- priority;
+- translated condition logic;
+- result summary;
+- updated timestamp;
+- actions.
+
+Detail uses compact sections aligned with edit:
+
+- Identity;
+- Matching logic;
+- Result;
+- Status / Metadata;
+- embedded Conditions.
+
+TransactionRule detail and edit follow View/Edit layout parity.
+
+Both screens use the same conceptual grouping:
+
+- Identity;
+- Matching logic;
+- Result;
+- Status / Metadata.
+
+Detail shows values in those groups.
+
+Edit shows inputs in those groups.
+
+TransactionRule detail additionally owns the embedded Conditions editor.
+
+TransactionRule edit does not render the embedded Conditions editor; it only provides a Manage conditions link back to detail.
+
 ### Components used
 
 - `transaction-rule-conditions-collection-editor.tsx`
@@ -315,7 +439,9 @@ Standalone detail routes remain available for direct maintenance/debug.
 
 ### Embedded table display
 
-The embedded TransactionRuleCondition table shows a normalized `Condition` summary plus actions. It does not expose raw technical child fields as separate embedded columns:
+The embedded TransactionRuleCondition table shows a normalized `Condition` summary plus actions.
+
+It does not expose raw technical child fields as separate embedded columns:
 
 - no raw `value` column;
 - no raw `secondValue` column;
@@ -327,7 +453,7 @@ Examples:
 - `Description contains "Uber"`
 - `Description contains "Uber" (case-sensitive)`
 - `Amount between 20 and 500`
-- `Flow is not IN`
+- `Flow is not Income` / `Flujo no es Ingreso`
 
 The raw model fields still exist in DTO/backend persistence and are still edited through the smart form where appropriate.
 

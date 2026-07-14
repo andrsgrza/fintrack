@@ -3,11 +3,14 @@ import axios from 'axios';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import dayjs from 'dayjs';
 
 import enTransactionRule from 'app/../i18n/en/transactionRule.json';
 import enTransactionRuleCondition from 'app/../i18n/en/transactionRuleCondition.json';
 import enTransactionRuleField from 'app/../i18n/en/transactionRuleField.json';
 import enRuleOperator from 'app/../i18n/en/ruleOperator.json';
+import enRuleConditionLogic from 'app/../i18n/en/ruleConditionLogic.json';
+import { TransactionRule } from './transaction-rule';
 import { TransactionRuleDetail } from './transaction-rule-detail';
 import { TransactionRuleUpdate } from './transaction-rule-update';
 
@@ -19,6 +22,7 @@ const mockAxiosPatch = axios.patch as jest.Mock;
 const mockAxiosDelete = axios.delete as jest.Mock;
 const mockDispatch = jest.fn();
 const mockGetEntity = jest.fn(id => ({ type: 'transactionRule/getEntity', payload: id }));
+const mockGetEntities = jest.fn(() => ({ type: 'transactionRule/getEntities' }));
 const mockReset = jest.fn(() => ({ type: 'transactionRule/reset' }));
 const mockGetCategories = jest.fn(() => ({ type: 'category/getEntities' }));
 const mockGetFinancialSubscriptions = jest.fn(() => ({ type: 'financialSubscription/getEntities' }));
@@ -32,6 +36,7 @@ jest.mock('app/config/store', () => ({
 
 jest.mock('./transaction-rule.reducer', () => ({
   getEntity: id => mockGetEntity(id),
+  getEntities: params => mockGetEntities(params),
   reset: () => mockReset(),
   createEntity: entity => ({ type: 'transactionRule/createEntity', payload: entity }),
   partialUpdateEntity: entity => ({ type: 'transactionRule/partialUpdateEntity', payload: entity }),
@@ -57,13 +62,17 @@ const baseRule = {
   conditionLogic: 'ALL',
   resultingDescription: 'Coffee',
   active: false,
-  resultingTags: [],
+  createdAt: dayjs('2026-07-12T10:00:00'),
+  updatedAt: dayjs('2026-07-13T10:00:00'),
+  resultingCategory: { id: 3, name: 'Food' },
+  resultingFinancialSubscription: { id: 4, name: 'Coffee club' },
+  resultingTags: [{ id: 5, name: 'Morning' }],
 };
 
 const baseState = {
-  category: { entities: [] },
-  financialSubscription: { entities: [] },
-  tag: { entities: [] },
+  category: { entities: [{ id: 3, name: 'Food' }] },
+  financialSubscription: { entities: [{ id: 4, name: 'Coffee club' }] },
+  tag: { entities: [{ id: 5, name: 'Morning' }] },
   financialAccount: { entities: [{ id: 2, name: 'Checking account' }] },
   transactionRule: {
     entity: baseRule,
@@ -79,7 +88,39 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enTransactionRuleCondition);
   TranslatorContext.registerTranslations('en', enTransactionRuleField);
   TranslatorContext.registerTranslations('en', enRuleOperator);
+  TranslatorContext.registerTranslations('en', enRuleConditionLogic);
   TranslatorContext.setLocale('en');
+};
+
+const renderList = () => {
+  mockState = {
+    ...baseState,
+    transactionRule: {
+      ...baseState.transactionRule,
+      entities: [
+        baseRule,
+        {
+          ...baseRule,
+          id: 2,
+          name: 'Rent rule',
+          conditionLogic: 'ANY',
+          active: true,
+          resultingDescription: null,
+          resultingCategory: null,
+          resultingFinancialSubscription: null,
+          resultingTags: [],
+        },
+      ],
+    },
+  };
+
+  return render(
+    <MemoryRouter initialEntries={['/transaction-rule']}>
+      <Routes>
+        <Route path="/transaction-rule" element={<TransactionRule />} />
+      </Routes>
+    </MemoryRouter>,
+  );
 };
 
 const renderCreateForm = () => {
@@ -97,7 +138,7 @@ const renderCreateForm = () => {
   );
 };
 
-const renderEditForm = (conditionsResult: any = []) => {
+const renderEditForm = (conditionsResult: any = [], stateOverride: any = {}) => {
   mockAxiosGet.mockImplementation((url: string) => {
     if (url === 'api/transaction-rules/1/conditions') {
       if (conditionsResult === 'error') {
@@ -107,7 +148,14 @@ const renderEditForm = (conditionsResult: any = []) => {
     }
     return new Promise(() => {});
   });
-  mockState = baseState;
+  mockState = {
+    ...baseState,
+    ...stateOverride,
+    transactionRule: {
+      ...baseState.transactionRule,
+      ...(stateOverride.transactionRule ?? {}),
+    },
+  };
 
   return render(
     <MemoryRouter initialEntries={['/transaction-rule/1/edit']}>
@@ -149,6 +197,32 @@ describe('TransactionRule UX', () => {
     registerTranslations();
   });
 
+  it('renders product-oriented list columns and keeps row actions', () => {
+    renderList();
+
+    expect(screen.queryByRole('columnheader', { name: /id/i })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: /created at/i })).toBeNull();
+    expect(screen.getByRole('columnheader', { name: /name/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /status/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /priority/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /conditions/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /result/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /updated/i })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Coffee rule' }).getAttribute('href')).toBe('/transaction-rule/1');
+    expect(screen.getByText('Inactive')).toBeTruthy();
+    expect(screen.getByText('Active')).toBeTruthy();
+    expect(screen.getByText('All conditions')).toBeTruthy();
+    expect(screen.getByText('Any condition')).toBeTruthy();
+    expect(screen.getByText('Category: Food')).toBeTruthy();
+    expect(screen.getByText('Subscription: Coffee club')).toBeTruthy();
+    expect(screen.getByText('Tags: Morning')).toBeTruthy();
+    expect(screen.getByText('Description: Coffee')).toBeTruthy();
+    expect(screen.getByText('No result configured')).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(2);
+  });
+
   it('renders create title, hides timestamps, and hides active in create mode', () => {
     renderCreateForm();
 
@@ -162,6 +236,10 @@ describe('TransactionRule UX', () => {
     renderEditForm();
 
     expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Identity' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Matching logic' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Result' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Status' })).toBeTruthy();
     expect(screen.getByLabelText('Active')).toBeTruthy();
     expect(screen.getByText('Active rules require at least one condition.')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
@@ -171,6 +249,44 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByRole('button', { name: /delete condition/i })).toBeNull();
     expect(screen.getByRole('link', { name: /manage conditions/i }).getAttribute('href')).toBe('/transaction-rule/1');
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules/1/conditions'));
+  });
+
+  it('hydrates existing rule values on edit', async () => {
+    renderEditForm();
+
+    await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
+    expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Coffee shops');
+    expect((screen.getByLabelText('Priority') as HTMLInputElement).value).toBe('10');
+    expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL');
+    expect((screen.getByLabelText('Resulting Description') as HTMLInputElement).value).toBe('Coffee');
+  });
+
+  it('hydrates resulting category, subscription, tags, and active on edit', async () => {
+    renderEditForm([], {
+      transactionRule: {
+        entity: {
+          ...baseRule,
+          active: true,
+        },
+      },
+    });
+
+    await waitFor(() => expect((screen.getByLabelText('Resulting Category') as HTMLSelectElement).value).toBe('3'));
+    expect((screen.getByLabelText('Resulting Financial Subscription') as HTMLSelectElement).value).toBe('4');
+    expect(screen.getByRole('option', { name: 'Morning' })).toHaveProperty('selected', true);
+    expect((screen.getByLabelText('Active') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('does not render an empty edit form before the requested entity is loaded', () => {
+    renderEditForm([], {
+      transactionRule: {
+        entity: {},
+        loading: false,
+      },
+    });
+
+    expect(screen.getByText('Loading...')).toBeTruthy();
+    expect(screen.queryByLabelText('Name')).toBeNull();
   });
 
   it('loads background condition count in edit and disables active when empty', async () => {
@@ -225,6 +341,25 @@ describe('TransactionRule UX', () => {
     );
     expect(mockAxiosPost.mock.calls[0][1]).not.toHaveProperty('position');
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+  });
+
+  it('renders compact detail sections aligned with edit layout', async () => {
+    renderDetail([]);
+
+    expect(screen.getByRole('heading', { name: 'Coffee rule' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Identity' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Matching logic' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Result' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Status / Metadata' })).toBeTruthy();
+    expect(screen.getByText('Inactive')).toBeTruthy();
+    expect(screen.getByText('10')).toBeTruthy();
+    expect(screen.getByText('All conditions')).toBeTruthy();
+    expect(screen.getByText('Food')).toBeTruthy();
+    expect(screen.getByText('Coffee club')).toBeTruthy();
+    expect(screen.getByText('Morning')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'When' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Then' })).toBeNull();
+    expect(await screen.findByRole('heading', { name: 'Conditions' })).toBeTruthy();
   });
 
   it('opens embedded edit form on detail without parent selector and patches editable condition fields only', async () => {
@@ -305,11 +440,11 @@ describe('TransactionRule UX', () => {
       },
     ]);
 
-    await screen.findByText('Coffee');
+    await screen.findByText('Description contains "Coffee"');
     fireEvent.click(screen.getByRole('button', { name: /delete condition/i }));
 
     expect(await screen.findByText('Condition could not be deleted.')).toBeTruthy();
-    expect(screen.getByText('Coffee rule')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Coffee rule' })).toBeTruthy();
   });
 
   it('handles edit background condition load failure without breaking rule edit page', async () => {
@@ -371,6 +506,6 @@ describe('TransactionRule UX', () => {
     renderDetail('error');
 
     await waitFor(() => expect(screen.getByText('Conditions are not available.')).toBeTruthy());
-    expect(screen.getByText('Coffee rule')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Coffee rule' })).toBeTruthy();
   });
 });
