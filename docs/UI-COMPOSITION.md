@@ -60,3 +60,5 @@ TransactionRule detail/edit pages show a read-only related list of TransactionRu
 This is a parent-centered UX foundation, not a full embedded collection editor. Users can navigate to add/view/edit conditions through the existing standalone TransactionRuleCondition CRUD. The full inline rule builder and rule execution engine remain deferred.
 
 TransactionRuleCondition create can be opened with `transactionRuleId` in the query string to preselect the parent. TransactionRuleCondition edit shows the parent as read-only because the backend treats `transactionRule` as immutable after create.
+
+The standalone TransactionRuleCondition form is a smart form, not a raw generated enum form. It filters operators by selected field, renders typed value inputs, shows `secondValue` only for `BETWEEN`, and shows `caseSensitive` only for `DESCRIPTION` / `EXTERNAL_REFERENCE`. `ACCOUNT` `EQUALS` / `NOT_EQUALS` uses an accessible FinancialAccount selector but still submits the selected account id as the string `value` expected by the backend. `IN` / `NOT_IN` inputs remain comma-separated text values in this slice.

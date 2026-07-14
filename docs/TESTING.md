@@ -1460,14 +1460,16 @@ Rehabilitated create/delete (sin selector User).
 
 ### Summary counts
 
-| Type           | File                                  | Tests  | Custom vs generated                                                                |
-| -------------- | ------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Integration IT | `TransactionRuleConditionResourceIT`  | **55** | 35 custom (ownership + parent immutable + domain rules) + 20 JHipster CRUD/filters |
-| Unit — service | `TransactionRuleConditionServiceTest` | **11** | All custom (ownership + validations + delete side-effect)                          |
-| Unit — domain  | `TransactionRuleConditionTest`        | **2**  | Generated                                                                          |
-| Unit — mapper  | `TransactionRuleConditionMapperTest`  | **1**  | Generated                                                                          |
-| Unit — DTO     | `TransactionRuleConditionDTOTest`     | **1**  | Generated                                                                          |
-| E2E            | `transaction-rule-condition.cy.ts`    | **8**  | CRUD/navigation + delete dialog copy                                               |
+| Type           | File                                              | Tests  | Custom vs generated                                                                |
+| -------------- | ------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
+| Integration IT | `TransactionRuleConditionResourceIT`              | **55** | 35 custom (ownership + parent immutable + domain rules) + 20 JHipster CRUD/filters |
+| Unit — service | `TransactionRuleConditionServiceTest`             | **11** | All custom (ownership + validations + delete side-effect)                          |
+| Unit — domain  | `TransactionRuleConditionTest`                    | **2**  | Generated                                                                          |
+| Unit — mapper  | `TransactionRuleConditionMapperTest`              | **1**  | Generated                                                                          |
+| Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                          |
+| Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers     |
+| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **18** | Smart condition form behavior + previous parent/title visibility checks            |
+| E2E            | `transaction-rule-condition.cy.ts`                | **8**  | CRUD/navigation + delete dialog copy                                               |
 
 **Run:**
 
@@ -1548,6 +1550,28 @@ Happy-path CRUD, required-field checks, criteria per field.
 ### Unit — `TransactionRuleConditionServiceTest` — ✅
 
 11 tests cover parent immutability, merged-state validation, duplicate normalization, delete deactivation, and ACCOUNT owner-login resolution.
+
+### Frontend smart form tests — ✅
+
+`transaction-rule-condition-form-helpers.spec.ts` covers:
+
+- `getAllowedOperators()` for text, enum, amount, date, and account fields.
+- `requiresSecondValue()` only for `BETWEEN`.
+- `supportsCaseSensitive()` only for `DESCRIPTION` / `EXTERNAL_REFERENCE`.
+- `getValueInputKind()` for amount/date inputs, flow/origin selects, account selector, and `IN`/`NOT_IN` text input.
+
+`transaction-rule-condition-ux.spec.tsx` covers:
+
+- dynamic create/edit titles;
+- parent preselect from `transactionRuleId`;
+- parent read-only in edit;
+- operator filtering by selected field;
+- `secondValue` only for `BETWEEN`;
+- `caseSensitive` only for text fields;
+- typed value inputs for amount/date/flow/origin/account;
+- `IN`/`NOT_IN` as comma-separated text with helper copy;
+- field/operator changes clearing incompatible values;
+- `ACCOUNT EQUALS` submitting the selected account id as a string and hidden `caseSensitive=false`.
 
 ### E2E — `transaction-rule-condition.cy.ts`
 

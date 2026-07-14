@@ -466,31 +466,36 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | UI mantiene selector                        | Create mantiene selector; edit lo muestra read-only/disabled; query param `transactionRuleId` puede preseleccionar padre               |
 | Admin bypass lectura/CRUD                   | Admin opera conditions de rules ajenas                                                                                                 |
 | `ACCOUNT` values                            | Validar ids contra **`transactionRule.user.login`**, no admin                                                                          |
+| Smart condition form                        | UI filtra operadores por campo, tipa inputs de valor y mantiene parent read-only en edit                                               |
 
-**Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI.
+**Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI, `transaction-rule-condition-form-helpers.ts`.
 
 #### Domain rules ✅
 
-| Regla                                           | Estado | Notas                                                |
-| ----------------------------------------------- | ------ | ---------------------------------------------------- |
-| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                 |
-| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción              |
-| Create en rule inactiva no reactiva             | ✅     |                                                      |
-| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices       |
-| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización              |
-| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update               |
-| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator |
-| Delete dialog copy                              | ✅     | i18n en/es                                           |
-| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                         |
+| Regla                                           | Estado | Notas                                                                                         |
+| ----------------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| DELETE solo condition row                       | ✅     | No borrar rule ni FT                                                                          |
+| DELETE última condition → `rule.active = false` | ✅     | Actualizar `updatedAt`; una transacción                                                       |
+| Create en rule inactiva no reactiva             | ✅     |                                                                                               |
+| Field/operator/value compatibility              | ✅     | TEXT / ENUM / AMOUNT / DATE / ACCOUNT matrices                                                |
+| `IN`/`NOT_IN` token rules                       | ✅     | trim, no empty tokens, canonicalización                                                       |
+| Duplicate guard (service)                       | ✅     | Normalización + exclude self on update                                                        |
+| Validar estado final post-merge PATCH           | ✅     | p.ej. `secondValue` huérfano tras cambio de operator                                          |
+| UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                       |
+| UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text |
+| UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                |
+| Delete dialog copy                              | ✅     | i18n en/es                                                                                    |
+| ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                  |
 
 #### Validations ✅
 
-| Capa              | Estado      | Detalle                                                                        |
-| ----------------- | ----------- | ------------------------------------------------------------------------------ |
-| DTO `@Valid`      | ✅ JHipster | shape: field, operator, value, caseSensitive, position, transactionRule        |
-| Service — parent  | ✅          | Inmutable tras create; PATCH preserve/null/same id                             |
-| Service — negocio | ✅          | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner |
-| REST              | ✅          | `@Valid` POST/PUT; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400` |
+| Capa              | Estado      | Detalle                                                                                                                            |
+| ----------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| DTO `@Valid`      | ✅ JHipster | shape: field, operator, value, caseSensitive, position, transactionRule                                                            |
+| Service — parent  | ✅          | Inmutable tras create; PATCH preserve/null/same id                                                                                 |
+| Service — negocio | ✅          | Matrices field/operator; value parsing; duplicate guard; ACCOUNT vs rule owner                                                     |
+| UI helper         | ✅          | Pure helper exposes `getAllowedOperators`, field-kind checks, `requiresSecondValue`, `supportsCaseSensitive`, and value input kind |
+| REST              | ✅          | `@Valid` POST/PUT; PATCH JsonNode; `400 invalid`; cross-user PUT/PATCH → `400`                                                     |
 
 **Tests:** 55 IT + 11 service — ver [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
 

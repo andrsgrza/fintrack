@@ -720,9 +720,25 @@ Block exact duplicate inside same `TransactionRule`: same `field`, `operator`, n
 
 Suggested copy: _"This will delete this rule condition. The rule itself will not be deleted. If this was the last condition, the rule will be disabled to prevent it from matching every transaction. This action cannot be undone."_
 
+### UX — smart condition form
+
+The standalone TransactionRuleCondition create/edit form is no longer a raw generated enum form. It guides the user toward combinations accepted by the backend:
+
+| Field type                          | UI behavior                                                                                                                                                                                     | Status   |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `DESCRIPTION`, `EXTERNAL_REFERENCE` | Shows only text operators; value is text; `caseSensitive` is visible                                                                                                                            | **Done** |
+| `AMOUNT`                            | Shows numeric/list operators; value is number except `IN`/`NOT_IN` text list; `BETWEEN` second value is number                                                                                  | **Done** |
+| `TRANSACTION_DATE`, `POSTING_DATE`  | Shows date/list operators; value is date except `IN`/`NOT_IN` text list; `BETWEEN` second value is date                                                                                         | **Done** |
+| `FLOW`                              | Shows enum operators; `EQUALS`/`NOT_EQUALS` use an `IN`/`OUT` select; `IN`/`NOT_IN` remain comma-separated text                                                                                 | **Done** |
+| `ORIGIN`                            | Shows enum operators; `EQUALS`/`NOT_EQUALS` use a `MANUAL`/`FILE_IMPORT`/`API` select; `IN`/`NOT_IN` remain comma-separated text                                                                | **Done** |
+| `ACCOUNT`                           | Shows account operators; `EQUALS`/`NOT_EQUALS` use an accessible FinancialAccount selector and submit the selected account id as a string; `IN`/`NOT_IN` remain comma-separated account id text | **Done** |
+| `secondValue`                       | Visible only for `BETWEEN`; hidden operators submit/clear it as `null`                                                                                                                          | **Done** |
+| `caseSensitive`                     | Visible only for text fields; hidden fields submit `false`                                                                                                                                      | **Done** |
+| Field/operator changes              | Incompatible operator/value/secondValue are cleared or reset client-side                                                                                                                        | **Done** |
+
 ### Out of scope
 
-Rule execution engine; batch reclassification; unique `position`; new enum values; condition reorder UI.
+Rule execution engine; batch reclassification; unique `position`; new enum values; condition reorder UI; full embedded conditions collection editor.
 
 ### Product rules (deferred)
 

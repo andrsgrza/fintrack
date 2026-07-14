@@ -27,7 +27,17 @@
       "secondValue": "Second Value",
       "caseSensitive": "Case Sensitive",
       "position": "Position",
-      "transactionRule": "Transaction Rule"
+      "transactionRule": "Transaction Rule",
+      "help": {
+        "AMOUNT": "Use comma-separated decimal values, e.g. 100.00,250.50",
+        "TRANSACTION_DATE": "Use comma-separated dates in YYYY-MM-DD format.",
+        "POSTING_DATE": "Use comma-separated dates in YYYY-MM-DD format.",
+        "FLOW": "Use comma-separated values: IN,OUT",
+        "ORIGIN": "Use comma-separated values: MANUAL,FILE_IMPORT,API",
+        "ACCOUNT": "Use comma-separated account IDs.",
+        "DESCRIPTION": "Use comma-separated text values.",
+        "EXTERNAL_REFERENCE": "Use comma-separated text values."
+      }
     }
   }
 }

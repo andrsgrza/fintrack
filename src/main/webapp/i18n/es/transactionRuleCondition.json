@@ -27,7 +27,17 @@
       "secondValue": "Segundo valor",
       "caseSensitive": "Sensible a mayúsculas",
       "position": "Posición",
-      "transactionRule": "Regla"
+      "transactionRule": "Regla",
+      "help": {
+        "AMOUNT": "Usa valores decimales separados por coma, ej. 100.00,250.50",
+        "TRANSACTION_DATE": "Usa fechas separadas por coma en formato YYYY-MM-DD.",
+        "POSTING_DATE": "Usa fechas separadas por coma en formato YYYY-MM-DD.",
+        "FLOW": "Usa valores separados por coma: IN,OUT",
+        "ORIGIN": "Usa valores separados por coma: MANUAL,FILE_IMPORT,API",
+        "ACCOUNT": "Usa IDs de cuenta separados por coma.",
+        "DESCRIPTION": "Usa textos separados por coma.",
+        "EXTERNAL_REFERENCE": "Usa textos separados por coma."
+      }
     }
   }
 }
