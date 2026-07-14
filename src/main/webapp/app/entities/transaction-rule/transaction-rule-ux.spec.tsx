@@ -24,6 +24,8 @@ const mockDispatch = jest.fn();
 const mockGetEntity = jest.fn(id => ({ type: 'transactionRule/getEntity', payload: id }));
 const mockGetEntities = jest.fn(() => ({ type: 'transactionRule/getEntities' }));
 const mockReset = jest.fn(() => ({ type: 'transactionRule/reset' }));
+const mockCreateEntity = jest.fn(entity => ({ type: 'transactionRule/createEntity', payload: entity }));
+const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'transactionRule/partialUpdateEntity', payload: entity }));
 const mockGetCategories = jest.fn(() => ({ type: 'category/getEntities' }));
 const mockGetFinancialSubscriptions = jest.fn(() => ({ type: 'financialSubscription/getEntities' }));
 const mockGetTags = jest.fn(() => ({ type: 'tag/getEntities' }));
@@ -38,8 +40,8 @@ jest.mock('./transaction-rule.reducer', () => ({
   getEntity: id => mockGetEntity(id),
   getEntities: params => mockGetEntities(params),
   reset: () => mockReset(),
-  createEntity: entity => ({ type: 'transactionRule/createEntity', payload: entity }),
-  partialUpdateEntity: entity => ({ type: 'transactionRule/partialUpdateEntity', payload: entity }),
+  createEntity: entity => mockCreateEntity(entity),
+  partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
 }));
 
 jest.mock('app/entities/category/category.reducer', () => ({
@@ -123,16 +125,22 @@ const renderList = () => {
   );
 };
 
-const renderCreateForm = () => {
+const renderCreateForm = (stateOverride: any = {}) => {
   mockState = {
     ...baseState,
-    transactionRule: { ...baseState.transactionRule, entity: {} },
+    ...stateOverride,
+    transactionRule: {
+      ...baseState.transactionRule,
+      entity: {},
+      ...(stateOverride.transactionRule ?? {}),
+    },
   };
 
   return render(
     <MemoryRouter initialEntries={['/transaction-rule/new']}>
       <Routes>
         <Route path="/transaction-rule/new" element={<TransactionRuleUpdate />} />
+        <Route path="/transaction-rule/:id" element={<div>Created rule detail route</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -194,6 +202,8 @@ describe('TransactionRule UX', () => {
     mockAxiosPost.mockReset();
     mockAxiosPatch.mockReset();
     mockAxiosDelete.mockReset();
+    mockCreateEntity.mockClear();
+    mockPartialUpdateEntity.mockClear();
     registerTranslations();
   });
 
@@ -227,9 +237,58 @@ describe('TransactionRule UX', () => {
     renderCreateForm();
 
     expect(screen.getByRole('heading', { name: 'Create Transaction Rule' })).toBeTruthy();
+    expect(
+      screen.getByText('Rules are saved inactive first. Add conditions from the rule detail page, then activate the rule when ready.'),
+    ).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Active')).toBeNull();
+    expect(screen.getByRole('button', { name: /save and add conditions/i })).toBeTruthy();
+  });
+
+  it('does not render the embedded conditions editor in create mode', () => {
+    renderCreateForm();
+
+    expect(screen.queryByRole('heading', { name: 'Conditions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^add condition$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^delete condition$/i })).toBeNull();
+  });
+
+  it('submits new rules as inactive drafts', async () => {
+    renderCreateForm();
+    mockDispatch.mockClear();
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New rule' } });
+    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Resulting Description'), { target: { value: 'Normalized description' } });
+    fireEvent.click(screen.getByRole('button', { name: /save and add conditions/i }));
+
+    await waitFor(() =>
+      expect(mockCreateEntity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'New rule',
+          active: false,
+          resultingDescription: 'Normalized description',
+        }),
+      ),
+    );
+    expect(mockDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'transactionRule/createEntity',
+        payload: expect.objectContaining({ active: false }),
+      }),
+    );
+  });
+
+  it('redirects successful create to the new rule detail page', async () => {
+    renderCreateForm({
+      transactionRule: {
+        entity: { id: 42 },
+        updateSuccess: true,
+      },
+    });
+
+    expect(await screen.findByText('Created rule detail route')).toBeTruthy();
   });
 
   it('renders edit title, active field, and manage conditions link without embedded editor', async () => {
@@ -341,6 +400,7 @@ describe('TransactionRule UX', () => {
     );
     expect(mockAxiosPost.mock.calls[0][1]).not.toHaveProperty('position');
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+    expect(mockPartialUpdateEntity).not.toHaveBeenCalled();
   });
 
   it('renders compact detail sections aligned with edit layout', async () => {

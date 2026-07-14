@@ -19,6 +19,8 @@
       },
       "createTitle": "Create Transaction Rule",
       "editTitle": "Edit Transaction Rule",
+      "saveAndAddConditions": "Save and add conditions",
+      "createInactiveHelp": "Rules are saved inactive first. Add conditions from the rule detail page, then activate the rule when ready.",
       "id": "ID",
       "name": "Name",
       "description": "Description",

@@ -19,6 +19,8 @@
       },
       "createTitle": "Crear regla",
       "editTitle": "Editar regla",
+      "saveAndAddConditions": "Guardar y agregar condiciones",
+      "createInactiveHelp": "Las reglas se guardan inactivas primero. Agrega condiciones desde el detalle de la regla y actívala cuando esté lista.",
       "id": "ID",
       "name": "Nombre",
       "description": "Descripción",

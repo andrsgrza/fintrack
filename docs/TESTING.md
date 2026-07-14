@@ -1329,16 +1329,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                           | Tests   | Custom vs generated                                                                                         |
-| --------------- | ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`    | **109** | Ownership/link/domain/API ergonomics custom tests + JHipster CRUD/filters                                   |
-| Unit — service  | `TransactionRuleServiceTest`   | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards)                                       |
-| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                   |
-| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                   |
-| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                   |
-| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                   |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **17**  | Product-oriented list/detail summaries, edit hydration, grouped edit form, detail embedded condition editor |
-| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                             |
+| Type            | File                           | Tests   | Custom vs generated                                                                                                               |
+| --------------- | ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TransactionRuleResourceIT`    | **109** | Ownership/link/domain/API ergonomics custom tests + JHipster CRUD/filters                                                         |
+| Unit — service  | `TransactionRuleServiceTest`   | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards)                                                             |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                         |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                         |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                         |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                         |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **20**  | Product-oriented list/detail summaries, create inactive flow, edit hydration, grouped edit form, detail embedded condition editor |
+| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                   |
 
 **Run:**
 
@@ -1394,19 +1394,20 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 
 #### Frontend UX — `transaction-rule-ux.spec.tsx` — ✅
 
-| Area                       | What it checks                                                                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Product list               | List hides generated ID/created columns, shows Name/Status/Priority/Conditions/Result/Updated/Actions                                    |
-| Compact detail             | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings         |
-| Create/edit shell          | Create hides timestamps/active; edit shows Active and Manage conditions link                                                             |
-| Edit hydration             | Edit waits for the requested entity and hydrates scalar fields, category, subscription, multi-select tags, and active                    |
-| Edit general fields        | Edit is grouped into identity/matching/result/status; `ValidatedField`s remain direct form children; condition controls are not embedded |
-| Embedded detail collection | Detail loads conditions from `GET /api/transaction-rules/{id}/conditions`; empty state is non-breaking                                   |
-| Active toggle UX           | Disabled when conditions are empty or unavailable; enabled when at least one condition is loaded                                         |
-| Add condition              | Detail opens embedded smart form without parent selector; POST includes `transactionRule: { id: currentRule }`                           |
-| Edit condition             | Detail opens embedded smart form without parent selector; PATCH sends editable fields only, no reparenting                               |
-| Delete condition           | Detail confirms, DELETEs condition, refreshes list; delete failure shows an inline error                                                 |
-| Embedded table actions     | No View action; Edit/Delete remain because condition values are already visible in the table                                             |
+| Area                       | What it checks                                                                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product list               | List hides generated ID/created columns, shows Name/Status/Priority/Conditions/Result/Updated/Actions                                                    |
+| Compact detail             | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                         |
+| Create flow                | Create hides timestamps/active/embedded conditions, shows Save and add conditions, submits `active=false`, and redirects create success to detail        |
+| Create/edit shell          | Create is parent-only; edit shows Active and Manage conditions link                                                                                      |
+| Edit hydration             | Edit waits for the requested entity and hydrates scalar fields, category, subscription, multi-select tags, and active                                    |
+| Edit general fields        | Edit is grouped into identity/matching/result/status; `ValidatedField`s remain direct form children; condition controls are not embedded                 |
+| Embedded detail collection | Detail loads conditions from `GET /api/transaction-rules/{id}/conditions`; empty state is non-breaking                                                   |
+| Active toggle UX           | Disabled when conditions are empty or unavailable; enabled when at least one condition is loaded                                                         |
+| Add condition              | Detail opens embedded smart form without parent selector; POST includes `transactionRule: { id: currentRule }`; frontend does not auto-activate the rule |
+| Edit condition             | Detail opens embedded smart form without parent selector; PATCH sends editable fields only, no reparenting                                               |
+| Delete condition           | Detail confirms, DELETEs condition, refreshes list; delete failure shows an inline error                                                                 |
+| Embedded table actions     | No View action; Edit/Delete remain because condition values are already visible in the table                                                             |
 
 #### CRUD domain lifecycle — ✅ custom
 

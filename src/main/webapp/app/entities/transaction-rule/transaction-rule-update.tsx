@@ -55,9 +55,13 @@ export const TransactionRuleUpdate = () => {
 
   useEffect(() => {
     if (updateSuccess) {
-      handleClose();
+      if (isNew && transactionRuleEntity?.id) {
+        navigate(`/transaction-rule/${transactionRuleEntity.id}`);
+      } else {
+        handleClose();
+      }
     }
-  }, [updateSuccess]);
+  }, [updateSuccess, isNew, transactionRuleEntity?.id]);
 
   useEffect(() => {
     if (isNew || !id) {
@@ -130,6 +134,13 @@ export const TransactionRuleUpdate = () => {
             <p>Loading...</p>
           ) : (
             <ValidatedForm key={formKey} defaultValues={defaultValues()} onSubmit={saveEntity}>
+              {isNew ? (
+                <FormText className="d-block mb-3">
+                  <Translate contentKey="fintrackApp.transactionRule.createInactiveHelp">
+                    Rules are saved inactive first. Add conditions from the rule detail page, then activate the rule when ready.
+                  </Translate>
+                </FormText>
+              ) : null}
               {!isNew ? (
                 <ValidatedField
                   name="id"
@@ -303,7 +314,9 @@ export const TransactionRuleUpdate = () => {
               <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
                 <FontAwesomeIcon icon="save" />
                 &nbsp;
-                <Translate contentKey="entity.action.save">Save</Translate>
+                <Translate contentKey={isNew ? 'fintrackApp.transactionRule.saveAndAddConditions' : 'entity.action.save'}>
+                  {isNew ? 'Save and add conditions' : 'Save'}
+                </Translate>
               </Button>
             </ValidatedForm>
           )}

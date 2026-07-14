@@ -354,6 +354,15 @@ TransactionRule detail/view shows the embedded editable conditions collection ed
 
 TransactionRule edit is reserved for general TransactionRule fields and provides a "Manage conditions" link back to detail.
 
+TransactionRule create saves only the parent rule. It does not embed a child collection editor because conditions require a persisted parent id.
+
+The create flow is:
+
+1. create an inactive TransactionRule parent;
+2. redirect to TransactionRule detail for the saved rule;
+3. add conditions from the embedded detail collection editor;
+4. activate the rule from edit when at least one condition exists.
+
 TransactionRule list/detail use product-oriented summaries instead of generated field dumps.
 
 The list shows:
@@ -391,6 +400,8 @@ TransactionRule detail additionally owns the embedded Conditions editor.
 
 TransactionRule edit does not render the embedded Conditions editor; it only provides a Manage conditions link back to detail.
 
+TransactionRule create also does not render the embedded Conditions editor, does not maintain client-side draft conditions, hides the Active toggle, and submits `active=false`.
+
 ### Components used
 
 - `transaction-rule-conditions-collection-editor.tsx`
@@ -406,6 +417,8 @@ We did not embed:
 - `transaction-rule-condition-detail.tsx`
 
 The embedded editor reuses the condition form section, not the standalone CRUD page.
+
+We also did not implement a create-with-conditions command endpoint or client-side draft child collection on TransactionRule create. Those remain deferred until there is a deliberate atomic parent+children command design.
 
 ### Parent relationship behavior
 
@@ -501,12 +514,16 @@ Deleting a condition uses the existing DELETE endpoint.
 
 If the last condition is deleted, the backend deactivates the parent rule.
 
+Adding a condition does not automatically activate the parent rule.
+
 The TransactionRule detail page refreshes parent state after condition mutations.
 
 ### Deferred
 
 Deferred for this workflow:
 
+- create-with-conditions command endpoint;
+- client-side draft child collection on parent create;
 - row-positioned inline edit;
 - condition reorder UI/API;
 - rule execution engine;
