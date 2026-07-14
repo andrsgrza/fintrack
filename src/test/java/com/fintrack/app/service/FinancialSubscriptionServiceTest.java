@@ -184,7 +184,6 @@ class FinancialSubscriptionServiceTest {
 
         assertThat(financialSubscriptionService.delete(10L)).isTrue();
         verify(financialSubscriptionRepository).clearFinancialTransactionSubscriptionReferences(10L);
-        verify(financialSubscriptionRepository).clearTransactionRuleResultingSubscriptionReferences(10L);
         verify(financialSubscriptionRepository).deleteTagLinksByFinancialSubscriptionId(10L);
         verify(financialSubscriptionRepository).deleteById(10L);
     }

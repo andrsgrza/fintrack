@@ -98,4 +98,12 @@ public interface TransactionRuleRepository
         "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory where transactionRule.user.login = :login"
     )
     List<TransactionRule> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
+
+    @EntityGraph(attributePaths = { "user", "conditions", "resultingCategory", "resultingTags" })
+    @Query(
+        "select distinct transactionRule from TransactionRule transactionRule " +
+        "where transactionRule.user.login = :login and transactionRule.active = true " +
+        "order by transactionRule.priority asc, transactionRule.id asc"
+    )
+    List<TransactionRule> findActiveRulesForEvaluationByUserLoginOrderByPriorityAscIdAsc(@Param("login") String login);
 }

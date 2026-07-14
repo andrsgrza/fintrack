@@ -1497,29 +1497,32 @@ Rehabilitated create/delete (sin selector User).
 | Low      | E2E     | UI table isolation       | ⏳          |
 | Low      | Product | Drag-and-drop reorder UI | ⏳ deferred |
 
-### Future Rule Engine test plan — planned only
+### Rule Engine evaluator tests
 
-See [RULE-ENGINE.md](RULE-ENGINE.md). No Rule Engine tests exist yet because the execution service is not implemented.
+See [RULE-ENGINE.md](RULE-ENGINE.md). Phase 1 backend-only pure evaluator tests are implemented in `TransactionRuleEvaluationServiceTest`.
 
-Planned areas:
+Implemented Phase 1 coverage:
 
-- pure evaluator unit tests that ignore inactive rules;
-- pure evaluator unit tests that ignore rules without conditions;
-- pure evaluator unit tests that respect `priority ASC` evaluation;
-- condition evaluator tests where `ALL` requires all conditions true;
-- condition evaluator tests where `ANY` requires at least one condition true;
-- field/operator/value tests that reuse the TransactionRuleCondition validation matrix;
-- output suggestion tests where category first matching output wins;
-- conflict tests where explicit transaction category differs from rule category suggestion;
-- no-conflict tests where explicit transaction category equals rule category suggestion;
-- tag tests where tags accumulate across matching rules;
-- tag tests where duplicate tag suggestions are de-duped;
-- tag tests where existing transaction tags are preserved;
-- tag tests where a later duplicate tag output is skipped;
-- regression tests confirming no description/subscription outputs exist;
-- mode tests for `PREVIEW_ONLY`, `FILL_EMPTY_ONLY`, and future confirmation/override modes;
+- inactive rules, rules without conditions, and rules without outputs are ignored;
+- rule order uses `priority ASC, id ASC`;
+- `ALL` requires all conditions true;
+- `ANY` requires at least one condition true;
+- text, amount, enum, account, and date operators are covered;
+- null optional fields do not match, including negative operators;
+- first matching category output wins;
+- later category outputs are skipped;
+- same explicit category creates no conflict;
+- different explicit category creates a conflict and does not override;
+- tags accumulate across matching rules;
+- later duplicate tags are skipped;
+- existing tags are returned with `alreadyPresent=true` and skipped as already present;
+- `alreadyPresent=true` tags are not treated as new tags to add.
+
+Future planned areas:
+
+- exhaustive field/operator/value matrix tests beyond the Phase 1 smoke coverage;
+- mode tests for future `FILL_EMPTY_ONLY`, confirmation, and override modes;
 - resource/service integration tests once rule application on create exists;
-- no-mutation tests for preview evaluation;
 - future one-transaction reevaluation tests;
 - future bulk reevaluation safety tests.
 

@@ -4,13 +4,13 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **design only**.
+Status: **Phase 1 backend evaluator implemented; apply/REST/UI remain deferred**.
 
 Not implemented yet:
 
-- rule execution service;
 - automatic rule application on transaction create;
 - automatic rule application on transaction update;
+- REST preview endpoint;
 - transaction reevaluation;
 - rule preview UI;
 - bulk reclassification;
@@ -31,21 +31,24 @@ Subscription and description assignment are deliberately not outputs in the curr
 - TransactionRuleCondition CRUD/domain rules.
 - Server-managed rule priority/order.
 - Server-managed condition position.
+- Backend-only pure evaluator service:
+  - `TransactionRuleEvaluationService`;
+  - internal `TransactionRuleEvaluationInput`;
+  - internal `TransactionRuleEvaluationResult`;
+  - no mutation;
+  - no saving;
+  - no REST endpoint;
+  - no automatic apply-on-create/update.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
 
 ### Designed but not implemented
 
-- pure rule evaluation;
-- `RuleEvaluationResult`;
-- category/tag suggestions;
-- conflict/skipped-output reporting;
 - future apply modes.
 
 ### Deferred
 
-- Java evaluator service implementation;
 - public REST preview endpoint;
 - automatic apply-on-create;
 - manual preview UI;
@@ -77,7 +80,7 @@ FINTRACK already implements the rule authoring model:
 - adding a condition does not auto-activate the rule.
 - deleting the last condition deactivates the rule.
 
-The rule execution engine is **not implemented**.
+The pure evaluator is implemented. Automatic rule application/execution is **not implemented**.
 
 ## Rule ordering
 
@@ -206,8 +209,8 @@ Subscription and description mutations are not TransactionRule outputs in the cu
 
 Do not include these in `RuleEvaluationResult` v1:
 
-- `resultingDescription`;
-- `financialSubscription`;
+- description replacement;
+- financial subscription assignment;
 - subscription output;
 - description replacement output.
 
@@ -478,11 +481,11 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - account-id handling;
 - `IN` / `NOT_IN` token semantics.
 
-## Proposed implementation phases
+## Implementation phases
 
-### Phase 1 — pure evaluator
+### Phase 1 — pure evaluator ✅
 
-- implement pure evaluator service;
+- backend-only pure evaluator service implemented;
 - no mutation;
 - backend tests only;
 - evaluate a transaction-like draft;
@@ -519,9 +522,9 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 ## Deferred items
 
-- rule execution service implementation;
 - applying rules on create;
 - applying rules on update;
+- REST preview endpoint;
 - preview UI;
 - override confirmation UI;
 - transaction-level explanation UI;
@@ -533,12 +536,8 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 ## Open decisions
 
-- Whether `RuleEvaluationResult` becomes a public REST DTO or remains an internal service result first.
-- Whether condition-level details are included in phase 1 or deferred.
-- Whether `matchedRules` should include matched rules with no outputs or only matched output-producing rules.
-- Whether `skippedOutputs` are always populated or only in debug/explain mode.
-- Whether tag suggestions that are already present should also appear in `skippedOutputs` or only in `suggestedTags` with `alreadyPresent=true`.
-- Exact Java package and class names when implemented later.
-- Whether evaluation needs a dedicated `TransactionDraft` abstraction or can use `FinancialTransactionDTO` initially.
+- Whether `RuleEvaluationResult` should later become a public REST DTO; today it is internal/backend-only.
+- Whether condition-level details should be added later for explanation/debug UI.
+- Whether skipped outputs should eventually be returned only in debug/explain mode if exposed over REST.
 - Where preview UI will live.
 - How to represent conflicts and skipped outputs consistently in REST responses if/when exposed.

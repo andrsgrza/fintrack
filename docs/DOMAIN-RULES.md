@@ -917,11 +917,11 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### Rule Engine design
 
-The Transaction Rule Engine is documented as a future design contract in [RULE-ENGINE.md](RULE-ENGINE.md).
+The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, and condition management.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, and a backend-only pure evaluator that returns internal category/tag suggestions without mutating transactions.
 
-Not implemented today: execution, automatic application, preview UI, transaction reevaluation, bulk reclassification, and audit/explanation UI.
+Not implemented today: automatic application, REST preview endpoint, preview UI, transaction reevaluation, bulk reclassification, and audit/explanation UI.
 
 ---
 

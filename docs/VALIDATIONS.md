@@ -159,7 +159,7 @@ Companion docs:
 
 **Tests implemented:** see [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
 
-**Future Rule Engine:** when implemented, matching must reuse this same field/operator/value validation matrix and semantics. The design contract is in [RULE-ENGINE.md](RULE-ENGINE.md). No execution behavior is implemented today.
+**Rule Engine evaluator:** Phase 1 matching reuses this same field/operator/value validation matrix and semantics. The evaluator is backend-only and internal; no automatic apply, REST preview endpoint, or UI exists today. See [RULE-ENGINE.md](RULE-ENGINE.md).
 
 ### 8. FinancialSubscription
 

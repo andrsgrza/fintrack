@@ -445,7 +445,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Priority/order UX                               | ✅     | List/detail show read-only 1-based order; list forces `priority ASC, id ASC`, exposes only possible Move up / Move down controls, and create/edit do not render or submit priority |
 | Manual reorder endpoint                         | ✅     | `PUT /api/transaction-rules/reorder` accepts full current-user ordered ids, validates exact membership, and normalizes priorities to `0..n`                                        |
 | Edit form hydration                             | ✅     | Edit waits for the requested entity before mounting the JHipster `ValidatedForm`; fields stay direct children for registration/defaults                                            |
-| Rule Engine design                              | 📝     | Design-only contract in [`RULE-ENGINE.md`](RULE-ENGINE.md); v1 `RuleEvaluationResult` supports category/tag suggestions only; no execution service implemented yet                 |
+| Rule Engine Phase 1 evaluator                   | ✅     | Backend-only pure evaluator in `service.rules`; internal `RuleEvaluationResult` supports category/tag suggestions only; no mutation, REST endpoint, UI, or apply-on-create         |
 | **Ejecución al crear transaction**              | ⏳     | Future Rule Engine phase 2 — apply on create with fill-empty behavior                                                                                                              |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                             |
 
@@ -459,11 +459,11 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`; related conditions endpoint returns `404` when parent inaccessible                                                                                                                                                                                                                                                                                           |
 | UI                        | ✅          | Create saves inactive parent then redirects to detail; list/detail use compact semantic summaries and read-only order; list Move up / Move down sends full ordered ids to the reorder endpoint; create/edit omit priority; detail/edit share identity/matching/result/status layout; edit preserves JHipster direct-field hydration; detail embeds TransactionRuleCondition editor via existing endpoints; no create-time draft child collection or Rule Engine preview UI yet |
 
-#### Future Rule Engine phases — design only
+#### Rule Engine phases
 
 See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
 
-1. Pure evaluator service returning `RuleEvaluationResult`; category/tag suggestions only; no mutation, no UI.
+1. ✅ Pure evaluator service returning `RuleEvaluationResult`; category/tag suggestions only; no mutation, no UI.
 2. Apply on `FinancialTransaction` create using fill-empty-only behavior.
 3. Preview UI for manual transaction create/edit.
 4. Reevaluate one transaction.
