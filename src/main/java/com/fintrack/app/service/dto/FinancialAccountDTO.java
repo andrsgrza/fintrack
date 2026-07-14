@@ -57,10 +57,8 @@ public class FinancialAccountDTO implements Serializable {
     @NotNull
     private Boolean active;
 
-    @NotNull
     private Instant createdAt;
 
-    @NotNull
     private Instant updatedAt;
 
     private UserDTO user;

@@ -6,6 +6,8 @@
         "refreshListLabel": "Refresh list",
         "createLabel": "Create a new Credit Account Details",
         "createOrEditLabel": "Create or edit a Credit Account Details",
+        "createTitle": "Create Credit Account Details",
+        "editTitle": "Edit Credit Account Details",
         "notFound": "No Credit Account Details found"
       },
       "created": "A new Credit Account Details is created with identifier {{ param }}",
@@ -16,16 +18,24 @@
         "message": "Credit card details cannot be deleted directly. These details are required for credit card accounts. To remove them, you must delete the financial account itself."
       },
       "detail": {
-        "title": "Credit Account Details"
+        "title": "Credit card details"
       },
       "id": "ID",
-      "creditLimit": "Credit Limit",
-      "statementDay": "Statement Day",
-      "paymentDueDay": "Payment Due Day",
-      "annualInterestRate": "Annual Interest Rate",
+      "creditLimit": "Credit limit",
+      "creditLimitHelp": "Maximum approved credit line for this card.",
+      "statementDay": "Statement day",
+      "statementDayHelp": "Day of the month when the statement period closes.",
+      "paymentDueDay": "Payment due day",
+      "paymentDueDayHelp": "Day of the month when payment is due.",
+      "annualInterestRate": "Annual interest rate",
+      "annualInterestRateHelp": "Annual percentage interest rate. Used later for interest calculations.",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
-      "account": "Account"
+      "account": "Account",
+      "composition": {
+        "notConfigured": "Credit card details have not been configured yet.",
+        "saveError": "The financial account was saved, but credit card details could not be saved. Please edit the account and try again."
+      }
     }
   }
 }

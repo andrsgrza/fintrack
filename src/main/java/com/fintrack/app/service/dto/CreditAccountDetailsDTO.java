@@ -33,10 +33,8 @@ public class CreditAccountDetailsDTO implements Serializable {
     @DecimalMin(value = "0")
     private BigDecimal annualInterestRate;
 
-    @NotNull
     private Instant createdAt;
 
-    @NotNull
     private Instant updatedAt;
 
     @NotNull

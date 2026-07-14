@@ -1,7 +1,6 @@
 package com.fintrack.app.web.rest;
 
 import static com.fintrack.app.domain.CreditAccountDetailsAsserts.*;
-import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
@@ -73,6 +72,7 @@ class CreditAccountDetailsResourceIT {
 
     private static final String ENTITY_API_URL = "/api/credit-account-details";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
+    private static final String ENTITY_API_URL_BY_ACCOUNT_ID = ENTITY_API_URL + "/by-account/{accountId}";
 
     private static Random random = new Random();
     private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
@@ -187,6 +187,9 @@ class CreditAccountDetailsResourceIT {
         long databaseSizeBeforeCreate = getRepositoryCount();
         // Create the CreditAccountDetails
         CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setCreatedAt(null);
+        creditAccountDetailsDTO.setUpdatedAt(null);
+        Instant beforeCreate = Instant.now();
         var returnedCreditAccountDetailsDTO = om.readValue(
             restCreditAccountDetailsMockMvc
                 .perform(
@@ -198,6 +201,7 @@ class CreditAccountDetailsResourceIT {
                 .getContentAsString(),
             CreditAccountDetailsDTO.class
         );
+        Instant afterCreate = Instant.now();
 
         // Validate the CreditAccountDetails in the database
         assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
@@ -206,8 +210,45 @@ class CreditAccountDetailsResourceIT {
             returnedCreditAccountDetails,
             getPersistedCreditAccountDetails(returnedCreditAccountDetails)
         );
+        CreditAccountDetails persistedCreditAccountDetails = getPersistedCreditAccountDetails(returnedCreditAccountDetails);
+        assertThat(persistedCreditAccountDetails.getCreatedAt()).isBetween(beforeCreate, afterCreate);
+        assertThat(persistedCreditAccountDetails.getUpdatedAt()).isBetween(beforeCreate, afterCreate);
 
         insertedCreditAccountDetails = returnedCreditAccountDetails;
+    }
+
+    @Test
+    @Transactional
+    void createCreditAccountDetailsIgnoresClientProvidedTimestamps() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setCreatedAt(DEFAULT_CREATED_AT);
+        creditAccountDetailsDTO.setUpdatedAt(DEFAULT_UPDATED_AT);
+
+        Instant beforeCreate = Instant.now();
+        var returnedCreditAccountDetailsDTO = om.readValue(
+            restCreditAccountDetailsMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CreditAccountDetailsDTO.class
+        );
+        Instant afterCreate = Instant.now();
+
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        CreditAccountDetails persistedCreditAccountDetails = getPersistedCreditAccountDetails(
+            creditAccountDetailsMapper.toEntity(returnedCreditAccountDetailsDTO)
+        );
+        assertThat(persistedCreditAccountDetails.getCreatedAt()).isBetween(beforeCreate, afterCreate);
+        assertThat(persistedCreditAccountDetails.getUpdatedAt()).isBetween(beforeCreate, afterCreate);
+        assertThat(persistedCreditAccountDetails.getCreatedAt()).isNotEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCreditAccountDetails.getUpdatedAt()).isNotEqualTo(DEFAULT_UPDATED_AT);
+
+        insertedCreditAccountDetails = persistedCreditAccountDetails;
     }
 
     @Test
@@ -281,36 +322,80 @@ class CreditAccountDetailsResourceIT {
 
     @Test
     @Transactional
-    void checkCreatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createCreditAccountDetailsWithoutCreatedAtSucceeds() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
         creditAccountDetails.setCreatedAt(null);
-
-        // Create the CreditAccountDetails, which fails.
         CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
 
-        restCreditAccountDetailsMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO)))
-            .andExpect(status().isBadRequest());
+        var returnedCreditAccountDetailsDTO = om.readValue(
+            restCreditAccountDetailsMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CreditAccountDetailsDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        insertedCreditAccountDetails = creditAccountDetailsMapper.toEntity(returnedCreditAccountDetailsDTO);
     }
 
     @Test
     @Transactional
-    void checkUpdatedAtIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
+    void createCreditAccountDetailsWithoutUpdatedAtSucceeds() throws Exception {
+        long databaseSizeBeforeCreate = getRepositoryCount();
         creditAccountDetails.setUpdatedAt(null);
-
-        // Create the CreditAccountDetails, which fails.
         CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
 
-        restCreditAccountDetailsMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO)))
-            .andExpect(status().isBadRequest());
+        var returnedCreditAccountDetailsDTO = om.readValue(
+            restCreditAccountDetailsMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(creditAccountDetailsDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            CreditAccountDetailsDTO.class
+        );
 
-        assertSameRepositoryCount(databaseSizeBeforeTest);
+        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
+        insertedCreditAccountDetails = creditAccountDetailsMapper.toEntity(returnedCreditAccountDetailsDTO);
+    }
+
+    @Test
+    @Transactional
+    void putCreditAccountDetailsWithNullCreatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setCreatedAt(null);
+
+        restCreditAccountDetailsMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(creditAccountDetailsDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void putCreditAccountDetailsWithNullUpdatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setUpdatedAt(null);
+
+        restCreditAccountDetailsMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(creditAccountDetailsDTO))
+            )
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -372,6 +457,39 @@ class CreditAccountDetailsResourceIT {
 
     @Test
     @Transactional
+    void getCreditAccountDetailsByAccountId() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL_BY_ACCOUNT_ID, creditAccountDetails.getAccount().getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(creditAccountDetails.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void getCreditAccountDetailsByAccountIdOwnedByAnotherUserIsNotFound() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL_BY_ACCOUNT_ID, otherDetails.getAccount().getId()))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetCreditAccountDetailsByAccountIdOwnedByAnotherUser() throws Exception {
+        CreditAccountDetails otherDetails = saveDetailsOnOtherUsersAccount();
+
+        restCreditAccountDetailsMockMvc
+            .perform(get(ENTITY_API_URL_BY_ACCOUNT_ID, otherDetails.getAccount().getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(otherDetails.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
     void getNonExistingCreditAccountDetails() throws Exception {
         // Get the creditAccountDetails
         restCreditAccountDetailsMockMvc.perform(get(ENTITY_API_URL_ID, Long.MAX_VALUE)).andExpect(status().isNotFound());
@@ -396,10 +514,11 @@ class CreditAccountDetailsResourceIT {
             .statementDay(UPDATED_STATEMENT_DAY)
             .paymentDueDay(UPDATED_PAYMENT_DUE_DAY)
             .annualInterestRate(UPDATED_ANNUAL_INTEREST_RATE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT);
         CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(updatedCreditAccountDetails);
 
+        Instant beforeUpdate = Instant.now();
         restCreditAccountDetailsMockMvc
             .perform(
                 put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
@@ -407,10 +526,49 @@ class CreditAccountDetailsResourceIT {
                     .content(om.writeValueAsBytes(creditAccountDetailsDTO))
             )
             .andExpect(status().isOk());
+        Instant afterUpdate = Instant.now();
 
         // Validate the CreditAccountDetails in the database
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedCreditAccountDetailsToMatchAllProperties(updatedCreditAccountDetails);
+        CreditAccountDetails persistedCreditAccountDetails = getPersistedCreditAccountDetails(updatedCreditAccountDetails);
+        assertThat(persistedCreditAccountDetails.getCreditLimit()).isEqualByComparingTo(UPDATED_CREDIT_LIMIT);
+        assertThat(persistedCreditAccountDetails.getStatementDay()).isEqualTo(UPDATED_STATEMENT_DAY);
+        assertThat(persistedCreditAccountDetails.getPaymentDueDay()).isEqualTo(UPDATED_PAYMENT_DUE_DAY);
+        assertThat(persistedCreditAccountDetails.getAnnualInterestRate()).isEqualByComparingTo(UPDATED_ANNUAL_INTEREST_RATE);
+        assertThat(persistedCreditAccountDetails.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCreditAccountDetails.getUpdatedAt()).isBetween(beforeUpdate, afterUpdate);
+    }
+
+    @Test
+    @Transactional
+    void putCreditAccountDetailsWithChangedCreatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setCreatedAt(UPDATED_CREATED_AT);
+
+        restCreditAccountDetailsMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(creditAccountDetailsDTO))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void putCreditAccountDetailsWithChangedUpdatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        CreditAccountDetailsDTO creditAccountDetailsDTO = creditAccountDetailsMapper.toDto(creditAccountDetails);
+        creditAccountDetailsDTO.setUpdatedAt(UPDATED_UPDATED_AT);
+
+        restCreditAccountDetailsMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, creditAccountDetailsDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(creditAccountDetailsDTO))
+            )
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -486,20 +644,19 @@ class CreditAccountDetailsResourceIT {
         // Update the creditAccountDetails using partial update
         String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"annualInterestRate\":" + UPDATED_ANNUAL_INTEREST_RATE + "}";
 
+        Instant beforeUpdate = Instant.now();
         restCreditAccountDetailsMockMvc
             .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
             .andExpect(status().isOk());
+        Instant afterUpdate = Instant.now();
 
         // Validate the CreditAccountDetails in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        CreditAccountDetails partialUpdatedCreditAccountDetails = new CreditAccountDetails();
-        partialUpdatedCreditAccountDetails.setId(creditAccountDetails.getId());
-        partialUpdatedCreditAccountDetails.annualInterestRate(UPDATED_ANNUAL_INTEREST_RATE);
-        assertCreditAccountDetailsUpdatableFieldsEquals(
-            createUpdateProxyForBean(partialUpdatedCreditAccountDetails, creditAccountDetails),
-            getPersistedCreditAccountDetails(creditAccountDetails)
-        );
+        CreditAccountDetails persistedCreditAccountDetails = getPersistedCreditAccountDetails(creditAccountDetails);
+        assertThat(persistedCreditAccountDetails.getAnnualInterestRate()).isEqualByComparingTo(UPDATED_ANNUAL_INTEREST_RATE);
+        assertThat(persistedCreditAccountDetails.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCreditAccountDetails.getUpdatedAt()).isBetween(beforeUpdate, afterUpdate);
     }
 
     @Test
@@ -523,30 +680,79 @@ class CreditAccountDetailsResourceIT {
             ",\"annualInterestRate\":" +
             UPDATED_ANNUAL_INTEREST_RATE +
             ",\"createdAt\":\"" +
-            UPDATED_CREATED_AT +
+            DEFAULT_CREATED_AT +
             "\",\"updatedAt\":\"" +
-            UPDATED_UPDATED_AT +
+            DEFAULT_UPDATED_AT +
             "\"}";
 
+        Instant beforeUpdate = Instant.now();
         restCreditAccountDetailsMockMvc
             .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
             .andExpect(status().isOk());
+        Instant afterUpdate = Instant.now();
 
         // Validate the CreditAccountDetails in the database
 
         assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        CreditAccountDetails partialUpdatedCreditAccountDetails = new CreditAccountDetails()
-            .creditLimit(UPDATED_CREDIT_LIMIT)
-            .statementDay(UPDATED_STATEMENT_DAY)
-            .paymentDueDay(UPDATED_PAYMENT_DUE_DAY)
-            .annualInterestRate(UPDATED_ANNUAL_INTEREST_RATE)
-            .createdAt(UPDATED_CREATED_AT)
-            .updatedAt(UPDATED_UPDATED_AT);
-        partialUpdatedCreditAccountDetails.setId(creditAccountDetails.getId());
-        assertCreditAccountDetailsUpdatableFieldsEquals(
-            partialUpdatedCreditAccountDetails,
-            getPersistedCreditAccountDetails(partialUpdatedCreditAccountDetails)
-        );
+        CreditAccountDetails persistedCreditAccountDetails = getPersistedCreditAccountDetails(creditAccountDetails);
+        assertThat(persistedCreditAccountDetails.getCreditLimit()).isEqualByComparingTo(UPDATED_CREDIT_LIMIT);
+        assertThat(persistedCreditAccountDetails.getStatementDay()).isEqualTo(UPDATED_STATEMENT_DAY);
+        assertThat(persistedCreditAccountDetails.getPaymentDueDay()).isEqualTo(UPDATED_PAYMENT_DUE_DAY);
+        assertThat(persistedCreditAccountDetails.getAnnualInterestRate()).isEqualByComparingTo(UPDATED_ANNUAL_INTEREST_RATE);
+        assertThat(persistedCreditAccountDetails.getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+        assertThat(persistedCreditAccountDetails.getUpdatedAt()).isBetween(beforeUpdate, afterUpdate);
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsWithChangedCreatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"createdAt\":\"" + UPDATED_CREATED_AT + "\"}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedCreditAccountDetails(creditAccountDetails).getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsWithChangedUpdatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"updatedAt\":\"" + UPDATED_UPDATED_AT + "\"}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedCreditAccountDetails(creditAccountDetails).getUpdatedAt()).isEqualTo(DEFAULT_UPDATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsWithNullCreatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"createdAt\":null}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedCreditAccountDetails(creditAccountDetails).getCreatedAt()).isEqualTo(DEFAULT_CREATED_AT);
+    }
+
+    @Test
+    @Transactional
+    void patchCreditAccountDetailsWithNullUpdatedAtFails() throws Exception {
+        insertedCreditAccountDetails = creditAccountDetailsRepository.saveAndFlush(creditAccountDetails);
+        String patchJson = "{\"id\":" + creditAccountDetails.getId() + ",\"updatedAt\":null}";
+
+        restCreditAccountDetailsMockMvc
+            .perform(patch(ENTITY_API_URL_ID, creditAccountDetails.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedCreditAccountDetails(creditAccountDetails).getUpdatedAt()).isEqualTo(DEFAULT_UPDATED_AT);
     }
 
     @Test

@@ -8,8 +8,10 @@ import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.service.dto.CreditAccountDetailsDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.CreditAccountDetailsMapper;
+import java.time.Instant;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -58,6 +60,9 @@ public class CreditAccountDetailsService {
         LOG.debug("Request to save CreditAccountDetails : {}", creditAccountDetailsDTO);
         CreditAccountDetails creditAccountDetails = creditAccountDetailsMapper.toEntity(creditAccountDetailsDTO);
         creditAccountDetails.setAccount(resolveAccountForCreate(creditAccountDetailsDTO.getAccount()));
+        Instant now = Instant.now();
+        creditAccountDetails.setCreatedAt(now);
+        creditAccountDetails.setUpdatedAt(now);
         creditAccountDetails = creditAccountDetailsRepository.save(creditAccountDetails);
         return creditAccountDetailsMapper.toDto(creditAccountDetails);
     }
@@ -72,8 +77,20 @@ public class CreditAccountDetailsService {
         LOG.debug("Request to update CreditAccountDetails : {}", creditAccountDetailsDTO);
         CreditAccountDetails existingCreditAccountDetails = findAccessibleEntity(creditAccountDetailsDTO.getId()).orElseThrow();
         rejectAccountChange(existingCreditAccountDetails, creditAccountDetailsDTO.getAccount());
+        rejectTimestampChange(
+            existingCreditAccountDetails.getCreatedAt(),
+            creditAccountDetailsDTO.getCreatedAt(),
+            "Created at cannot be changed"
+        );
+        rejectTimestampChange(
+            existingCreditAccountDetails.getUpdatedAt(),
+            creditAccountDetailsDTO.getUpdatedAt(),
+            "Updated at cannot be changed"
+        );
         CreditAccountDetails creditAccountDetails = creditAccountDetailsMapper.toEntity(creditAccountDetailsDTO);
         creditAccountDetails.setAccount(existingCreditAccountDetails.getAccount());
+        creditAccountDetails.setCreatedAt(existingCreditAccountDetails.getCreatedAt());
+        creditAccountDetails.setUpdatedAt(Instant.now());
         creditAccountDetails = creditAccountDetailsRepository.save(creditAccountDetails);
         return creditAccountDetailsMapper.toDto(creditAccountDetails);
     }
@@ -100,6 +117,7 @@ public class CreditAccountDetailsService {
 
         return findAccessibleEntity(creditAccountDetailsDTO.getId())
             .map(existingCreditAccountDetails -> {
+                rejectTimestampChanges(existingCreditAccountDetails, creditAccountDetailsDTO, patchNode);
                 if (patchNode != null && patchNode.has("account") && patchNode.get("account").isNull()) {
                     throw new IllegalArgumentException("Account cannot be null");
                 }
@@ -107,6 +125,8 @@ public class CreditAccountDetailsService {
                     rejectAccountChange(existingCreditAccountDetails, creditAccountDetailsDTO.getAccount());
                 }
                 creditAccountDetailsMapper.partialUpdate(existingCreditAccountDetails, creditAccountDetailsDTO);
+                existingCreditAccountDetails.setCreatedAt(existingCreditAccountDetails.getCreatedAt());
+                existingCreditAccountDetails.setUpdatedAt(Instant.now());
                 return existingCreditAccountDetails;
             })
             .map(creditAccountDetailsRepository::save)
@@ -157,6 +177,25 @@ public class CreditAccountDetailsService {
     public Optional<CreditAccountDetailsDTO> findOne(Long id) {
         LOG.debug("Request to get CreditAccountDetails : {}", id);
         return findAccessibleEntity(id).map(creditAccountDetailsMapper::toDto);
+    }
+
+    /**
+     * Get one creditAccountDetails by financial account id.
+     *
+     * @param accountId the id of the parent financial account.
+     * @return the entity when the parent account is accessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<CreditAccountDetailsDTO> findOneByAccountId(Long accountId) {
+        LOG.debug("Request to get CreditAccountDetails for FinancialAccount : {}", accountId);
+        if (currentUserService.isAdmin()) {
+            return creditAccountDetailsRepository
+                .findOneWithEagerRelationshipsByAccountId(accountId)
+                .map(creditAccountDetailsMapper::toDto);
+        }
+        return creditAccountDetailsRepository
+            .findOneWithEagerRelationshipsByAccountIdAndAccountUserLogin(accountId, currentUserService.getCurrentUserLogin())
+            .map(creditAccountDetailsMapper::toDto);
     }
 
     /**
@@ -215,6 +254,50 @@ public class CreditAccountDetailsService {
         }
         if (!accountDTO.getId().equals(existingCreditAccountDetails.getAccount().getId())) {
             throw new IllegalArgumentException("Account cannot be changed");
+        }
+    }
+
+    private void rejectTimestampChanges(
+        CreditAccountDetails existingCreditAccountDetails,
+        CreditAccountDetailsDTO creditAccountDetailsDTO,
+        JsonNode patchNode
+    ) {
+        if (patchNode == null) {
+            if (creditAccountDetailsDTO.getCreatedAt() != null) {
+                rejectTimestampChange(
+                    existingCreditAccountDetails.getCreatedAt(),
+                    creditAccountDetailsDTO.getCreatedAt(),
+                    "Created at cannot be changed"
+                );
+            }
+            if (creditAccountDetailsDTO.getUpdatedAt() != null) {
+                rejectTimestampChange(
+                    existingCreditAccountDetails.getUpdatedAt(),
+                    creditAccountDetailsDTO.getUpdatedAt(),
+                    "Updated at cannot be changed"
+                );
+            }
+            return;
+        }
+        if (patchNode.has("createdAt")) {
+            rejectTimestampChange(
+                existingCreditAccountDetails.getCreatedAt(),
+                creditAccountDetailsDTO.getCreatedAt(),
+                "Created at cannot be changed"
+            );
+        }
+        if (patchNode.has("updatedAt")) {
+            rejectTimestampChange(
+                existingCreditAccountDetails.getUpdatedAt(),
+                creditAccountDetailsDTO.getUpdatedAt(),
+                "Updated at cannot be changed"
+            );
+        }
+    }
+
+    private void rejectTimestampChange(Instant existingTimestamp, Instant requestedTimestamp, String message) {
+        if (requestedTimestamp == null || !Objects.equals(existingTimestamp, requestedTimestamp)) {
+            throw new IllegalArgumentException(message);
         }
     }
 

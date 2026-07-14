@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
@@ -19,6 +21,8 @@ import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +39,11 @@ import org.springframework.data.domain.Pageable;
 class FinancialAccountServiceTest {
 
     private static final String CURRENT_USER_LOGIN = "user";
+    private static final Instant CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Instant UPDATED_AT = Instant.parse("2026-01-02T00:00:00Z");
+    private static final Instant CHANGED_TIMESTAMP = Instant.parse("2026-02-01T00:00:00Z");
+    private static final BigDecimal INITIAL_BALANCE = new BigDecimal("100.00");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Mock
     private FinancialAccountRepository financialAccountRepository;
@@ -87,17 +96,24 @@ class FinancialAccountServiceTest {
         financialAccount.setUser(currentUser);
         financialAccount.setCurrency(CurrencyCode.MXN);
         financialAccount.setAccountType(AccountType.DEBIT);
+        financialAccount.setInitialBalance(INITIAL_BALANCE);
+        financialAccount.setCreatedAt(CREATED_AT);
+        financialAccount.setUpdatedAt(UPDATED_AT);
 
         financialAccountDTO = new FinancialAccountDTO();
         financialAccountDTO.setId(10L);
         financialAccountDTO.setName("Main account");
         financialAccountDTO.setCurrency(CurrencyCode.MXN);
         financialAccountDTO.setAccountType(AccountType.DEBIT);
+        financialAccountDTO.setInitialBalance(INITIAL_BALANCE);
+        financialAccountDTO.setCreatedAt(CREATED_AT);
+        financialAccountDTO.setUpdatedAt(UPDATED_AT);
     }
 
     @Test
     void saveShouldAssignCurrentUser() {
         FinancialAccount mappedEntity = new FinancialAccount();
+        mappedEntity.setInitialBalance(INITIAL_BALANCE);
         FinancialAccount savedEntity = new FinancialAccount();
         savedEntity.setId(10L);
         savedEntity.setUser(currentUser);
@@ -110,6 +126,31 @@ class FinancialAccountServiceTest {
         financialAccountService.save(financialAccountDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getCreatedAt()).isNotNull();
+        assertThat(mappedEntity.getUpdatedAt()).isEqualTo(mappedEntity.getCreatedAt());
+        verify(financialAccountRepository).save(mappedEntity);
+    }
+
+    @Test
+    void saveShouldIgnoreClientProvidedTimestamps() {
+        FinancialAccount mappedEntity = new FinancialAccount();
+        mappedEntity.setInitialBalance(INITIAL_BALANCE);
+        FinancialAccount savedEntity = new FinancialAccount();
+        savedEntity.setId(10L);
+        savedEntity.setUser(currentUser);
+
+        financialAccountDTO.setCreatedAt(Instant.parse("2000-01-01T00:00:00Z"));
+        financialAccountDTO.setUpdatedAt(Instant.parse("2000-01-02T00:00:00Z"));
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(financialAccountMapper.toEntity(financialAccountDTO)).thenReturn(mappedEntity);
+        when(financialAccountRepository.save(mappedEntity)).thenReturn(savedEntity);
+        when(financialAccountMapper.toDto(savedEntity)).thenReturn(financialAccountDTO);
+
+        financialAccountService.save(financialAccountDTO);
+
+        assertThat(mappedEntity.getCreatedAt()).isNotEqualTo(Instant.parse("2000-01-01T00:00:00Z"));
+        assertThat(mappedEntity.getUpdatedAt()).isEqualTo(mappedEntity.getCreatedAt());
         verify(financialAccountRepository).save(mappedEntity);
     }
 
@@ -117,6 +158,7 @@ class FinancialAccountServiceTest {
     void updateShouldPreserveExistingOwner() {
         FinancialAccount mappedEntity = new FinancialAccount();
         mappedEntity.setId(10L);
+        mappedEntity.setInitialBalance(INITIAL_BALANCE);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
@@ -130,6 +172,40 @@ class FinancialAccountServiceTest {
         financialAccountService.update(financialAccountDTO);
 
         assertThat(mappedEntity.getUser()).isEqualTo(currentUser);
+        assertThat(mappedEntity.getCreatedAt()).isEqualTo(CREATED_AT);
+        assertThat(mappedEntity.getUpdatedAt()).isAfter(UPDATED_AT);
+    }
+
+    @Test
+    void updateShouldRejectChangedCreatedAt() {
+        financialAccountDTO.setCreatedAt(CHANGED_TIMESTAMP);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+
+        assertThatThrownBy(() -> financialAccountService.update(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectNullUpdatedAt() {
+        financialAccountDTO.setUpdatedAt(null);
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+
+        assertThatThrownBy(() -> financialAccountService.update(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+        verify(financialAccountRepository, never()).save(any());
     }
 
     @Test
@@ -226,6 +302,167 @@ class FinancialAccountServiceTest {
     }
 
     @Test
+    void partialUpdateShouldRejectExplicitNullCreatedAt() {
+        financialAccountDTO.setCreatedAt(null);
+        ObjectNode patchNode = OBJECT_MAPPER.createObjectNode();
+        patchNode.putNull("createdAt");
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+
+        assertThatThrownBy(() -> financialAccountService.partialUpdate(financialAccountDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Created at cannot be changed");
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectChangedUpdatedAt() {
+        financialAccountDTO.setUpdatedAt(CHANGED_TIMESTAMP);
+        ObjectNode patchNode = OBJECT_MAPPER.createObjectNode();
+        patchNode.put("updatedAt", CHANGED_TIMESTAMP.toString());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+
+        assertThatThrownBy(() -> financialAccountService.partialUpdate(financialAccountDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Updated at cannot be changed");
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldAllowSameTimestampsAndSetUpdatedAt() {
+        ObjectNode patchNode = OBJECT_MAPPER.createObjectNode();
+        patchNode.put("createdAt", CREATED_AT.toString());
+        patchNode.put("updatedAt", UPDATED_AT.toString());
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+        when(financialAccountRepository.save(financialAccount)).thenReturn(financialAccount);
+        when(financialAccountMapper.toDto(financialAccount)).thenReturn(financialAccountDTO);
+
+        financialAccountService.partialUpdate(financialAccountDTO, patchNode);
+
+        assertThat(financialAccount.getCreatedAt()).isEqualTo(CREATED_AT);
+        assertThat(financialAccount.getUpdatedAt()).isAfter(UPDATED_AT);
+        verify(financialAccountRepository).save(financialAccount);
+    }
+
+    @Test
+    void saveShouldAcceptInitialBalanceWithScaleZeroOneOrTwo() {
+        FinancialAccount mappedEntity = new FinancialAccount();
+        FinancialAccount savedEntity = new FinancialAccount();
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(financialAccountMapper.toEntity(financialAccountDTO)).thenReturn(mappedEntity);
+        when(financialAccountRepository.save(mappedEntity)).thenReturn(savedEntity);
+        when(financialAccountMapper.toDto(savedEntity)).thenReturn(financialAccountDTO);
+
+        for (BigDecimal validBalance : java.util.List.of(new BigDecimal("100"), new BigDecimal("100.0"), new BigDecimal("100.00"))) {
+            mappedEntity.setInitialBalance(validBalance);
+            financialAccountService.save(financialAccountDTO);
+        }
+
+        verify(financialAccountRepository, org.mockito.Mockito.times(3)).save(mappedEntity);
+    }
+
+    @Test
+    void saveShouldAcceptNegativeInitialBalanceWithScaleZeroOneOrTwo() {
+        FinancialAccount mappedEntity = new FinancialAccount();
+        FinancialAccount savedEntity = new FinancialAccount();
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(financialAccountMapper.toEntity(financialAccountDTO)).thenReturn(mappedEntity);
+        when(financialAccountRepository.save(mappedEntity)).thenReturn(savedEntity);
+        when(financialAccountMapper.toDto(savedEntity)).thenReturn(financialAccountDTO);
+
+        for (BigDecimal validBalance : java.util.List.of(new BigDecimal("-5000"), new BigDecimal("-5000.2"), new BigDecimal("-5000.25"))) {
+            mappedEntity.setInitialBalance(validBalance);
+            financialAccountService.save(financialAccountDTO);
+        }
+
+        verify(financialAccountRepository, org.mockito.Mockito.times(3)).save(mappedEntity);
+    }
+
+    @Test
+    void saveShouldRejectInitialBalanceScaleGreaterThanTwoWithoutRounding() {
+        FinancialAccount mappedEntity = new FinancialAccount();
+        mappedEntity.setInitialBalance(new BigDecimal("100.001"));
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(financialAccountMapper.toEntity(financialAccountDTO)).thenReturn(mappedEntity);
+
+        assertThatThrownBy(() -> financialAccountService.save(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Initial balance must have at most 2 decimal places");
+        assertThat(mappedEntity.getInitialBalance()).isEqualByComparingTo(new BigDecimal("100.001"));
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void saveShouldRejectNullInitialBalance() {
+        FinancialAccount mappedEntity = new FinancialAccount();
+        mappedEntity.setInitialBalance(null);
+
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(financialAccountMapper.toEntity(financialAccountDTO)).thenReturn(mappedEntity);
+
+        assertThatThrownBy(() -> financialAccountService.save(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Initial balance is required");
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void updateShouldRejectInitialBalanceScaleGreaterThanTwo() {
+        financialAccountDTO.setInitialBalance(new BigDecimal("-5000.123"));
+        FinancialAccount mappedEntity = new FinancialAccount();
+        mappedEntity.setId(10L);
+        mappedEntity.setInitialBalance(new BigDecimal("-5000.123"));
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+        when(financialAccountMapper.toEntity(financialAccountDTO)).thenReturn(mappedEntity);
+
+        assertThatThrownBy(() -> financialAccountService.update(financialAccountDTO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Initial balance must have at most 2 decimal places");
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void partialUpdateShouldRejectExplicitInitialBalanceScaleGreaterThanTwoWithoutMutating() {
+        financialAccountDTO.setInitialBalance(new BigDecimal("0.999"));
+        ObjectNode patchNode = OBJECT_MAPPER.createObjectNode();
+        patchNode.put("initialBalance", new BigDecimal("0.999"));
+
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+        assertThatThrownBy(() -> financialAccountService.partialUpdate(financialAccountDTO, patchNode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Initial balance must have at most 2 decimal places");
+        assertThat(financialAccount.getInitialBalance()).isEqualByComparingTo(INITIAL_BALANCE);
+        verify(financialAccountMapper, never()).partialUpdate(any(), any());
+        verify(financialAccountRepository, never()).save(any());
+    }
+
+    @Test
     void updateShouldRejectCurrencyChange() {
         financialAccountDTO.setCurrency(CurrencyCode.USD);
 
@@ -265,6 +502,7 @@ class FinancialAccountServiceTest {
         mappedEntity.setId(10L);
         mappedEntity.setCurrency(CurrencyCode.MXN);
         mappedEntity.setAccountType(AccountType.DEBIT);
+        mappedEntity.setInitialBalance(INITIAL_BALANCE);
         mappedEntity.setInitialBalanceDate(LocalDate.parse("2026-02-01"));
 
         when(currentUserService.isAdmin()).thenReturn(false);

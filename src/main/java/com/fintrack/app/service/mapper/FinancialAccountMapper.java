@@ -27,6 +27,8 @@ public interface FinancialAccountMapper extends EntityMapper<FinancialAccountDTO
     @Mapping(target = "transactionIngestions", ignore = true)
     @Mapping(target = "removeTransactionIngestions", ignore = true)
     @Mapping(target = "user", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
     FinancialAccount toEntity(FinancialAccountDTO financialAccountDTO);
 
     @Named("partialUpdate")

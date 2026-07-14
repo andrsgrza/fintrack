@@ -8,6 +8,14 @@ import { APP_DATE_FORMAT, APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntity } from './financial-account.reducer';
+import { getInitialBalanceLabelKey } from './financial-account-labels';
+import {
+  getEntityByAccountId as getCreditAccountDetailsByAccountId,
+  reset as resetCreditAccountDetails,
+} from 'app/entities/credit-account-details/credit-account-details.reducer';
+import CreditCardDetailsViewSection from './components/credit-card-details-view-section';
+import FinancialAccountBalanceSection from './components/financial-account-balance-section';
+import AccountRecentTransactionsSection from './components/account-recent-transactions-section';
 
 export const FinancialAccountDetail = () => {
   const dispatch = useAppDispatch();
@@ -16,9 +24,18 @@ export const FinancialAccountDetail = () => {
 
   useEffect(() => {
     dispatch(getEntity(id));
+    dispatch(resetCreditAccountDetails());
   }, []);
 
   const financialAccountEntity = useAppSelector(state => state.financialAccount.entity);
+  const creditAccountDetailsEntity = useAppSelector(state => state.creditAccountDetails.entity);
+
+  useEffect(() => {
+    if (financialAccountEntity.id && financialAccountEntity.accountType === 'CREDIT_CARD') {
+      dispatch(getCreditAccountDetailsByAccountId(financialAccountEntity.id));
+    }
+  }, [financialAccountEntity.id, financialAccountEntity.accountType]);
+
   return (
     <Row>
       <Col md="8">
@@ -58,7 +75,7 @@ export const FinancialAccountDetail = () => {
           <dd>{financialAccountEntity.currency}</dd>
           <dt>
             <span id="initialBalance">
-              <Translate contentKey="fintrackApp.financialAccount.initialBalance">Initial Balance</Translate>
+              <Translate contentKey={getInitialBalanceLabelKey(financialAccountEntity.accountType)}>Opening position</Translate>
             </span>
           </dt>
           <dd>{financialAccountEntity.initialBalance}</dd>
@@ -151,6 +168,21 @@ export const FinancialAccountDetail = () => {
               : null}
           </dd>
         </dl>
+        {financialAccountEntity.accountType === 'CREDIT_CARD' ? (
+          <div className="mt-3 mb-3">
+            <CreditCardDetailsViewSection details={creditAccountDetailsEntity} accountId={financialAccountEntity.id} />
+          </div>
+        ) : null}
+        {financialAccountEntity.id ? (
+          <div className="mt-3 mb-3">
+            <FinancialAccountBalanceSection accountId={financialAccountEntity.id} />
+          </div>
+        ) : null}
+        {financialAccountEntity.id ? (
+          <div className="mt-3 mb-3">
+            <AccountRecentTransactionsSection accountId={financialAccountEntity.id} currency={financialAccountEntity.currency} />
+          </div>
+        ) : null}
         <Button tag={Link} to="/financial-account" replace color="info" data-cy="entityDetailsBackButton">
           <FontAwesomeIcon icon="arrow-left" />{' '}
           <span className="d-none d-md-inline">

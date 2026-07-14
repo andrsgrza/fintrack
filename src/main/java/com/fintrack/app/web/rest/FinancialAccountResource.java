@@ -2,15 +2,18 @@ package com.fintrack.app.web.rest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fintrack.app.service.FinancialAccountBalanceService;
 import com.fintrack.app.service.FinancialAccountQueryService;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.criteria.FinancialAccountCriteria;
+import com.fintrack.app.service.dto.FinancialAccountBalanceDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -40,15 +43,19 @@ public class FinancialAccountResource {
 
     private final FinancialAccountQueryService financialAccountQueryService;
 
+    private final FinancialAccountBalanceService financialAccountBalanceService;
+
     private final ObjectMapper objectMapper;
 
     public FinancialAccountResource(
         FinancialAccountService financialAccountService,
         FinancialAccountQueryService financialAccountQueryService,
+        FinancialAccountBalanceService financialAccountBalanceService,
         ObjectMapper objectMapper
     ) {
         this.financialAccountService = financialAccountService;
         this.financialAccountQueryService = financialAccountQueryService;
+        this.financialAccountBalanceService = financialAccountBalanceService;
         this.objectMapper = objectMapper;
     }
 
@@ -203,6 +210,23 @@ public class FinancialAccountResource {
         LOG.debug("REST request to get FinancialAccount : {}", id);
         Optional<FinancialAccountDTO> financialAccountDTO = financialAccountService.findOne(id);
         return ResponseUtil.wrapOrNotFound(financialAccountDTO);
+    }
+
+    /**
+     * {@code GET  /financial-accounts/:id/balance} : get the calculated balance snapshot for the "id" financialAccount.
+     *
+     * @param id the id of the financialAccount.
+     * @param asOfDate optional inclusive transactionDate cutoff.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the financialAccountBalanceDTO, or with status {@code 404 (Not Found)}.
+     */
+    @GetMapping("/{id}/balance")
+    public ResponseEntity<FinancialAccountBalanceDTO> getFinancialAccountBalance(
+        @PathVariable("id") Long id,
+        @RequestParam(value = "asOfDate", required = false) LocalDate asOfDate
+    ) {
+        LOG.debug("REST request to get FinancialAccount balance : {}, asOfDate: {}", id, asOfDate);
+        Optional<FinancialAccountBalanceDTO> financialAccountBalanceDTO = financialAccountBalanceService.calculateBalance(id, asOfDate);
+        return ResponseUtil.wrapOrNotFound(financialAccountBalanceDTO);
     }
 
     /**

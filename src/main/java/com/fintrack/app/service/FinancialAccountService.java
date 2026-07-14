@@ -11,9 +11,12 @@ import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -85,6 +88,10 @@ public class FinancialAccountService {
         LOG.debug("Request to save FinancialAccount : {}", financialAccountDTO);
         FinancialAccount financialAccount = financialAccountMapper.toEntity(financialAccountDTO);
         financialAccount.setUser(currentUserService.getCurrentUser());
+        Instant now = Instant.now();
+        financialAccount.setCreatedAt(now);
+        financialAccount.setUpdatedAt(now);
+        validateInitialBalance(financialAccount);
         validateInitialBalanceDateFloor(financialAccount);
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
@@ -101,10 +108,15 @@ public class FinancialAccountService {
         FinancialAccount existingFinancialAccount = findAccessibleEntity(financialAccountDTO.getId()).orElseThrow();
         rejectCurrencyChange(existingFinancialAccount, financialAccountDTO.getCurrency());
         rejectAccountTypeChange(existingFinancialAccount, financialAccountDTO.getAccountType());
+        rejectTimestampChange(existingFinancialAccount.getCreatedAt(), financialAccountDTO.getCreatedAt(), "Created at cannot be changed");
+        rejectTimestampChange(existingFinancialAccount.getUpdatedAt(), financialAccountDTO.getUpdatedAt(), "Updated at cannot be changed");
         FinancialAccount financialAccount = financialAccountMapper.toEntity(financialAccountDTO);
         financialAccount.setUser(existingFinancialAccount.getUser());
         financialAccount.setCurrency(existingFinancialAccount.getCurrency());
         financialAccount.setAccountType(existingFinancialAccount.getAccountType());
+        financialAccount.setCreatedAt(existingFinancialAccount.getCreatedAt());
+        financialAccount.setUpdatedAt(Instant.now());
+        validateInitialBalance(financialAccount);
         validateInitialBalanceDateFloor(financialAccount);
         financialAccount = financialAccountRepository.save(financialAccount);
         return financialAccountMapper.toDto(financialAccount);
@@ -133,7 +145,10 @@ public class FinancialAccountService {
         return findAccessibleEntity(financialAccountDTO.getId())
             .map(existingFinancialAccount -> {
                 rejectImmutableFieldChanges(existingFinancialAccount, financialAccountDTO, patchNode);
+                rejectInvalidInitialBalancePatch(financialAccountDTO, patchNode);
                 financialAccountMapper.partialUpdate(existingFinancialAccount, financialAccountDTO);
+                existingFinancialAccount.setUpdatedAt(Instant.now());
+                validateInitialBalance(existingFinancialAccount);
                 validateInitialBalanceDateFloor(existingFinancialAccount);
                 return existingFinancialAccount;
             })
@@ -247,6 +262,12 @@ public class FinancialAccountService {
             if (financialAccountDTO.getAccountType() != null) {
                 rejectAccountTypeChange(existing, financialAccountDTO.getAccountType());
             }
+            if (financialAccountDTO.getCreatedAt() != null) {
+                rejectTimestampChange(existing.getCreatedAt(), financialAccountDTO.getCreatedAt(), "Created at cannot be changed");
+            }
+            if (financialAccountDTO.getUpdatedAt() != null) {
+                rejectTimestampChange(existing.getUpdatedAt(), financialAccountDTO.getUpdatedAt(), "Updated at cannot be changed");
+            }
             return;
         }
         if (patchNode.has("currency")) {
@@ -254,6 +275,12 @@ public class FinancialAccountService {
         }
         if (patchNode.has("accountType")) {
             rejectAccountTypeChange(existing, financialAccountDTO.getAccountType());
+        }
+        if (patchNode.has("createdAt")) {
+            rejectTimestampChange(existing.getCreatedAt(), financialAccountDTO.getCreatedAt(), "Created at cannot be changed");
+        }
+        if (patchNode.has("updatedAt")) {
+            rejectTimestampChange(existing.getUpdatedAt(), financialAccountDTO.getUpdatedAt(), "Updated at cannot be changed");
         }
     }
 
@@ -266,6 +293,31 @@ public class FinancialAccountService {
     private void rejectAccountTypeChange(FinancialAccount existing, AccountType accountType) {
         if (accountType == null || !accountType.equals(existing.getAccountType())) {
             throw new IllegalArgumentException("Account type cannot be changed");
+        }
+    }
+
+    private void rejectTimestampChange(Instant existingTimestamp, Instant requestedTimestamp, String message) {
+        if (requestedTimestamp == null || !Objects.equals(existingTimestamp, requestedTimestamp)) {
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    private void rejectInvalidInitialBalancePatch(FinancialAccountDTO financialAccountDTO, JsonNode patchNode) {
+        if (patchNode != null && patchNode.has("initialBalance")) {
+            validateInitialBalance(financialAccountDTO.getInitialBalance());
+        }
+    }
+
+    private void validateInitialBalance(FinancialAccount financialAccount) {
+        validateInitialBalance(financialAccount.getInitialBalance());
+    }
+
+    private void validateInitialBalance(BigDecimal initialBalance) {
+        if (initialBalance == null) {
+            throw new IllegalArgumentException("Initial balance is required");
+        }
+        if (initialBalance.scale() > 2) {
+            throw new IllegalArgumentException("Initial balance must have at most 2 decimal places");
         }
     }
 

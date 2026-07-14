@@ -28,6 +28,14 @@ public interface CreditAccountDetailsRepository extends JpaRepository<CreditAcco
         return this.findOneWithToOneRelationshipsByIdAndAccountUserLogin(id, login);
     }
 
+    default Optional<CreditAccountDetails> findOneWithEagerRelationshipsByAccountId(Long accountId) {
+        return this.findOneWithToOneRelationshipsByAccountId(accountId);
+    }
+
+    default Optional<CreditAccountDetails> findOneWithEagerRelationshipsByAccountIdAndAccountUserLogin(Long accountId, String login) {
+        return this.findOneWithToOneRelationshipsByAccountIdAndAccountUserLogin(accountId, login);
+    }
+
     default List<CreditAccountDetails> findAllWithEagerRelationships() {
         return this.findAllWithToOneRelationships();
     }
@@ -60,6 +68,19 @@ public interface CreditAccountDetailsRepository extends JpaRepository<CreditAcco
         "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user where creditAccountDetails.id = :id and account.user.login = :login"
     )
     Optional<CreditAccountDetails> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user where account.id = :accountId"
+    )
+    Optional<CreditAccountDetails> findOneWithToOneRelationshipsByAccountId(@Param("accountId") Long accountId);
+
+    @Query(
+        "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user where account.id = :accountId and account.user.login = :login"
+    )
+    Optional<CreditAccountDetails> findOneWithToOneRelationshipsByAccountIdAndAccountUserLogin(
+        @Param("accountId") Long accountId,
+        @Param("login") String login
+    );
 
     @Query(
         "select creditAccountDetails from CreditAccountDetails creditAccountDetails left join fetch creditAccountDetails.account account left join fetch account.user where account.user.login = :login"

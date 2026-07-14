@@ -170,6 +170,19 @@ public class CreditAccountDetailsResource {
     }
 
     /**
+     * {@code GET  /credit-account-details/by-account/:accountId} : get credit card details for a financial account.
+     *
+     * @param accountId the id of the parent financial account.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the creditAccountDetailsDTO, or with status {@code 404 (Not Found)}.
+     */
+    @GetMapping("/by-account/{accountId}")
+    public ResponseEntity<CreditAccountDetailsDTO> getCreditAccountDetailsByAccountId(@PathVariable("accountId") Long accountId) {
+        LOG.debug("REST request to get CreditAccountDetails by FinancialAccount : {}", accountId);
+        Optional<CreditAccountDetailsDTO> creditAccountDetailsDTO = creditAccountDetailsService.findOneByAccountId(accountId);
+        return ResponseUtil.wrapOrNotFound(creditAccountDetailsDTO);
+    }
+
+    /**
      * {@code GET  /credit-account-details/:id} : get the "id" creditAccountDetails.
      *
      * @param id the id of the creditAccountDetailsDTO to retrieve.
