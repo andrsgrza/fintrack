@@ -433,18 +433,20 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Rule requiere al menos un output                | ✅     | final merged state                                                                                                       |
 | Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                              |
 | PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                            |
+| Parent-centered conditions endpoint             | ✅     | `GET /api/transaction-rules/{id}/conditions`, scoped by parent access, sorted by `position,id`                           |
+| Parent-centered read-only conditions UX         | ✅     | TransactionRule detail/edit show related conditions and add/view/edit links                                              |
 | **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                           |
 | Prioridad única                                 | ❌     | duplicate priority allowed                                                                                               |
 | Priority tie-break                              | ⏳     | definir antes del motor                                                                                                  |
 
 #### Validations ✅
 
-| Capa                      | Estado      | Detalle                                                                                                                                        |
-| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| DTO `@Valid`              | ✅ JHipster | name, priority, enums, dates; `user` opcional en payload                                                                                       |
-| Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                  |
-| Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented |
-| REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`                               |
+| Capa                      | Estado      | Detalle                                                                                                                                                                              |
+| ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DTO `@Valid`              | ✅ JHipster | name, priority, enums, dates; `user` opcional en payload                                                                                                                             |
+| Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                                                        |
+| Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented                                       |
+| REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`; related conditions endpoint returns `404` when parent inaccessible |
 
 ---
 
@@ -461,7 +463,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | **`transactionRule` inmutable tras create** | PUT/PATCH otro `{id}` → `400` (incluso mismo owner); mismo id → OK; `null` → `400`; PATCH ausente → preservar; mover = delete + create |
 | ~~Reparent same-owner~~                     | **Eliminado** — reemplazado por inmutabilidad total                                                                                    |
 | PATCH `transactionRule`                     | Ausente → preservar; mismo `{id}` → OK; otro `{id}` → `400`; `null` → `400`                                                            |
-| UI mantiene selector                        | `transaction-rule-condition-*.tsx` — DTO sigue `@NotNull` en `transactionRule` (solo create)                                           |
+| UI mantiene selector                        | Create mantiene selector; edit lo muestra read-only/disabled; query param `transactionRuleId` puede preseleccionar padre               |
 | Admin bypass lectura/CRUD                   | Admin opera conditions de rules ajenas                                                                                                 |
 | `ACCOUNT` values                            | Validar ids contra **`transactionRule.user.login`**, no admin                                                                          |
 

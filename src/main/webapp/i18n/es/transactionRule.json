@@ -15,22 +15,29 @@
         "question": "Esto eliminará Transaction Rule {{ id }} y sus condiciones. Las categorías, suscripciones, etiquetas y transacciones no se eliminarán. Las transacciones futuras ya no serán clasificadas por esta regla. Esta acción no se puede deshacer."
       },
       "detail": {
-        "title": "Transaction Rule"
+        "title": "Regla"
       },
+      "createTitle": "Crear regla",
+      "editTitle": "Editar regla",
       "id": "ID",
-      "name": "Name",
-      "description": "Description",
-      "priority": "Priority",
-      "conditionLogic": "Condition Logic",
-      "resultingDescription": "Resulting Description",
-      "active": "Active",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
-      "user": "User",
-      "resultingCategory": "Resulting Category",
-      "resultingFinancialSubscription": "Resulting Financial Subscription",
-      "resultingTags": "Resulting Tags",
-      "conditions": "Conditions"
+      "name": "Nombre",
+      "description": "Descripción",
+      "priority": "Prioridad",
+      "conditionLogic": "Lógica de condiciones",
+      "resultingDescription": "Descripción resultante",
+      "active": "Activa",
+      "createdAt": "Creada el",
+      "updatedAt": "Actualizada el",
+      "user": "Usuario",
+      "resultingCategory": "Categoría resultante",
+      "resultingFinancialSubscription": "Suscripción financiera resultante",
+      "resultingTags": "Etiquetas resultantes",
+      "conditions": "Condiciones",
+      "loadingConditions": "Cargando condiciones...",
+      "noConditionsYet": "Todavía no hay condiciones.",
+      "conditionsUnavailable": "Las condiciones no están disponibles.",
+      "addCondition": "Agregar condición",
+      "activeRequiresCondition": "Las reglas activas requieren al menos una condición."
     }
   }
 }

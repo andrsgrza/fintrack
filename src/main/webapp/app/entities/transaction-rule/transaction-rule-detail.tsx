@@ -8,6 +8,7 @@ import { APP_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntity } from './transaction-rule.reducer';
+import TransactionRuleConditionsRelatedList from './components/transaction-rule-conditions-related-list';
 
 export const TransactionRuleDetail = () => {
   const dispatch = useAppDispatch();
@@ -110,6 +111,7 @@ export const TransactionRuleDetail = () => {
               : null}
           </dd>
         </dl>
+        <TransactionRuleConditionsRelatedList transactionRuleId={transactionRuleEntity.id} />
         <Button tag={Link} to="/transaction-rule" replace color="info" data-cy="entityDetailsBackButton">
           <FontAwesomeIcon icon="arrow-left" />{' '}
           <span className="d-none d-md-inline">

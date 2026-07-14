@@ -17,6 +17,8 @@
       "detail": {
         "title": "Transaction Rule"
       },
+      "createTitle": "Create Transaction Rule",
+      "editTitle": "Edit Transaction Rule",
       "id": "ID",
       "name": "Name",
       "description": "Description",
@@ -30,7 +32,12 @@
       "resultingCategory": "Resulting Category",
       "resultingFinancialSubscription": "Resulting Financial Subscription",
       "resultingTags": "Resulting Tags",
-      "conditions": "Conditions"
+      "conditions": "Conditions",
+      "loadingConditions": "Loading conditions...",
+      "noConditionsYet": "No conditions yet.",
+      "conditionsUnavailable": "Conditions are not available.",
+      "addCondition": "Add condition",
+      "activeRequiresCondition": "Active rules require at least one condition."
     }
   }
 }

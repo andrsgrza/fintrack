@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -9,7 +9,7 @@ import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { getEntities as getTransactionRules } from 'app/entities/transaction-rule/transaction-rule.reducer';
 import { TransactionRuleField } from 'app/shared/model/enumerations/transaction-rule-field.model';
 import { RuleOperator } from 'app/shared/model/enumerations/rule-operator.model';
-import { createEntity, getEntity, reset, updateEntity } from './transaction-rule-condition.reducer';
+import { createEntity, getEntity, partialUpdateEntity, reset } from './transaction-rule-condition.reducer';
 
 export const TransactionRuleConditionUpdate = () => {
   const dispatch = useAppDispatch();
@@ -17,7 +17,9 @@ export const TransactionRuleConditionUpdate = () => {
   const navigate = useNavigate();
 
   const { id } = useParams<'id'>();
+  const [searchParams] = useSearchParams();
   const isNew = id === undefined;
+  const requestedTransactionRuleId = searchParams.get('transactionRuleId');
 
   const transactionRules = useAppSelector(state => state.transactionRule.entities);
   const transactionRuleConditionEntity = useAppSelector(state => state.transactionRuleCondition.entity);
@@ -26,6 +28,12 @@ export const TransactionRuleConditionUpdate = () => {
   const updateSuccess = useAppSelector(state => state.transactionRuleCondition.updateSuccess);
   const transactionRuleFieldValues = Object.keys(TransactionRuleField);
   const ruleOperatorValues = Object.keys(RuleOperator);
+  const [selectedField, setSelectedField] = useState(TransactionRuleField.DESCRIPTION);
+  const [selectedOperator, setSelectedOperator] = useState(RuleOperator.EQUALS);
+
+  const isBetweenOperator = selectedOperator === RuleOperator.BETWEEN;
+  const supportsCaseSensitive =
+    selectedField === TransactionRuleField.DESCRIPTION || selectedField === TransactionRuleField.EXTERNAL_REFERENCE;
 
   const handleClose = () => {
     navigate('/transaction-rule-condition');
@@ -47,6 +55,15 @@ export const TransactionRuleConditionUpdate = () => {
     }
   }, [updateSuccess]);
 
+  useEffect(() => {
+    if (!isNew && transactionRuleConditionEntity.field) {
+      setSelectedField(transactionRuleConditionEntity.field);
+    }
+    if (!isNew && transactionRuleConditionEntity.operator) {
+      setSelectedOperator(transactionRuleConditionEntity.operator);
+    }
+  }, [isNew, transactionRuleConditionEntity.field, transactionRuleConditionEntity.operator]);
+
   const saveEntity = values => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
@@ -58,22 +75,29 @@ export const TransactionRuleConditionUpdate = () => {
     const entity = {
       ...transactionRuleConditionEntity,
       ...values,
-      transactionRule: transactionRules.find(it => it.id.toString() === values.transactionRule?.toString()),
+      secondValue: selectedOperator === RuleOperator.BETWEEN ? values.secondValue : null,
+      caseSensitive: isNew ? Boolean(values.caseSensitive) : values.caseSensitive,
+      transactionRule: isNew ? transactionRules.find(it => it.id.toString() === values.transactionRule?.toString()) : undefined,
     };
 
     if (isNew) {
       dispatch(createEntity(entity));
     } else {
-      dispatch(updateEntity(entity));
+      dispatch(partialUpdateEntity(entity));
     }
   };
 
   const defaultValues = () =>
     isNew
-      ? {}
+      ? {
+          field: TransactionRuleField.DESCRIPTION,
+          operator: RuleOperator.EQUALS,
+          caseSensitive: false,
+          transactionRule: requestedTransactionRuleId ?? undefined,
+        }
       : {
-          field: 'DESCRIPTION',
-          operator: 'EQUALS',
+          field: TransactionRuleField.DESCRIPTION,
+          operator: RuleOperator.EQUALS,
           ...transactionRuleConditionEntity,
           transactionRule: transactionRuleConditionEntity?.transactionRule?.id,
         };
@@ -83,8 +107,10 @@ export const TransactionRuleConditionUpdate = () => {
       <Row className="justify-content-center">
         <Col md="8">
           <h2 id="fintrackApp.transactionRuleCondition.home.createOrEditLabel" data-cy="TransactionRuleConditionCreateUpdateHeading">
-            <Translate contentKey="fintrackApp.transactionRuleCondition.home.createOrEditLabel">
-              Create or edit a TransactionRuleCondition
+            <Translate
+              contentKey={isNew ? 'fintrackApp.transactionRuleCondition.createTitle' : 'fintrackApp.transactionRuleCondition.editTitle'}
+            >
+              {isNew ? 'Create Transaction Rule Condition' : 'Edit Transaction Rule Condition'}
             </Translate>
           </h2>
         </Col>
@@ -111,6 +137,7 @@ export const TransactionRuleConditionUpdate = () => {
                 name="field"
                 data-cy="field"
                 type="select"
+                onChange={event => setSelectedField(event.target.value as TransactionRuleField)}
               >
                 {transactionRuleFieldValues.map(transactionRuleField => (
                   <option value={transactionRuleField} key={transactionRuleField}>
@@ -124,6 +151,7 @@ export const TransactionRuleConditionUpdate = () => {
                 name="operator"
                 data-cy="operator"
                 type="select"
+                onChange={event => setSelectedOperator(event.target.value as RuleOperator)}
               >
                 {ruleOperatorValues.map(ruleOperator => (
                   <option value={ruleOperator} key={ruleOperator}>
@@ -142,24 +170,28 @@ export const TransactionRuleConditionUpdate = () => {
                   maxLength: { value: 1000, message: translate('entity.validation.maxlength', { max: 1000 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.transactionRuleCondition.secondValue')}
-                id="transaction-rule-condition-secondValue"
-                name="secondValue"
-                data-cy="secondValue"
-                type="text"
-                validate={{
-                  maxLength: { value: 1000, message: translate('entity.validation.maxlength', { max: 1000 }) },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionRuleCondition.caseSensitive')}
-                id="transaction-rule-condition-caseSensitive"
-                name="caseSensitive"
-                data-cy="caseSensitive"
-                check
-                type="checkbox"
-              />
+              {isBetweenOperator ? (
+                <ValidatedField
+                  label={translate('fintrackApp.transactionRuleCondition.secondValue')}
+                  id="transaction-rule-condition-secondValue"
+                  name="secondValue"
+                  data-cy="secondValue"
+                  type="text"
+                  validate={{
+                    maxLength: { value: 1000, message: translate('entity.validation.maxlength', { max: 1000 }) },
+                  }}
+                />
+              ) : null}
+              {supportsCaseSensitive ? (
+                <ValidatedField
+                  label={translate('fintrackApp.transactionRuleCondition.caseSensitive')}
+                  id="transaction-rule-condition-caseSensitive"
+                  name="caseSensitive"
+                  data-cy="caseSensitive"
+                  check
+                  type="checkbox"
+                />
+              ) : null}
               <ValidatedField
                 label={translate('fintrackApp.transactionRuleCondition.position')}
                 id="transaction-rule-condition-position"
@@ -179,6 +211,7 @@ export const TransactionRuleConditionUpdate = () => {
                 label={translate('fintrackApp.transactionRuleCondition.transactionRule')}
                 type="select"
                 required
+                disabled={!isNew}
               >
                 <option value="" key="0" />
                 {transactionRules

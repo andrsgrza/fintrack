@@ -1329,15 +1329,15 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                          | Tests   | Custom vs generated                                                   |
-| --------------- | ----------------------------- | ------- | --------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`   | **104** | Ownership/link/domain custom tests + JHipster CRUD/filters            |
-| Unit — service  | `TransactionRuleServiceTest`  | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards) |
-| Unit — domain   | `TransactionRuleTest`         | **6**   | Generated                                                             |
-| Unit — mapper   | `TransactionRuleMapperTest`   | **1**   | Generated                                                             |
-| Unit — DTO      | `TransactionRuleDTOTest`      | **1**   | Generated                                                             |
-| Unit — criteria | `TransactionRuleCriteriaTest` | **5**   | Generated                                                             |
-| E2E             | `transaction-rule.cy.ts`      | **10**  | 3 ownership + 7 CRUD/navigation                                       |
+| Type            | File                          | Tests   | Custom vs generated                                                       |
+| --------------- | ----------------------------- | ------- | ------------------------------------------------------------------------- |
+| Integration IT  | `TransactionRuleResourceIT`   | **109** | Ownership/link/domain/API ergonomics custom tests + JHipster CRUD/filters |
+| Unit — service  | `TransactionRuleServiceTest`  | **14**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards)     |
+| Unit — domain   | `TransactionRuleTest`         | **6**   | Generated                                                                 |
+| Unit — mapper   | `TransactionRuleMapperTest`   | **1**   | Generated                                                                 |
+| Unit — DTO      | `TransactionRuleDTOTest`      | **1**   | Generated                                                                 |
+| Unit — criteria | `TransactionRuleCriteriaTest` | **5**   | Generated                                                                 |
+| E2E             | `transaction-rule.cy.ts`      | **10**  | 3 ownership + 7 CRUD/navigation                                           |
 
 **Run:**
 
@@ -1380,6 +1380,16 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 | Test                                                      | HTTP  | What it checks                                           |
 | --------------------------------------------------------- | ----- | -------------------------------------------------------- |
 | `adminCannotAttachCurrentUsersCategoryToAnotherUsersRule` | `PUT` | Admin cannot mix rule owner with another user's category |
+
+#### Parent-centered conditions endpoint (5) — ✅ custom
+
+| Test                                                                     | HTTP  | What it checks                                                                |
+| ------------------------------------------------------------------------ | ----- | ----------------------------------------------------------------------------- |
+| `getTransactionRuleConditionsReturnsOwnConditionsSorted`                 | `GET` | Own parent returns related conditions sorted by `position ASC`, then `id ASC` |
+| `getTransactionRuleConditionsReturnsEmptyListWhenOwnRuleHasNoConditions` | `GET` | Own parent with no conditions returns `200 []`                                |
+| `getTransactionRuleConditionsOwnedByAnotherUserIsNotFound`               | `GET` | Normal user foreign parent → `404`                                            |
+| `adminCanGetTransactionRuleConditionsOwnedByAnotherUser`                 | `GET` | Admin can read conditions for foreign parent                                  |
+| `getTransactionRuleConditionsOnlyReturnsRequestedRuleConditions`         | `GET` | Endpoint returns only conditions belonging to requested rule                  |
 
 #### CRUD domain lifecycle — ✅ custom
 

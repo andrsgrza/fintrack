@@ -179,12 +179,16 @@ class TransactionRuleResourceIT {
     }
 
     private TransactionRuleCondition createCondition(TransactionRule rule) {
+        return createCondition(rule, 0, "Amazon");
+    }
+
+    private TransactionRuleCondition createCondition(TransactionRule rule, int position, String value) {
         TransactionRuleCondition condition = new TransactionRuleCondition()
             .field(TransactionRuleField.DESCRIPTION)
             .operator(RuleOperator.CONTAINS)
-            .value("Amazon")
+            .value(value)
             .caseSensitive(false)
-            .position(0)
+            .position(position)
             .transactionRule(rule);
         em.persist(condition);
         em.flush();
@@ -1599,6 +1603,76 @@ class TransactionRuleResourceIT {
             .perform(get(ENTITY_API_URL_ID, transactionRule.getId()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(transactionRule.getId().intValue()));
+    }
+
+    @Test
+    @Transactional
+    void getTransactionRuleConditionsReturnsOwnConditionsSorted() throws Exception {
+        transactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRuleCondition laterCondition = createCondition(transactionRule, 2, "later");
+        TransactionRuleCondition earlierCondition = createCondition(transactionRule, 1, "earlier");
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/conditions", transactionRule.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[0].id").value(earlierCondition.getId().intValue()))
+            .andExpect(jsonPath("$.[0].position").value(1))
+            .andExpect(jsonPath("$.[1].id").value(laterCondition.getId().intValue()))
+            .andExpect(jsonPath("$.[1].position").value(2));
+    }
+
+    @Test
+    @Transactional
+    void getTransactionRuleConditionsReturnsEmptyListWhenOwnRuleHasNoConditions() throws Exception {
+        transactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/conditions", transactionRule.getId()))
+            .andExpect(status().isOk())
+            .andExpect(content().json("[]"));
+    }
+
+    @Test
+    @Transactional
+    void getTransactionRuleConditionsOwnedByAnotherUserIsNotFound() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        transactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        createCondition(transactionRule);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/conditions", transactionRule.getId()))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetTransactionRuleConditionsOwnedByAnotherUser() throws Exception {
+        transactionRule.setUser(createOtherUser(em));
+        transactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRuleCondition condition = createCondition(transactionRule);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/conditions", transactionRule.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(condition.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
+    void getTransactionRuleConditionsOnlyReturnsRequestedRuleConditions() throws Exception {
+        transactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRule otherRule = createEntity(em);
+        otherRule.setName("OTHER_RULE");
+        otherRule = transactionRuleRepository.saveAndFlush(otherRule);
+        TransactionRuleCondition requestedCondition = createCondition(transactionRule, 0, "requested");
+        TransactionRuleCondition otherCondition = createCondition(otherRule, 0, "other");
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/conditions", transactionRule.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(requestedCondition.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(otherCondition.getId().intValue()))));
     }
 
     @Test

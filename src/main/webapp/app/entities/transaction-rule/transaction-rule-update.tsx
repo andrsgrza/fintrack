@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
+import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
@@ -12,7 +11,8 @@ import { getEntities as getCategories } from 'app/entities/category/category.red
 import { getEntities as getFinancialSubscriptions } from 'app/entities/financial-subscription/financial-subscription.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
-import { createEntity, getEntity, reset, updateEntity } from './transaction-rule.reducer';
+import { createEntity, getEntity, partialUpdateEntity, reset } from './transaction-rule.reducer';
+import TransactionRuleConditionsRelatedList from './components/transaction-rule-conditions-related-list';
 
 export const TransactionRuleUpdate = () => {
   const dispatch = useAppDispatch();
@@ -60,37 +60,33 @@ export const TransactionRuleUpdate = () => {
     if (values.priority !== undefined && typeof values.priority !== 'number') {
       values.priority = Number(values.priority);
     }
-    values.createdAt = convertDateTimeToServer(values.createdAt);
-    values.updatedAt = convertDateTimeToServer(values.updatedAt);
-
     const entity = {
-      ...transactionRuleEntity,
       ...values,
-      resultingCategory: categories.find(it => it.id.toString() === values.resultingCategory?.toString()),
-      resultingFinancialSubscription: financialSubscriptions.find(
-        it => it.id.toString() === values.resultingFinancialSubscription?.toString(),
-      ),
+      id: isNew ? undefined : transactionRuleEntity.id,
+      active: isNew ? false : values.active,
+      resultingCategory: values.resultingCategory ? categories.find(it => it.id.toString() === values.resultingCategory?.toString()) : null,
+      resultingFinancialSubscription: values.resultingFinancialSubscription
+        ? financialSubscriptions.find(it => it.id.toString() === values.resultingFinancialSubscription?.toString())
+        : null,
       resultingTags: mapIdList(values.resultingTags),
     };
 
     if (isNew) {
       dispatch(createEntity(entity));
     } else {
-      dispatch(updateEntity(entity));
+      dispatch(partialUpdateEntity(entity));
     }
   };
 
   const defaultValues = () =>
     isNew
       ? {
-          createdAt: displayDefaultDateTime(),
-          updatedAt: displayDefaultDateTime(),
+          active: false,
+          conditionLogic: 'ALL',
         }
       : {
           conditionLogic: 'ALL',
           ...transactionRuleEntity,
-          createdAt: convertDateTimeFromServer(transactionRuleEntity.createdAt),
-          updatedAt: convertDateTimeFromServer(transactionRuleEntity.updatedAt),
           resultingCategory: transactionRuleEntity?.resultingCategory?.id,
           resultingFinancialSubscription: transactionRuleEntity?.resultingFinancialSubscription?.id,
           resultingTags: transactionRuleEntity?.resultingTags?.map(e => e.id.toString()),
@@ -101,7 +97,9 @@ export const TransactionRuleUpdate = () => {
       <Row className="justify-content-center">
         <Col md="8">
           <h2 id="fintrackApp.transactionRule.home.createOrEditLabel" data-cy="TransactionRuleCreateUpdateHeading">
-            <Translate contentKey="fintrackApp.transactionRule.home.createOrEditLabel">Create or edit a TransactionRule</Translate>
+            <Translate contentKey={isNew ? 'fintrackApp.transactionRule.createTitle' : 'fintrackApp.transactionRule.editTitle'}>
+              {isNew ? 'Create Transaction Rule' : 'Edit Transaction Rule'}
+            </Translate>
           </h2>
         </Col>
       </Row>
@@ -178,36 +176,23 @@ export const TransactionRuleUpdate = () => {
                   maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.transactionRule.active')}
-                id="transaction-rule-active"
-                name="active"
-                data-cy="active"
-                check
-                type="checkbox"
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionRule.createdAt')}
-                id="transaction-rule-createdAt"
-                name="createdAt"
-                data-cy="createdAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.transactionRule.updatedAt')}
-                id="transaction-rule-updatedAt"
-                name="updatedAt"
-                data-cy="updatedAt"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-                validate={{
-                  required: { value: true, message: translate('entity.validation.required') },
-                }}
-              />
+              {!isNew ? (
+                <>
+                  <ValidatedField
+                    label={translate('fintrackApp.transactionRule.active')}
+                    id="transaction-rule-active"
+                    name="active"
+                    data-cy="active"
+                    check
+                    type="checkbox"
+                  />
+                  <FormText>
+                    <Translate contentKey="fintrackApp.transactionRule.activeRequiresCondition">
+                      Active rules require at least one condition.
+                    </Translate>
+                  </FormText>
+                </>
+              ) : null}
               <ValidatedField
                 id="transaction-rule-resultingCategory"
                 name="resultingCategory"
@@ -270,6 +255,7 @@ export const TransactionRuleUpdate = () => {
                 &nbsp;
                 <Translate contentKey="entity.action.save">Save</Translate>
               </Button>
+              {!isNew ? <TransactionRuleConditionsRelatedList transactionRuleId={transactionRuleEntity.id} /> : null}
             </ValidatedForm>
           )}
         </Col>

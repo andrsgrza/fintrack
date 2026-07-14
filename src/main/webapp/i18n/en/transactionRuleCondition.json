@@ -18,6 +18,8 @@
       "detail": {
         "title": "Transaction Rule Condition"
       },
+      "createTitle": "Create Transaction Rule Condition",
+      "editTitle": "Edit Transaction Rule Condition",
       "id": "ID",
       "field": "Field",
       "operator": "Operator",

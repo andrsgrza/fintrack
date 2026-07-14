@@ -38,10 +38,10 @@ Embedded sections must be extracted into components.
 
 Naming:
 
-- `*FormSection.tsx` for embedded editable child sections.
-- `*ViewSection.tsx` for embedded read-only child sections.
-- `*CollectionEditor.tsx` for embedded editable child collections.
-- `*RelatedList.tsx` for read-only related lists.
+- `*form-section.tsx` for embedded editable child sections.
+- `*view-section.tsx` for embedded read-only child sections.
+- `*collection-editor.tsx` for embedded editable child collections.
+- `*related-list.tsx` for read-only related lists.
 
 ## Implemented cases
 
@@ -52,3 +52,11 @@ Naming:
 This is frontend orchestration today: FinancialAccount is saved first, then CreditAccountDetails is created or updated for the saved account. Atomic backend command endpoint remains deferred.
 
 Standalone CreditAccountDetails CRUD remains available for admin/debug/direct maintenance.
+
+### TransactionRule + TransactionRuleCondition
+
+TransactionRule detail/edit pages show a read-only related list of TransactionRuleCondition rows. The list is loaded from `GET /api/transaction-rules/{id}/conditions`, not by fetching all conditions in the frontend.
+
+This is a parent-centered UX foundation, not a full embedded collection editor. Users can navigate to add/view/edit conditions through the existing standalone TransactionRuleCondition CRUD. The full inline rule builder and rule execution engine remain deferred.
+
+TransactionRuleCondition create can be opened with `transactionRuleId` in the query string to preselect the parent. TransactionRuleCondition edit shows the parent as read-only because the backend treats `transactionRule` as immutable after create.

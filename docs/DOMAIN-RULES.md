@@ -631,19 +631,19 @@ Suggested copy documented; `budget-delete-dialog.tsx` + i18n en/es.
 
 ### DELETE
 
-| Rule                              | Decision                                                             | Applies to admin | Error | Status       |
-| --------------------------------- | -------------------------------------------------------------------- | ---------------- | ----- | ------------ |
-| Delete allowed                    | Delete only `TransactionRuleCondition` row                           | Yes              | —     | **Done**     |
-| Do not delete parent rule         | `TransactionRule` survives                                           | Yes              | —     | **Done**     |
-| Do not delete FT / financial data | —                                                                    | Yes              | —     | **Done**     |
-| Last condition on parent          | `TransactionRule.active = false`; update `updatedAt`                 | Yes              | —     | **Done**     |
-| Count before delete               | `count(conditions where rule_id = parentId)`; if `== 1` → deactivate | Yes              | —     | **Done**     |
-| Single transaction                | Delete + optional parent update                                      | Yes              | —     | **Done**     |
-| Parent already inactive           | Stays `false`                                                        | Yes              | —     | **Done**     |
-| Create on inactive rule           | Does **not** auto-reactivate parent                                  | Yes              | —     | **Done**     |
-| Foreign user DELETE               | `404`                                                                | —                | `404` | **Done**     |
-| Admin DELETE foreign              | `204`                                                                | Yes              | —     | **Done**     |
-| Parent rule DELETE cascade        | Belongs to `TransactionRuleService` (#9)                             | —                | —     | **Deferred** |
+| Rule                              | Decision                                                             | Applies to admin | Error | Status   |
+| --------------------------------- | -------------------------------------------------------------------- | ---------------- | ----- | -------- |
+| Delete allowed                    | Delete only `TransactionRuleCondition` row                           | Yes              | —     | **Done** |
+| Do not delete parent rule         | `TransactionRule` survives                                           | Yes              | —     | **Done** |
+| Do not delete FT / financial data | —                                                                    | Yes              | —     | **Done** |
+| Last condition on parent          | `TransactionRule.active = false`; update `updatedAt`                 | Yes              | —     | **Done** |
+| Count before delete               | `count(conditions where rule_id = parentId)`; if `== 1` → deactivate | Yes              | —     | **Done** |
+| Single transaction                | Delete + optional parent update                                      | Yes              | —     | **Done** |
+| Parent already inactive           | Stays `false`                                                        | Yes              | —     | **Done** |
+| Create on inactive rule           | Does **not** auto-reactivate parent                                  | Yes              | —     | **Done** |
+| Foreign user DELETE               | `404`                                                                | —                | `404` | **Done** |
+| Admin DELETE foreign              | `204`                                                                | Yes              | —     | **Done** |
+| Parent rule DELETE cleanup        | `TransactionRuleService.delete` bulk deletes child conditions        | Yes              | —     | **Done** |
 
 ### CREATE — parent `transactionRule`
 
@@ -809,6 +809,17 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Create condition under inactive rule | Does not auto-reactivate                        | Yes              | —             | **Done** in TRC |
 
 **UI/API flow:** create inactive draft → add conditions through `TransactionRuleCondition` → activate rule.
+
+### Parent-centered UX / API
+
+| Rule                                    | Decision                                                                                 | Status       |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- | ------------ |
+| Related conditions endpoint             | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule   | **Done**     |
+| Related condition ordering              | Sort by `position ASC`, then `id ASC`                                                    | **Done**     |
+| Related condition access                | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all | **Done**     |
+| Rule detail/edit related condition list | Read-only condition section with add/view/edit links                                     | **Done**     |
+| Embedded condition collection editor    | Full inline create/update/delete/reorder remains out of scope                            | **Deferred** |
+| Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                   | **Deferred** |
 
 ### Output PATCH semantics
 

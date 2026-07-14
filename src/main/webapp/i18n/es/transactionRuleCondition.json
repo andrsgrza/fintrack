@@ -16,16 +16,18 @@
         "message": "Esto eliminará esta condición de regla. La regla en sí no se eliminará. Si era la última condición, la regla se desactivará para evitar que coincida con todas las transacciones. Esta acción no se puede deshacer."
       },
       "detail": {
-        "title": "Transaction Rule Condition"
+        "title": "Condición de regla"
       },
+      "createTitle": "Crear condición",
+      "editTitle": "Editar condición",
       "id": "ID",
-      "field": "Field",
-      "operator": "Operator",
-      "value": "Value",
-      "secondValue": "Second Value",
-      "caseSensitive": "Case Sensitive",
-      "position": "Position",
-      "transactionRule": "Transaction Rule"
+      "field": "Campo",
+      "operator": "Operador",
+      "value": "Valor",
+      "secondValue": "Segundo valor",
+      "caseSensitive": "Sensible a mayúsculas",
+      "position": "Posición",
+      "transactionRule": "Regla"
     }
   }
 }

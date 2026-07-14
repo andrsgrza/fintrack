@@ -215,6 +215,27 @@ public class TransactionRuleConditionService {
         return findAccessibleEntity(id).map(transactionRuleConditionMapper::toDto);
     }
 
+    /**
+     * Get all conditions for an accessible transaction rule.
+     *
+     * @param transactionRuleId the id of the parent transaction rule.
+     * @return conditions ordered by position, then id, or empty when the parent rule is inaccessible.
+     */
+    @Transactional(readOnly = true)
+    public Optional<List<TransactionRuleConditionDTO>> findByTransactionRuleId(Long transactionRuleId) {
+        LOG.debug("Request to get TransactionRuleConditions for TransactionRule : {}", transactionRuleId);
+        if (findAccessibleTransactionRule(transactionRuleId).isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            transactionRuleConditionRepository
+                .findByTransactionRuleIdOrderByPositionAscIdAsc(transactionRuleId)
+                .stream()
+                .map(transactionRuleConditionMapper::toDto)
+                .collect(Collectors.toCollection(LinkedList::new))
+        );
+    }
+
     @Transactional(readOnly = true)
     public boolean isAccessible(Long id) {
         return findAccessibleEntity(id).isPresent();
@@ -249,6 +270,13 @@ public class TransactionRuleConditionService {
             id,
             currentUserService.getCurrentUserLogin()
         );
+    }
+
+    private Optional<TransactionRule> findAccessibleTransactionRule(Long id) {
+        if (currentUserService.isAdmin()) {
+            return transactionRuleRepository.findOneWithEagerRelationships(id);
+        }
+        return transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
     private void applyTransactionRuleForPartialUpdate(
