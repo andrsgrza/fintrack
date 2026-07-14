@@ -5,6 +5,8 @@ import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
+import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
+import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enCreditAccountDetails from 'app/../i18n/en/creditAccountDetails.json';
 import { FinancialAccountDetail } from './financial-account-detail';
 import { FinancialAccountUpdate } from './financial-account-update';
@@ -76,6 +78,8 @@ const baseState = {
 
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enFinancialAccount);
+  TranslatorContext.registerTranslations('en', enFinancialTransaction);
+  TranslatorContext.registerTranslations('en', enTransactionFlow);
   TranslatorContext.registerTranslations('en', enCreditAccountDetails);
   TranslatorContext.setLocale('en');
 };
@@ -153,13 +157,46 @@ const buildBalance = (accountType, overrides = {}) => ({
   ...overrides,
 });
 
-const renderDetail = (accountType, creditAccountDetailsEntity = {}, balanceOverride?) => {
-  if (!mockAxiosGet.getMockImplementation()) {
-    if (balanceOverride === undefined) {
-      mockAxiosGet.mockReturnValue(new Promise(() => {}));
-    } else {
-      mockAxiosGet.mockResolvedValue({ data: buildBalance(accountType, balanceOverride) });
+const buildRecentTransactions = (overrides = []) => overrides;
+
+const pendingRequest = () => new Promise(() => {});
+
+const setupDetailAxiosMocks = (accountType, options: any = {}) => {
+  const balanceOption = Object.prototype.hasOwnProperty.call(options, 'balance') ? options.balance : 'pending';
+  const transactionsOption = Object.prototype.hasOwnProperty.call(options, 'transactions') ? options.transactions : 'pending';
+
+  mockAxiosGet.mockImplementation((url: string) => {
+    if (url === 'api/financial-accounts/1/balance') {
+      if (balanceOption === 'pending') {
+        return pendingRequest();
+      }
+      if (balanceOption === 'error') {
+        return Promise.reject(new Error('balance failed'));
+      }
+      return Promise.resolve({ data: buildBalance(accountType, balanceOption) });
     }
+    if (url === 'api/financial-transactions?accountId.equals=1&sort=transactionDate,desc&sort=id,desc&size=5') {
+      if (transactionsOption === 'pending') {
+        return pendingRequest();
+      }
+      if (transactionsOption === 'error') {
+        return Promise.reject(new Error('transactions failed'));
+      }
+      return Promise.resolve({ data: buildRecentTransactions(transactionsOption) });
+    }
+    return pendingRequest();
+  });
+};
+
+const renderDetail = (accountType, creditAccountDetailsEntity = {}, detailOptions?) => {
+  if (!mockAxiosGet.getMockImplementation()) {
+    const options =
+      detailOptions === undefined ||
+      Object.prototype.hasOwnProperty.call(detailOptions, 'balance') ||
+      Object.prototype.hasOwnProperty.call(detailOptions, 'transactions')
+        ? detailOptions
+        : { balance: detailOptions };
+    setupDetailAxiosMocks(accountType, options);
   }
   mockState = {
     ...baseState,
@@ -564,6 +601,71 @@ describe('FinancialAccount opening-position labels', () => {
 
     resolveBalance({ data: buildBalance('DEBIT') });
     await waitFor(() => expect(screen.queryByText('Loading balance...')).toBeNull());
+  });
+
+  it('renders recent transactions section and loading state', () => {
+    renderDetail('DEBIT');
+
+    expect(screen.getByText('Recent transactions')).toBeTruthy();
+    expect(screen.getByText('Loading transactions...')).toBeTruthy();
+  });
+
+  it('shows empty recent transactions state', async () => {
+    renderDetail('DEBIT', {}, { transactions: [] });
+
+    const section = await screen.findByTestId('accountRecentTransactionsSection');
+
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      'api/financial-transactions?accountId.equals=1&sort=transactionDate,desc&sort=id,desc&size=5',
+    );
+    expect(within(section).getByText('No transactions yet.')).toBeTruthy();
+    expect(within(section).getByText('View all transactions')).toBeTruthy();
+  });
+
+  it('shows recent transactions returned by API without edit or delete controls', async () => {
+    renderDetail(
+      'DEBIT',
+      {},
+      {
+        transactions: [
+          {
+            id: 2501,
+            transactionDate: '2026-07-13',
+            description: 'Bus fare',
+            flow: 'OUT',
+            amount: 3,
+          },
+          {
+            id: 2502,
+            transactionDate: '2026-07-06',
+            description: 'Refund',
+            flow: 'IN',
+            amount: 5,
+          },
+        ],
+      },
+    );
+
+    const section = await screen.findByTestId('accountRecentTransactionsSection');
+
+    expect(within(section).getByText('13/07/2026')).toBeTruthy();
+    expect(within(section).getByText('Bus fare')).toBeTruthy();
+    expect(within(section).getByText('OUT')).toBeTruthy();
+    expect(within(section).getByText('3 MXN')).toBeTruthy();
+    expect(within(section).getByText('06/07/2026')).toBeTruthy();
+    expect(within(section).getByText('Refund')).toBeTruthy();
+    expect(within(section).getByText('IN')).toBeTruthy();
+    expect(within(section).getByText('5 MXN')).toBeTruthy();
+    expect(within(section).queryByRole('link', { name: /edit/i })).toBeNull();
+    expect(within(section).queryByRole('button', { name: /delete/i })).toBeNull();
+  });
+
+  it('shows recent transactions unavailable when request fails but keeps account detail rendered', async () => {
+    renderDetail('DEBIT', {}, { transactions: 'error' });
+
+    expect(screen.getByText('Test account')).toBeTruthy();
+    expect(await screen.findByText('Transactions are not available.')).toBeTruthy();
+    expect(screen.getByText('Initial balance')).toBeTruthy();
   });
 
   it('shows a clear detail message when CREDIT_CARD details are missing', () => {
