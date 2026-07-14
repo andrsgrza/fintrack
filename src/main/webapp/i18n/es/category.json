@@ -2,39 +2,39 @@
   "fintrackApp": {
     "category": {
       "home": {
-        "title": "Categories",
+        "title": "Categorías",
         "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nuevo Category",
-        "createOrEditLabel": "Crear o editar Category",
-        "notFound": "Ningún Categories encontrado"
+        "createLabel": "Crear nueva categoría",
+        "createOrEditLabel": "Crear o editar categoría",
+        "notFound": "No se encontraron categorías"
       },
-      "created": "Un nuevo Category ha sido creado con el identificador {{ param }}",
-      "updated": "Un Category ha sido actualizado con el identificador {{ param }}",
-      "deleted": "Un Category ha sido eliminado con el identificador {{ param }}",
+      "created": "Se creó una nueva categoría con el identificador {{ param }}",
+      "updated": "Se actualizó la categoría con el identificador {{ param }}",
+      "deleted": "Se eliminó la categoría con el identificador {{ param }}",
       "delete": {
         "title": "¿Eliminar categoría?",
         "leafMessage": "Esto eliminará la categoría y la quitará de todo donde se use actualmente. Las transacciones y suscripciones que usen esta categoría seguirán existiendo, pero se les quitará la categoría. Los presupuestos ya no incluirán esta categoría. Las reglas que usen esta categoría se desactivarán porque se eliminará su categoría objetivo. Esta acción no se puede deshacer.",
         "blockedMessage": "Esta categoría no se puede eliminar porque tiene subcategorías. Elimina primero sus subcategorías e inténtalo de nuevo."
       },
       "detail": {
-        "title": "Category"
+        "title": "Categoría"
       },
       "id": "ID",
-      "name": "Name",
-      "description": "Description",
-      "categoryType": "Category Type",
+      "name": "Nombre",
+      "description": "Descripción",
+      "categoryType": "Tipo",
       "color": "Color",
-      "icon": "Icon",
-      "active": "Active",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
-      "user": "User",
-      "parentCategory": "Parent Category",
-      "financialTransactions": "Financial Transactions",
-      "childCategories": "Child Categories",
-      "transactionRules": "Transaction Rules",
-      "subscriptions": "Subscriptions",
-      "budgets": "Budgets"
+      "icon": "Ícono",
+      "active": "Activa",
+      "createdAt": "Creado en",
+      "updatedAt": "Actualizado en",
+      "user": "Usuario",
+      "parentCategory": "Categoría padre",
+      "financialTransactions": "Transacciones financieras",
+      "childCategories": "Subcategorías",
+      "transactionRules": "Reglas de transacción",
+      "subscriptions": "Suscripciones",
+      "budgets": "Presupuestos"
     }
   }
 }

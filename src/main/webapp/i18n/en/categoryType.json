@@ -2,9 +2,9 @@
   "fintrackApp": {
     "CategoryType": {
       "null": "",
-      "EXPENSE": "EXPENSE",
-      "INCOME": "INCOME",
-      "BOTH": "BOTH"
+      "EXPENSE": "Expense",
+      "INCOME": "Income",
+      "BOTH": "Both"
     }
   }
 }

@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Table } from 'reactstrap';
-import { TextFormat, Translate, getSortState } from 'react-jhipster';
+import { Translate, getSortState } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
-import { APP_DATE_FORMAT } from 'app/config/constants';
 import { ASC, DESC } from 'app/shared/util/pagination.constants';
 import { overrideSortStateWithQueryParams } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
@@ -84,20 +83,16 @@ export const Category = () => {
           <Table responsive>
             <thead>
               <tr>
-                <th className="hand" onClick={sort('id')}>
-                  <Translate contentKey="fintrackApp.category.id">ID</Translate> <FontAwesomeIcon icon={getSortIconByFieldName('id')} />
-                </th>
                 <th className="hand" onClick={sort('name')}>
                   <Translate contentKey="fintrackApp.category.name">Name</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('name')} />
                 </th>
-                <th className="hand" onClick={sort('description')}>
-                  <Translate contentKey="fintrackApp.category.description">Description</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('description')} />
-                </th>
                 <th className="hand" onClick={sort('categoryType')}>
-                  <Translate contentKey="fintrackApp.category.categoryType">Category Type</Translate>{' '}
+                  <Translate contentKey="fintrackApp.category.categoryType">Type</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('categoryType')} />
+                </th>
+                <th>
+                  <Translate contentKey="fintrackApp.category.parentCategory">Parent category</Translate> <FontAwesomeIcon icon="sort" />
                 </th>
                 <th className="hand" onClick={sort('color')}>
                   <Translate contentKey="fintrackApp.category.color">Color</Translate>{' '}
@@ -111,20 +106,6 @@ export const Category = () => {
                   <Translate contentKey="fintrackApp.category.active">Active</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('active')} />
                 </th>
-                <th className="hand" onClick={sort('createdAt')}>
-                  <Translate contentKey="fintrackApp.category.createdAt">Created At</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('createdAt')} />
-                </th>
-                <th className="hand" onClick={sort('updatedAt')}>
-                  <Translate contentKey="fintrackApp.category.updatedAt">Updated At</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.category.parentCategory">Parent Category</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.category.budgets">Budgets</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
                 <th />
               </tr>
             </thead>
@@ -133,19 +114,12 @@ export const Category = () => {
                 <tr key={`entity-${i}`} data-cy="entityTable">
                   <td>
                     <Button tag={Link} to={`/category/${category.id}`} color="link" size="sm">
-                      {category.id}
+                      {category.name}
                     </Button>
                   </td>
-                  <td>{category.name}</td>
-                  <td>{category.description}</td>
                   <td>
                     <Translate contentKey={`fintrackApp.CategoryType.${category.categoryType}`} />
                   </td>
-                  <td>{category.color}</td>
-                  <td>{category.icon}</td>
-                  <td>{category.active ? 'true' : 'false'}</td>
-                  <td>{category.createdAt ? <TextFormat type="date" value={category.createdAt} format={APP_DATE_FORMAT} /> : null}</td>
-                  <td>{category.updatedAt ? <TextFormat type="date" value={category.updatedAt} format={APP_DATE_FORMAT} /> : null}</td>
                   <td>
                     {category.parentCategory ? (
                       <Link to={`/category/${category.parentCategory.id}`}>{category.parentCategory.name}</Link>
@@ -153,16 +127,9 @@ export const Category = () => {
                       ''
                     )}
                   </td>
-                  <td>
-                    {category.budgets
-                      ? category.budgets.map((val, j) => (
-                          <span key={j}>
-                            <Link to={`/budget/${val.id}`}>{val.id}</Link>
-                            {j === category.budgets.length - 1 ? '' : ', '}
-                          </span>
-                        ))
-                      : null}
-                  </td>
+                  <td>{category.color}</td>
+                  <td>{category.icon}</td>
+                  <td>{category.active ? 'true' : 'false'}</td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">
                       <Button tag={Link} to={`/category/${category.id}`} color="info" size="sm" data-cy="entityDetailsButton">
