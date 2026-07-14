@@ -36,6 +36,7 @@
       "loadingConditions": "Cargando condiciones...",
       "noConditionsYet": "Todavía no hay condiciones.",
       "conditionsUnavailable": "Las condiciones no están disponibles.",
+      "manageConditions": "Administrar condiciones",
       "addCondition": "Agregar condición",
       "editCondition": "Editar condición",
       "cancelConditionEdit": "Cancelar",

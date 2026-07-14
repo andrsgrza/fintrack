@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
@@ -10,9 +11,9 @@ import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getFinancialSubscriptions } from 'app/entities/financial-subscription/financial-subscription.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
+import { ITransactionRuleCondition } from 'app/shared/model/transaction-rule-condition.model';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
 import { createEntity, getEntity, partialUpdateEntity, reset } from './transaction-rule.reducer';
-import TransactionRuleConditionsCollectionEditor from './components/transaction-rule-conditions-collection-editor';
 
 export const TransactionRuleUpdate = () => {
   const dispatch = useAppDispatch();
@@ -55,6 +56,21 @@ export const TransactionRuleUpdate = () => {
       handleClose();
     }
   }, [updateSuccess]);
+
+  useEffect(() => {
+    if (isNew || !id) {
+      return;
+    }
+
+    axios
+      .get<ITransactionRuleCondition[]>(`api/transaction-rules/${id}/conditions`)
+      .then(response => {
+        setConditionsState({ count: response.data.length, loaded: true, failed: false });
+      })
+      .catch(() => {
+        setConditionsState({ count: 0, loaded: false, failed: true });
+      });
+  }, [isNew, id]);
 
   const saveEntity = values => {
     if (values.id !== undefined && typeof values.id !== 'number') {
@@ -191,16 +207,17 @@ export const TransactionRuleUpdate = () => {
                     disabled={activeDisabled}
                   />
                   <FormText>
-                    {activeDisabled ? (
+                    <Translate contentKey="fintrackApp.transactionRule.activeRequiresCondition">
+                      Active rules require at least one condition.
+                    </Translate>
+                  </FormText>
+                  {activeDisabled ? (
+                    <FormText>
                       <Translate contentKey="fintrackApp.transactionRule.activeDisabledNoConditions">
                         Add at least one condition before activating this rule.
                       </Translate>
-                    ) : (
-                      <Translate contentKey="fintrackApp.transactionRule.activeRequiresCondition">
-                        Active rules require at least one condition.
-                      </Translate>
-                    )}
-                  </FormText>
+                    </FormText>
+                  ) : null}
                 </>
               ) : null}
               <ValidatedField
@@ -265,15 +282,23 @@ export const TransactionRuleUpdate = () => {
                 &nbsp;
                 <Translate contentKey="entity.action.save">Save</Translate>
               </Button>
+              {!isNew ? (
+                <>
+                  &nbsp;
+                  <Button
+                    tag={Link}
+                    to={`/transaction-rule/${transactionRuleEntity.id}`}
+                    color="secondary"
+                    data-cy="manageConditionsButton"
+                  >
+                    <FontAwesomeIcon icon="list" />
+                    &nbsp;
+                    <Translate contentKey="fintrackApp.transactionRule.manageConditions">Manage conditions</Translate>
+                  </Button>
+                </>
+              ) : null}
             </ValidatedForm>
           )}
-          {!loading && !isNew ? (
-            <TransactionRuleConditionsCollectionEditor
-              transactionRuleId={transactionRuleEntity.id}
-              onConditionsStateChange={setConditionsState}
-              onConditionMutation={() => dispatch(getEntity(id))}
-            />
-          ) : null}
         </Col>
       </Row>
     </div>

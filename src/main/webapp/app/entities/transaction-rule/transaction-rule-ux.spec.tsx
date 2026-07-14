@@ -158,7 +158,7 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Active')).toBeNull();
   });
 
-  it('renders edit title, active field, and related conditions section in edit mode', async () => {
+  it('renders edit title, active field, and manage conditions link without embedded editor', async () => {
     renderEditForm();
 
     expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
@@ -166,20 +166,22 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('Active rules require at least one condition.')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Conditions' })).toBeTruthy();
-    expect(await screen.findByText('No conditions yet.')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Conditions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /add condition/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /delete condition/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /manage conditions/i }).getAttribute('href')).toBe('/transaction-rule/1');
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules/1/conditions'));
   });
 
-  it('loads conditions in edit collection editor and disables active when empty', async () => {
+  it('loads background condition count in edit and disables active when empty', async () => {
     renderEditForm([]);
 
-    expect(await screen.findByText('No conditions yet.')).toBeTruthy();
-    expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules/1/conditions');
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules/1/conditions'));
     expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByText('Add at least one condition before activating this rule.')).toBeTruthy();
   });
 
-  it('enables active when edit collection editor loads at least one condition', async () => {
+  it('enables active in edit when background condition count has at least one condition', async () => {
     renderEditForm([
       {
         id: 11,
@@ -191,13 +193,12 @@ describe('TransactionRule UX', () => {
       },
     ]);
 
-    expect(await screen.findByText('Coffee')).toBeTruthy();
-    expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(false);
+    await waitFor(() => expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(false));
   });
 
-  it('opens embedded add form without parent selector and posts condition with fixed rule id', async () => {
+  it('opens embedded add form on detail without parent selector and posts condition with fixed rule id', async () => {
     mockAxiosPost.mockResolvedValue({ data: { id: 12 } });
-    renderEditForm([]);
+    renderDetail([]);
 
     await screen.findByText('No conditions yet.');
     fireEvent.click(screen.getByRole('button', { name: /add condition/i }));
@@ -226,9 +227,9 @@ describe('TransactionRule UX', () => {
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
   });
 
-  it('opens embedded edit form without parent selector and patches editable condition fields only', async () => {
+  it('opens embedded edit form on detail without parent selector and patches editable condition fields only', async () => {
     mockAxiosPatch.mockResolvedValue({ data: { id: 11 } });
-    renderEditForm([
+    renderDetail([
       {
         id: 11,
         position: 1,
@@ -268,10 +269,10 @@ describe('TransactionRule UX', () => {
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
   });
 
-  it('deletes a condition after confirmation and refreshes the list', async () => {
+  it('deletes a condition from detail after confirmation and refreshes the list', async () => {
     jest.spyOn(window, 'confirm').mockReturnValue(true);
     mockAxiosDelete.mockResolvedValue({ data: {} });
-    renderEditForm([
+    renderDetail([
       {
         id: 11,
         position: 1,
@@ -289,10 +290,10 @@ describe('TransactionRule UX', () => {
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
   });
 
-  it('shows condition delete failure without breaking edit page', async () => {
+  it('shows condition delete failure without breaking detail page', async () => {
     jest.spyOn(window, 'confirm').mockReturnValue(true);
     mockAxiosDelete.mockRejectedValue(new Error('delete failed'));
-    renderEditForm([
+    renderDetail([
       {
         id: 11,
         position: 1,
@@ -307,15 +308,14 @@ describe('TransactionRule UX', () => {
     fireEvent.click(screen.getByRole('button', { name: /delete condition/i }));
 
     expect(await screen.findByText('Condition could not be deleted.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
+    expect(screen.getByText('Coffee rule')).toBeTruthy();
   });
 
-  it('handles edit collection condition load failure without breaking rule edit page', async () => {
+  it('handles edit background condition load failure without breaking rule edit page', async () => {
     renderEditForm('error');
 
-    await waitFor(() => expect(screen.getByText('Conditions are not available.')).toBeTruthy());
     expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
-    expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(true);
+    await waitFor(() => expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(true));
   });
 
   it('loads and displays related conditions on detail', async () => {
@@ -333,6 +333,9 @@ describe('TransactionRule UX', () => {
     expect(await screen.findByText('Coffee')).toBeTruthy();
     expect(screen.getAllByText('Description').length).toBeGreaterThan(0);
     expect(screen.getByText('Contains')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /view/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /edit/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /delete condition/i })).toBeTruthy();
   });
 
   it('shows empty related conditions state on detail', async () => {

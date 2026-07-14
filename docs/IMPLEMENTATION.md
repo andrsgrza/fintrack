@@ -418,29 +418,29 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 #### Domain rules ✅ (CRUD/domain baseline)
 
-| Regla                                           | Estado | Notas                                                                                                                    |
-| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                |
-| No cambiar dueño en update/patch                | ✅     |                                                                                                                          |
-| Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                          |
-| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/subscription/tag                                                                      |
-| PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                   |
-| Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                     |
-| Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                    |
-| Description/resultingDescription normalization  | ✅     | trim; blank → `null`                                                                                                     |
-| Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now` |
-| Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                               |
-| Rule requiere al menos un output                | ✅     | final merged state                                                                                                       |
-| Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                              |
-| PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                            |
-| Parent-centered conditions endpoint             | ✅     | `GET /api/transaction-rules/{id}/conditions`, scoped by parent access, sorted by `position,id`                           |
-| Parent-centered conditions UX                   | ✅     | TransactionRule detail keeps read-only list; edit embeds inline add/edit/delete editor                                   |
-| Embedded condition form                         | ✅     | Reuses TransactionRuleCondition smart form section/helper; parent hidden/fixed by TransactionRule edit page              |
-| Embedded condition mutation                     | ✅     | POST includes `transactionRule: { id }`; PATCH sends editable fields only; DELETE refreshes conditions and parent state  |
-| Active toggle UX                                | ✅     | Disabled when condition list is empty or unavailable; backend still validates `active=true`                              |
-| **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                           |
-| Prioridad única                                 | ❌     | duplicate priority allowed                                                                                               |
-| Priority tie-break                              | ⏳     | definir antes del motor                                                                                                  |
+| Regla                                           | Estado | Notas                                                                                                                        |
+| ----------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                    |
+| No cambiar dueño en update/patch                | ✅     |                                                                                                                              |
+| Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                              |
+| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/subscription/tag                                                                          |
+| PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                       |
+| Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                         |
+| Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                        |
+| Description/resultingDescription normalization  | ✅     | trim; blank → `null`                                                                                                         |
+| Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now`     |
+| Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                                   |
+| Rule requiere al menos un output                | ✅     | final merged state                                                                                                           |
+| Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                                  |
+| PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                                |
+| Parent-centered conditions endpoint             | ✅     | `GET /api/transaction-rules/{id}/conditions`, scoped by parent access, sorted by `position,id`                               |
+| Parent-centered conditions UX                   | ✅     | TransactionRule detail embeds inline add/edit/delete editor; edit remains general rule fields only                           |
+| Embedded condition form                         | ✅     | Reuses TransactionRuleCondition smart form section/helper; parent hidden/fixed by TransactionRule detail page                |
+| Embedded condition mutation                     | ✅     | POST includes `transactionRule: { id }`; PATCH sends editable fields only; DELETE refreshes conditions and parent state      |
+| Active toggle UX                                | ✅     | Edit page background-loads condition count and disables Active when empty/unavailable; backend still validates `active=true` |
+| **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                               |
+| Prioridad única                                 | ❌     | duplicate priority allowed                                                                                                   |
+| Priority tie-break                              | ⏳     | definir antes del motor                                                                                                      |
 
 #### Validations ✅
 
@@ -450,7 +450,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                                                        |
 | Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented                                       |
 | REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`; related conditions endpoint returns `404` when parent inaccessible |
-| UI                        | ✅          | Embedded TransactionRule edit collection editor uses existing TransactionRuleCondition endpoints; no backend command endpoint yet                                                    |
+| UI                        | ✅          | Embedded TransactionRule detail collection editor uses existing TransactionRuleCondition endpoints; no backend command endpoint yet                                                  |
 
 ---
 
@@ -471,7 +471,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Admin bypass lectura/CRUD                   | Admin opera conditions de rules ajenas                                                                                                 |
 | `ACCOUNT` values                            | Validar ids contra **`transactionRule.user.login`**, no admin                                                                          |
 | Smart condition form                        | UI filtra operadores por campo, tipa inputs de valor y mantiene parent read-only en edit                                               |
-| Embedded collection editor                  | TransactionRule edit manages child conditions inline without exposing parent selector                                                  |
+| Embedded collection editor                  | TransactionRule detail manages child conditions inline without exposing parent selector                                                |
 
 **Archivos:** `TransactionRuleConditionRepository`, `TransactionRuleConditionService`, `TransactionRuleConditionResource` (PATCH `JsonNode`), `TransactionRuleConditionMapper`, UI, `transaction-rule-condition-form-helpers.ts`, `transaction-rule-condition-form-section.tsx`.
 
@@ -489,7 +489,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | UI operator filtering                           | ✅     | Mismo matrix que backend: text/enum/amount/date/account                                       |
 | UI typed value inputs                           | ✅     | amount/date inputs, enum selects, account selector; `IN`/`NOT_IN` remain comma-separated text |
 | UI `secondValue` / `caseSensitive` visibility   | ✅     | `secondValue` only `BETWEEN`; `caseSensitive` only text fields                                |
-| Embedded parent hidden/fixed                    | ✅     | TransactionRule edit create sends current parent id; edit PATCH omits parent                  |
+| Embedded parent hidden/fixed                    | ✅     | TransactionRule detail create sends current parent id; edit PATCH omits parent                |
 | Delete dialog copy                              | ✅     | i18n en/es                                                                                    |
 | ~~Reparent same-owner~~                         | ❌     | Eliminado — parent inmutable                                                                  |
 

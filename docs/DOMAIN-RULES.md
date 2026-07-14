@@ -722,7 +722,7 @@ Suggested copy: _"This will delete this rule condition. The rule itself will not
 
 ### UX — smart condition form
 
-The standalone TransactionRuleCondition create/edit form and embedded TransactionRule edit condition editor are no longer raw generated enum forms. They guide the user toward combinations accepted by the backend:
+The standalone TransactionRuleCondition create/edit form and embedded TransactionRule detail condition editor are no longer raw generated enum forms. They guide the user toward combinations accepted by the backend:
 
 | Field type                          | UI behavior                                                                                                                                                                                     | Status   |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -828,17 +828,18 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 
 ### Parent-centered UX / API
 
-| Rule                                  | Decision                                                                                       | Status       |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
-| Related conditions endpoint           | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule         | **Done**     |
-| Related condition ordering            | Sort by `position ASC`, then `id ASC`                                                          | **Done**     |
-| Related condition access              | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all       | **Done**     |
-| Rule detail related condition list    | Read-only condition section with view/edit links                                               | **Done**     |
-| Rule edit condition collection editor | Inline create/update/delete using existing TransactionRuleCondition endpoints                  | **Done**     |
-| Embedded parent behavior              | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent | **Done**     |
-| Active toggle UX                      | Disabled when conditions are empty/unavailable; backend remains source of truth                | **Done**     |
-| Condition reorder UI                  | No drag/drop or reorder controls yet; `position` remains editable in the inline form           | **Deferred** |
-| Rule execution engine                 | No evaluation behavior implemented in this UX/API pass                                         | **Deferred** |
+| Rule                                    | Decision                                                                                                       | Status       |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------ |
+| Related conditions endpoint             | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule                         | **Done**     |
+| Related condition ordering              | Sort by `position ASC`, then `id ASC`                                                                          | **Done**     |
+| Related condition access                | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all                       | **Done**     |
+| Rule detail condition collection editor | Inline create/update/delete using existing TransactionRuleCondition endpoints                                  | **Done**     |
+| Rule edit general-fields page           | No embedded condition editor; includes Manage conditions link and background condition count for Active safety | **Done**     |
+| Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                 | **Done**     |
+| Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                | **Done**     |
+| Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                               | **Deferred** |
+| Condition reorder UI                    | No drag/drop or reorder controls yet; `position` remains editable in the inline form                           | **Deferred** |
+| Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                                         | **Deferred** |
 
 ### Output PATCH semantics
 
