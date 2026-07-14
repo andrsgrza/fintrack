@@ -909,16 +909,24 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### Product rules
 
-| Rule                                   | Decision                                                                      | Status       |
-| -------------------------------------- | ----------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only         | JDL                                                                           | **Deferred** |
-| Lower `priority` evaluates earlier     | Future engine uses `priority ASC`; first matching active rule applies outputs | **Deferred** |
-| Tags union from all matching rules     | JDL                                                                           | **Deferred** |
-| Duplicate priorities                   | Not allowed by service-managed per-user consecutive ordering                  | **Done**     |
-| Manual rule reorder                    | Move up / Move down sends full ordered ids; backend validates exact owner set | **Done**     |
-| Manual FT fields override rule outputs |                                                                               | **Open**     |
-| Rule execution engine                  | Not part of CRUD domain-rule pass                                             | **Deferred** |
-| Batch reclassification                 | Not part of CRUD domain-rule pass                                             | **Deferred** |
+| Rule                                   | Decision                                                                           | Status       |
+| -------------------------------------- | ---------------------------------------------------------------------------------- | ------------ |
+| Evaluate on FT **create** only         | JDL                                                                                | **Deferred** |
+| Lower `priority` evaluates earlier     | Future engine uses `priority ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)            | **Design**   |
+| Tags union from all matching rules     | Future engine can accumulate tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md) | **Design**   |
+| Duplicate priorities                   | Not allowed by service-managed per-user consecutive ordering                       | **Done**     |
+| Manual rule reorder                    | Move up / Move down sends full ordered ids; backend validates exact owner set      | **Done**     |
+| Manual FT fields override rule outputs |                                                                                    | **Open**     |
+| Rule execution engine                  | Not part of CRUD domain-rule pass                                                  | **Deferred** |
+| Batch reclassification                 | Not part of CRUD domain-rule pass                                                  | **Deferred** |
+
+### Rule Engine design
+
+The Transaction Rule Engine is documented as a future design contract in [RULE-ENGINE.md](RULE-ENGINE.md).
+
+Implemented today: rule authoring, validation, ordering, active/condition guards, and condition management.
+
+Not implemented today: execution, automatic application, preview UI, transaction reevaluation, bulk reclassification, and audit/explanation UI.
 
 ---
 

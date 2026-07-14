@@ -1498,6 +1498,23 @@ Rehabilitated create/delete (sin selector User).
 | Low      | E2E     | UI table isolation       | ⏳          |
 | Low      | Product | Drag-and-drop reorder UI | ⏳ deferred |
 
+### Future Rule Engine test plan — planned only
+
+See [RULE-ENGINE.md](RULE-ENGINE.md). No Rule Engine tests exist yet because the execution service is not implemented.
+
+Planned areas:
+
+- pure evaluator unit tests for active-rule filtering and `priority ASC` evaluation;
+- condition evaluator tests for `ALL` / `ANY` short-circuit semantics;
+- field/operator/value tests that reuse the TransactionRuleCondition validation matrix;
+- output suggestion tests for category, financial subscription, tags, and resulting description;
+- conflict tests where explicit transaction values differ from rule suggestions;
+- mode tests for `PREVIEW_ONLY`, `FILL_EMPTY_ONLY`, and future confirmation/override modes;
+- resource/service integration tests once rule application on create exists;
+- no-mutation tests for preview evaluation;
+- future one-transaction reevaluation tests;
+- future bulk reevaluation safety tests.
+
 ---
 
 ## TransactionRuleCondition

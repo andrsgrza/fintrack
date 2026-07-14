@@ -534,4 +534,7 @@ Deferred for this workflow:
 - TransactionRule drag-and-drop UI;
 - condition reorder UI/API;
 - rule execution engine;
+- rule preview / override confirmation UI;
 - atomic backend command endpoint.
+
+Future Rule Engine preview UI is documented as design-only in [RULE-ENGINE.md](RULE-ENGINE.md). No preview UI exists today.

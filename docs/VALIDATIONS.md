@@ -159,6 +159,8 @@ Companion docs:
 
 **Tests implemented:** see [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
 
+**Future Rule Engine:** when implemented, matching must reuse this same field/operator/value validation matrix and semantics. The design contract is in [RULE-ENGINE.md](RULE-ENGINE.md). No execution behavior is implemented today.
+
 ### 8. FinancialSubscription
 
 | Layer       | Rules                                                                                                                                                                                                      |
