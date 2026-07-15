@@ -4,13 +4,12 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 3A backend draft preview endpoint implemented; UI remains deferred**.
+Status: **Phase 3B manual create two-step preview UI implemented**.
 
 Not implemented yet:
 
 - automatic rule application on transaction update;
 - transaction reevaluation;
-- rule preview UI;
 - bulk reclassification;
 - rule execution audit log.
 
@@ -47,21 +46,23 @@ Subscription and description assignment are deliberately not outputs in the curr
   - does not save or mutate a transaction;
   - does not apply `FILL_EMPTY_ONLY`;
   - has no admin cross-user preview behavior.
+- Manual FinancialTransaction create two-step preview UI:
+  - Step 1 collects transaction details;
+  - the frontend calls `POST /api/financial-transactions/rule-preview`;
+  - Step 2 shows category/tags prepopulated from the preview response;
+  - the user can accept, change, remove, or add category/tags before saving;
+  - final save still uses normal FinancialTransaction create.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
 
 ### Designed but not implemented
 
-- Phase 3B manual create two-step UI:
-  - Step 1 collects transaction details;
-  - the frontend calls `POST /api/financial-transactions/rule-preview`;
-  - Step 2 shows category/tags prepopulated from the preview response;
-  - the user can accept, change, remove, or add category/tags before saving.
+- Existing-transaction rule preview / reevaluation UI.
+- Bulk reevaluation flow.
 
 ### Deferred
 
-- manual preview UI;
 - transaction reevaluation;
 - bulk reevaluation;
 - condition-level explanation UI;
@@ -411,7 +412,7 @@ The mutation uses `FILL_EMPTY_ONLY`.
 
 Phase 2 remains unchanged: create through the central `FinancialTransactionService.save(...)` path may receive `FILL_EMPTY_ONLY` rule application. It is not currently restricted to `MANUAL` origin only.
 
-Manual create UI may later call the Phase 3A draft preview endpoint between a details step and a categorization step. Preview suggestions are UI assistance only; the final save still uses normal backend create. If the UI sends category/tags after the categorization step, backend create treats those as explicit values and does not override the category. If UI/direct API creates without category/tags, Phase 2 may still fill empty category/tags.
+Manual create UI calls the Phase 3A draft preview endpoint between a details step and a categorization step. Preview suggestions are UI assistance only; the final save still uses normal backend create. Category/tags sent by Step 2 are treated as explicit user choices, so backend create does not override the category. If UI/direct API creates without category/tags, Phase 2 may still fill empty category/tags.
 
 ### Update
 
@@ -547,9 +548,9 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - does not persist the evaluation result;
 - does not expose a UI.
 
-### Phase 3B — manual create two-step preview UI
+### Phase 3B — manual create two-step preview UI ✅
 
-- planned frontend-only custom manual create flow;
+- frontend-only custom manual create flow;
 - Step 1 collects transaction details:
   - account;
   - description;
@@ -564,7 +565,7 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
   - category;
   - tags;
 - prepopulate category/tags from preview suggestions;
-- show conflicts/skipped outputs/matched rules as helpful context when useful;
+- show conflicts and matched rules as helpful context when present;
 - user has final control and can accept, change, remove, or add category/tags before save;
 - final save still calls normal FinancialTransaction create;
 - Phase 2 `FILL_EMPTY_ONLY` remains as backend safety behavior.
@@ -584,8 +585,8 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 ## Deferred items
 
 - applying rules on update;
-- preview UI;
 - override confirmation UI;
+- existing-transaction preview UI;
 - transaction-level explanation UI;
 - reevaluate one transaction;
 - bulk reevaluation;
@@ -599,4 +600,3 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - Whether condition-level details should be added later for explanation/debug UI.
 - Whether skipped outputs should later be hidden/filtered in normal UI while remaining available from the backend preview response.
 - Origin policy for future API/import/ingestion runtime: when those flows are implemented, decide whether they should use central create with rule application, bypass rule application, make rule application configurable, preview only, or apply only in specific modes. Current project decision: no premature origin-based restriction.
-- Exact visual placement/copy for the Phase 3B two-step manual create flow.

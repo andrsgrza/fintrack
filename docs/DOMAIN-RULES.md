@@ -807,18 +807,18 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 
 ### Priority / evaluation order
 
-| Rule                             | Decision                                                                                | Status       |
-| -------------------------------- | --------------------------------------------------------------------------------------- | ------------ |
-| Server-managed                   | Users cannot edit `priority` as a free numeric field                                    | **Done**     |
-| Scope                            | Unique/consecutive per owner/user, not global                                           | **Done**     |
-| Internal numbering               | Stored 0-based: `0, 1, 2, ...`                                                          | **Done**     |
-| Create                           | Ignore client-supplied priority; append with `max(priority for user) + 1`, or `0` first | **Done**     |
-| Delete                           | Reindex remaining rules for the same owner/user only                                    | **Done**     |
-| Delete ordering                  | Reindex preserves existing order by `priority ASC, id ASC`                              | **Done**     |
-| UI display                       | Shows 1-based order (`#1`, `#2`, ...) and does not submit priority from create/edit     | **Done**     |
-| Reorder UI/API                   | Move up / Move down sends a full owner-scoped ordered id list                           | **Done**     |
-| Rule engine evaluation           | Phase 1 pure evaluator reads active rules by `priority ASC, id ASC`; no mutation        | **Done**     |
-| Admin-specific cross-user design | Not designed in this slice                                                              | **Deferred** |
+| Rule                           | Decision                                                                                | Status   |
+| ------------------------------ | --------------------------------------------------------------------------------------- | -------- |
+| Server-managed                 | Users cannot edit `priority` as a free numeric field                                    | **Done** |
+| Scope                          | Unique/consecutive per owner/user, not global                                           | **Done** |
+| Internal numbering             | Stored 0-based: `0, 1, 2, ...`                                                          | **Done** |
+| Create                         | Ignore client-supplied priority; append with `max(priority for user) + 1`, or `0` first | **Done** |
+| Delete                         | Reindex remaining rules for the same owner/user only                                    | **Done** |
+| Delete ordering                | Reindex preserves existing order by `priority ASC, id ASC`                              | **Done** |
+| UI display                     | Shows 1-based order (`#1`, `#2`, ...) and does not submit priority from create/edit     | **Done** |
+| Reorder UI/API                 | Move up / Move down sends a full owner-scoped ordered id list                           | **Done** |
+| Rule engine evaluation         | Phase 1 pure evaluator reads active rules by `priority ASC, id ASC`; no mutation        | **Done** |
+| Admin-specific cross-user eval | Not supported; evaluation uses the transaction/account owner under normal-user rules    | **Done** |
 
 ### Output requirements
 
@@ -913,7 +913,7 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 | Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                          | **Done**     |
 | Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                | **Done**     |
 | Rule preview endpoint                         | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                | **Done**     |
-| Rule execution engine                         | Phase 3A backend preview implemented; Phase 3B two-step manual create UI/reevaluation/bulk remain deferred             | **Done**     |
+| Rule execution engine                         | Phase 3B two-step manual create preview UI implemented; reevaluation/bulk remain deferred                              | **Done**     |
 | Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                     | **Done**     |
 | Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                      | **Deferred** |
 
@@ -921,9 +921,9 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on `FinancialTransaction` create, and backend-only draft preview via `POST /api/financial-transactions/rule-preview`.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, and the manual FinancialTransaction create two-step preview UI.
 
-Not implemented today: Phase 3B two-step manual create UI, rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, and audit/explanation UI.
+Not implemented today: rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, override confirmation UI, and audit/explanation UI.
 
 Origin policy remains open for future API/import/ingestion runtime. Current behavior is intentionally not restricted to `MANUAL` origin only; future runtime work must decide whether non-manual flows should use central create with rule application, bypass it, make it configurable, preview only, or apply only in specific modes.
 

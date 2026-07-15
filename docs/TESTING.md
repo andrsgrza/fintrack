@@ -1571,15 +1571,32 @@ Implemented Phase 3A coverage:
 - no existing-transaction preview endpoint is implemented at `/api/financial-transactions/{id}/rule-preview`;
 - response assertions cover DTO-shaped output rather than full entity graphs.
 
+### Rule Engine manual create preview UI tests
+
+Phase 3B frontend manual create behavior is covered in `financial-transaction-ux.spec.tsx`.
+
+Implemented Phase 3B coverage:
+
+- create mode starts on Step 1 with transaction details only;
+- Step 1 hides category/tags and Save;
+- Step 1 validates required preview fields before calling the preview endpoint;
+- Next calls `POST /api/financial-transactions/rule-preview` with the unsaved draft and `origin=MANUAL`;
+- preview suggestions prepopulate Step 2 category/tags;
+- matched rule names are shown when returned;
+- user can change suggested category before save;
+- user can remove suggested tags before save;
+- explicit selected tags are preserved and new suggested tags are added without duplicates;
+- no suggestions shows empty manual categorization controls;
+- category conflicts show a non-blocking warning;
+- preview failure stays on Step 1 and does not create;
+- Back from Step 2 preserves Step 1 values;
+- Save from Step 2 calls normal create with final category/tags and `origin=MANUAL`;
+- edit mode remains one-step and does not call preview.
+
 Future planned areas:
 
 - exhaustive field/operator/value matrix tests beyond the Phase 1 smoke coverage;
 - deeper `FILL_EMPTY_ONLY` edge-case tests beyond apply-on-create smoke coverage;
-- Phase 3B frontend two-step manual create UI tests after UI exists:
-  - Step 1 collects transaction details;
-  - the frontend calls `POST /api/financial-transactions/rule-preview`;
-  - Step 2 prepopulates editable category/tags from suggestions;
-  - final save sends the user's explicit categorization choices;
 - future origin-policy tests for API/import/ingestion runtime once that policy is decided; no `MANUAL`-only behavior is asserted today;
 - additional mode tests for confirmation and override modes;
 - future one-transaction reevaluation tests;

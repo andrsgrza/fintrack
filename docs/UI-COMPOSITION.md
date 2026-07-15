@@ -534,16 +534,16 @@ Deferred for this workflow:
 - TransactionRule drag-and-drop UI;
 - condition reorder UI/API;
 - rule execution engine;
-- rule preview / override confirmation UI;
+- override confirmation UI;
 - atomic backend command endpoint.
 
-Future Rule Engine preview UI is documented as design-only in [RULE-ENGINE.md](RULE-ENGINE.md). No preview UI exists today.
+FinancialTransaction manual create owns the implemented Rule Engine preview UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-## FinancialTransaction manual create — planned two-step Rule Engine UX
+## FinancialTransaction manual create — two-step Rule Engine UX
 
-Status: planned only. Phase 3A provides the backend preview endpoint, but no frontend two-step flow exists yet.
+Status: implemented for manual create only. Phase 3A provides the backend preview endpoint, and Phase 3B uses it from the FinancialTransaction create form.
 
-Planned Phase 3B manual create composition:
+Phase 3B manual create composition:
 
 1. Step 1 — Transaction details:
    - account;
@@ -569,7 +569,9 @@ Step 2 should own category/tags. Step 1 should not duplicate those controls.
 
 Final Save still uses normal FinancialTransaction create. Backend Phase 2 `FILL_EMPTY_ONLY` remains a safety net: explicit category/tags sent by Step 2 are treated as user choices; if a direct API/UI create omits category/tags, backend create may still fill empty values.
 
-Do not document or implement this as:
+Edit mode remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
+
+Do not extend this as:
 
 - silently saving preview suggestions;
 - modal override confirmation;
