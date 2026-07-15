@@ -159,7 +159,7 @@ Companion docs:
 
 **Tests implemented:** see [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
 
-**Rule Engine evaluator:** Phase 1 matching reuses this same field/operator/value validation matrix and semantics. The evaluator is backend-only and internal; no automatic apply, REST preview endpoint, or UI exists today. See [RULE-ENGINE.md](RULE-ENGINE.md).
+**Rule Engine evaluator:** Phase 1 matching reuses this same field/operator/value validation matrix and semantics. The evaluator is backend-only and internal; no automatic apply, REST preview endpoint, or UI exists today. Future apply-on-create must resolve and validate a current-user-accessible account first, then build evaluator input for that transaction/account owner. Admin has no special cross-user rule-evaluation behavior. See [RULE-ENGINE.md](RULE-ENGINE.md).
 
 ### 8. FinancialSubscription
 

@@ -1499,7 +1499,7 @@ Rehabilitated create/delete (sin selector User).
 
 ### Rule Engine evaluator tests
 
-See [RULE-ENGINE.md](RULE-ENGINE.md). Phase 1 backend-only pure evaluator tests are implemented in `TransactionRuleEvaluationServiceTest`.
+See [RULE-ENGINE.md](RULE-ENGINE.md). Phase 1 backend-only pure evaluator tests are implemented in `TransactionRuleEvaluationServiceTest` and `TransactionRuleEvaluationServiceIT`.
 
 Implemented Phase 1 coverage:
 
@@ -1516,13 +1516,18 @@ Implemented Phase 1 coverage:
 - tags accumulate across matching rules;
 - later duplicate tags are skipped;
 - existing tags are returned with `alreadyPresent=true` and skipped as already present;
-- `alreadyPresent=true` tags are not treated as new tags to add.
+- `alreadyPresent=true` tags are not treated as new tags to add;
+- persisted DB-backed rules load active current-user rules only;
+- persisted evaluation respects `priority ASC, id ASC`;
+- persisted resulting category/tags are fetched without lazy-loading failures;
+- persisted inactive and conditionless rules are ignored defensively.
 
 Future planned areas:
 
 - exhaustive field/operator/value matrix tests beyond the Phase 1 smoke coverage;
 - mode tests for future `FILL_EMPTY_ONLY`, confirmation, and override modes;
-- resource/service integration tests once rule application on create exists;
+- apply-on-create tests should resolve an account accessible to the current user and must not introduce special admin or cross-user rule-evaluation behavior;
+- resource integration tests once rule application on create exists;
 - future one-transaction reevaluation tests;
 - future bulk reevaluation safety tests.
 

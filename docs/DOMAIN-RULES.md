@@ -816,8 +816,8 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Delete                           | Reindex remaining rules for the same owner/user only                                    | **Done**     |
 | Delete ordering                  | Reindex preserves existing order by `priority ASC, id ASC`                              | **Done**     |
 | UI display                       | Shows 1-based order (`#1`, `#2`, ...) and does not submit priority from create/edit     | **Done**     |
-| Reorder UI/API                   | Future explicit user-facing way to change priority                                      | **Deferred** |
-| Rule engine evaluation           | Future engine evaluates active rules by `priority ASC`                                  | **Deferred** |
+| Reorder UI/API                   | Move up / Move down sends a full owner-scoped ordered id list                           | **Done**     |
+| Rule engine evaluation           | Phase 1 pure evaluator reads active rules by `priority ASC, id ASC`; no mutation        | **Done**     |
 | Admin-specific cross-user design | Not designed in this slice                                                              | **Deferred** |
 
 ### Output requirements
@@ -862,7 +862,7 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                                   | **Deferred** |
 | Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`                | **Done**     |
 | Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                       | **Deferred** |
-| Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                                             | **Deferred** |
+| Rule execution engine                   | Phase 1 backend-only pure evaluator exists; embedded UI still does not preview/apply rules                         | **Done**     |
 
 ### Output PATCH semantics
 
@@ -883,12 +883,12 @@ Applies to the current ManyToOne output: `resultingCategory`.
 
 ### Active false
 
-| Rule                   | Decision                        | Status                                     |
-| ---------------------- | ------------------------------- | ------------------------------------------ |
-| Deactivation           | Does not delete anything        | **Done**                                   |
-| Output preservation    | Does not clear category/tags    | **Done**                                   |
-| Condition preservation | Does not clear child conditions | **Done**                                   |
-| Execution              | Prevents future rule execution  | **Deferred** — rule engine not implemented |
+| Rule                   | Decision                                                     | Status   |
+| ---------------------- | ------------------------------------------------------------ | -------- |
+| Deactivation           | Does not delete anything                                     | **Done** |
+| Output preservation    | Does not clear category/tags                                 | **Done** |
+| Condition preservation | Does not clear child conditions                              | **Done** |
+| Execution              | Prevents evaluator matching and future automatic application | **Done** |
 
 ### Interactions with other deletes
 
@@ -906,13 +906,14 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 | Rule                                          | Decision                                                                                              | Status       |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only                | JDL                                                                                                   | **Deferred** |
-| Lower `priority` evaluates earlier            | Future engine uses `priority ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                               | **Design**   |
-| Tags union from all matching rules            | Future engine can accumulate tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                    | **Design**   |
+| Evaluate on FT **create** only                | Apply-on-create remains future Phase 2                                                                | **Deferred** |
+| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                   | **Done**     |
+| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                   | **Done**     |
 | Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                          | **Done**     |
 | Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                         | **Done**     |
 | Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator may return suggestions/conflicts but must not mutate | **Design**   |
-| Rule execution engine                         | Not part of CRUD domain-rule pass                                                                     | **Deferred** |
+| Rule execution engine                         | Phase 1 pure evaluator implemented; automatic application remains deferred                            | **Done**     |
+| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override    | **Design**   |
 | Batch reclassification                        | Not part of CRUD domain-rule pass                                                                     | **Deferred** |
 
 ### Rule Engine design

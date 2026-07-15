@@ -372,10 +372,23 @@ Not all skip reasons need to be exposed in v1 UI. They are primarily useful for 
 
 ### FORCE_OVERRIDE
 
-- future system/admin/bulk mode;
+- future explicit override mode;
 - not v1.
 
 `RuleEvaluationResult` should support these future modes, but implementation phase 1 only needs `PREVIEW_ONLY` evaluation semantics.
+
+## Ownership for evaluation and apply
+
+Admin has no special rule-evaluation behavior in v1. TransactionRule evaluation and future FinancialTransaction rule application follow normal-user ownership rules.
+
+For future apply-on-create:
+
+- resolve and validate the `FinancialAccount` first;
+- confirm the account belongs to/is accessible by the current user under normal-user ownership rules;
+- build `TransactionRuleEvaluationInput.userLogin` from that resolved transaction/account owner, which should normally be the authenticated user's login;
+- evaluate only that owner's rules;
+- do not evaluate another user's rules due to admin privileges;
+- do not design special admin rule-evaluation flows.
 
 ## Create/update/reevaluate lifecycle
 
@@ -499,6 +512,9 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 - apply on `FinancialTransaction` create;
 - use `FILL_EMPTY_ONLY`;
+- resolve and validate the account first, then evaluate only the transaction/account owner's rules;
+- no admin override;
+- no cross-user rule evaluation;
 - no silent override;
 - no update reevaluation;
 - no bulk reevaluation.
