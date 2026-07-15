@@ -292,6 +292,46 @@ describe('FinancialTransaction manual UX cleanup', () => {
     expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ category: expect.objectContaining({ id: 12 }) }));
   });
 
+  it('user can clear suggested category before save', async () => {
+    renderCreateForm();
+
+    await goToStepTwo({
+      ...emptyPreview,
+      suggestedCategory: { categoryId: 10, categoryName: 'Groceries', conflictsWithCurrentValue: false },
+      hasSuggestions: true,
+    });
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(mockCreateEntity).toHaveBeenCalled());
+    expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ category: null }));
+  });
+
+  it('manual category selection is not overwritten when preview is run again', async () => {
+    renderCreateForm();
+
+    await goToStepTwo({
+      ...emptyPreview,
+      suggestedCategory: { categoryId: 10, categoryName: 'Groceries', conflictsWithCurrentValue: false },
+      hasSuggestions: true,
+    });
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: /back to details/i }));
+    mockAxiosPost.mockResolvedValueOnce({
+      data: {
+        ...emptyPreview,
+        suggestedCategory: { categoryId: 10, categoryName: 'Groceries', conflictsWithCurrentValue: true },
+        hasSuggestions: true,
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /next: categorization/i }));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledTimes(2));
+
+    expect((screen.getByLabelText('Category') as HTMLSelectElement).value).toBe('12');
+  });
+
   it('user can remove suggested tag before save', async () => {
     renderCreateForm();
 
@@ -306,6 +346,18 @@ describe('FinancialTransaction manual UX cleanup', () => {
 
     await waitFor(() => expect(mockCreateEntity).toHaveBeenCalled());
     expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ tags: [] }));
+  });
+
+  it('user can add a manual tag before save', async () => {
+    renderCreateForm();
+
+    await goToStepTwo(emptyPreview);
+
+    selectMultipleValues('Tags', ['21']);
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(mockCreateEntity).toHaveBeenCalled());
+    expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ tags: [expect.objectContaining({ id: 21 })] }));
   });
 
   it('explicit selected tag is preserved and suggested new tag is added without duplicates', async () => {
