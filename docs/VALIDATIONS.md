@@ -159,7 +159,7 @@ Companion docs:
 
 **Tests implemented:** see [TESTING.md § TransactionRuleCondition](TESTING.md#transactionrulecondition).
 
-**Rule Engine evaluator:** Phase 1 matching reuses this same field/operator/value validation matrix and semantics. The evaluator is backend-only and internal; no automatic apply, REST preview endpoint, or UI exists today. Future apply-on-create must resolve and validate a current-user-accessible account first, then build evaluator input for that transaction/account owner. Admin has no special cross-user rule-evaluation behavior. See [RULE-ENGINE.md](RULE-ENGINE.md).
+**Rule Engine evaluator/apply-on-create:** Phase 1 matching reuses this same field/operator/value validation matrix and semantics. Phase 2 applies rules on `FinancialTransaction` create only with `FILL_EMPTY_ONLY`: resolve and validate a current-user-accessible account first, build evaluator input for that transaction/account owner, apply category only when empty/no conflict, preserve explicit tags, and add only new suggested tags. It does not apply on update/PATCH, expose a REST preview endpoint/UI, or persist the evaluation result. Admin has no special cross-user rule-evaluation behavior. See [RULE-ENGINE.md](RULE-ENGINE.md).
 
 ### 8. FinancialSubscription
 

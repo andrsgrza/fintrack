@@ -23,9 +23,12 @@ import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,6 +74,9 @@ class FinancialTransactionServiceTest {
 
     @Mock
     private CurrentUserService currentUserService;
+
+    @Mock
+    private TransactionRuleEvaluationService transactionRuleEvaluationService;
 
     @InjectMocks
     private FinancialTransactionService financialTransactionService;
@@ -134,6 +140,8 @@ class FinancialTransactionServiceTest {
 
         when(financialTransactionMapper.toEntity(financialTransactionDTO)).thenReturn(mappedEntity);
         when(financialAccountService.findAccessibleAccountEntity(20L)).thenReturn(Optional.of(financialAccount));
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(transactionRuleEvaluationService.evaluate(any())).thenReturn(emptyEvaluationResult());
         when(financialTransactionRepository.save(mappedEntity)).thenReturn(savedEntity);
         when(financialTransactionMapper.toDto(savedEntity)).thenReturn(financialTransactionDTO);
 
@@ -162,6 +170,10 @@ class FinancialTransactionServiceTest {
 
         assertThatThrownBy(() -> financialTransactionService.save(financialTransactionDTO)).isInstanceOf(IllegalArgumentException.class);
         verify(financialTransactionRepository, never()).save(any());
+    }
+
+    private TransactionRuleEvaluationResult emptyEvaluationResult() {
+        return new TransactionRuleEvaluationResult(List.of(), null, List.of(), List.of(), List.of());
     }
 
     @Test

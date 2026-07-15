@@ -26,12 +26,17 @@ import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
+import com.fintrack.app.service.rules.TagSuggestion;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -78,6 +83,8 @@ public class FinancialTransactionService {
 
     private final CurrentUserService currentUserService;
 
+    private final TransactionRuleEvaluationService transactionRuleEvaluationService;
+
     public FinancialTransactionService(
         FinancialTransactionRepository financialTransactionRepository,
         FinancialTransactionMapper financialTransactionMapper,
@@ -88,7 +95,8 @@ public class FinancialTransactionService {
         TransactionIngestionRepository transactionIngestionRepository,
         InternalTransferRepository internalTransferRepository,
         IngestionRecordRepository ingestionRecordRepository,
-        CurrentUserService currentUserService
+        CurrentUserService currentUserService,
+        TransactionRuleEvaluationService transactionRuleEvaluationService
     ) {
         this.financialTransactionRepository = financialTransactionRepository;
         this.financialTransactionMapper = financialTransactionMapper;
@@ -100,6 +108,7 @@ public class FinancialTransactionService {
         this.internalTransferRepository = internalTransferRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.currentUserService = currentUserService;
+        this.transactionRuleEvaluationService = transactionRuleEvaluationService;
     }
 
     /**
@@ -125,6 +134,8 @@ public class FinancialTransactionService {
         Instant now = Instant.now();
         financialTransaction.setCreatedAt(now);
         financialTransaction.setUpdatedAt(now);
+        validateMergedState(financialTransaction);
+        applyRulesOnCreate(financialTransaction, ownerLogin(account));
         validateMergedState(financialTransaction);
         financialTransaction = financialTransactionRepository.save(financialTransaction);
         return financialTransactionMapper.toDto(financialTransaction);
@@ -498,9 +509,81 @@ public class FinancialTransactionService {
         if (accountDTO == null || accountDTO.getId() == null) {
             throw new IllegalArgumentException("Financial account is required");
         }
-        return financialAccountService
+        FinancialAccount account = financialAccountService
             .findAccessibleAccountEntity(accountDTO.getId())
             .orElseThrow(() -> new IllegalArgumentException("Financial account is not accessible"));
+        if (!Objects.equals(ownerLogin(account), currentUserService.getCurrentUserLogin())) {
+            throw new IllegalArgumentException("Financial account is not accessible");
+        }
+        return account;
+    }
+
+    private void applyRulesOnCreate(FinancialTransaction financialTransaction, String ownerLogin) {
+        TransactionRuleEvaluationResult evaluation = transactionRuleEvaluationService.evaluate(
+            new TransactionRuleEvaluationInput(
+                ownerLogin,
+                financialTransaction.getDescription(),
+                financialTransaction.getAmount(),
+                financialTransaction.getFlow(),
+                financialTransaction.getExternalReference(),
+                financialTransaction.getOrigin(),
+                financialTransaction.getTransactionDate(),
+                financialTransaction.getPostingDate(),
+                financialTransaction.getAccount().getId(),
+                financialTransaction.getCategory() == null ? null : financialTransaction.getCategory().getId(),
+                financialTransaction.getCategory() == null ? null : financialTransaction.getCategory().getName(),
+                currentTagIds(financialTransaction),
+                currentTagNames(financialTransaction)
+            )
+        );
+        applyRuleEvaluationOnCreate(financialTransaction, evaluation, ownerLogin);
+    }
+
+    private void applyRuleEvaluationOnCreate(
+        FinancialTransaction financialTransaction,
+        TransactionRuleEvaluationResult evaluation,
+        String ownerLogin
+    ) {
+        if (
+            financialTransaction.getCategory() == null &&
+            evaluation.suggestedCategory() != null &&
+            !evaluation.suggestedCategory().conflictsWithCurrentValue()
+        ) {
+            Category suggestedCategory = categoryRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(evaluation.suggestedCategory().categoryId(), ownerLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Suggested category is not accessible"));
+            financialTransaction.setCategory(suggestedCategory);
+        }
+
+        Set<Long> tagIds = currentTagIds(financialTransaction);
+        for (TagSuggestion suggestedTag : evaluation.suggestedTags()) {
+            if (suggestedTag.alreadyPresent() || suggestedTag.duplicateOfEarlierSuggestion() || tagIds.contains(suggestedTag.tagId())) {
+                continue;
+            }
+            Tag tag = tagRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(suggestedTag.tagId(), ownerLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"));
+            financialTransaction.addTags(tag);
+            tagIds.add(tag.getId());
+        }
+    }
+
+    private Set<Long> currentTagIds(FinancialTransaction financialTransaction) {
+        if (financialTransaction.getTags() == null || financialTransaction.getTags().isEmpty()) {
+            return new HashSet<>();
+        }
+        return financialTransaction.getTags().stream().map(Tag::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    private Map<Long, String> currentTagNames(FinancialTransaction financialTransaction) {
+        if (financialTransaction.getTags() == null || financialTransaction.getTags().isEmpty()) {
+            return Map.of();
+        }
+        return financialTransaction
+            .getTags()
+            .stream()
+            .filter(tag -> tag.getId() != null)
+            .collect(Collectors.toMap(Tag::getId, Tag::getName, (left, right) -> left));
     }
 
     private Category resolveOptionalCategoryForOwner(CategoryDTO categoryDTO, String ownerLogin) {

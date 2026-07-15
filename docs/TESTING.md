@@ -1522,12 +1522,32 @@ Implemented Phase 1 coverage:
 - persisted resulting category/tags are fetched without lazy-loading failures;
 - persisted inactive and conditionless rules are ignored defensively.
 
+### Rule Engine apply-on-create tests
+
+Phase 2 backend apply-on-create behavior is covered in `FinancialTransactionResourceIT`.
+
+Implemented Phase 2 coverage:
+
+- create without category applies a suggested category;
+- explicit category is not overridden;
+- create without tags adds suggested tags;
+- explicit tags are preserved while new suggested tags are added;
+- `alreadyPresent=true` / existing suggested tags are not duplicated;
+- explicit different category still allows suggested new tags;
+- no matching rules leave category/tags unchanged;
+- inactive rules are not applied;
+- another user's rules are not applied;
+- admin has no special cross-user rule application on create;
+- update does not apply rules;
+- PATCH does not apply rules;
+- category plus multiple tags are applied once;
+- explicit same category remains and suggested tags still apply.
+
 Future planned areas:
 
 - exhaustive field/operator/value matrix tests beyond the Phase 1 smoke coverage;
-- mode tests for future `FILL_EMPTY_ONLY`, confirmation, and override modes;
-- apply-on-create tests should resolve an account accessible to the current user and must not introduce special admin or cross-user rule-evaluation behavior;
-- resource integration tests once rule application on create exists;
+- deeper `FILL_EMPTY_ONLY` edge-case tests beyond apply-on-create smoke coverage;
+- additional mode tests for confirmation and override modes;
 - future one-transaction reevaluation tests;
 - future bulk reevaluation safety tests.
 

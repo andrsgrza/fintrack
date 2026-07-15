@@ -445,8 +445,8 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Priority/order UX                               | ✅     | List/detail show read-only 1-based order; list forces `priority ASC, id ASC`, exposes only possible Move up / Move down controls, and create/edit do not render or submit priority |
 | Manual reorder endpoint                         | ✅     | `PUT /api/transaction-rules/reorder` accepts full current-user ordered ids, validates exact membership, and normalizes priorities to `0..n`                                        |
 | Edit form hydration                             | ✅     | Edit waits for the requested entity before mounting the JHipster `ValidatedForm`; fields stay direct children for registration/defaults                                            |
-| Rule Engine Phase 1 evaluator                   | ✅     | Backend-only pure evaluator in `service.rules`; internal `RuleEvaluationResult` supports category/tag suggestions only; no mutation, REST endpoint, UI, or apply-on-create         |
-| **Ejecución al crear transaction**              | ⏳     | Future Rule Engine phase 2 — apply on create with fill-empty behavior after resolving a current-user-accessible account; no admin override or cross-user evaluation                |
+| Rule Engine Phase 1 evaluator                   | ✅     | Backend-only pure evaluator in `service.rules`; internal `RuleEvaluationResult` supports category/tag suggestions only; no REST endpoint/UI                                        |
+| **Ejecución al crear transaction**              | ✅     | Phase 2 applies rules on FinancialTransaction create with `FILL_EMPTY_ONLY` after resolving a current-user-accessible account; no admin override or cross-user evaluation          |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                             |
 
 #### Validations ✅
@@ -464,7 +464,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
 
 1. ✅ Pure evaluator service returning `RuleEvaluationResult`; category/tag suggestions only; no mutation, no UI.
-2. Apply on `FinancialTransaction` create using fill-empty-only behavior after resolving an account accessible to the current user and evaluating only that transaction/account owner's rules.
+2. ✅ Apply on `FinancialTransaction` create using fill-empty-only behavior after resolving an account accessible to the current user and evaluating only that transaction/account owner's rules.
 3. Preview UI for manual transaction create/edit.
 4. Reevaluate one transaction.
 5. Bulk reevaluation.

@@ -4,11 +4,10 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 1 backend evaluator implemented; apply/REST/UI remain deferred**.
+Status: **Phase 2 backend apply-on-create implemented; REST preview/UI remain deferred**.
 
 Not implemented yet:
 
-- automatic rule application on transaction create;
 - automatic rule application on transaction update;
 - REST preview endpoint;
 - transaction reevaluation;
@@ -35,22 +34,25 @@ Subscription and description assignment are deliberately not outputs in the curr
   - `TransactionRuleEvaluationService`;
   - internal `TransactionRuleEvaluationInput`;
   - internal `TransactionRuleEvaluationResult`;
-  - no mutation;
-  - no saving;
   - no REST endpoint;
-  - no automatic apply-on-create/update.
+- Backend-only `FILL_EMPTY_ONLY` application on `FinancialTransaction` create:
+  - applies category only when the transaction has no explicit category;
+  - preserves explicit category and does not override conflicts;
+  - preserves explicit tags and adds only new suggested tags;
+  - does not re-add `alreadyPresent=true` tag suggestions;
+  - does not apply on update/PATCH;
+  - does not persist the evaluation result.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
 
 ### Designed but not implemented
 
-- future apply modes.
+- public preview/result DTOs.
 
 ### Deferred
 
 - public REST preview endpoint;
-- automatic apply-on-create;
 - manual preview UI;
 - transaction reevaluation;
 - bulk reevaluation;
@@ -360,9 +362,10 @@ Not all skip reasons need to be exposed in v1 UI. They are primarily useful for 
 
 ### FILL_EMPTY_ONLY
 
-- future apply mode;
-- category applies only if empty;
+- implemented for `FinancialTransaction` create only;
+- category applies only if empty and no conflict exists;
 - tags are added without removing existing tags;
+- `alreadyPresent=true` tag suggestions are not re-added;
 - no override.
 
 ### OVERRIDE_WITH_CONFIRMATION
@@ -379,9 +382,9 @@ Not all skip reasons need to be exposed in v1 UI. They are primarily useful for 
 
 ## Ownership for evaluation and apply
 
-Admin has no special rule-evaluation behavior in v1. TransactionRule evaluation and future FinancialTransaction rule application follow normal-user ownership rules.
+Admin has no special rule-evaluation behavior in v1. TransactionRule evaluation and FinancialTransaction rule application follow normal-user ownership rules.
 
-For future apply-on-create:
+For apply-on-create:
 
 - resolve and validate the `FinancialAccount` first;
 - confirm the account belongs to/is accessible by the current user under normal-user ownership rules;
@@ -394,9 +397,9 @@ For future apply-on-create:
 
 ### Create
 
-Automatic backend evaluation may run on transaction create in a future phase.
+Automatic backend evaluation runs on `FinancialTransaction` create only.
 
-The first mutation phase should apply only empty fields automatically.
+The mutation uses `FILL_EMPTY_ONLY`.
 
 Manual create UI may later show rule preview/conflicts before saving.
 
@@ -508,7 +511,7 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - support output suggestions;
 - support conflict detection.
 
-### Phase 2 — apply on create with fill-empty behavior
+### Phase 2 — apply on create with fill-empty behavior ✅
 
 - apply on `FinancialTransaction` create;
 - use `FILL_EMPTY_ONLY`;
@@ -517,6 +520,9 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - no cross-user rule evaluation;
 - no silent override;
 - no update reevaluation;
+- no persisted evaluation result;
+- no REST preview endpoint;
+- no preview UI;
 - no bulk reevaluation.
 
 ### Phase 3 — preview UI
@@ -538,7 +544,6 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 ## Deferred items
 
-- applying rules on create;
 - applying rules on update;
 - REST preview endpoint;
 - preview UI;

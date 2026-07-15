@@ -906,23 +906,23 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 | Rule                                          | Decision                                                                                              | Status       |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only                | Apply-on-create remains future Phase 2                                                                | **Deferred** |
+| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application                    | **Done**     |
 | Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                   | **Done**     |
 | Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                   | **Done**     |
 | Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                          | **Done**     |
 | Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                         | **Done**     |
 | Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator may return suggestions/conflicts but must not mutate | **Design**   |
-| Rule execution engine                         | Phase 1 pure evaluator implemented; automatic application remains deferred                            | **Done**     |
-| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override    | **Design**   |
+| Rule execution engine                         | Phase 2 apply-on-create implemented; REST preview/UI/reevaluation/bulk remain deferred                | **Done**     |
+| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override    | **Done**     |
 | Batch reclassification                        | Not part of CRUD domain-rule pass                                                                     | **Deferred** |
 
 ### Rule Engine design
 
 The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, and a backend-only pure evaluator that returns internal category/tag suggestions without mutating transactions.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, and `FILL_EMPTY_ONLY` application on `FinancialTransaction` create.
 
-Not implemented today: automatic application, REST preview endpoint, preview UI, transaction reevaluation, bulk reclassification, and audit/explanation UI.
+Not implemented today: rule application on update/PATCH, REST preview endpoint, preview UI, transaction reevaluation, bulk reclassification, persisted evaluation result, and audit/explanation UI.
 
 ---
 
