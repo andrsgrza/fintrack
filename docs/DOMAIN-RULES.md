@@ -862,7 +862,7 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                                   | **Deferred** |
 | Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`                | **Done**     |
 | Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                       | **Deferred** |
-| Rule execution engine                   | Phase 1 backend-only pure evaluator exists; embedded UI still does not preview/apply rules                         | **Done**     |
+| Rule execution engine                   | Backend evaluator exists; embedded UI still does not preview/apply rules                                           | **Done**     |
 
 ### Output PATCH semantics
 
@@ -904,25 +904,28 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### Product rules
 
-| Rule                                          | Decision                                                                                              | Status       |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application                    | **Done**     |
-| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                   | **Done**     |
-| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                   | **Done**     |
-| Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                          | **Done**     |
-| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                         | **Done**     |
-| Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator may return suggestions/conflicts but must not mutate | **Design**   |
-| Rule execution engine                         | Phase 2 apply-on-create implemented; REST preview/UI/reevaluation/bulk remain deferred                | **Done**     |
-| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override    | **Done**     |
-| Batch reclassification                        | Not part of CRUD domain-rule pass                                                                     | **Deferred** |
+| Rule                                          | Decision                                                                                                               | Status       |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application; no `MANUAL`-only restriction today | **Done**     |
+| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                                    | **Done**     |
+| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                                    | **Done**     |
+| Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                           | **Done**     |
+| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                          | **Done**     |
+| Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                | **Done**     |
+| Rule preview endpoint                         | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                | **Done**     |
+| Rule execution engine                         | Phase 3A backend preview implemented; Phase 3B two-step manual create UI/reevaluation/bulk remain deferred             | **Done**     |
+| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                     | **Done**     |
+| Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                      | **Deferred** |
 
 ### Rule Engine design
 
 The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, and `FILL_EMPTY_ONLY` application on `FinancialTransaction` create.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on `FinancialTransaction` create, and backend-only draft preview via `POST /api/financial-transactions/rule-preview`.
 
-Not implemented today: rule application on update/PATCH, REST preview endpoint, preview UI, transaction reevaluation, bulk reclassification, persisted evaluation result, and audit/explanation UI.
+Not implemented today: Phase 3B two-step manual create UI, rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, and audit/explanation UI.
+
+Origin policy remains open for future API/import/ingestion runtime. Current behavior is intentionally not restricted to `MANUAL` origin only; future runtime work must decide whether non-manual flows should use central create with rule application, bypass it, make it configurable, preview only, or apply only in specific modes.
 
 ---
 

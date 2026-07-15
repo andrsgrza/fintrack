@@ -538,3 +538,43 @@ Deferred for this workflow:
 - atomic backend command endpoint.
 
 Future Rule Engine preview UI is documented as design-only in [RULE-ENGINE.md](RULE-ENGINE.md). No preview UI exists today.
+
+## FinancialTransaction manual create — planned two-step Rule Engine UX
+
+Status: planned only. Phase 3A provides the backend preview endpoint, but no frontend two-step flow exists yet.
+
+Planned Phase 3B manual create composition:
+
+1. Step 1 — Transaction details:
+   - account;
+   - description;
+   - amount;
+   - flow;
+   - transaction date;
+   - posting date;
+   - external reference;
+   - notes and other non-categorization fields as applicable.
+2. Between steps:
+   - call `POST /api/financial-transactions/rule-preview` with the unsaved draft;
+   - do not save or mutate anything;
+   - use the response as UI assistance only.
+3. Step 2 — Categorization:
+   - category;
+   - tags;
+   - prepopulate controls from suggested category/tags;
+   - show conflicts/skipped outputs/matched rules where useful;
+   - let the user accept, change, remove, or add category/tags before save.
+
+Step 2 should own category/tags. Step 1 should not duplicate those controls.
+
+Final Save still uses normal FinancialTransaction create. Backend Phase 2 `FILL_EMPTY_ONLY` remains a safety net: explicit category/tags sent by Step 2 are treated as user choices; if a direct API/UI create omits category/tags, backend create may still fill empty values.
+
+Do not document or implement this as:
+
+- silently saving preview suggestions;
+- modal override confirmation;
+- existing-transaction reevaluation;
+- bulk reevaluation;
+- persisted evaluation results;
+- audit log;
+- `MANUAL`-only backend apply behavior.

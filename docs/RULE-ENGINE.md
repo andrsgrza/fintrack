@@ -4,12 +4,11 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 2 backend apply-on-create implemented; REST preview/UI remain deferred**.
+Status: **Phase 3A backend draft preview endpoint implemented; UI remains deferred**.
 
 Not implemented yet:
 
 - automatic rule application on transaction update;
-- REST preview endpoint;
 - transaction reevaluation;
 - rule preview UI;
 - bulk reclassification;
@@ -33,8 +32,7 @@ Subscription and description assignment are deliberately not outputs in the curr
 - Backend-only pure evaluator service:
   - `TransactionRuleEvaluationService`;
   - internal `TransactionRuleEvaluationInput`;
-  - internal `TransactionRuleEvaluationResult`;
-  - no REST endpoint;
+  - internal `TransactionRuleEvaluationResult`.
 - Backend-only `FILL_EMPTY_ONLY` application on `FinancialTransaction` create:
   - applies category only when the transaction has no explicit category;
   - preserves explicit category and does not override conflicts;
@@ -42,17 +40,27 @@ Subscription and description assignment are deliberately not outputs in the curr
   - does not re-add `alreadyPresent=true` tag suggestions;
   - does not apply on update/PATCH;
   - does not persist the evaluation result.
+- Backend-only draft preview REST endpoint:
+  - `POST /api/financial-transactions/rule-preview`;
+  - evaluates an unsaved `FinancialTransaction` draft;
+  - returns suggestions, conflicts, skipped outputs, matched rules, and summary booleans;
+  - does not save or mutate a transaction;
+  - does not apply `FILL_EMPTY_ONLY`;
+  - has no admin cross-user preview behavior.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
 
 ### Designed but not implemented
 
-- public preview/result DTOs.
+- Phase 3B manual create two-step UI:
+  - Step 1 collects transaction details;
+  - the frontend calls `POST /api/financial-transactions/rule-preview`;
+  - Step 2 shows category/tags prepopulated from the preview response;
+  - the user can accept, change, remove, or add category/tags before saving.
 
 ### Deferred
 
-- public REST preview endpoint;
 - manual preview UI;
 - transaction reevaluation;
 - bulk reevaluation;
@@ -246,9 +254,9 @@ Deferred conceptual API:
 applyEvaluation(transaction, evaluation, mode)
 ```
 
-### Proposed `RuleEvaluationResult` shape
+### `RuleEvaluationResult` shape
 
-This is not Java code yet. It is the conceptual shape implementation should follow.
+The internal backend result shape is implemented as `TransactionRuleEvaluationResult` plus supporting records. Phase 3A exposes a separate REST-safe preview response DTO rather than returning the internal records directly.
 
 ```text
 RuleEvaluationResult
@@ -266,9 +274,9 @@ RuleEvaluationResult
 
 `evaluatedTransactionId` is optional because preview may evaluate an unsaved draft/new transaction.
 
-`evaluatedAt` is optional for phase 1. It becomes more useful if the result is persisted, returned by a REST preview endpoint, or used for audit/debug later.
+`evaluatedAt` remains deferred. It becomes more useful if an evaluation result is ever persisted or used for audit/debug later.
 
-`mode` is optional for phase 1 pure preview. The result should still be compatible with future apply modes.
+`mode` remains deferred for the internal result; Phase 2 hardcodes `FILL_EMPTY_ONLY` application on create, and Phase 3A preview does not apply a mode.
 
 ### `RuleMatchResult`
 
@@ -401,7 +409,9 @@ Automatic backend evaluation runs on `FinancialTransaction` create only.
 
 The mutation uses `FILL_EMPTY_ONLY`.
 
-Manual create UI may later show rule preview/conflicts before saving.
+Phase 2 remains unchanged: create through the central `FinancialTransactionService.save(...)` path may receive `FILL_EMPTY_ONLY` rule application. It is not currently restricted to `MANUAL` origin only.
+
+Manual create UI may later call the Phase 3A draft preview endpoint between a details step and a categorization step. Preview suggestions are UI assistance only; the final save still uses normal backend create. If the UI sends category/tags after the categorization step, backend create treats those as explicit values and does not override the category. If UI/direct API creates without category/tags, Phase 2 may still fill empty category/tags.
 
 ### Update
 
@@ -521,14 +531,43 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - no silent override;
 - no update reevaluation;
 - no persisted evaluation result;
-- no REST preview endpoint;
 - no preview UI;
 - no bulk reevaluation.
 
-### Phase 3 — preview UI
+### Phase 3A — backend draft preview endpoint ✅
 
-- add preview UI for manual transaction create/edit;
-- show suggestions and conflicts before save/apply.
+- `POST /api/financial-transactions/rule-preview`;
+- accepts an unsaved draft with account, transaction fields, optional explicit category, and optional explicit tags;
+- validates account/category/tags using current-user ownership rules;
+- admin has no cross-user preview behavior;
+- returns category/tag suggestions, conflicts, skipped outputs, matched rules, `hasSuggestions`, and `hasConflicts`;
+- does not save a `FinancialTransaction`;
+- does not mutate category/tags/rules;
+- does not apply `FILL_EMPTY_ONLY`;
+- does not persist the evaluation result;
+- does not expose a UI.
+
+### Phase 3B — manual create two-step preview UI
+
+- planned frontend-only custom manual create flow;
+- Step 1 collects transaction details:
+  - account;
+  - description;
+  - amount;
+  - flow;
+  - transaction date;
+  - posting date;
+  - external reference;
+  - notes and other non-categorization fields as applicable;
+- between Step 1 and Step 2, call `POST /api/financial-transactions/rule-preview`;
+- Step 2 shows categorization fields:
+  - category;
+  - tags;
+- prepopulate category/tags from preview suggestions;
+- show conflicts/skipped outputs/matched rules as helpful context when useful;
+- user has final control and can accept, change, remove, or add category/tags before save;
+- final save still calls normal FinancialTransaction create;
+- Phase 2 `FILL_EMPTY_ONLY` remains as backend safety behavior.
 
 ### Phase 4 — reevaluate one transaction
 
@@ -545,7 +584,6 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 ## Deferred items
 
 - applying rules on update;
-- REST preview endpoint;
 - preview UI;
 - override confirmation UI;
 - transaction-level explanation UI;
@@ -557,8 +595,8 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 ## Open decisions
 
-- Whether `RuleEvaluationResult` should later become a public REST DTO; today it is internal/backend-only.
+- `RuleEvaluationResult` remains internal/backend-only; Phase 3A exposes separate REST preview DTOs.
 - Whether condition-level details should be added later for explanation/debug UI.
-- Whether skipped outputs should eventually be returned only in debug/explain mode if exposed over REST.
-- Where preview UI will live.
-- How to represent conflicts and skipped outputs consistently in REST responses if/when exposed.
+- Whether skipped outputs should later be hidden/filtered in normal UI while remaining available from the backend preview response.
+- Origin policy for future API/import/ingestion runtime: when those flows are implemented, decide whether they should use central create with rule application, bypass rule application, make rule application configurable, preview only, or apply only in specific modes. Current project decision: no premature origin-based restriction.
+- Exact visual placement/copy for the Phase 3B two-step manual create flow.

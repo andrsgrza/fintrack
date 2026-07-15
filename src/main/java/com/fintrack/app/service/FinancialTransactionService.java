@@ -20,12 +20,23 @@ import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.FinancialTransactionRulePreviewRequestDTO;
+import com.fintrack.app.service.dto.FinancialTransactionRulePreviewResponseDTO;
+import com.fintrack.app.service.dto.RuleMatchResultDTO;
+import com.fintrack.app.service.dto.RuleOutputConflictDTO;
+import com.fintrack.app.service.dto.SkippedRuleOutputDTO;
 import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.TagSuggestionDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
+import com.fintrack.app.service.rules.CategorySuggestion;
+import com.fintrack.app.service.rules.RuleMatchResult;
+import com.fintrack.app.service.rules.RuleOutputConflict;
+import com.fintrack.app.service.rules.SkippedRuleOutput;
 import com.fintrack.app.service.rules.TagSuggestion;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
@@ -139,6 +150,67 @@ public class FinancialTransactionService {
         validateMergedState(financialTransaction);
         financialTransaction = financialTransactionRepository.save(financialTransaction);
         return financialTransactionMapper.toDto(financialTransaction);
+    }
+
+    /**
+     * Preview TransactionRule evaluation for an unsaved FinancialTransaction draft.
+     *
+     * @param request the draft preview request.
+     * @return the rule evaluation preview response.
+     */
+    @Transactional(readOnly = true)
+    public FinancialTransactionRulePreviewResponseDTO previewRules(FinancialTransactionRulePreviewRequestDTO request) {
+        LOG.debug("Request to preview TransactionRule evaluation for FinancialTransaction draft");
+        if (request == null) {
+            throw new IllegalArgumentException("Preview request is required");
+        }
+
+        FinancialAccount account = resolveAccountForPreview(request.getAccountId());
+        String ownerLogin = ownerLogin(account);
+        Category category = resolveOptionalCategoryIdForOwner(request.getCategoryId(), ownerLogin);
+        Set<Tag> tags = resolveTagIdsForOwner(request.getTagIds(), ownerLogin);
+        FinancialSubscription subscription = resolveOptionalSubscriptionIdForOwner(request.getFinancialSubscriptionId(), account);
+        TransactionIngestion transactionIngestion = resolveOptionalTransactionIngestionIdForPreview(
+            request.getTransactionIngestionId(),
+            account
+        );
+
+        FinancialTransaction draft = new FinancialTransaction()
+            .account(account)
+            .category(category)
+            .financialSubscription(subscription)
+            .transactionIngestion(transactionIngestion)
+            .description(request.getDescription())
+            .amount(request.getAmount())
+            .flow(request.getFlow())
+            .origin(request.getOrigin())
+            .transactionDate(request.getTransactionDate())
+            .postingDate(request.getPostingDate())
+            .externalReference(request.getExternalReference());
+        tags.forEach(draft::addTags);
+
+        normalizeFields(draft);
+        validateMergedState(draft);
+
+        TransactionRuleEvaluationResult evaluation = transactionRuleEvaluationService.evaluate(
+            new TransactionRuleEvaluationInput(
+                ownerLogin,
+                draft.getDescription(),
+                draft.getAmount(),
+                draft.getFlow(),
+                draft.getExternalReference(),
+                draft.getOrigin(),
+                draft.getTransactionDate(),
+                draft.getPostingDate(),
+                draft.getAccount().getId(),
+                draft.getCategory() == null ? null : draft.getCategory().getId(),
+                draft.getCategory() == null ? null : draft.getCategory().getName(),
+                currentTagIds(draft),
+                currentTagNames(draft)
+            )
+        );
+
+        return toPreviewResponse(evaluation);
     }
 
     /**
@@ -518,6 +590,19 @@ public class FinancialTransactionService {
         return account;
     }
 
+    private FinancialAccount resolveAccountForPreview(Long accountId) {
+        if (accountId == null) {
+            throw new IllegalArgumentException("Financial account is required");
+        }
+        FinancialAccount account = financialAccountService
+            .findAccessibleAccountEntity(accountId)
+            .orElseThrow(() -> new IllegalArgumentException("Financial account is not accessible"));
+        if (!Objects.equals(ownerLogin(account), currentUserService.getCurrentUserLogin())) {
+            throw new IllegalArgumentException("Financial account is not accessible");
+        }
+        return account;
+    }
+
     private void applyRulesOnCreate(FinancialTransaction financialTransaction, String ownerLogin) {
         TransactionRuleEvaluationResult evaluation = transactionRuleEvaluationService.evaluate(
             new TransactionRuleEvaluationInput(
@@ -598,6 +683,15 @@ public class FinancialTransactionService {
             .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
     }
 
+    private Category resolveOptionalCategoryIdForOwner(Long categoryId, String ownerLogin) {
+        if (categoryId == null) {
+            return null;
+        }
+        return categoryRepository
+            .findOneWithToOneRelationshipsByIdAndUserLogin(categoryId, ownerLogin)
+            .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
+    }
+
     private Category resolveOptionalCategoryPatch(CategoryDTO categoryDTO, String ownerLogin, JsonNode updateNode) {
         if (relationshipExplicitNull(updateNode, "category")) {
             return null;
@@ -622,6 +716,23 @@ public class FinancialTransactionService {
         return tags;
     }
 
+    private Set<Tag> resolveTagIdsForOwner(Set<Long> tagIds, String ownerLogin) {
+        Set<Tag> tags = new HashSet<>();
+        if (tagIds == null || tagIds.isEmpty()) {
+            return tags;
+        }
+        for (Long tagId : tagIds) {
+            if (tagId == null) {
+                throw new IllegalArgumentException("Tag id is required");
+            }
+            Tag tag = tagRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, ownerLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
+            tags.add(tag);
+        }
+        return tags;
+    }
+
     private Set<Tag> resolveTagsPatch(Set<TagDTO> tagDTOs, String ownerLogin, JsonNode updateNode) {
         if (relationshipExplicitNull(updateNode, "tags")) {
             return new HashSet<>();
@@ -638,6 +749,17 @@ public class FinancialTransactionService {
         }
         FinancialSubscription subscription = financialSubscriptionRepository
             .findOneWithToOneRelationshipsByIdAndUserLogin(subscriptionDTO.getId(), ownerLogin(account))
+            .orElseThrow(() -> new IllegalArgumentException("Financial subscription is not accessible"));
+        validateSubscriptionMatchesAccount(subscription, account);
+        return subscription;
+    }
+
+    private FinancialSubscription resolveOptionalSubscriptionIdForOwner(Long subscriptionId, FinancialAccount account) {
+        if (subscriptionId == null) {
+            return null;
+        }
+        FinancialSubscription subscription = financialSubscriptionRepository
+            .findOneWithToOneRelationshipsByIdAndUserLogin(subscriptionId, ownerLogin(account))
             .orElseThrow(() -> new IllegalArgumentException("Financial subscription is not accessible"));
         validateSubscriptionMatchesAccount(subscription, account);
         return subscription;
@@ -694,6 +816,87 @@ public class FinancialTransactionService {
             throw new IllegalArgumentException("Transaction ingestion account must match transaction account");
         }
         return transactionIngestion;
+    }
+
+    private TransactionIngestion resolveOptionalTransactionIngestionIdForPreview(Long transactionIngestionId, FinancialAccount account) {
+        if (transactionIngestionId == null) {
+            return null;
+        }
+        TransactionIngestionDTO dto = new TransactionIngestionDTO();
+        dto.setId(transactionIngestionId);
+        return resolveOptionalTransactionIngestionForCreate(dto, account);
+    }
+
+    private FinancialTransactionRulePreviewResponseDTO toPreviewResponse(TransactionRuleEvaluationResult evaluation) {
+        FinancialTransactionRulePreviewResponseDTO response = new FinancialTransactionRulePreviewResponseDTO();
+        response.setSuggestedCategory(toCategorySuggestionDTO(evaluation.suggestedCategory()));
+        response.setSuggestedTags(evaluation.suggestedTags().stream().map(this::toTagSuggestionDTO).toList());
+        response.setConflicts(evaluation.conflicts().stream().map(this::toRuleOutputConflictDTO).toList());
+        response.setSkippedOutputs(evaluation.skippedOutputs().stream().map(this::toSkippedRuleOutputDTO).toList());
+        response.setMatchedRules(evaluation.matchedRules().stream().map(this::toRuleMatchResultDTO).toList());
+        response.setHasSuggestions(evaluation.hasSuggestions());
+        response.setHasConflicts(evaluation.hasConflicts());
+        return response;
+    }
+
+    private CategorySuggestionDTO toCategorySuggestionDTO(CategorySuggestion suggestion) {
+        if (suggestion == null) {
+            return null;
+        }
+        CategorySuggestionDTO dto = new CategorySuggestionDTO();
+        dto.setCategoryId(suggestion.categoryId());
+        dto.setCategoryName(suggestion.categoryName());
+        dto.setSourceRuleId(suggestion.sourceRuleId());
+        dto.setSourceRuleName(suggestion.sourceRuleName());
+        dto.setConflictsWithCurrentValue(suggestion.conflictsWithCurrentValue());
+        dto.setCurrentCategoryId(suggestion.currentCategoryId());
+        dto.setCurrentCategoryName(suggestion.currentCategoryName());
+        return dto;
+    }
+
+    private TagSuggestionDTO toTagSuggestionDTO(TagSuggestion suggestion) {
+        TagSuggestionDTO dto = new TagSuggestionDTO();
+        dto.setTagId(suggestion.tagId());
+        dto.setTagName(suggestion.tagName());
+        dto.setSourceRuleId(suggestion.sourceRuleId());
+        dto.setSourceRuleName(suggestion.sourceRuleName());
+        dto.setAlreadyPresent(suggestion.alreadyPresent());
+        dto.setDuplicateOfEarlierSuggestion(suggestion.duplicateOfEarlierSuggestion());
+        return dto;
+    }
+
+    private RuleOutputConflictDTO toRuleOutputConflictDTO(RuleOutputConflict conflict) {
+        RuleOutputConflictDTO dto = new RuleOutputConflictDTO();
+        dto.setField(conflict.field());
+        dto.setCurrentValueId(conflict.currentValueId());
+        dto.setCurrentValueLabel(conflict.currentValueLabel());
+        dto.setSuggestedValueId(conflict.suggestedValueId());
+        dto.setSuggestedValueLabel(conflict.suggestedValueLabel());
+        dto.setSourceRuleId(conflict.sourceRuleId());
+        dto.setSourceRuleName(conflict.sourceRuleName());
+        dto.setReason(conflict.reason());
+        return dto;
+    }
+
+    private SkippedRuleOutputDTO toSkippedRuleOutputDTO(SkippedRuleOutput skippedOutput) {
+        SkippedRuleOutputDTO dto = new SkippedRuleOutputDTO();
+        dto.setField(skippedOutput.field());
+        dto.setSourceRuleId(skippedOutput.sourceRuleId());
+        dto.setSourceRuleName(skippedOutput.sourceRuleName());
+        dto.setReason(skippedOutput.reason());
+        dto.setValueId(skippedOutput.valueId());
+        dto.setValueLabel(skippedOutput.valueLabel());
+        return dto;
+    }
+
+    private RuleMatchResultDTO toRuleMatchResultDTO(RuleMatchResult match) {
+        RuleMatchResultDTO dto = new RuleMatchResultDTO();
+        dto.setRuleId(match.ruleId());
+        dto.setRuleName(match.ruleName());
+        dto.setPriority(match.priority());
+        dto.setConditionLogic(match.conditionLogic());
+        dto.setProposedOutputs(match.proposedOutputs());
+        return dto;
     }
 
     private void validateTransactionIngestionMatchesAccountAndOrigin(

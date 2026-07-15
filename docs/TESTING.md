@@ -1543,10 +1543,44 @@ Implemented Phase 2 coverage:
 - category plus multiple tags are applied once;
 - explicit same category remains and suggested tags still apply.
 
+### Rule Engine draft preview endpoint tests
+
+Phase 3A backend-only draft preview behavior is covered in `FinancialTransactionResourceIT`.
+
+Endpoint: `POST /api/financial-transactions/rule-preview`.
+
+Implemented Phase 3A coverage:
+
+- preview without explicit category returns the suggested category;
+- preview with explicit different category returns category conflict metadata;
+- preview with same explicit category does not produce a conflict;
+- preview without tags returns suggested tags;
+- preview with an explicit tag marks the suggestion as `alreadyPresent=true`;
+- preview with explicit tag plus new suggested tag returns both states;
+- duplicate tag suggestions are reported as skipped duplicate outputs;
+- no matching rules return empty suggestions/conflicts/skips/matches and false booleans;
+- inactive rules are ignored;
+- rules from another user are ignored;
+- foreign account preview is rejected;
+- admin preview for another user's account is rejected;
+- foreign category is rejected;
+- foreign tag is rejected;
+- required draft fields are validated (`accountId`, nonblank `description`, positive `amount`, `flow`, `origin`, `transactionDate`);
+- successful preview does not save a `FinancialTransaction`;
+- preview returns suggestions but does not apply `FILL_EMPTY_ONLY`;
+- no existing-transaction preview endpoint is implemented at `/api/financial-transactions/{id}/rule-preview`;
+- response assertions cover DTO-shaped output rather than full entity graphs.
+
 Future planned areas:
 
 - exhaustive field/operator/value matrix tests beyond the Phase 1 smoke coverage;
 - deeper `FILL_EMPTY_ONLY` edge-case tests beyond apply-on-create smoke coverage;
+- Phase 3B frontend two-step manual create UI tests after UI exists:
+  - Step 1 collects transaction details;
+  - the frontend calls `POST /api/financial-transactions/rule-preview`;
+  - Step 2 prepopulates editable category/tags from suggestions;
+  - final save sends the user's explicit categorization choices;
+- future origin-policy tests for API/import/ingestion runtime once that policy is decided; no `MANUAL`-only behavior is asserted today;
 - additional mode tests for confirmation and override modes;
 - future one-transaction reevaluation tests;
 - future bulk reevaluation safety tests.
