@@ -1217,6 +1217,49 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ---
 
+## CSV Ingestion v1 workflow
+
+**Scope:** canonical CSV import workflow using the existing ingestion entities. This is distinct from generated CRUD pages for `TransactionIngestion`, `FileIngestion`, and `IngestionRecord`.
+
+### I1 — persisted preview
+
+| Rule                     | Decision                                                                                                                                             | Status   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Parent batch             | `TransactionIngestion` is the parent import batch/process and owns the target `FinancialAccount`                                                     | **Done** |
+| File metadata            | `FileIngestion` is metadata only and links 1:1 to `TransactionIngestion`; it does not have its own account field                                     | **Done** |
+| Account derivation       | `FileIngestion` derives account through `TransactionIngestion.account`                                                                               | **Done** |
+| Preview records          | `IngestionRecord` represents one CSV data row                                                                                                        | **Done** |
+| No transactions in I1    | CSV preview creates no `FinancialTransaction` rows                                                                                                   | **Done** |
+| No Rule Engine in I1     | CSV preview does not run Rule Engine                                                                                                                 | **Done** |
+| Preview status semantics | `IngestionRecord.status = CREATED` means valid preview row in I1, ready to create a `FinancialTransaction` later                                     | **Done** |
+| Preview record link      | `IngestionRecord.financialTransaction` must be `null` for every I1 preview row, including `CREATED` rows                                             | **Done** |
+| Raw/normalized payload   | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON                                                             | **Done** |
+| Rejected uploads         | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred | **Done** |
+| Duplicate file checksum  | Same checksum/account is warning-only in I1; it does not block preview                                                                               | **Done** |
+
+### Canonical CSV transaction rules
+
+| Rule                 | Decision                                                                                         | Status   |
+| -------------------- | ------------------------------------------------------------------------------------------------ | -------- |
+| Contract             | Header must be exact, ordered, and case-sensitive                                                | **Done** |
+| Sign convention      | Positive `signedAmount` → `flow = IN`                                                            | **Done** |
+| Sign convention      | Negative `signedAmount` → `flow = OUT`                                                           | **Done** |
+| Amount normalization | Preview `amount = abs(signedAmount)`; I2 will use this when creating `FinancialTransaction` rows | **Done** |
+| Zero amount          | `signedAmount = 0` is invalid, not skipped                                                       | **Done** |
+| Currency             | Row `currency` must match selected account currency                                              | **Done** |
+| Account type         | CSV sign convention is canonical; do not infer flow from bank/account type/kind                  | **Done** |
+
+### I2 — confirm import
+
+| Rule                   | Decision                                                                                                       | Status       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------ |
+| Confirm import         | Create `FinancialTransaction` rows from valid preview records                                                  | **Planned**  |
+| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                               | **Planned**  |
+| Rule Engine            | Explicitly apply Rule Engine `FILL_EMPTY_ONLY` during confirm import unless a later design finds a clear issue | **Planned**  |
+| Evaluation persistence | Do not persist Rule Engine evaluation results in I2 unless separately designed                                 | **Deferred** |
+
+---
+
 ## 17. FinancialAccount
 
 **Pattern:** A. **Orchestrator** — most complex; implement **last**.

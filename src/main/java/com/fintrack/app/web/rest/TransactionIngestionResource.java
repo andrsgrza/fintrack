@@ -2,9 +2,11 @@ package com.fintrack.app.web.rest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fintrack.app.service.CsvIngestionPreviewService;
 import com.fintrack.app.service.TransactionIngestionQueryService;
 import com.fintrack.app.service.TransactionIngestionService;
 import com.fintrack.app.service.criteria.TransactionIngestionCriteria;
+import com.fintrack.app.service.dto.CsvIngestionPreviewResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
@@ -20,8 +22,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import tech.jhipster.web.util.HeaderUtil;
 import tech.jhipster.web.util.PaginationUtil;
@@ -45,15 +49,19 @@ public class TransactionIngestionResource {
 
     private final TransactionIngestionQueryService transactionIngestionQueryService;
 
+    private final CsvIngestionPreviewService csvIngestionPreviewService;
+
     private final ObjectMapper objectMapper;
 
     public TransactionIngestionResource(
         TransactionIngestionService transactionIngestionService,
         TransactionIngestionQueryService transactionIngestionQueryService,
+        CsvIngestionPreviewService csvIngestionPreviewService,
         ObjectMapper objectMapper
     ) {
         this.transactionIngestionService = transactionIngestionService;
         this.transactionIngestionQueryService = transactionIngestionQueryService;
+        this.csvIngestionPreviewService = csvIngestionPreviewService;
         this.objectMapper = objectMapper;
     }
 
@@ -80,6 +88,29 @@ public class TransactionIngestionResource {
         return ResponseEntity.created(new URI("/api/transaction-ingestions/" + transactionIngestionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, transactionIngestionDTO.getId().toString()))
             .body(transactionIngestionDTO);
+    }
+
+    /**
+     * {@code POST /transaction-ingestions/file-preview} : Parse and persist a canonical CSV ingestion preview.
+     *
+     * I1 preview creates TransactionIngestion, FileIngestion and IngestionRecord rows only.
+     * It does not create FinancialTransactions and does not run the Rule Engine.
+     *
+     * @param accountId the target account id.
+     * @param file the canonical CSV upload.
+     * @return the persisted preview response.
+     */
+    @PostMapping(value = "/file-preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CsvIngestionPreviewResponseDTO> createFilePreview(
+        @RequestParam(value = "accountId", required = false) Long accountId,
+        @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        LOG.debug("REST request to create CSV FileIngestion preview for account : {}", accountId);
+        try {
+            return ResponseEntity.ok(csvIngestionPreviewService.createPreview(accountId, file));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
     }
 
     /**

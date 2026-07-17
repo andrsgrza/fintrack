@@ -232,6 +232,44 @@ Companion docs:
 | **Service** | **`existsByTransactionIngestionIdAndRecordIndex()`**; normalized `externalRecordId` uniqueness per parent; optional FT: accessible + same-owner + same parent + **`existsByFinancialTransactionId()`**. Immutable: parent, `recordIndex`, `externalRecordId`, `rawData`, `createdAt`; `createdAt = now()` on create. Status consistency and parent-final freeze enforced. Direct delete blocked. |
 | **REST**    | `@Valid` POST; PUT/PATCH **JsonNode**; `400 invalid`.                                                                                                                                                                                                                                                                                                                                            |
 
+### CSV Ingestion v1 preview validation
+
+**Scope:** `POST /api/transaction-ingestions/file-preview` canonical CSV workflow. This is not the generated `FileIngestion` or `IngestionRecord` CRUD contract.
+
+#### File/header
+
+| Rule                      | Decision                                                                                                                                           |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header                    | Exact header required: `transactionDate,postingDate,description,signedAmount,currency,externalReference,notes`.                                    |
+| Header order/case         | Ordered and case-sensitive. Missing, extra, reordered, or case-changed headers are rejected.                                                       |
+| Missing file              | Rejected; create nothing in I1.                                                                                                                    |
+| Empty file                | Rejected; create nothing in I1.                                                                                                                    |
+| Header-only file          | Rejected; create nothing in I1.                                                                                                                    |
+| Unreadable/malformed file | Rejected; create nothing in I1.                                                                                                                    |
+| Max file size             | 2 MB.                                                                                                                                              |
+| Max data rows             | 5,000 rows, excluding header.                                                                                                                      |
+| Invalid/rejected upload   | Creates no `TransactionIngestion`, `FileIngestion`, or `IngestionRecord` in I1. Persisted `FAILED` ingestion for rejected upload remains deferred. |
+
+#### Rows
+
+When the header is valid, invalid rows persist as `REJECTED` `IngestionRecord`s.
+
+| Field / rule         | Decision                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `transactionDate`    | Required ISO date `YYYY-MM-DD`.                                                                               |
+| `postingDate`        | Optional ISO date `YYYY-MM-DD`; blank normalizes to `null`.                                                   |
+| `description`        | Required nonblank after trim; max 500 after trim.                                                             |
+| `signedAmount`       | Required decimal; nonzero; max scale 2.                                                                       |
+| Positive amount      | `signedAmount > 0` normalizes to `flow = IN`.                                                                 |
+| Negative amount      | `signedAmount < 0` normalizes to `flow = OUT`.                                                                |
+| Normalized amount    | `amount = abs(signedAmount)`.                                                                                 |
+| Zero amount          | `signedAmount = 0` invalid, not skipped.                                                                      |
+| `currency`           | Required and must match selected `FinancialAccount.currency`.                                                 |
+| `externalReference`  | Optional; trim; blank to `null`; max 150 after trim.                                                          |
+| `notes`              | Optional; trim; blank to `null`; max 1000 after trim.                                                         |
+| Valid preview status | `IngestionRecordStatus.CREATED` means valid preview row in I1, not an already-created `FinancialTransaction`. |
+| FT link in I1        | `financialTransaction` must remain `null` for every I1 preview row.                                           |
+
 ### 15. ApiAccessToken
 
 | Layer       | Rules                                                                                                                                                                                                                                                                                                                                                     |

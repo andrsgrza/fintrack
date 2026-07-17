@@ -580,3 +580,24 @@ Do not extend this as:
 - persisted evaluation results;
 - audit log;
 - `MANUAL`-only backend apply behavior.
+
+## CSV Ingestion v1 — upload/preview workflow
+
+Status: planned.
+
+CSV import upload/preview is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
+
+Composition rules:
+
+- start from TransactionIngestion list/page with a contextual "New File Import" action;
+- select the target FinancialAccount and upload the canonical CSV;
+- call `POST /api/transaction-ingestions/file-preview`;
+- show persisted preview summary and rows;
+- do not use generated FileIngestion create as the main product flow;
+- do not embed full FileIngestion CRUD inside TransactionIngestion;
+- use contextual upload/preview components;
+- preview rows are high-volume, so use related-list/table style rather than inline editable child collection;
+- I1 has no confirm/import action;
+- later FinancialAccount shortcut should reuse the same flow with account preselected.
+
+`FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview rows. In I1, no `FinancialTransaction` rows are created from the UI.

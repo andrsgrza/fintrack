@@ -2484,6 +2484,63 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 ---
 
+## CSV Ingestion v1 tests
+
+**Scope:** canonical CSV import workflow. I1 is persisted preview only: it creates `TransactionIngestion`, `FileIngestion`, and `IngestionRecord` rows, but no `FinancialTransaction` rows and no Rule Engine execution.
+
+### I1A unit tests — parser/validator
+
+- exact header accepted.
+- missing column rejected.
+- extra column rejected.
+- reordered header rejected.
+- case-changed header rejected.
+- invalid `transactionDate`.
+- invalid `postingDate`.
+- blank `description`.
+- description max length.
+- zero `signedAmount`.
+- malformed `signedAmount`.
+- `signedAmount` scale > 2 rejected.
+- positive `signedAmount` normalizes to `flow = IN` + absolute amount.
+- negative `signedAmount` normalizes to `flow = OUT` + absolute amount.
+- unsupported currency.
+- account currency mismatch.
+- `externalReference` trim/blank-to-null.
+- `notes` trim/blank-to-null.
+- quoted CSV field with comma.
+- empty file.
+- header-only file.
+- row limit: 5,000 data rows max.
+- file size limit: 2 MB max.
+
+### I1B resource/integration tests — persisted preview
+
+- valid CSV upload creates `TransactionIngestion`, `FileIngestion`, and `IngestionRecord` rows.
+- invalid rows persist as `REJECTED` records when header is valid.
+- valid preview rows use `IngestionRecordStatus.CREATED` and `financialTransaction` remains `null`.
+- invalid header creates nothing.
+- inaccessible account rejected and creates nothing.
+- admin foreign account rejected and creates nothing.
+- checksum stored as SHA-256 hex digest.
+- duplicate checksum for same account returns warning only.
+- `parserName = fintrack-canonical-csv` and `parserVersion = 1.0` stored.
+- `storageKey = null` in I1.
+- `statementStartDate` / `statementEndDate` derived from valid rows.
+- counters correct: received = data rows, created = 0, skipped = 0, rejected = invalid rows.
+- no `FinancialTransaction` rows created.
+- Rule Engine not invoked.
+
+### I2 planned tests — confirm import
+
+- confirm import creates `FinancialTransaction` rows from valid preview rows.
+- imported transactions use `origin = FILE_IMPORT`.
+- `IngestionRecord` links to created `FinancialTransaction`.
+- Rule Engine `FILL_EMPTY_ONLY` is applied explicitly.
+- counters update correctly after confirm import.
+
+---
+
 Copy this block when hardening the next entity:
 
 ```markdown
@@ -2558,5 +2615,6 @@ Copy this block when hardening the next entity:
 | 2026-07-12 | FinancialTransaction domain rules     | 101 IT, 10 service unit; JsonNode presence semantics, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup.                                                                                                                           |
 | 2026-07-12 | FinancialAccount domain rules         | 118 IT, 12 service unit; delete orchestration for ingestion/transaction trees and account-level links, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                |
 | 2026-07-13 | FinancialAccount balance read model   | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                           |
+| 2026-07-17 | CSV Ingestion I1A/I1B backend         | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted preview endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                         |
 | 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                            |
 | 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal. |

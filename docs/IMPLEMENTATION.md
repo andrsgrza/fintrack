@@ -830,6 +830,8 @@ Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. 
 
 **Fuera de scope:** pipeline FILE/API, parent count reconciliation, balances/rule-engine execution.
 
+> CSV Ingestion I1 exception: the canonical CSV preview endpoint uses `IngestionRecordStatus.CREATED` to mean "valid preview row" with `financialTransaction = null`. That workflow is separate from generated `IngestionRecord` CRUD semantics and is documented in [CSV-INGESTION-V1-DESIGN.md](CSV-INGESTION-V1-DESIGN.md).
+
 #### Checklist ownership ✅
 
 - [x] Repository: scoped eager joins + `existsByFinancialTransactionId` + `existsByTransactionIngestionIdAndRecordIndex`
@@ -844,6 +846,66 @@ Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. 
 #### Domain rules ⏳ (fase 6)
 
 Procesamiento FILE/API, status machine, creación de transactions con `origin` FILE/API.
+
+---
+
+### 14b. CSV Ingestion v1 backend I1 ✅
+
+**Design:** [CSV-INGESTION-V1-DESIGN.md](CSV-INGESTION-V1-DESIGN.md)
+
+CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes were needed for I1.
+
+#### I1A — canonical CSV parser/validator
+
+| Item        | Plan                                                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Service     | `CanonicalCsvIngestionParser`.                                                                                                |
+| Persistence | None.                                                                                                                         |
+| Contract    | Exact ordered case-sensitive header: `transactionDate,postingDate,description,signedAmount,currency,externalReference,notes`. |
+| Limits      | 2 MB file size; 5,000 data rows.                                                                                              |
+| Output      | In-memory parsed rows with raw values, normalized values, errors, and warnings.                                               |
+| Tests       | `CanonicalCsvIngestionParserTest`.                                                                                            |
+
+#### I1B — persisted preview endpoint
+
+| Item               | Plan                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint           | `POST /api/transaction-ingestions/file-preview` multipart with `accountId` + `file`.                                                                        |
+| Ownership          | Resolve account ownership before creating anything. Admin has no special import bypass.                                                                     |
+| Parent             | Create `TransactionIngestion` with `ingestionType = FILE`.                                                                                                  |
+| File child         | Create `FileIngestion` metadata with `fileType = CSV`, `parserName = fintrack-canonical-csv`, `parserVersion = 1.0`, SHA-256 checksum, `storageKey = null`. |
+| Records            | Create one `IngestionRecord` per CSV data row. Store raw/normalized/errors/warnings in `rawData` JSON.                                                      |
+| Status             | Valid preview rows use `IngestionRecordStatus.CREATED`; in I1 this means "valid preview row", not "transaction created".                                    |
+| FT link            | Every I1 `IngestionRecord.financialTransaction` remains `null`.                                                                                             |
+| Counters           | `recordsReceived = data rows`; `recordsCreated = 0`; `recordsRejected = invalid rows`; `recordsSkipped = 0`.                                                |
+| Dates              | `FileIngestion.statementStartDate/statementEndDate` derive from min/max `transactionDate` among valid rows.                                                 |
+| Rejected upload    | Invalid header, missing file, empty file, header-only file, unreadable file, and oversized file create nothing in I1.                                       |
+| Duplicate checksum | Same checksum/account is warning-only in I1; it does not block preview.                                                                                     |
+| Service            | `CsvIngestionPreviewService`.                                                                                                                               |
+| Response           | Return persisted preview DTO with summary counts, global warnings, and rows.                                                                                |
+| Not included       | No `FinancialTransaction` creation; no Rule Engine.                                                                                                         |
+| Tests              | `CsvIngestionPreviewResourceIT`.                                                                                                                            |
+
+#### I1C — minimal UI
+
+| Item     | Plan                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------- |
+| Entry    | TransactionIngestion domain workflow, not generated FileIngestion create.                   |
+| Form     | Select account, upload canonical CSV, submit preview.                                       |
+| Result   | Show persisted preview summary and row table.                                               |
+| Confirm  | No confirm/import action in I1.                                                             |
+| Shortcut | Later FinancialAccount detail shortcut should reuse the same flow with account preselected. |
+
+#### I2 — confirm import
+
+| Item        | Plan                                                                                                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Endpoint    | Confirm import endpoint.                                                                                                                                                       |
+| Creation    | Create `FinancialTransaction` rows from valid preview records.                                                                                                                 |
+| Origin      | Imported transactions use `origin = FILE_IMPORT`.                                                                                                                              |
+| Record link | Link each imported `IngestionRecord` to its created `FinancialTransaction`.                                                                                                    |
+| Rule Engine | Explicitly apply Rule Engine `FILL_EMPTY_ONLY` during confirm import unless a later design finds a clear issue. This must be tested and must not be an accidental side effect. |
+| Counters    | Update import counters according to created/skipped/rejected rows.                                                                                                             |
 
 ---
 
@@ -1074,6 +1136,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-11 | CreditAccountDetails domain rules ✅: direct DELETE blocked (`400` invalid; admin no bypass; foreign `404`); mutable credit fields without utilization checks; `CREDIT_CARD` details expected for full functionality but not enforced by `FinancialAccountService` today (atomic create / required-details enforcement deferred). 41 IT + 10 service.                        |
 | 2026-07-13 | CreditAccountDetails timestamp hardening ✅: `createdAt`/`updatedAt` server-owned; create ignores/missing client timestamps; PUT/PATCH reject explicit null/change and set `updatedAt=now` on success; frontend create no longer injects fake timestamps. 50 IT + 21 service + frontend CAD tests.                                                                           |
 | 2026-07-13 | FinancialAccount/CreditAccountDetails UI composition ✅: `CREDIT_CARD` FinancialAccount create/edit embeds editable credit-card details without parent selector; detail embeds read-only section; standalone CAD CRUD remains; backend adds scoped `GET /api/credit-account-details/by-account/{accountId}` helper. 53 CAD IT + 22 CAD service + FA/CAD frontend tests.      |
+| 2026-07-17 | CSV Ingestion I1A/I1B backend ✅: canonical CSV parser/validator + `POST /api/transaction-ingestions/file-preview`; persists `TransactionIngestion`, `FileIngestion`, and preview `IngestionRecord`s only; no DB/JDL/Liquibase, no `FinancialTransaction` creation, no Rule Engine.                                                                                          |
 | 2026-07-11 | Grupo 1 delete confirmation dialogs ✅: domain-aware UX copy for UDP, AATP, Tag, Category; CAD informational-only (no confirm). i18n en/es.                                                                                                                                                                                                                                  |
 | 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                                                                                        |
 | 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6.                                                                    |
