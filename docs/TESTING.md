@@ -2531,6 +2531,20 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 - no `FinancialTransaction` rows created.
 - Rule Engine not invoked.
 
+### I1C frontend tests — minimal upload/preview UI
+
+Covered by `transaction-ingestion-file-preview.spec.tsx`.
+
+- TransactionIngestion list renders the contextual "New File Import" route action.
+- Preview page renders account selector, CSV file input, preview-only notice, and Preview button.
+- Account is required before submit.
+- File is required before submit.
+- Successful submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file-preview`.
+- Persisted preview response renders summary counts.
+- Duplicate checksum warning renders as a non-blocking warning.
+- Rejected row error renders in the row table.
+- No confirm/import action is rendered in I1C.
+
 ### I2 planned tests — confirm import
 
 - confirm import creates `FinancialTransaction` rows from valid preview rows.
@@ -2616,5 +2630,6 @@ Copy this block when hardening the next entity:
 | 2026-07-12 | FinancialAccount domain rules         | 118 IT, 12 service unit; delete orchestration for ingestion/transaction trees and account-level links, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                |
 | 2026-07-13 | FinancialAccount balance read model   | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                           |
 | 2026-07-17 | CSV Ingestion I1A/I1B backend         | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted preview endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                         |
+| 2026-07-17 | CSV Ingestion I1C frontend            | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart preview submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                 |
 | 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                            |
 | 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal. |

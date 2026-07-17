@@ -5,6 +5,7 @@
         "title": "Transaction Ingestions",
         "refreshListLabel": "Refrescar lista",
         "createLabel": "Crear nuevo Transaction Ingestion",
+        "newFileImportLabel": "Nueva importación de archivo",
         "createOrEditLabel": "Crear o editar Transaction Ingestion",
         "notFound": "Ningún Transaction Ingestions encontrado"
       },
@@ -33,7 +34,39 @@
       "fileIngestion": "File Ingestion",
       "apiIngestion": "Api Ingestion",
       "financialTransactions": "Financial Transactions",
-      "records": "Records"
+      "records": "Records",
+      "filePreview": {
+        "title": "Vista previa de importación de archivo",
+        "help": "Sube un archivo CSV canónico de FINTRACK para crear una vista previa persistida.",
+        "account": "Cuenta",
+        "csvFile": "Archivo CSV",
+        "csvHint": "Encabezado esperado: transactionDate,postingDate,description,signedAmount,currency,externalReference,notes",
+        "preview": "Vista previa",
+        "previewCreated": "Vista previa creada",
+        "previewOnly": "Solo vista previa — no se crearon transacciones.",
+        "transactionIngestionId": "ID de importación de transacciones",
+        "fileIngestionId": "ID de archivo importado",
+        "recordsReceived": "Registros recibidos",
+        "validRows": "Filas válidas",
+        "invalidRows": "Filas inválidas",
+        "recordsRejected": "Registros rechazados",
+        "warnings": "Advertencias",
+        "duplicateFile": "Ya se previsualizó un archivo con el mismo checksum para esta cuenta.",
+        "transactionDate": "Fecha de transacción",
+        "postingDate": "Fecha de aplicación",
+        "description": "Descripción",
+        "signedAmount": "Monto con signo",
+        "amount": "Monto",
+        "flow": "Flujo",
+        "currency": "Moneda",
+        "externalReference": "Referencia externa",
+        "error": "Error",
+        "errors": {
+          "accountRequired": "La cuenta es obligatoria.",
+          "fileRequired": "El archivo CSV es obligatorio.",
+          "previewFailed": "No se pudo crear la vista previa. Revisa el archivo e inténtalo de nuevo."
+        }
+      }
     }
   }
 }

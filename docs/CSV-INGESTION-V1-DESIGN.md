@@ -411,13 +411,13 @@ Future:
 - Optional bulk review before import.
 - Bulk reevaluation remains deferred.
 
-## 10. UI design for later phases
+## 10. UI design
 
 I1C UI starts from `TransactionIngestion`, not generated `FileIngestion` create.
 
 TransactionIngestion page/list:
 
-- Add "New File Import" button.
+- Add "New File Import" button. Implemented at `/transaction-ingestion/file-preview/new`.
 - User selects account.
 - User uploads canonical CSV.
 - Submit preview.
@@ -439,7 +439,7 @@ Preview screen:
   - `error`
 - Expandable raw row if useful.
 - No `FinancialTransaction` rows are created in I1.
-- Confirm/import button is absent or disabled/deferred until I2.
+- Confirm/import button is absent until I2.
 
 Future shortcut:
 
@@ -488,9 +488,9 @@ UI composition conventions:
 
 ### I1C — Minimal UI
 
-- Add TransactionIngestion upload/preview flow.
-- Show summary and row table.
-- No confirm/import action yet.
+- Add TransactionIngestion upload/preview flow. **Implemented.**
+- Show summary and row table. **Implemented.**
+- No confirm/import action yet. **Implemented.**
 
 ### I2 — Confirm import
 
@@ -560,14 +560,16 @@ UI composition conventions:
 - Rule Engine not invoked.
 - duplicate checksum produces warning but does not block.
 
-### Frontend tests later for I1C
+### I1C frontend tests
 
 - account required.
 - file required.
+- multipart preview submit.
 - preview summary renders counts.
+- duplicate checksum warning renders.
 - invalid row errors render.
 - no confirm/import action in I1.
-- future account shortcut preselects account.
+- future account shortcut preselects account remains deferred.
 
 ## 13. Docs to update during implementation later
 

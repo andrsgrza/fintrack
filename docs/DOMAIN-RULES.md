@@ -1223,19 +1223,20 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### I1 — persisted preview
 
-| Rule                     | Decision                                                                                                                                             | Status   |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Parent batch             | `TransactionIngestion` is the parent import batch/process and owns the target `FinancialAccount`                                                     | **Done** |
-| File metadata            | `FileIngestion` is metadata only and links 1:1 to `TransactionIngestion`; it does not have its own account field                                     | **Done** |
-| Account derivation       | `FileIngestion` derives account through `TransactionIngestion.account`                                                                               | **Done** |
-| Preview records          | `IngestionRecord` represents one CSV data row                                                                                                        | **Done** |
-| No transactions in I1    | CSV preview creates no `FinancialTransaction` rows                                                                                                   | **Done** |
-| No Rule Engine in I1     | CSV preview does not run Rule Engine                                                                                                                 | **Done** |
-| Preview status semantics | `IngestionRecord.status = CREATED` means valid preview row in I1, ready to create a `FinancialTransaction` later                                     | **Done** |
-| Preview record link      | `IngestionRecord.financialTransaction` must be `null` for every I1 preview row, including `CREATED` rows                                             | **Done** |
-| Raw/normalized payload   | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON                                                             | **Done** |
-| Rejected uploads         | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred | **Done** |
-| Duplicate file checksum  | Same checksum/account is warning-only in I1; it does not block preview                                                                               | **Done** |
+| Rule                     | Decision                                                                                                                                                      | Status   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Parent batch             | `TransactionIngestion` is the parent import batch/process and owns the target `FinancialAccount`                                                              | **Done** |
+| File metadata            | `FileIngestion` is metadata only and links 1:1 to `TransactionIngestion`; it does not have its own account field                                              | **Done** |
+| Account derivation       | `FileIngestion` derives account through `TransactionIngestion.account`                                                                                        | **Done** |
+| Preview records          | `IngestionRecord` represents one CSV data row                                                                                                                 | **Done** |
+| No transactions in I1    | CSV preview creates no `FinancialTransaction` rows                                                                                                            | **Done** |
+| No Rule Engine in I1     | CSV preview does not run Rule Engine                                                                                                                          | **Done** |
+| Preview status semantics | `IngestionRecord.status = CREATED` means valid preview row in I1, ready to create a `FinancialTransaction` later                                              | **Done** |
+| Preview record link      | `IngestionRecord.financialTransaction` must be `null` for every I1 preview row, including `CREATED` rows                                                      | **Done** |
+| Raw/normalized payload   | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON                                                                      | **Done** |
+| Rejected uploads         | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred          | **Done** |
+| Duplicate file checksum  | Same checksum/account is warning-only in I1; it does not block preview                                                                                        | **Done** |
+| Minimal preview UI       | TransactionIngestion “New File Import” workflow selects account, uploads CSV, shows persisted preview summary/warnings/rows, and has no confirm/import action | **Done** |
 
 ### Canonical CSV transaction rules
 

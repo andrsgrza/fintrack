@@ -888,13 +888,14 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 
 #### I1C — minimal UI
 
-| Item     | Plan                                                                                        |
-| -------- | ------------------------------------------------------------------------------------------- |
-| Entry    | TransactionIngestion domain workflow, not generated FileIngestion create.                   |
-| Form     | Select account, upload canonical CSV, submit preview.                                       |
-| Result   | Show persisted preview summary and row table.                                               |
-| Confirm  | No confirm/import action in I1.                                                             |
-| Shortcut | Later FinancialAccount detail shortcut should reuse the same flow with account preselected. |
+| Item     | Status                                                                                                                                                               |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entry    | ✅ TransactionIngestion domain workflow at `/transaction-ingestion/file-preview/new`, linked from the TransactionIngestion list; not generated FileIngestion create. |
+| Form     | ✅ Select account, upload canonical CSV, submit preview.                                                                                                             |
+| Result   | ✅ Show persisted preview summary, non-blocking warnings, preview-only notice, and read-only row table.                                                              |
+| Confirm  | ✅ No confirm/import action in I1.                                                                                                                                   |
+| Shortcut | Deferred; later FinancialAccount detail shortcut should reuse the same flow with account preselected.                                                                |
+| Tests    | ✅ `transaction-ingestion-file-preview.spec.tsx`.                                                                                                                    |
 
 #### I2 — confirm import
 
@@ -1137,6 +1138,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-13 | CreditAccountDetails timestamp hardening ✅: `createdAt`/`updatedAt` server-owned; create ignores/missing client timestamps; PUT/PATCH reject explicit null/change and set `updatedAt=now` on success; frontend create no longer injects fake timestamps. 50 IT + 21 service + frontend CAD tests.                                                                           |
 | 2026-07-13 | FinancialAccount/CreditAccountDetails UI composition ✅: `CREDIT_CARD` FinancialAccount create/edit embeds editable credit-card details without parent selector; detail embeds read-only section; standalone CAD CRUD remains; backend adds scoped `GET /api/credit-account-details/by-account/{accountId}` helper. 53 CAD IT + 22 CAD service + FA/CAD frontend tests.      |
 | 2026-07-17 | CSV Ingestion I1A/I1B backend ✅: canonical CSV parser/validator + `POST /api/transaction-ingestions/file-preview`; persists `TransactionIngestion`, `FileIngestion`, and preview `IngestionRecord`s only; no DB/JDL/Liquibase, no `FinancialTransaction` creation, no Rule Engine.                                                                                          |
+| 2026-07-17 | CSV Ingestion I1C frontend ✅: TransactionIngestion “New File Import” workflow at `/transaction-ingestion/file-preview/new`; account + CSV upload, persisted preview summary/warnings/rows, preview-only notice, no confirm/import action.                                                                                                                                   |
 | 2026-07-11 | Grupo 1 delete confirmation dialogs ✅: domain-aware UX copy for UDP, AATP, Tag, Category; CAD informational-only (no confirm). i18n en/es.                                                                                                                                                                                                                                  |
 | 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                                                                                        |
 | 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6.                                                                    |

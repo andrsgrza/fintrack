@@ -583,7 +583,7 @@ Do not extend this as:
 
 ## CSV Ingestion v1 — upload/preview workflow
 
-Status: planned.
+Status: implemented for I1C minimal upload/preview.
 
 CSV import upload/preview is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
 
@@ -600,4 +600,4 @@ Composition rules:
 - I1 has no confirm/import action;
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
-`FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview rows. In I1, no `FinancialTransaction` rows are created from the UI.
+The implemented I1C route is `/transaction-ingestion/file-preview/new`. It renders a minimal account selector, CSV file input, preview submit action, preview-only notice, summary counts, global warnings, and a read-only row table. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview rows. In I1, no `FinancialTransaction` rows are created from the UI and no confirm/import action is rendered.

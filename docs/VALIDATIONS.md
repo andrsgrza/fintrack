@@ -270,6 +270,10 @@ When the header is valid, invalid rows persist as `REJECTED` `IngestionRecord`s.
 | Valid preview status | `IngestionRecordStatus.CREATED` means valid preview row in I1, not an already-created `FinancialTransaction`. |
 | FT link in I1        | `financialTransaction` must remain `null` for every I1 preview row.                                           |
 
+#### UI
+
+The I1C UI is a minimal `TransactionIngestion` workflow at `/transaction-ingestion/file-preview/new`. It requires selecting an account and a file before submit, but it does not duplicate canonical CSV validation in the browser. Backend validation remains the source of truth. The UI posts multipart `accountId` + `file`, displays the persisted preview response, shows duplicate-checksum warnings as non-blocking, and does not render a confirm/import action.
+
 ### 15. ApiAccessToken
 
 | Layer       | Rules                                                                                                                                                                                                                                                                                                                                                     |

@@ -5,6 +5,7 @@
         "title": "Transaction Ingestions",
         "refreshListLabel": "Refresh list",
         "createLabel": "Create a new Transaction Ingestion",
+        "newFileImportLabel": "New File Import",
         "createOrEditLabel": "Create or edit a Transaction Ingestion",
         "notFound": "No Transaction Ingestions found"
       },
@@ -33,7 +34,39 @@
       "fileIngestion": "File Ingestion",
       "apiIngestion": "Api Ingestion",
       "financialTransactions": "Financial Transactions",
-      "records": "Records"
+      "records": "Records",
+      "filePreview": {
+        "title": "File import preview",
+        "help": "Upload a canonical FINTRACK CSV file to create a persisted preview.",
+        "account": "Account",
+        "csvFile": "CSV file",
+        "csvHint": "Expected header: transactionDate,postingDate,description,signedAmount,currency,externalReference,notes",
+        "preview": "Preview",
+        "previewCreated": "Preview created",
+        "previewOnly": "Preview only — no transactions were created.",
+        "transactionIngestionId": "Transaction Ingestion ID",
+        "fileIngestionId": "File Ingestion ID",
+        "recordsReceived": "Records received",
+        "validRows": "Valid rows",
+        "invalidRows": "Invalid rows",
+        "recordsRejected": "Records rejected",
+        "warnings": "Warnings",
+        "duplicateFile": "A file with the same checksum was already previewed for this account.",
+        "transactionDate": "Transaction date",
+        "postingDate": "Posting date",
+        "description": "Description",
+        "signedAmount": "Signed amount",
+        "amount": "Amount",
+        "flow": "Flow",
+        "currency": "Currency",
+        "externalReference": "External reference",
+        "error": "Error",
+        "errors": {
+          "accountRequired": "Account is required.",
+          "fileRequired": "CSV file is required.",
+          "previewFailed": "Could not create file preview. Check the file and try again."
+        }
+      }
     }
   }
 }

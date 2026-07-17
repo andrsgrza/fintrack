@@ -12,6 +12,7 @@ import reducer, {
   getEntity,
   partialUpdateEntity,
   reset,
+  TransactionIngestionState,
   updateEntity,
 } from './transaction-ingestion.reducer';
 
@@ -23,7 +24,7 @@ describe('Entities reducer tests', () => {
     return Object.keys(element).length === 0;
   }
 
-  const initialState: EntityState<ITransactionIngestion> = {
+  const initialState: EntityState<ITransactionIngestion> & TransactionIngestionState = {
     loading: false,
     errorMessage: null,
     entities: [],
@@ -31,6 +32,10 @@ describe('Entities reducer tests', () => {
     totalItems: 0,
     updating: false,
     updateSuccess: false,
+    fileIngestionParentCandidates: [],
+    loadingFileIngestionParentCandidates: false,
+    apiIngestionParentCandidates: [],
+    loadingApiIngestionParentCandidates: false,
   };
 
   function testInitialState(state) {
