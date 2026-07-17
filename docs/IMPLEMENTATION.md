@@ -60,7 +60,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **Nota — PATCH link semantics:** el resource PATCH recibe `JsonNode`; el service usa `patchNode.has(...)` para distinguir campo **ausente** (preservar link) vs **presente** (`null`/`[]` limpia M2M; `null` limpia ManyToOne). Implementado en Budget, FinancialSubscription, TransactionRule, FinancialAccount (inmutables), etc.
 
-**Nota — TransactionRule outputs:** `resultingCategory` / `resultingFinancialSubscription` / `resultingTags` se validan contra el **dueño de la rule** (`ownerLogin`), no contra el usuario actual — admin puede editar la rule ajena pero no adjuntar outputs de otro user.
+**Nota — TransactionRule outputs:** `resultingCategory` / `resultingTags` se validan contra el **dueño de la rule** (`ownerLogin`), no contra el usuario actual — admin puede editar la rule ajena pero no adjuntar outputs de otro user.
 
 **Convención HTTP cross-user (todas las entidades con ownership):** PUT/PATCH de recurso ajeno → `400` `idnotfound`; GET/DELETE → `404`. No variar por entidad.
 
@@ -399,64 +399,80 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 ### 6. TransactionRule ✅ ✅ ✅
 
-**JDL:** `user` required; `resultingCategory` / `resultingFinancialSubscription` opcionales (ManyToOne); `resultingTags` opcional (M2M). Evaluada al crear transaction (motor ⏳).
+**JDL:** `user` required; `resultingCategory` opcional (ManyToOne); `resultingTags` opcional (M2M). Evaluada al crear transaction (motor ⏳).
 
 #### Ownership ✅
 
-| Regla                                | Implementación                                                                                 |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Create asigna `user = currentUser`   | `TransactionRuleService.save()`                                                                |
-| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` y links                                     |
-| List / criteria filtrados por user   | `TransactionRuleQueryService` + repository                                                     |
-| Get / update / patch / delete scoped | `findAccessibleEntity()` (con bag relationships)                                               |
-| Admin bypass                         | `CurrentUserService.isAdmin()`                                                                 |
-| UI sin User                          | `transaction-rule-*.tsx`                                                                       |
-| Links owned por **dueño de la rule** | `resolveOptionalCategory/Subscription/Tags` con `ownerLogin` — **sin bypass admin en outputs** |
-| PATCH links                          | `partialUpdate(dto, patchNode)` — `has("resultingCategory")` etc.                              |
+| Regla                                | Implementación                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| Create asigna `user = currentUser`   | `TransactionRuleService.save()`                                                   |
+| Cliente no elige user                | DTO sin `@NotNull` en `user`; mapper ignora `user` y links                        |
+| List / criteria filtrados por user   | `TransactionRuleQueryService` + repository                                        |
+| Get / update / patch / delete scoped | `findAccessibleEntity()` (con bag relationships)                                  |
+| Admin bypass                         | `CurrentUserService.isAdmin()`                                                    |
+| UI sin User                          | `transaction-rule-*.tsx`                                                          |
+| Links owned por **dueño de la rule** | `resolveOptionalCategory/Tags` con `ownerLogin` — **sin bypass admin en outputs** |
+| PATCH links                          | `partialUpdate(dto, patchNode)` — `has("resultingCategory")` etc.                 |
 
 **Archivos:** `TransactionRuleRepository`, `TransactionRuleService`, `TransactionRuleQueryService`, `TransactionRuleResource` (PATCH con `JsonNode`), `TransactionRuleDTO`, `TransactionRuleMapper`, UI.
 
 #### Domain rules ✅ (CRUD/domain baseline)
 
-| Regla                                           | Estado | Notas                                                                                                                                                                              |
-| ----------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                                                                          |
-| No cambiar dueño en update/patch                | ✅     |                                                                                                                                                                                    |
-| Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                                                                                    |
-| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/subscription/tag                                                                                                                                |
-| PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                                                                             |
-| Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                                                                               |
-| Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                                                                              |
-| Description/resultingDescription normalization  | ✅     | trim; blank → `null`                                                                                                                                                               |
-| Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now`                                                           |
-| Server-managed priority/order                   | ✅     | per-user 0-based consecutive ordering; create appends; update/patch preserve; delete reindexes same owner only                                                                     |
-| Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                                                                                         |
-| Rule requiere al menos un output                | ✅     | final merged state                                                                                                                                                                 |
-| Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                                                                                        |
-| PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                                                                                      |
-| Parent-centered conditions endpoint             | ✅     | `GET /api/transaction-rules/{id}/conditions`, scoped by parent access, sorted by `position,id`                                                                                     |
-| Rule list ordering                              | ✅     | `TransactionRuleQueryService.findByCriteria` sorts filtered results by `priority ASC, id ASC`                                                                                      |
-| Parent-centered conditions UX                   | ✅     | TransactionRule detail embeds inline add/edit/delete editor; edit remains general rule fields only                                                                                 |
-| Create flow                                     | ✅     | Create hides Active/conditions, submits `active=false`, and redirects to detail for condition management after parent id exists                                                    |
-| Embedded condition form                         | ✅     | Reuses TransactionRuleCondition smart form section/helper; parent hidden/fixed by TransactionRule detail page                                                                      |
-| Embedded condition mutation                     | ✅     | POST includes `transactionRule: { id }`; adding does not auto-activate; PATCH sends editable fields only; DELETE refreshes conditions and parent state                             |
-| Active toggle UX                                | ✅     | Edit page background-loads condition count and disables Active when empty/unavailable; backend still validates `active=true`                                                       |
-| Product-oriented rule UX                        | ✅     | List/detail use translated status, condition logic, output/result summaries, compact view/edit layout parity, and metadata                                                         |
-| Priority/order UX                               | ✅     | List/detail show read-only 1-based order; list forces `priority ASC, id ASC`, exposes only possible Move up / Move down controls, and create/edit do not render or submit priority |
-| Manual reorder endpoint                         | ✅     | `PUT /api/transaction-rules/reorder` accepts full current-user ordered ids, validates exact membership, and normalizes priorities to `0..n`                                        |
-| Edit form hydration                             | ✅     | Edit waits for the requested entity before mounting the JHipster `ValidatedForm`; fields stay direct children for registration/defaults                                            |
-| **Ejecución al crear transaction**              | ⏳     | Fase 6 — motor                                                                                                                                                                     |
-| Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                             |
+| Regla                                           | Estado | Notas                                                                                                                                                                                                      |
+| ----------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Usuario no puede ver/editar rule ajena          | ✅     | Pattern A                                                                                                                                                                                                  |
+| No cambiar dueño en update/patch                | ✅     |                                                                                                                                                                                                            |
+| Admin accede a todo (CRUD rule)                 | ✅     |                                                                                                                                                                                                            |
+| Outputs ⊆ dueño de la rule (aunque admin edite) | ✅     | No mezclar owners rule ↔ category/tag                                                                                                                                                                     |
+| PATCH: omitir link preserva; `null`/`[]` limpia | ✅     | `JsonNode` en resource                                                                                                                                                                                     |
+| Condiciones hijas scoped al rule                | ✅     | TransactionRuleCondition — pattern C                                                                                                                                                                       |
+| Normalización + unicidad de nombre              | ✅     | trim; uniqueness per owner, case-insensitive/trim-insensitive; inactive reserves name                                                                                                                      |
+| Description normalization                       | ✅     | trim; blank → `null`                                                                                                                                                                                       |
+| Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now`                                                                                   |
+| Server-managed priority/order                   | ✅     | per-user 0-based consecutive ordering; create appends; update/patch preserve; delete reindexes same owner only                                                                                             |
+| Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                                                                                                                 |
+| Rule requiere al menos un output                | ✅     | final merged state                                                                                                                                                                                         |
+| Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                                                                                                                |
+| PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                                                                                                              |
+| Parent-centered conditions endpoint             | ✅     | `GET /api/transaction-rules/{id}/conditions`, scoped by parent access, sorted by `position,id`                                                                                                             |
+| Rule list ordering                              | ✅     | `TransactionRuleQueryService.findByCriteria` sorts filtered results by `priority ASC, id ASC`                                                                                                              |
+| Parent-centered conditions UX                   | ✅     | TransactionRule detail embeds inline add/edit/delete editor; edit remains general rule fields only                                                                                                         |
+| Create flow                                     | ✅     | Create hides Active/conditions, submits `active=false`, and redirects to detail for condition management after parent id exists                                                                            |
+| Embedded condition form                         | ✅     | Reuses TransactionRuleCondition smart form section/helper; parent hidden/fixed by TransactionRule detail page                                                                                              |
+| Embedded condition mutation                     | ✅     | POST includes `transactionRule: { id }`; adding does not auto-activate; PATCH sends editable fields only; DELETE refreshes conditions and parent state                                                     |
+| Active toggle UX                                | ✅     | Edit page background-loads condition count and disables Active when empty/unavailable; backend still validates `active=true`                                                                               |
+| Product-oriented rule UX                        | ✅     | List/detail use translated status, condition logic, output/result summaries, compact view/edit layout parity, and metadata                                                                                 |
+| Priority/order UX                               | ✅     | List/detail show read-only 1-based order; list forces `priority ASC, id ASC`, exposes only possible Move up / Move down controls, and create/edit do not render or submit priority                         |
+| Manual reorder endpoint                         | ✅     | `PUT /api/transaction-rules/reorder` accepts full current-user ordered ids, validates exact membership, and normalizes priorities to `0..n`                                                                |
+| Edit form hydration                             | ✅     | Edit waits for the requested entity before mounting the JHipster `ValidatedForm`; fields stay direct children for registration/defaults                                                                    |
+| Rule Engine Phase 1 evaluator                   | ✅     | Backend-only pure evaluator in `service.rules`; internal `RuleEvaluationResult` supports category/tag suggestions only                                                                                     |
+| **Ejecución al crear transaction**              | ✅     | Phase 2 applies rules on FinancialTransaction create with `FILL_EMPTY_ONLY` after resolving a current-user-accessible account; no admin override or cross-user evaluation; not restricted to `MANUAL` only |
+| Rule Engine draft preview endpoint              | ✅     | Phase 3A exposes `POST /api/financial-transactions/rule-preview` for unsaved drafts; returns suggestions/conflicts/skips/matches; no save, mutation, UI, or persisted result                               |
+| FinancialTransaction manual rule-preview create | ✅     | Phase 3B frontend two-step create: Step 1 details → preview endpoint → Step 2 editable category/tags prefilled from suggestions → normal create save                                                       |
+| Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                                                     |
 
 #### Validations ✅
 
-| Capa                      | Estado      | Detalle                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DTO `@Valid`              | ✅ JHipster | name, enums, dates; `priority` optional in request because service owns it; `user` opcional en payload                                                                                                                                                                                                                                                                                                                                               |
-| Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented                                                                                                                                                                                                                                                                                                       |
-| REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`; related conditions endpoint returns `404` when parent inaccessible                                                                                                                                                                                                                                                                 |
-| UI                        | ✅          | Create saves inactive parent then redirects to detail; list/detail use compact semantic summaries and read-only order; list Move up / Move down sends full ordered ids to the reorder endpoint; create/edit omit priority; detail/edit share identity/matching/result/status layout; edit preserves JHipster direct-field hydration; detail embeds TransactionRuleCondition editor via existing endpoints; no create-time draft child collection yet |
+| Capa                      | Estado      | Detalle                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DTO `@Valid`              | ✅ JHipster | name, enums, dates; `priority` optional in request because service owns it; `user` opcional en payload                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Service — links           | ✅          | Foreign output en create/update/patch → `400`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Service — domain baseline | ✅          | Normalization, uniqueness, output requirement, active/conditions, PATCH null semantics, strict timestamp ownership, delete cleanup implemented                                                                                                                                                                                                                                                                                                                                                                   |
+| REST                      | ✅          | `@Valid` + `isAccessible` + `IllegalArgumentException` → `400`; cross-user PUT/PATCH → `400`, GET/DELETE → `404`; related conditions endpoint returns `404` when parent inaccessible                                                                                                                                                                                                                                                                                                                             |
+| UI                        | ✅          | Create saves inactive parent then redirects to detail; list/detail use compact semantic summaries and read-only order; list Move up / Move down sends full ordered ids to the reorder endpoint; create/edit omit priority; detail/edit share identity/matching/result/status layout; edit preserves JHipster direct-field hydration; detail embeds TransactionRuleCondition editor via existing endpoints; no create-time draft child collection; FinancialTransaction manual create owns Rule Engine preview UI |
+
+#### Rule Engine phases
+
+See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
+
+1. ✅ Pure evaluator service returning `RuleEvaluationResult`; category/tag suggestions only; no mutation, no UI.
+2. ✅ Apply on `FinancialTransaction` create using fill-empty-only behavior after resolving an account accessible to the current user and evaluating only that transaction/account owner's rules.
+3. ✅ Backend-only draft preview endpoint: `POST /api/financial-transactions/rule-preview`; no save/mutation/application.
+4. ✅ Manual create two-step preview UI: Step 1 transaction details → preview endpoint → Step 2 category/tags prepopulated from suggestions and editable before save → normal create save.
+5. Reevaluate one transaction.
+6. Bulk reevaluation.
+
+**Origin policy note:** no `MANUAL`-only rule-application restriction exists today. Future API/import/ingestion runtime must explicitly decide whether to use central create with rule application, bypass it, make it configurable, preview only, or apply only in specific modes.
 
 ---
 
@@ -556,7 +572,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Matching en import / tolerancia de monto                                | ⏳     | Fase 6 / motor                                    |
 | Delete confirmation UX                                                  | ✅     | `financial-subscription-delete-dialog.tsx` + i18n |
 
-**DELETE cleanup:** `FinancialTransaction.financialSubscription = null`; `TransactionRule.resultingFinancialSubscription = null` + `active = false`; `rel_financial_subscription__tags` join rows; luego `deleteById`. Account/category/tag entities survive.
+**DELETE cleanup:** `FinancialTransaction.financialSubscription = null`; `rel_financial_subscription__tags` join rows; luego `deleteById`. Account/category/tag entities survive.
 
 #### Validations ✅
 

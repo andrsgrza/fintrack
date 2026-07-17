@@ -534,4 +534,49 @@ Deferred for this workflow:
 - TransactionRule drag-and-drop UI;
 - condition reorder UI/API;
 - rule execution engine;
+- override confirmation UI;
 - atomic backend command endpoint.
+
+FinancialTransaction manual create owns the implemented Rule Engine preview UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+
+## FinancialTransaction manual create — two-step Rule Engine UX
+
+Status: implemented for manual create only. Phase 3A provides the backend preview endpoint, and Phase 3B uses it from the FinancialTransaction create form.
+
+Phase 3B manual create composition:
+
+1. Step 1 — Transaction details:
+   - account;
+   - description;
+   - amount;
+   - flow;
+   - transaction date;
+   - posting date;
+   - external reference;
+   - notes and other non-categorization fields as applicable.
+2. Between steps:
+   - call `POST /api/financial-transactions/rule-preview` with the unsaved draft;
+   - do not save or mutate anything;
+   - use the response as UI assistance only.
+3. Step 2 — Categorization:
+   - category;
+   - tags;
+   - prepopulate controls from suggested category/tags;
+   - show conflicts/skipped outputs/matched rules where useful;
+   - let the user accept, change, remove, or add category/tags before save.
+
+Step 2 should own category/tags. Step 1 should not duplicate those controls.
+
+Final Save still uses normal FinancialTransaction create. Backend Phase 2 `FILL_EMPTY_ONLY` remains a safety net: explicit category/tags sent by Step 2 are treated as user choices; if a direct API/UI create omits category/tags, backend create may still fill empty values.
+
+Edit mode remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
+
+Do not extend this as:
+
+- silently saving preview suggestions;
+- modal override confirmation;
+- existing-transaction reevaluation;
+- bulk reevaluation;
+- persisted evaluation results;
+- audit log;
+- `MANUAL`-only backend apply behavior.

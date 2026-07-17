@@ -12,7 +12,7 @@ import java.util.Set;
 /**
  * A user-owned rule evaluated only when a transaction is created.
  *
- * Higher numeric priority wins for category, subscription and description.
+ * Higher numeric priority wins for category.
  * Tags from every matching rule are accumulated without duplicates.
  */
 @Entity
@@ -47,10 +47,6 @@ public class TransactionRule implements Serializable {
     @Column(name = "condition_logic", nullable = false)
     private RuleConditionLogic conditionLogic;
 
-    @Size(max = 500)
-    @Column(name = "resulting_description", length = 500)
-    private String resultingDescription;
-
     @NotNull
     @Column(name = "active", nullable = false)
     private Boolean active;
@@ -73,13 +69,6 @@ public class TransactionRule implements Serializable {
         allowSetters = true
     )
     private Category resultingCategory;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties(
-        value = { "user", "account", "category", "tags", "financialTransactions", "transactionRules" },
-        allowSetters = true
-    )
-    private FinancialSubscription resultingFinancialSubscription;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -161,19 +150,6 @@ public class TransactionRule implements Serializable {
         this.conditionLogic = conditionLogic;
     }
 
-    public String getResultingDescription() {
-        return this.resultingDescription;
-    }
-
-    public TransactionRule resultingDescription(String resultingDescription) {
-        this.setResultingDescription(resultingDescription);
-        return this;
-    }
-
-    public void setResultingDescription(String resultingDescription) {
-        this.resultingDescription = resultingDescription;
-    }
-
     public Boolean getActive() {
         return this.active;
     }
@@ -236,19 +212,6 @@ public class TransactionRule implements Serializable {
 
     public TransactionRule resultingCategory(Category category) {
         this.setResultingCategory(category);
-        return this;
-    }
-
-    public FinancialSubscription getResultingFinancialSubscription() {
-        return this.resultingFinancialSubscription;
-    }
-
-    public void setResultingFinancialSubscription(FinancialSubscription financialSubscription) {
-        this.resultingFinancialSubscription = financialSubscription;
-    }
-
-    public TransactionRule resultingFinancialSubscription(FinancialSubscription financialSubscription) {
-        this.setResultingFinancialSubscription(financialSubscription);
         return this;
     }
 
@@ -334,7 +297,6 @@ public class TransactionRule implements Serializable {
             ", description='" + getDescription() + "'" +
             ", priority=" + getPriority() +
             ", conditionLogic='" + getConditionLogic() + "'" +
-            ", resultingDescription='" + getResultingDescription() + "'" +
             ", active='" + getActive() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
             ", updatedAt='" + getUpdatedAt() + "'" +

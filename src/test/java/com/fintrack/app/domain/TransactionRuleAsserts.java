@@ -51,9 +51,6 @@ public class TransactionRuleAsserts {
             .satisfies(a -> assertThat(a.getDescription()).as("check description").isEqualTo(expected.getDescription()))
             .satisfies(a -> assertThat(a.getPriority()).as("check priority").isEqualTo(expected.getPriority()))
             .satisfies(a -> assertThat(a.getConditionLogic()).as("check conditionLogic").isEqualTo(expected.getConditionLogic()))
-            .satisfies(a ->
-                assertThat(a.getResultingDescription()).as("check resultingDescription").isEqualTo(expected.getResultingDescription())
-            )
             .satisfies(a -> assertThat(a.getActive()).as("check active").isEqualTo(expected.getActive()))
             .satisfies(a -> assertThat(a.getCreatedAt()).as("check createdAt").isEqualTo(expected.getCreatedAt()))
             .satisfies(a -> assertThat(a.getUpdatedAt()).as("check updatedAt").isEqualTo(expected.getUpdatedAt()));
@@ -69,11 +66,6 @@ public class TransactionRuleAsserts {
         assertThat(actual)
             .as("Verify TransactionRule relationships")
             .satisfies(a -> assertThat(a.getResultingCategory()).as("check resultingCategory").isEqualTo(expected.getResultingCategory()))
-            .satisfies(a ->
-                assertThat(a.getResultingFinancialSubscription())
-                    .as("check resultingFinancialSubscription")
-                    .isEqualTo(expected.getResultingFinancialSubscription())
-            )
             .satisfies(a -> assertThat(a.getResultingTags()).as("check resultingTags").isEqualTo(expected.getResultingTags()));
     }
 }

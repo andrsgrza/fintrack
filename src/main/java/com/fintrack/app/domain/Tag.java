@@ -70,10 +70,7 @@ public class Tag implements Serializable {
     private Set<FinancialTransaction> financialTransactions = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY, mappedBy = "resultingTags")
-    @JsonIgnoreProperties(
-        value = { "user", "resultingCategory", "resultingFinancialSubscription", "resultingTags", "conditions" },
-        allowSetters = true
-    )
+    @JsonIgnoreProperties(value = { "user", "resultingCategory", "resultingTags", "conditions" }, allowSetters = true)
     private Set<TransactionRule> transactionRules = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY, mappedBy = "tags")

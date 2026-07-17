@@ -5,7 +5,6 @@ import static com.fintrack.app.domain.FinancialAccountTestSamples.*;
 import static com.fintrack.app.domain.FinancialSubscriptionTestSamples.*;
 import static com.fintrack.app.domain.FinancialTransactionTestSamples.*;
 import static com.fintrack.app.domain.TagTestSamples.*;
-import static com.fintrack.app.domain.TransactionRuleTestSamples.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fintrack.app.web.rest.TestUtil;
@@ -91,27 +90,5 @@ class FinancialSubscriptionTest {
         financialSubscription.setFinancialTransactions(new HashSet<>());
         assertThat(financialSubscription.getFinancialTransactions()).doesNotContain(financialTransactionBack);
         assertThat(financialTransactionBack.getFinancialSubscription()).isNull();
-    }
-
-    @Test
-    void transactionRulesTest() {
-        FinancialSubscription financialSubscription = getFinancialSubscriptionRandomSampleGenerator();
-        TransactionRule transactionRuleBack = getTransactionRuleRandomSampleGenerator();
-
-        financialSubscription.addTransactionRules(transactionRuleBack);
-        assertThat(financialSubscription.getTransactionRules()).containsOnly(transactionRuleBack);
-        assertThat(transactionRuleBack.getResultingFinancialSubscription()).isEqualTo(financialSubscription);
-
-        financialSubscription.removeTransactionRules(transactionRuleBack);
-        assertThat(financialSubscription.getTransactionRules()).doesNotContain(transactionRuleBack);
-        assertThat(transactionRuleBack.getResultingFinancialSubscription()).isNull();
-
-        financialSubscription.transactionRules(new HashSet<>(Set.of(transactionRuleBack)));
-        assertThat(financialSubscription.getTransactionRules()).containsOnly(transactionRuleBack);
-        assertThat(transactionRuleBack.getResultingFinancialSubscription()).isEqualTo(financialSubscription);
-
-        financialSubscription.setTransactionRules(new HashSet<>());
-        assertThat(financialSubscription.getTransactionRules()).doesNotContain(transactionRuleBack);
-        assertThat(transactionRuleBack.getResultingFinancialSubscription()).isNull();
     }
 }

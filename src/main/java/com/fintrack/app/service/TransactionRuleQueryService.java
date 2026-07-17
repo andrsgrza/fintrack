@@ -93,16 +93,12 @@ public class TransactionRuleQueryService extends QueryService<TransactionRule> {
                 buildStringSpecification(criteria.getDescription(), TransactionRule_.description),
                 buildRangeSpecification(criteria.getPriority(), TransactionRule_.priority),
                 buildSpecification(criteria.getConditionLogic(), TransactionRule_.conditionLogic),
-                buildStringSpecification(criteria.getResultingDescription(), TransactionRule_.resultingDescription),
                 buildSpecification(criteria.getActive(), TransactionRule_.active),
                 buildRangeSpecification(criteria.getCreatedAt(), TransactionRule_.createdAt),
                 buildRangeSpecification(criteria.getUpdatedAt(), TransactionRule_.updatedAt),
                 buildSpecification(criteria.getUserId(), root -> root.join(TransactionRule_.user, JoinType.LEFT).get(User_.id)),
                 buildSpecification(criteria.getResultingCategoryId(), root ->
                     root.join(TransactionRule_.resultingCategory, JoinType.LEFT).get(Category_.id)
-                ),
-                buildSpecification(criteria.getResultingFinancialSubscriptionId(), root ->
-                    root.join(TransactionRule_.resultingFinancialSubscription, JoinType.LEFT).get(FinancialSubscription_.id)
                 ),
                 buildSpecification(criteria.getResultingTagsId(), root ->
                     root.join(TransactionRule_.resultingTags, JoinType.LEFT).get(Tag_.id)

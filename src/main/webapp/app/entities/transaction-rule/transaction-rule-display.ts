@@ -28,15 +28,9 @@ export const buildTransactionRuleResultSummary = (rule: ITransactionRule, transl
   if (rule.resultingCategory?.name) {
     results.push(`${translate('fintrackApp.transactionRule.result.category')}: ${rule.resultingCategory.name}`);
   }
-  if (rule.resultingFinancialSubscription?.name) {
-    results.push(`${translate('fintrackApp.transactionRule.result.subscription')}: ${rule.resultingFinancialSubscription.name}`);
-  }
   const names = tagNames(rule);
   if (names.length > 0) {
     results.push(`${translate('fintrackApp.transactionRule.result.tags')}: ${names.join(', ')}`);
-  }
-  if (rule.resultingDescription?.trim()) {
-    results.push(`${translate('fintrackApp.transactionRule.result.description')}: ${rule.resultingDescription.trim()}`);
   }
 
   return results;
@@ -48,15 +42,9 @@ export const buildTransactionRuleResultActions = (rule: ITransactionRule, transl
   if (rule.resultingCategory?.name) {
     results.push(`${translate('fintrackApp.transactionRule.then.assignCategory')}: ${rule.resultingCategory.name}`);
   }
-  if (rule.resultingFinancialSubscription?.name) {
-    results.push(`${translate('fintrackApp.transactionRule.then.linkSubscription')}: ${rule.resultingFinancialSubscription.name}`);
-  }
   const names = tagNames(rule);
   if (names.length > 0) {
     results.push(`${translate('fintrackApp.transactionRule.then.addTags')}: ${names.join(', ')}`);
-  }
-  if (rule.resultingDescription?.trim()) {
-    results.push(`${translate('fintrackApp.transactionRule.then.replaceDescription')}: ${rule.resultingDescription.trim()}`);
   }
 
   return results;

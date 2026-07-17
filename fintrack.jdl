@@ -275,7 +275,7 @@ entity Tag {
 /**
  * A user-owned rule evaluated only when a transaction is created.
  *
- * Higher numeric priority wins for category, subscription and description.
+ * Higher numeric priority wins for category.
  * Tags from every matching rule are accumulated without duplicates.
  */
 entity TransactionRule {
@@ -283,7 +283,6 @@ entity TransactionRule {
   description String maxlength(500)
   priority Integer required min(0)
   conditionLogic RuleConditionLogic required
-  resultingDescription String maxlength(500)
   active Boolean required
   createdAt Instant required
   updatedAt Instant required
@@ -504,7 +503,6 @@ relationship ManyToOne {
 relationship ManyToOne {
   TransactionRuleCondition{transactionRule(name) required} to TransactionRule{conditions}
   TransactionRule{resultingCategory(name)} to Category{transactionRules}
-  TransactionRule{resultingFinancialSubscription(name)} to FinancialSubscription{transactionRules}
 }
 
 relationship ManyToMany {

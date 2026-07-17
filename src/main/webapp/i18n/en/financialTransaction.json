@@ -35,7 +35,25 @@
       "tags": "Tags",
       "outgoingInternalTransfer": "Outgoing Internal Transfer",
       "incomingInternalTransfer": "Incoming Internal Transfer",
-      "ingestionRecord": "Ingestion Record"
+      "ingestionRecord": "Ingestion Record",
+      "rulePreview": {
+        "step1": "Step 1: Transaction details",
+        "step2": "Step 2: Categorization",
+        "nextToCategorization": "Next: Categorization",
+        "backToDetails": "Back to details",
+        "suggestionsPrefilled": "Suggestions from rules were prefilled. You can change them before saving.",
+        "noSuggestions": "No rule suggestions found. Choose category/tags manually.",
+        "failed": "Rule preview failed. Review the transaction details and try again.",
+        "matchedRules": "Matched rules",
+        "categoryConflict": "A rule suggested {{ suggested }}, but the current category is {{ current }}.",
+        "validation": {
+          "accountRequired": "Account is required before previewing rules.",
+          "descriptionRequired": "Description is required before previewing rules.",
+          "amountRequired": "Amount must be greater than zero before previewing rules.",
+          "flowRequired": "Type is required before previewing rules.",
+          "transactionDateRequired": "Transaction date is required before previewing rules."
+        }
+      }
     }
   }
 }

@@ -4,23 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.Category;
-import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.repository.CategoryRepository;
-import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
-import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
 import java.time.Instant;
@@ -55,9 +53,6 @@ class TransactionRuleServiceTest {
     private CategoryRepository categoryRepository;
 
     @Mock
-    private FinancialSubscriptionRepository financialSubscriptionRepository;
-
-    @Mock
     private TagRepository tagRepository;
 
     @Mock
@@ -67,6 +62,8 @@ class TransactionRuleServiceTest {
     private TransactionRuleService transactionRuleService;
 
     private User currentUser;
+    private Category category;
+    private CategoryDTO categoryDTO;
     private TransactionRule transactionRule;
     private TransactionRuleDTO transactionRuleDTO;
 
@@ -76,12 +73,18 @@ class TransactionRuleServiceTest {
         currentUser.setId(2L);
         currentUser.setLogin(CURRENT_USER_LOGIN);
 
+        category = new Category();
+        category.setId(3L);
+
+        categoryDTO = new CategoryDTO();
+        categoryDTO.setId(3L);
+
         transactionRule = new TransactionRule();
         transactionRule.setId(10L);
         transactionRule.setName("Amazon rule");
         transactionRule.setPriority(0);
         transactionRule.setConditionLogic(RuleConditionLogic.ALL);
-        transactionRule.setResultingDescription("Amazon");
+        transactionRule.setResultingCategory(category);
         transactionRule.setActive(false);
         transactionRule.setCreatedAt(Instant.parse("2026-07-11T00:00:00Z"));
         transactionRule.setUpdatedAt(Instant.parse("2026-07-11T00:00:00Z"));
@@ -92,10 +95,13 @@ class TransactionRuleServiceTest {
         transactionRuleDTO.setName("Amazon rule");
         transactionRuleDTO.setPriority(0);
         transactionRuleDTO.setConditionLogic(RuleConditionLogic.ALL);
-        transactionRuleDTO.setResultingDescription("Amazon");
+        transactionRuleDTO.setResultingCategory(categoryDTO);
         transactionRuleDTO.setActive(false);
         transactionRuleDTO.setCreatedAt(Instant.parse("2026-07-11T00:00:00Z"));
         transactionRuleDTO.setUpdatedAt(Instant.parse("2026-07-11T00:00:00Z"));
+
+        lenient().when(categoryRepository.findOneByIdAndUserLogin(3L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+        lenient().when(categoryRepository.findOneByIdAndUserLogin(3L, OTHER_USER_LOGIN)).thenReturn(Optional.of(category));
     }
 
     @Test
@@ -484,36 +490,13 @@ class TransactionRuleServiceTest {
         verify(categoryRepository).findOneByIdAndUserLogin(88L, OTHER_USER_LOGIN);
     }
 
-    @Test
-    void updateShouldRejectSubscriptionNotOwnedByRuleOwner() {
-        User otherOwner = new User();
-        otherOwner.setId(99L);
-        otherOwner.setLogin(OTHER_USER_LOGIN);
-        transactionRule.setUser(otherOwner);
-
-        FinancialSubscriptionDTO subscriptionDTO = new FinancialSubscriptionDTO();
-        subscriptionDTO.setId(77L);
-        transactionRuleDTO.setResultingFinancialSubscription(subscriptionDTO);
-
-        TransactionRule mappedEntity = new TransactionRule();
-        mappedEntity.setId(10L);
-
-        when(currentUserService.isAdmin()).thenReturn(true);
-        when(transactionRuleRepository.findOneWithEagerRelationships(10L)).thenReturn(Optional.of(transactionRule));
-        when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
-        when(financialSubscriptionRepository.findOneByIdAndUserLogin(77L, OTHER_USER_LOGIN)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> transactionRuleService.update(transactionRuleDTO)).isInstanceOf(IllegalArgumentException.class);
-        verify(transactionRuleRepository, never()).save(any());
-    }
-
     private TransactionRule validMappedRule(Long id) {
         TransactionRule mappedRule = new TransactionRule();
         mappedRule.setId(id);
         mappedRule.setName("Amazon rule");
         mappedRule.setPriority(0);
         mappedRule.setConditionLogic(RuleConditionLogic.ALL);
-        mappedRule.setResultingDescription("Amazon");
+        mappedRule.setResultingCategory(category);
         mappedRule.setActive(false);
         mappedRule.setCreatedAt(Instant.parse("2026-07-11T00:00:00Z"));
         mappedRule.setUpdatedAt(Instant.parse("2026-07-11T00:00:00Z"));

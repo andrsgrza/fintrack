@@ -9,7 +9,6 @@ import { mapIdList } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
-import { getEntities as getFinancialSubscriptions } from 'app/entities/financial-subscription/financial-subscription.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
 import { ITransactionRuleCondition } from 'app/shared/model/transaction-rule-condition.model';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
@@ -24,7 +23,6 @@ export const TransactionRuleUpdate = () => {
   const isNew = id === undefined;
 
   const categories = useAppSelector(state => state.category.entities);
-  const financialSubscriptions = useAppSelector(state => state.financialSubscription.entities);
   const tags = useAppSelector(state => state.tag.entities);
   const transactionRuleEntity = useAppSelector(state => state.transactionRule.entity);
   const loading = useAppSelector(state => state.transactionRule.loading);
@@ -49,7 +47,6 @@ export const TransactionRuleUpdate = () => {
     }
 
     dispatch(getCategories({}));
-    dispatch(getFinancialSubscriptions({}));
     dispatch(getTags({}));
   }, []);
 
@@ -88,9 +85,6 @@ export const TransactionRuleUpdate = () => {
       id: isNew ? undefined : transactionRuleEntity.id,
       active: isNew ? false : values.active,
       resultingCategory: values.resultingCategory ? categories.find(it => it.id.toString() === values.resultingCategory?.toString()) : null,
-      resultingFinancialSubscription: values.resultingFinancialSubscription
-        ? financialSubscriptions.find(it => it.id.toString() === values.resultingFinancialSubscription?.toString())
-        : null,
       resultingTags: mapIdList(values.resultingTags),
     };
 
@@ -111,7 +105,6 @@ export const TransactionRuleUpdate = () => {
           conditionLogic: 'ALL',
           ...transactionRuleEntity,
           resultingCategory: transactionRuleEntity?.resultingCategory?.id,
-          resultingFinancialSubscription: transactionRuleEntity?.resultingFinancialSubscription?.id,
           resultingTags: transactionRuleEntity?.resultingTags?.map(e => e.id.toString()),
         };
 
@@ -206,16 +199,6 @@ export const TransactionRuleUpdate = () => {
                 <Translate contentKey="fintrackApp.transactionRule.sections.result">Result</Translate>
               </h3>
               <ValidatedField
-                label={translate('fintrackApp.transactionRule.resultingDescription')}
-                id="transaction-rule-resultingDescription"
-                name="resultingDescription"
-                data-cy="resultingDescription"
-                type="text"
-                validate={{
-                  maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
-                }}
-              />
-              <ValidatedField
                 id="transaction-rule-resultingCategory"
                 name="resultingCategory"
                 data-cy="resultingCategory"
@@ -225,22 +208,6 @@ export const TransactionRuleUpdate = () => {
                 <option value="" key="0" />
                 {categories
                   ? categories.map(otherEntity => (
-                      <option value={otherEntity.id} key={otherEntity.id}>
-                        {otherEntity.name}
-                      </option>
-                    ))
-                  : null}
-              </ValidatedField>
-              <ValidatedField
-                id="transaction-rule-resultingFinancialSubscription"
-                name="resultingFinancialSubscription"
-                data-cy="resultingFinancialSubscription"
-                label={translate('fintrackApp.transactionRule.resultingFinancialSubscription')}
-                type="select"
-              >
-                <option value="" key="0" />
-                {financialSubscriptions
-                  ? financialSubscriptions.map(otherEntity => (
                       <option value={otherEntity.id} key={otherEntity.id}>
                         {otherEntity.name}
                       </option>

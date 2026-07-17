@@ -459,7 +459,7 @@ Grupo 1 #2 domain rules **Done**.
 
 ## 6. FinancialSubscription
 
-**Pattern:** A + optional links. **Relationships:** `account`, `category`, `tags` M2M; inverse `FinancialTransaction.financialSubscription`; `TransactionRule.resultingFinancialSubscription`.  
+**Pattern:** A + optional links. **Relationships:** `account`, `category`, `tags` M2M; inverse `FinancialTransaction.financialSubscription`.
 **Status:** **Done** (ownership + validations + domain rules).
 
 **Concept:** recurring expected item (Netflix, rent, salary, etc.) — not the transaction itself.
@@ -475,17 +475,16 @@ Grupo 1 #2 domain rules **Done**.
 
 ### DELETE
 
-| Rule                                             | Decision                                                               | Applies to admin | Error | Status   |
-| ------------------------------------------------ | ---------------------------------------------------------------------- | ---------------- | ----- | -------- |
-| Delete allowed when in use                       | **Yes** — unlink first, then delete row                                | Yes              | —     | **Done** |
-| Delete only subscription row                     | Do not delete FT, account, category, tag entities                      | Yes              | —     | **Done** |
-| `FinancialTransaction.financialSubscription`     | Set `null`                                                             | Yes              | —     | **Done** |
-| `TransactionRule.resultingFinancialSubscription` | Set `null` + `active = false`                                          | Yes              | —     | **Done** |
-| `rel_financial_subscription__tags`               | Remove join rows (explicit `@Modifying`)                               | Yes              | —     | **Done** |
-| Guard order                                      | Access → cleanup FT → cleanup rules → cleanup tag joins → `deleteById` | Yes              | —     | **Done** |
-| Single transaction                               | Cleanup + `deleteById` in `FinancialSubscriptionService.delete()`      | Yes              | —     | **Done** |
-| Foreign user DELETE                              | `404` (ownership first)                                                | —                | `404` | **Done** |
-| Accessible / admin DELETE                        | `204` after cleanup                                                    | Yes              | —     | **Done** |
+| Rule                                         | Decision                                                          | Applies to admin | Error | Status   |
+| -------------------------------------------- | ----------------------------------------------------------------- | ---------------- | ----- | -------- |
+| Delete allowed when in use                   | **Yes** — unlink first, then delete row                           | Yes              | —     | **Done** |
+| Delete only subscription row                 | Do not delete FT, account, category, tag entities                 | Yes              | —     | **Done** |
+| `FinancialTransaction.financialSubscription` | Set `null`                                                        | Yes              | —     | **Done** |
+| `rel_financial_subscription__tags`           | Remove join rows (explicit `@Modifying`)                          | Yes              | —     | **Done** |
+| Guard order                                  | Access → cleanup FT → cleanup tag joins → `deleteById`            | Yes              | —     | **Done** |
+| Single transaction                           | Cleanup + `deleteById` in `FinancialSubscriptionService.delete()` | Yes              | —     | **Done** |
+| Foreign user DELETE                          | `404` (ownership first)                                           | —                | `404` | **Done** |
+| Accessible / admin DELETE                    | `204` after cleanup                                               | Yes              | —     | **Done** |
 
 **Implementation:** explicit `@Modifying` cleanup (`flushAutomatically` + `clearAutomatically`), then `deleteById`. Do **not** cascade-delete FT, account, category, or tags.
 
@@ -551,10 +550,9 @@ Grupo 1 #2 domain rules **Done**.
 | Rule                                                            | Status   |
 | --------------------------------------------------------------- | -------- |
 | Explain subscription row deleted; FT not deleted; links removed | **Done** |
-| Explain rules using subscription as output will be disabled     | **Done** |
 | Action cannot be undone                                         | **Done** |
 
-**Suggested copy:** “This will delete the subscription. Transactions that were linked to this subscription will not be deleted. They will simply no longer be associated with it. Any rules that use this subscription as their target will be disabled. This action cannot be undone.”
+**Suggested copy:** “This will delete the subscription. Transactions that were linked to this subscription will not be deleted. They will simply no longer be associated with it. This action cannot be undone.”
 
 ---
 
@@ -757,16 +755,14 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 
 ### Normalization
 
-| Rule                                       | Decision                                         | Status   |
-| ------------------------------------------ | ------------------------------------------------ | -------- |
-| `name` trim before persist                 | Trimmed value is stored                          | **Done** |
-| `name` non-blank after trim                | Blank → `400 invalid`                            | **Done** |
-| `name` max length                          | Applies after trim                               | **Done** |
-| `name` uniqueness                          | Per owner, case-insensitive and trim-insensitive | **Done** |
-| Inactive rule names                        | Still reserve the name                           | **Done** |
-| `description` trim before persist          | Blank becomes `null`; max length after trim      | **Done** |
-| `resultingDescription` trim before persist | Blank becomes `null`; max length after trim      | **Done** |
-| `resultingDescription` output check        | Counts as output only when non-null after trim   | **Done** |
+| Rule                              | Decision                                         | Status   |
+| --------------------------------- | ------------------------------------------------ | -------- |
+| `name` trim before persist        | Trimmed value is stored                          | **Done** |
+| `name` non-blank after trim       | Blank → `400 invalid`                            | **Done** |
+| `name` max length                 | Applies after trim                               | **Done** |
+| `name` uniqueness                 | Per owner, case-insensitive and trim-insensitive | **Done** |
+| Inactive rule names               | Still reserve the name                           | **Done** |
+| `description` trim before persist | Blank becomes `null`; max length after trim      | **Done** |
 
 ### Timestamps
 
@@ -801,7 +797,7 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | ---------------------------- | --------------------------------------------------------------------------------------------- | -------- |
 | Outputs ⊆ rule owner         |                                                                                               | **Done** |
 | `user` immutable             | Client payload cannot change owner                                                            | **Done** |
-| Mutable fields               | `name`, `description`, `conditionLogic`, `resultingDescription`, `active`, outputs            | **Done** |
+| Mutable fields               | `name`, `description`, `conditionLogic`, `active`, outputs                                    | **Done** |
 | `priority` server-managed    | Omitted on PUT/PATCH preserves; same value is a no-op; explicit null/changed value → `400`    | **Done** |
 | PUT contract                 | Full DTO update, except server-managed `priority` may be omitted and preserved                | **Done** |
 | Conditions inline            | TransactionRule create/update/patch never creates, updates, or deletes conditions inline      | **Done** |
@@ -811,28 +807,28 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 
 ### Priority / evaluation order
 
-| Rule                             | Decision                                                                                | Status       |
-| -------------------------------- | --------------------------------------------------------------------------------------- | ------------ |
-| Server-managed                   | Users cannot edit `priority` as a free numeric field                                    | **Done**     |
-| Scope                            | Unique/consecutive per owner/user, not global                                           | **Done**     |
-| Internal numbering               | Stored 0-based: `0, 1, 2, ...`                                                          | **Done**     |
-| Create                           | Ignore client-supplied priority; append with `max(priority for user) + 1`, or `0` first | **Done**     |
-| Delete                           | Reindex remaining rules for the same owner/user only                                    | **Done**     |
-| Delete ordering                  | Reindex preserves existing order by `priority ASC, id ASC`                              | **Done**     |
-| UI display                       | Shows 1-based order (`#1`, `#2`, ...) and does not submit priority from create/edit     | **Done**     |
-| Reorder UI/API                   | Future explicit user-facing way to change priority                                      | **Deferred** |
-| Rule engine evaluation           | Future engine evaluates active rules by `priority ASC`                                  | **Deferred** |
-| Admin-specific cross-user design | Not designed in this slice                                                              | **Deferred** |
+| Rule                           | Decision                                                                                | Status   |
+| ------------------------------ | --------------------------------------------------------------------------------------- | -------- |
+| Server-managed                 | Users cannot edit `priority` as a free numeric field                                    | **Done** |
+| Scope                          | Unique/consecutive per owner/user, not global                                           | **Done** |
+| Internal numbering             | Stored 0-based: `0, 1, 2, ...`                                                          | **Done** |
+| Create                         | Ignore client-supplied priority; append with `max(priority for user) + 1`, or `0` first | **Done** |
+| Delete                         | Reindex remaining rules for the same owner/user only                                    | **Done** |
+| Delete ordering                | Reindex preserves existing order by `priority ASC, id ASC`                              | **Done** |
+| UI display                     | Shows 1-based order (`#1`, `#2`, ...) and does not submit priority from create/edit     | **Done** |
+| Reorder UI/API                 | Move up / Move down sends a full owner-scoped ordered id list                           | **Done** |
+| Rule engine evaluation         | Phase 1 pure evaluator reads active rules by `priority ASC, id ASC`; no mutation        | **Done** |
+| Admin-specific cross-user eval | Not supported; evaluation uses the transaction/account owner under normal-user rules    | **Done** |
 
 ### Output requirements
 
-| Rule                                  | Decision                                                                                               | Applies to admin | Error         | Status   |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------- | ------------- | -------- |
-| At least one output                   | Final merged state must have category, subscription, non-empty tags, or non-blank resultingDescription | Yes              | `400 invalid` | **Done** |
-| No output                             | Reject create/update/patch                                                                             | Yes              | `400 invalid` | **Done** |
-| Output links vs rule owner            | Validate against rule owner, not current admin actor                                                   | Yes              | `400 invalid` | **Done** |
-| Inactive linked outputs               | Allowed at backend level                                                                               | Yes              | —             | **Done** |
-| Category + subscription compatibility | No guard; rule may set both without matching categories                                                | Yes              | —             | **Done** |
+| Rule                       | Decision                                                                                    | Applies to admin | Error         | Status   |
+| -------------------------- | ------------------------------------------------------------------------------------------- | ---------------- | ------------- | -------- |
+| At least one output        | Final merged state must have category or non-empty tags                                     | Yes              | `400 invalid` | **Done** |
+| No output                  | Reject create/update/patch                                                                  | Yes              | `400 invalid` | **Done** |
+| Output links vs rule owner | Validate against rule owner, not current admin actor                                        | Yes              | `400 invalid` | **Done** |
+| Inactive linked outputs    | Allowed at backend level                                                                    | Yes              | —             | **Done** |
+| Deferred outputs           | Subscription and description mutations are not outputs in the current TransactionRule model | Yes              | —             | **Done** |
 
 ### Active / conditions
 
@@ -866,7 +862,7 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                                   | **Deferred** |
 | Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`                | **Done**     |
 | Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                       | **Deferred** |
-| Rule execution engine                   | No evaluation behavior implemented in this UX/API pass                                                             | **Deferred** |
+| Rule execution engine                   | Backend evaluator exists; embedded UI still does not preview/apply rules                                           | **Done**     |
 
 ### Output PATCH semantics
 
@@ -883,25 +879,24 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Foreign tag id                        | `400 invalid`                               | **Done** |
 | Admin editing foreign rule            | Validate tags against rule owner, not admin | **Done** |
 
-Applies to ManyToOne outputs: `resultingCategory`, `resultingFinancialSubscription`.
+Applies to the current ManyToOne output: `resultingCategory`.
 
 ### Active false
 
-| Rule                   | Decision                                              | Status                                     |
-| ---------------------- | ----------------------------------------------------- | ------------------------------------------ |
-| Deactivation           | Does not delete anything                              | **Done**                                   |
-| Output preservation    | Does not clear category/subscription/tags/description | **Done**                                   |
-| Condition preservation | Does not clear child conditions                       | **Done**                                   |
-| Execution              | Prevents future rule execution                        | **Deferred** — rule engine not implemented |
+| Rule                   | Decision                                                     | Status   |
+| ---------------------- | ------------------------------------------------------------ | -------- |
+| Deactivation           | Does not delete anything                                     | **Done** |
+| Output preservation    | Does not clear category/tags                                 | **Done** |
+| Condition preservation | Does not clear child conditions                              | **Done** |
+| Execution              | Prevents evaluator matching and future automatic application | **Done** |
 
 ### Interactions with other deletes
 
-| Source delete                | TransactionRule effect                                     | Owner service                  |
-| ---------------------------- | ---------------------------------------------------------- | ------------------------------ |
-| Category leaf delete         | Clear `resultingCategory`; set `active=false`              | `CategoryService`              |
-| FinancialSubscription delete | Clear `resultingFinancialSubscription`; set `active=false` | `FinancialSubscriptionService` |
-| Tag delete                   | Remove tag from `resultingTags`                            | `TagService`                   |
-| TransactionRule delete       | Owns deleting only rule + rule conditions + rule tag joins | `TransactionRuleService`       |
+| Source delete          | TransactionRule effect                                     | Owner service            |
+| ---------------------- | ---------------------------------------------------------- | ------------------------ |
+| Category leaf delete   | Clear `resultingCategory`; set `active=false`              | `CategoryService`        |
+| Tag delete             | Remove tag from `resultingTags`                            | `TagService`             |
+| TransactionRule delete | Owns deleting only rule + rule conditions + rule tag joins | `TransactionRuleService` |
 
 ### UX — delete confirmation
 
@@ -909,16 +904,28 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### Product rules
 
-| Rule                                   | Decision                                                                      | Status       |
-| -------------------------------------- | ----------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only         | JDL                                                                           | **Deferred** |
-| Lower `priority` evaluates earlier     | Future engine uses `priority ASC`; first matching active rule applies outputs | **Deferred** |
-| Tags union from all matching rules     | JDL                                                                           | **Deferred** |
-| Duplicate priorities                   | Not allowed by service-managed per-user consecutive ordering                  | **Done**     |
-| Manual rule reorder                    | Move up / Move down sends full ordered ids; backend validates exact owner set | **Done**     |
-| Manual FT fields override rule outputs |                                                                               | **Open**     |
-| Rule execution engine                  | Not part of CRUD domain-rule pass                                             | **Deferred** |
-| Batch reclassification                 | Not part of CRUD domain-rule pass                                             | **Deferred** |
+| Rule                                          | Decision                                                                                                               | Status       |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application; no `MANUAL`-only restriction today | **Done**     |
+| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                                    | **Done**     |
+| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                                    | **Done**     |
+| Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                           | **Done**     |
+| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                          | **Done**     |
+| Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                | **Done**     |
+| Rule preview endpoint                         | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                | **Done**     |
+| Rule execution engine                         | Phase 3B two-step manual create preview UI implemented; reevaluation/bulk remain deferred                              | **Done**     |
+| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                     | **Done**     |
+| Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                      | **Deferred** |
+
+### Rule Engine design
+
+The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, and the manual FinancialTransaction create two-step preview UI.
+
+Not implemented today: rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, override confirmation UI, and audit/explanation UI.
+
+Origin policy remains open for future API/import/ingestion runtime. Current behavior is intentionally not restricted to `MANUAL` origin only; future runtime work must decide whether non-manual flows should use central create with rule application, bypass it, make it configurable, preview only, or apply only in specific modes.
 
 ---
 

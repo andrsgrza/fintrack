@@ -42,18 +42,18 @@ public interface TransactionRuleRepository
     }
 
     @Query(
-        value = "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory left join fetch transactionRule.resultingFinancialSubscription",
+        value = "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory",
         countQuery = "select count(transactionRule) from TransactionRule transactionRule"
     )
     Page<TransactionRule> findAllWithToOneRelationships(Pageable pageable);
 
     @Query(
-        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory left join fetch transactionRule.resultingFinancialSubscription"
+        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory"
     )
     List<TransactionRule> findAllWithToOneRelationships();
 
     @Query(
-        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory left join fetch transactionRule.resultingFinancialSubscription where transactionRule.id =:id"
+        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory where transactionRule.id =:id"
     )
     Optional<TransactionRule> findOneWithToOneRelationships(@Param("id") Long id);
 
@@ -84,18 +84,26 @@ public interface TransactionRuleRepository
     void deleteResultingTagsByRuleId(@Param("ruleId") Long ruleId);
 
     @Query(
-        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory left join fetch transactionRule.resultingFinancialSubscription where transactionRule.id = :id and transactionRule.user.login = :login"
+        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory where transactionRule.id = :id and transactionRule.user.login = :login"
     )
     Optional<TransactionRule> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
     @Query(
-        value = "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory left join fetch transactionRule.resultingFinancialSubscription where transactionRule.user.login = :login",
+        value = "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory where transactionRule.user.login = :login",
         countQuery = "select count(transactionRule) from TransactionRule transactionRule where transactionRule.user.login = :login"
     )
     Page<TransactionRule> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
 
     @Query(
-        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory left join fetch transactionRule.resultingFinancialSubscription where transactionRule.user.login = :login"
+        "select transactionRule from TransactionRule transactionRule left join fetch transactionRule.user left join fetch transactionRule.resultingCategory where transactionRule.user.login = :login"
     )
     List<TransactionRule> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
+
+    @EntityGraph(attributePaths = { "user", "conditions", "resultingCategory", "resultingTags" })
+    @Query(
+        "select distinct transactionRule from TransactionRule transactionRule " +
+        "where transactionRule.user.login = :login and transactionRule.active = true " +
+        "order by transactionRule.priority asc, transactionRule.id asc"
+    )
+    List<TransactionRule> findActiveRulesForEvaluationByUserLoginOrderByPriorityAscIdAsc(@Param("login") String login);
 }

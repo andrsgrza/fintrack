@@ -22,17 +22,23 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.TransactionRule;
+import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
+import com.fintrack.app.domain.enumeration.RuleConditionLogic;
+import com.fintrack.app.domain.enumeration.RuleOperator;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialTransactionService;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -42,6 +48,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -102,6 +109,7 @@ class FinancialTransactionResourceIT {
 
     private static final String ENTITY_API_URL = "/api/financial-transactions";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
+    private static final String RULE_PREVIEW_API_URL = ENTITY_API_URL + "/rule-preview";
     private static final String OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL = ENTITY_API_URL + "/outgoing-internal-transfer-candidates";
     private static final String INCOMING_INTERNAL_TRANSFER_CANDIDATES_API_URL = ENTITY_API_URL + "/incoming-internal-transfer-candidates";
 
@@ -1573,6 +1581,594 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
+    void createFinancialTransactionWithoutCategoryAppliesSuggestedCategory() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(), true, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNotNull();
+        assertThat(persisted.getCategory().getId()).isEqualTo(transport.getId());
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithExplicitCategoryDoesNotOverride() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Category restaurants = persistCategory("Restaurants", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(), true, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", restaurants, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNotNull();
+        assertThat(persisted.getCategory().getId()).isEqualTo(restaurants.getId());
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithoutTagsAddsSuggestedTags() throws Exception {
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Ride share rule", financialTransaction.getAccount().getUser(), null, Set.of(rideShare), true, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactly(rideShare.getId());
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithExplicitTagsPreservesThemAndAddsSuggestedTags() throws Exception {
+        Tag business = persistTag("Business", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Ride share rule", financialTransaction.getAccount().getUser(), null, Set.of(rideShare), true, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of(business));
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(business.getId(), rideShare.getId());
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithAlreadySuggestedExplicitTagDoesNotDuplicate() throws Exception {
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Ride share rule", financialTransaction.getAccount().getUser(), null, Set.of(rideShare), true, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of(rideShare));
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactly(rideShare.getId());
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithExplicitDifferentCategoryStillAppliesSuggestedNewTags() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Category restaurants = persistCategory("Restaurants", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule(
+            "Transport ride share rule",
+            financialTransaction.getAccount().getUser(),
+            transport,
+            Set.of(rideShare),
+            true,
+            "Uber"
+        );
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", restaurants, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNotNull();
+        assertThat(persisted.getCategory().getId()).isEqualTo(restaurants.getId());
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactly(rideShare.getId());
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithNoMatchingRulesLeavesCategoryAndTagsUnchanged() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Non matching rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), true, "Lyft");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNull();
+        assertThat(persisted.getTags()).isEmpty();
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionDoesNotApplyInactiveRule() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Inactive rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), false, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNull();
+        assertThat(persisted.getTags()).isEmpty();
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionDoesNotApplyRuleFromAnotherUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        Category foreignCategory = persistCategory("Foreign transport", otherUser);
+        Tag foreignTag = persistTag("Foreign ride share", otherUser);
+        persistMatchingRule("Foreign rule", otherUser, foreignCategory, Set.of(foreignTag), true, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNull();
+        assertThat(persisted.getTags()).isEmpty();
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminCreateOnAnotherUsersAccountIsRejectedAndDoesNotApplyRules() throws Exception {
+        User accountOwner = financialTransaction.getAccount().getUser();
+        Category transport = persistCategory("Transport", accountOwner);
+        persistMatchingRule("Owner rule", accountOwner, transport, Set.of(), true, "Uber");
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setDescription("Uber ride");
+
+        restFinancialTransactionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateFinancialTransactionDoesNotApplyRules() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), true, "Uber");
+        financialTransaction.setDescription("Initial unmatched");
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(insertedFinancialTransaction);
+        financialTransactionDTO.setDescription("Uber ride");
+
+        restFinancialTransactionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialTransactionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialTransactionDTO))
+            )
+            .andExpect(status().isOk());
+
+        FinancialTransaction persisted = financialTransactionRepository
+            .findOneWithEagerRelationships(insertedFinancialTransaction.getId())
+            .orElseThrow();
+        assertThat(persisted.getCategory()).isNull();
+        assertThat(persisted.getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void patchFinancialTransactionDoesNotApplyRules() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), true, "Uber");
+        financialTransaction.setDescription("Initial unmatched");
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        ObjectNode patchNode = om.createObjectNode();
+        patchNode.put("id", insertedFinancialTransaction.getId());
+        patchNode.put("description", "Uber ride");
+
+        restFinancialTransactionMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID, insertedFinancialTransaction.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(om.writeValueAsBytes(patchNode))
+            )
+            .andExpect(status().isOk());
+
+        FinancialTransaction persisted = financialTransactionRepository
+            .findOneWithEagerRelationships(insertedFinancialTransaction.getId())
+            .orElseThrow();
+        assertThat(persisted.getCategory()).isNull();
+        assertThat(persisted.getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionAppliesCategoryAndMultipleTagsOnlyOnce() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        Tag business = persistTag("Business", financialTransaction.getAccount().getUser());
+        persistMatchingRule(
+            "Transport tags rule",
+            financialTransaction.getAccount().getUser(),
+            transport,
+            Set.of(rideShare, business),
+            true,
+            "Uber"
+        );
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", null, Set.of(rideShare));
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNotNull();
+        assertThat(persisted.getCategory().getId()).isEqualTo(transport.getId());
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(rideShare.getId(), business.getId());
+        assertThat(persisted.getTags()).hasSize(2);
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionWithSameExplicitCategoryKeepsCategoryAndAppliesTags() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), true, "Uber");
+
+        FinancialTransactionDTO result = createTransactionFromDraft("Uber ride", transport, Set.of());
+        FinancialTransaction persisted = financialTransactionRepository.findOneWithEagerRelationships(result.getId()).orElseThrow();
+
+        assertThat(persisted.getCategory()).isNotNull();
+        assertThat(persisted.getCategory().getId()).isEqualTo(transport.getId());
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactly(rideShare.getId());
+        insertedFinancialTransaction = persisted;
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithoutCategoryReturnsSuggestedCategoryAndDoesNotSaveTransaction() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(), true, "Uber");
+        long databaseSizeBeforePreview = getRepositoryCount();
+
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory.categoryId").value(transport.getId().intValue()))
+            .andExpect(jsonPath("$.suggestedCategory.categoryName").value("Transport"))
+            .andExpect(jsonPath("$.suggestedCategory.sourceRuleName").value("Transport rule"))
+            .andExpect(jsonPath("$.suggestedCategory.conflictsWithCurrentValue").value(false))
+            .andExpect(jsonPath("$.matchedRules.[0].ruleName").value("Transport rule"))
+            .andExpect(jsonPath("$.hasSuggestions").value(true))
+            .andExpect(jsonPath("$.hasConflicts").value(false))
+            .andExpect(jsonPath("$.suggestedCategory.user").doesNotExist())
+            .andExpect(jsonPath("$.matchedRules.[0].user").doesNotExist());
+
+        assertSameRepositoryCount(databaseSizeBeforePreview);
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithExplicitDifferentCategoryReturnsConflictAndDoesNotApply() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Category restaurants = persistCategory("Restaurants", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(), true, "Uber");
+
+        ObjectNode request = previewRequest("Uber ride");
+        request.put("categoryId", restaurants.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory.categoryId").value(transport.getId().intValue()))
+            .andExpect(jsonPath("$.suggestedCategory.conflictsWithCurrentValue").value(true))
+            .andExpect(jsonPath("$.suggestedCategory.currentCategoryId").value(restaurants.getId().intValue()))
+            .andExpect(jsonPath("$.suggestedCategory.currentCategoryName").value("Restaurants"))
+            .andExpect(jsonPath("$.conflicts.[0].field").value("CATEGORY"))
+            .andExpect(jsonPath("$.conflicts.[0].currentValueId").value(restaurants.getId().intValue()))
+            .andExpect(jsonPath("$.conflicts.[0].suggestedValueId").value(transport.getId().intValue()))
+            .andExpect(jsonPath("$.hasConflicts").value(true));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithSameExplicitCategoryDoesNotProduceConflict() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(), true, "Uber");
+
+        ObjectNode request = previewRequest("Uber ride");
+        request.put("categoryId", transport.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory.categoryId").value(transport.getId().intValue()))
+            .andExpect(jsonPath("$.suggestedCategory.conflictsWithCurrentValue").value(false))
+            .andExpect(jsonPath("$.conflicts.length()").value(0))
+            .andExpect(jsonPath("$.hasConflicts").value(false));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithoutTagsReturnsSuggestedTags() throws Exception {
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Ride share rule", financialTransaction.getAccount().getUser(), null, Set.of(rideShare), true, "Uber");
+
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedTags.length()").value(1))
+            .andExpect(jsonPath("$.suggestedTags.[0].tagId").value(rideShare.getId().intValue()))
+            .andExpect(jsonPath("$.suggestedTags.[0].tagName").value("Ride share"))
+            .andExpect(jsonPath("$.suggestedTags.[0].alreadyPresent").value(false))
+            .andExpect(jsonPath("$.suggestedTags.[0].duplicateOfEarlierSuggestion").value(false))
+            .andExpect(jsonPath("$.hasSuggestions").value(true));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithExplicitTagMarksAlreadyPresent() throws Exception {
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Ride share rule", financialTransaction.getAccount().getUser(), null, Set.of(rideShare), true, "Uber");
+
+        ObjectNode request = previewRequest("Uber ride");
+        request.putArray("tagIds").add(rideShare.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedTags.[0].tagId").value(rideShare.getId().intValue()))
+            .andExpect(jsonPath("$.suggestedTags.[0].alreadyPresent").value(true))
+            .andExpect(jsonPath("$.skippedOutputs.[0].reason").value("TAG_ALREADY_PRESENT"));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithExplicitTagPlusNewSuggestedTagReturnsBothStates() throws Exception {
+        Tag business = persistTag("Business", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule(
+            "Business ride rule",
+            financialTransaction.getAccount().getUser(),
+            null,
+            Set.of(business, rideShare),
+            true,
+            "Uber"
+        );
+
+        ObjectNode request = previewRequest("Uber ride");
+        request.putArray("tagIds").add(business.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedTags.length()").value(2))
+            .andExpect(jsonPath("$.suggestedTags.[?(@.tagName == 'Business')].alreadyPresent").value(hasItem(true)))
+            .andExpect(jsonPath("$.suggestedTags.[?(@.tagName == 'Ride share')].alreadyPresent").value(hasItem(false)));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithDuplicateTagSuggestionsReportsSkip() throws Exception {
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("First ride rule", financialTransaction.getAccount().getUser(), null, Set.of(rideShare), true, "Uber");
+        persistMatchingRule("Second ride rule", financialTransaction.getAccount().getUser(), null, Set.of(rideShare), true, "Uber");
+
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedTags.length()").value(1))
+            .andExpect(
+                jsonPath("$.skippedOutputs.[?(@.reason == 'TAG_ALREADY_SUGGESTED')].valueId").value(hasItem(rideShare.getId().intValue()))
+            );
+    }
+
+    @Test
+    @Transactional
+    void previewRulesWithNoMatchingRulesReturnsEmptyResult() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Non matching rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), true, "Lyft");
+
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory").value(nullValue()))
+            .andExpect(jsonPath("$.suggestedTags.length()").value(0))
+            .andExpect(jsonPath("$.conflicts.length()").value(0))
+            .andExpect(jsonPath("$.skippedOutputs.length()").value(0))
+            .andExpect(jsonPath("$.matchedRules.length()").value(0))
+            .andExpect(jsonPath("$.hasSuggestions").value(false))
+            .andExpect(jsonPath("$.hasConflicts").value(false));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesIgnoresInactiveRules() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Inactive rule", financialTransaction.getAccount().getUser(), transport, Set.of(), false, "Uber");
+
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory").value(nullValue()))
+            .andExpect(jsonPath("$.hasSuggestions").value(false));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesIgnoresRulesFromAnotherUser() throws Exception {
+        User otherUser = createOtherUser(em);
+        Category foreignCategory = persistCategory("Foreign transport", otherUser);
+        Tag foreignTag = persistTag("Foreign ride share", otherUser);
+        persistMatchingRule("Foreign rule", otherUser, foreignCategory, Set.of(foreignTag), true, "Uber");
+
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory").value(nullValue()))
+            .andExpect(jsonPath("$.suggestedTags.length()").value(0));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesRejectsForeignAccount() throws Exception {
+        FinancialAccount otherAccount = FinancialAccountResourceIT.createEntity(em);
+        otherAccount.setUser(createOtherUser(em));
+        em.persist(otherAccount);
+        em.flush();
+
+        ObjectNode request = previewRequest("Uber ride");
+        request.put("accountId", otherAccount.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void adminPreviewForAnotherUsersAccountIsRejected() throws Exception {
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void previewRulesRejectsForeignCategory() throws Exception {
+        Category foreignCategory = persistCategory("Foreign category", createOtherUser(em));
+        ObjectNode request = previewRequest("Uber ride");
+        request.put("categoryId", foreignCategory.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void previewRulesRejectsForeignTag() throws Exception {
+        Tag foreignTag = persistTag("Foreign tag", createOtherUser(em));
+        ObjectNode request = previewRequest("Uber ride");
+        request.putArray("tagIds").add(foreignTag.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void previewRulesValidatesRequiredFields() throws Exception {
+        ObjectNode request = previewRequest("Uber ride");
+        request.remove("accountId");
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+
+        request = previewRequest("   ");
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+
+        request = previewRequest("Uber ride");
+        request.put("amount", "0.00");
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+
+        request = previewRequest("Uber ride");
+        request.remove("flow");
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+
+        request = previewRequest("Uber ride");
+        request.remove("origin");
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+
+        request = previewRequest("Uber ride");
+        request.remove("transactionDate");
+        restFinancialTransactionMockMvc
+            .perform(post(RULE_PREVIEW_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void previewRulesDoesNotApplyFillEmptyOnlyOrPersistTransaction() throws Exception {
+        Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
+        Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
+        persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), true, "Uber");
+        long databaseSizeBeforePreview = getRepositoryCount();
+
+        restFinancialTransactionMockMvc
+            .perform(
+                post(RULE_PREVIEW_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory.categoryId").value(transport.getId().intValue()))
+            .andExpect(jsonPath("$.suggestedTags.[0].tagId").value(rideShare.getId().intValue()));
+
+        assertSameRepositoryCount(databaseSizeBeforePreview);
+        assertThat(financialTransactionRepository.findAll()).noneMatch(transaction -> "Uber ride".equals(transaction.getDescription()));
+    }
+
+    @Test
+    @Transactional
+    void existingTransactionRulePreviewEndpointIsNotImplemented() throws Exception {
+        restFinancialTransactionMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/1/rule-preview")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(previewRequest("Uber ride")))
+            )
+            .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @Transactional
     void patchFinancialTransactionAmountFailsWhenLinkedToInternalTransfer() throws Exception {
         insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
 
@@ -1953,6 +2549,105 @@ class FinancialTransactionResourceIT {
             .perform(get(OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[*].id").value(hasItem(otherOutgoing.getId().intValue())));
+    }
+
+    private FinancialTransactionDTO createTransactionFromDraft(String description, Category category, Set<Tag> tags) throws Exception {
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setDescription(description);
+        financialTransactionDTO.setCategory(category == null ? null : categoryDTO(category));
+        financialTransactionDTO.setTags(tags.stream().map(this::tagDTO).collect(java.util.stream.Collectors.toSet()));
+
+        return om.readValue(
+            restFinancialTransactionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            FinancialTransactionDTO.class
+        );
+    }
+
+    private ObjectNode previewRequest(String description) {
+        ObjectNode request = om.createObjectNode();
+        request.put("accountId", financialTransaction.getAccount().getId());
+        request.put("description", description);
+        request.put("amount", "1.00");
+        request.put("flow", TransactionFlow.OUT.name());
+        request.put("origin", TransactionOrigin.MANUAL.name());
+        request.put("transactionDate", DEFAULT_TRANSACTION_DATE.toString());
+        request.put("postingDate", DEFAULT_POSTING_DATE.toString());
+        request.put("externalReference", "preview-ref");
+        request.putArray("tagIds");
+        return request;
+    }
+
+    private Category persistCategory(String name, User user) {
+        Category category = CategoryResourceIT.createEntity(em);
+        category.setName(name);
+        category.setCategoryType(CategoryType.BOTH);
+        category.setUser(user);
+        em.persist(category);
+        em.flush();
+        return category;
+    }
+
+    private Tag persistTag(String name, User user) {
+        Tag tag = TagResourceIT.createEntity(em);
+        tag.setName(name);
+        tag.setUser(user);
+        em.persist(tag);
+        em.flush();
+        return tag;
+    }
+
+    private TransactionRule persistMatchingRule(
+        String name,
+        User user,
+        Category resultingCategory,
+        Set<Tag> resultingTags,
+        boolean active,
+        String descriptionValue
+    ) {
+        TransactionRule rule = new TransactionRule()
+            .name(name)
+            .priority(0)
+            .conditionLogic(RuleConditionLogic.ALL)
+            .active(active)
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT)
+            .user(user)
+            .resultingCategory(resultingCategory);
+        resultingTags.forEach(rule::addResultingTags);
+        em.persist(rule);
+        em.flush();
+
+        TransactionRuleCondition condition = new TransactionRuleCondition()
+            .field(TransactionRuleField.DESCRIPTION)
+            .operator(RuleOperator.CONTAINS)
+            .value(descriptionValue)
+            .caseSensitive(false)
+            .position(0)
+            .transactionRule(rule);
+        rule.addConditions(condition);
+        em.persist(condition);
+        em.flush();
+        return rule;
+    }
+
+    private CategoryDTO categoryDTO(Category category) {
+        CategoryDTO categoryDTO = new CategoryDTO();
+        categoryDTO.setId(category.getId());
+        return categoryDTO;
+    }
+
+    private TagDTO tagDTO(Tag tag) {
+        TagDTO tagDTO = new TagDTO();
+        tagDTO.setId(tag.getId());
+        return tagDTO;
     }
 
     protected long getRepositoryCount() {

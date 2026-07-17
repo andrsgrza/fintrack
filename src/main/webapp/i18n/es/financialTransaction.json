@@ -35,7 +35,25 @@
       "tags": "Etiquetas",
       "outgoingInternalTransfer": "Outgoing Internal Transfer",
       "incomingInternalTransfer": "Incoming Internal Transfer",
-      "ingestionRecord": "Ingestion Record"
+      "ingestionRecord": "Ingestion Record",
+      "rulePreview": {
+        "step1": "Paso 1: Detalles de la transacción",
+        "step2": "Paso 2: Categorización",
+        "nextToCategorization": "Siguiente: categorización",
+        "backToDetails": "Volver a detalles",
+        "suggestionsPrefilled": "Se precargaron sugerencias de reglas. Puedes cambiarlas antes de guardar.",
+        "noSuggestions": "No se encontraron sugerencias de reglas. Elige categoría/etiquetas manualmente.",
+        "failed": "Falló la vista previa de reglas. Revisa los detalles de la transacción e intenta de nuevo.",
+        "matchedRules": "Reglas coincidentes",
+        "categoryConflict": "Una regla sugirió {{ suggested }}, pero la categoría actual es {{ current }}.",
+        "validation": {
+          "accountRequired": "La cuenta es obligatoria antes de previsualizar reglas.",
+          "descriptionRequired": "La descripción es obligatoria antes de previsualizar reglas.",
+          "amountRequired": "El monto debe ser mayor a cero antes de previsualizar reglas.",
+          "flowRequired": "El tipo es obligatorio antes de previsualizar reglas.",
+          "transactionDateRequired": "La fecha de transacción es obligatoria antes de previsualizar reglas."
+        }
+      }
     }
   }
 }

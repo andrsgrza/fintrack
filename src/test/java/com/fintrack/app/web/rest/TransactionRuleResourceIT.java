@@ -12,7 +12,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Category;
-import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
@@ -25,7 +24,6 @@ import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TransactionRuleService;
 import com.fintrack.app.service.dto.CategoryDTO;
-import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.dto.UserDTO;
@@ -75,9 +73,6 @@ class TransactionRuleResourceIT {
 
     private static final RuleConditionLogic DEFAULT_CONDITION_LOGIC = RuleConditionLogic.ALL;
     private static final RuleConditionLogic UPDATED_CONDITION_LOGIC = RuleConditionLogic.ANY;
-
-    private static final String DEFAULT_RESULTING_DESCRIPTION = "AAAAAAAAAA";
-    private static final String UPDATED_RESULTING_DESCRIPTION = "BBBBBBBBBB";
 
     private static final Boolean DEFAULT_ACTIVE = false;
     private static final Boolean UPDATED_ACTIVE = true;
@@ -136,11 +131,14 @@ class TransactionRuleResourceIT {
             .description(DEFAULT_DESCRIPTION)
             .priority(DEFAULT_PRIORITY)
             .conditionLogic(DEFAULT_CONDITION_LOGIC)
-            .resultingDescription(DEFAULT_RESULTING_DESCRIPTION)
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
         transactionRule.setUser(getCurrentMockUser(em));
+        Category resultingCategory = CategoryResourceIT.createEntity(em);
+        em.persist(resultingCategory);
+        em.flush();
+        transactionRule.setResultingCategory(resultingCategory);
         return transactionRule;
     }
 
@@ -156,11 +154,14 @@ class TransactionRuleResourceIT {
             .description(UPDATED_DESCRIPTION)
             .priority(UPDATED_PRIORITY)
             .conditionLogic(UPDATED_CONDITION_LOGIC)
-            .resultingDescription(UPDATED_RESULTING_DESCRIPTION)
             .active(UPDATED_ACTIVE)
             .createdAt(UPDATED_CREATED_AT)
             .updatedAt(UPDATED_UPDATED_AT);
         updatedTransactionRule.setUser(getCurrentMockUser(em));
+        Category resultingCategory = CategoryResourceIT.createUpdatedEntity(em);
+        em.persist(resultingCategory);
+        em.flush();
+        updatedTransactionRule.setResultingCategory(resultingCategory);
         return updatedTransactionRule;
     }
 
@@ -436,7 +437,6 @@ class TransactionRuleResourceIT {
         transactionRuleDTO.setId(null);
         transactionRuleDTO.setName("  Trimmed rule  ");
         transactionRuleDTO.setDescription("  Description  ");
-        transactionRuleDTO.setResultingDescription("  Result  ");
 
         TransactionRuleDTO returnedTransactionRuleDTO = om.readValue(
             restTransactionRuleMockMvc
@@ -451,7 +451,6 @@ class TransactionRuleResourceIT {
         TransactionRule persistedTransactionRule = transactionRuleRepository.findById(returnedTransactionRuleDTO.getId()).orElseThrow();
         assertThat(persistedTransactionRule.getName()).isEqualTo("Trimmed rule");
         assertThat(persistedTransactionRule.getDescription()).isEqualTo("Description");
-        assertThat(persistedTransactionRule.getResultingDescription()).isEqualTo("Result");
         insertedTransactionRule = transactionRuleMapper.toEntity(returnedTransactionRuleDTO);
     }
 
@@ -520,9 +519,7 @@ class TransactionRuleResourceIT {
         long databaseSizeBeforeTest = getRepositoryCount();
         TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
         transactionRuleDTO.setId(null);
-        transactionRuleDTO.setResultingDescription("   ");
         transactionRuleDTO.setResultingCategory(null);
-        transactionRuleDTO.setResultingFinancialSubscription(null);
         transactionRuleDTO.setResultingTags(new HashSet<>());
 
         restTransactionRuleMockMvc
@@ -563,7 +560,6 @@ class TransactionRuleResourceIT {
             .andExpect(jsonPath("$.[*].description").value(hasItem(DEFAULT_DESCRIPTION)))
             .andExpect(jsonPath("$.[*].priority").value(hasItem(DEFAULT_PRIORITY)))
             .andExpect(jsonPath("$.[*].conditionLogic").value(hasItem(DEFAULT_CONDITION_LOGIC.toString())))
-            .andExpect(jsonPath("$.[*].resultingDescription").value(hasItem(DEFAULT_RESULTING_DESCRIPTION)))
             .andExpect(jsonPath("$.[*].active").value(hasItem(DEFAULT_ACTIVE)))
             .andExpect(jsonPath("$.[*].createdAt").value(hasItem(DEFAULT_CREATED_AT.toString())))
             .andExpect(jsonPath("$.[*].updatedAt").value(hasItem(DEFAULT_UPDATED_AT.toString())));
@@ -602,7 +598,6 @@ class TransactionRuleResourceIT {
             .andExpect(jsonPath("$.description").value(DEFAULT_DESCRIPTION))
             .andExpect(jsonPath("$.priority").value(DEFAULT_PRIORITY))
             .andExpect(jsonPath("$.conditionLogic").value(DEFAULT_CONDITION_LOGIC.toString()))
-            .andExpect(jsonPath("$.resultingDescription").value(DEFAULT_RESULTING_DESCRIPTION))
             .andExpect(jsonPath("$.active").value(DEFAULT_ACTIVE))
             .andExpect(jsonPath("$.createdAt").value(DEFAULT_CREATED_AT.toString()))
             .andExpect(jsonPath("$.updatedAt").value(DEFAULT_UPDATED_AT.toString()));
@@ -840,68 +835,6 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
-    void getAllTransactionRulesByResultingDescriptionIsEqualToSomething() throws Exception {
-        // Initialize the database
-        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
-
-        // Get all the transactionRuleList where resultingDescription equals to
-        defaultTransactionRuleFiltering(
-            "resultingDescription.equals=" + DEFAULT_RESULTING_DESCRIPTION,
-            "resultingDescription.equals=" + UPDATED_RESULTING_DESCRIPTION
-        );
-    }
-
-    @Test
-    @Transactional
-    void getAllTransactionRulesByResultingDescriptionIsInShouldWork() throws Exception {
-        // Initialize the database
-        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
-
-        // Get all the transactionRuleList where resultingDescription in
-        defaultTransactionRuleFiltering(
-            "resultingDescription.in=" + DEFAULT_RESULTING_DESCRIPTION + "," + UPDATED_RESULTING_DESCRIPTION,
-            "resultingDescription.in=" + UPDATED_RESULTING_DESCRIPTION
-        );
-    }
-
-    @Test
-    @Transactional
-    void getAllTransactionRulesByResultingDescriptionIsNullOrNotNull() throws Exception {
-        // Initialize the database
-        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
-
-        // Get all the transactionRuleList where resultingDescription is not null
-        defaultTransactionRuleFiltering("resultingDescription.specified=true", "resultingDescription.specified=false");
-    }
-
-    @Test
-    @Transactional
-    void getAllTransactionRulesByResultingDescriptionContainsSomething() throws Exception {
-        // Initialize the database
-        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
-
-        // Get all the transactionRuleList where resultingDescription contains
-        defaultTransactionRuleFiltering(
-            "resultingDescription.contains=" + DEFAULT_RESULTING_DESCRIPTION,
-            "resultingDescription.contains=" + UPDATED_RESULTING_DESCRIPTION
-        );
-    }
-
-    @Test
-    @Transactional
-    void getAllTransactionRulesByResultingDescriptionNotContainsSomething() throws Exception {
-        // Initialize the database
-        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
-
-        // Get all the transactionRuleList where resultingDescription does not contain
-        defaultTransactionRuleFiltering(
-            "resultingDescription.doesNotContain=" + UPDATED_RESULTING_DESCRIPTION,
-            "resultingDescription.doesNotContain=" + DEFAULT_RESULTING_DESCRIPTION
-        );
-    }
-
-    @Test
-    @Transactional
     void getAllTransactionRulesByActiveIsEqualToSomething() throws Exception {
         // Initialize the database
         insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
@@ -1034,28 +967,6 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
-    void getAllTransactionRulesByResultingFinancialSubscriptionIsEqualToSomething() throws Exception {
-        FinancialSubscription resultingFinancialSubscription;
-        if (TestUtil.findAll(em, FinancialSubscription.class).isEmpty()) {
-            transactionRuleRepository.saveAndFlush(transactionRule);
-            resultingFinancialSubscription = FinancialSubscriptionResourceIT.createEntity(em);
-        } else {
-            resultingFinancialSubscription = TestUtil.findAll(em, FinancialSubscription.class).get(0);
-        }
-        em.persist(resultingFinancialSubscription);
-        em.flush();
-        transactionRule.setResultingFinancialSubscription(resultingFinancialSubscription);
-        transactionRuleRepository.saveAndFlush(transactionRule);
-        Long resultingFinancialSubscriptionId = resultingFinancialSubscription.getId();
-        // Get all the transactionRuleList where resultingFinancialSubscription equals to resultingFinancialSubscriptionId
-        defaultTransactionRuleShouldBeFound("resultingFinancialSubscriptionId.equals=" + resultingFinancialSubscriptionId);
-
-        // Get all the transactionRuleList where resultingFinancialSubscription equals to (resultingFinancialSubscriptionId + 1)
-        defaultTransactionRuleShouldNotBeFound("resultingFinancialSubscriptionId.equals=" + (resultingFinancialSubscriptionId + 1));
-    }
-
-    @Test
-    @Transactional
     void getAllTransactionRulesByResultingTagsIsEqualToSomething() throws Exception {
         Tag resultingTags;
         if (TestUtil.findAll(em, Tag.class).isEmpty()) {
@@ -1094,7 +1005,6 @@ class TransactionRuleResourceIT {
             .andExpect(jsonPath("$.[*].description").value(hasItem(DEFAULT_DESCRIPTION)))
             .andExpect(jsonPath("$.[*].priority").value(hasItem(DEFAULT_PRIORITY)))
             .andExpect(jsonPath("$.[*].conditionLogic").value(hasItem(DEFAULT_CONDITION_LOGIC.toString())))
-            .andExpect(jsonPath("$.[*].resultingDescription").value(hasItem(DEFAULT_RESULTING_DESCRIPTION)))
             .andExpect(jsonPath("$.[*].active").value(hasItem(DEFAULT_ACTIVE)))
             .andExpect(jsonPath("$.[*].createdAt").value(hasItem(DEFAULT_CREATED_AT.toString())))
             .andExpect(jsonPath("$.[*].updatedAt").value(hasItem(DEFAULT_UPDATED_AT.toString())));
@@ -1149,7 +1059,6 @@ class TransactionRuleResourceIT {
             .name(UPDATED_NAME)
             .description(UPDATED_DESCRIPTION)
             .conditionLogic(UPDATED_CONDITION_LOGIC)
-            .resultingDescription(UPDATED_RESULTING_DESCRIPTION)
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
@@ -1186,9 +1095,9 @@ class TransactionRuleResourceIT {
             UPDATED_DESCRIPTION +
             "\",\"conditionLogic\":\"" +
             UPDATED_CONDITION_LOGIC +
-            "\",\"resultingDescription\":\"" +
-            UPDATED_RESULTING_DESCRIPTION +
-            "\",\"active\":false,\"createdAt\":\"" +
+            "\",\"resultingCategory\":{\"id\":" +
+            transactionRule.getResultingCategory().getId() +
+            "},\"active\":false,\"createdAt\":\"" +
             DEFAULT_CREATED_AT +
             "\",\"updatedAt\":\"" +
             DEFAULT_UPDATED_AT +
@@ -1200,6 +1109,26 @@ class TransactionRuleResourceIT {
             .andExpect(jsonPath("$.priority").value(DEFAULT_PRIORITY));
 
         assertThat(getPersistedTransactionRule(transactionRule).getPriority()).isEqualTo(DEFAULT_PRIORITY);
+    }
+
+    @Test
+    @Transactional
+    void putTransactionRuleWithNoOutputsFails() throws Exception {
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setResultingCategory(null);
+        transactionRuleDTO.setResultingTags(new HashSet<>());
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRule(transactionRule).getResultingCategory()).isNotNull();
     }
 
     @Test
@@ -1250,8 +1179,6 @@ class TransactionRuleResourceIT {
             DEFAULT_NAME +
             "\",\"priority\":null,\"conditionLogic\":\"" +
             DEFAULT_CONDITION_LOGIC +
-            "\",\"resultingDescription\":\"" +
-            DEFAULT_RESULTING_DESCRIPTION +
             "\",\"active\":false,\"createdAt\":\"" +
             DEFAULT_CREATED_AT +
             "\",\"updatedAt\":\"" +
@@ -1413,15 +1340,8 @@ class TransactionRuleResourceIT {
 
         TransactionRule partialUpdatedTransactionRule = new TransactionRule();
         partialUpdatedTransactionRule.setId(transactionRule.getId());
-        partialUpdatedTransactionRule.name(UPDATED_NAME).resultingDescription(UPDATED_RESULTING_DESCRIPTION);
-        String patchJson =
-            "{\"id\":" +
-            transactionRule.getId() +
-            ",\"name\":\"" +
-            UPDATED_NAME +
-            "\",\"resultingDescription\":\"" +
-            UPDATED_RESULTING_DESCRIPTION +
-            "\"}";
+        partialUpdatedTransactionRule.name(UPDATED_NAME);
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"name\":\"" + UPDATED_NAME + "\"}";
 
         restTransactionRuleMockMvc
             .perform(
@@ -1460,16 +1380,32 @@ class TransactionRuleResourceIT {
             .description(UPDATED_DESCRIPTION)
             .priority(DEFAULT_PRIORITY)
             .conditionLogic(UPDATED_CONDITION_LOGIC)
-            .resultingDescription(UPDATED_RESULTING_DESCRIPTION)
             .active(DEFAULT_ACTIVE)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT);
+
+        String patchJson =
+            "{\"id\":" +
+            partialUpdatedTransactionRule.getId() +
+            ",\"name\":\"" +
+            UPDATED_NAME +
+            "\",\"description\":\"" +
+            UPDATED_DESCRIPTION +
+            "\",\"priority\":" +
+            DEFAULT_PRIORITY +
+            ",\"conditionLogic\":\"" +
+            UPDATED_CONDITION_LOGIC +
+            "\",\"active\":false,\"createdAt\":\"" +
+            DEFAULT_CREATED_AT +
+            "\",\"updatedAt\":\"" +
+            DEFAULT_UPDATED_AT +
+            "\"}";
 
         restTransactionRuleMockMvc
             .perform(
                 patch(ENTITY_API_URL_ID, partialUpdatedTransactionRule.getId())
                     .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedTransactionRule))
+                    .content(patchJson)
             )
             .andExpect(status().isOk());
 
@@ -1650,10 +1586,7 @@ class TransactionRuleResourceIT {
     void patchClearingAllOutputsFails() throws Exception {
         insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
 
-        String patchJson =
-            "{\"id\":" +
-            transactionRule.getId() +
-            ",\"resultingDescription\":\"   \",\"resultingCategory\":null,\"resultingFinancialSubscription\":null,\"resultingTags\":[]}";
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"resultingCategory\":null,\"resultingTags\":[]}";
 
         restTransactionRuleMockMvc
             .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
@@ -2279,7 +2212,12 @@ class TransactionRuleResourceIT {
     @Transactional
     @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
     void adminCanUpdateTransactionRuleOwnedByAnotherUser() throws Exception {
-        transactionRule.setUser(createOtherUser(em));
+        User otherUser = createOtherUser(em);
+        transactionRule.setUser(otherUser);
+        Category otherUsersCategory = CategoryResourceIT.createEntity(em);
+        otherUsersCategory.setUser(otherUser);
+        otherUsersCategory = em.merge(otherUsersCategory);
+        transactionRule.setResultingCategory(otherUsersCategory);
         insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
 
         TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
@@ -2324,25 +2262,6 @@ class TransactionRuleResourceIT {
         CategoryDTO categoryDTO = new CategoryDTO();
         categoryDTO.setId(otherUsersCategory.getId());
         transactionRuleDTO.setResultingCategory(categoryDTO);
-
-        restTransactionRuleMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
-            .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @Transactional
-    void createTransactionRuleWithSubscriptionOwnedByAnotherUserFails() throws Exception {
-        FinancialSubscription otherUsersSubscription = FinancialSubscriptionResourceIT.createEntity(em);
-        otherUsersSubscription.setUser(createOtherUser(em));
-        otherUsersSubscription = em.merge(otherUsersSubscription);
-        em.flush();
-
-        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
-        transactionRuleDTO.setId(null);
-        FinancialSubscriptionDTO subscriptionDTO = new FinancialSubscriptionDTO();
-        subscriptionDTO.setId(otherUsersSubscription.getId());
-        transactionRuleDTO.setResultingFinancialSubscription(subscriptionDTO);
 
         restTransactionRuleMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
@@ -2399,6 +2318,35 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
+    void createTransactionRuleWithAccessibleTagsOnlySucceeds() throws Exception {
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
+        em.flush();
+
+        TransactionRuleDTO transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
+        transactionRuleDTO.setId(null);
+        transactionRuleDTO.setResultingCategory(null);
+        TagDTO tagDTO = new TagDTO();
+        tagDTO.setId(ownTag.getId());
+        transactionRuleDTO.setResultingTags(Set.of(tagDTO));
+
+        TransactionRuleDTO returnedTransactionRuleDTO = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleDTO)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleDTO.class
+        );
+
+        assertThat(returnedTransactionRuleDTO.getResultingCategory()).isNull();
+        assertThat(returnedTransactionRuleDTO.getResultingTags()).extracting(TagDTO::getId).containsExactly(ownTag.getId());
+        insertedTransactionRule = transactionRuleMapper.toEntity(returnedTransactionRuleDTO);
+    }
+
+    @Test
+    @Transactional
     void patchTransactionRuleWithoutCategoryFieldPreservesExistingCategory() throws Exception {
         Category ownCategory = CategoryResourceIT.createEntity(em);
         ownCategory = em.merge(ownCategory);
@@ -2422,9 +2370,12 @@ class TransactionRuleResourceIT {
     void patchTransactionRuleWithNullCategoryClearsCategory() throws Exception {
         Category ownCategory = CategoryResourceIT.createEntity(em);
         ownCategory = em.merge(ownCategory);
+        Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag = em.merge(ownTag);
         em.flush();
 
         transactionRule.setResultingCategory(ownCategory);
+        transactionRule.addResultingTags(ownTag);
         insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
 
         String patchJson = "{\"id\":" + transactionRule.getId() + ",\"resultingCategory\":null}";
@@ -2461,7 +2412,7 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
-    void updateTransactionRuleWithForeignCategoryOrSubscriptionFails() throws Exception {
+    void updateTransactionRuleWithForeignCategoryFails() throws Exception {
         insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
 
         Category otherUsersCategory = CategoryResourceIT.createEntity(em);
@@ -2473,24 +2424,6 @@ class TransactionRuleResourceIT {
         CategoryDTO categoryDTO = new CategoryDTO();
         categoryDTO.setId(otherUsersCategory.getId());
         transactionRuleDTO.setResultingCategory(categoryDTO);
-
-        restTransactionRuleMockMvc
-            .perform(
-                put(ENTITY_API_URL_ID, transactionRuleDTO.getId())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(om.writeValueAsBytes(transactionRuleDTO))
-            )
-            .andExpect(status().isBadRequest());
-
-        FinancialSubscription otherUsersSubscription = FinancialSubscriptionResourceIT.createEntity(em);
-        otherUsersSubscription.setUser(createOtherUser(em));
-        otherUsersSubscription = em.merge(otherUsersSubscription);
-        em.flush();
-
-        transactionRuleDTO = transactionRuleMapper.toDto(transactionRule);
-        FinancialSubscriptionDTO subscriptionDTO = new FinancialSubscriptionDTO();
-        subscriptionDTO.setId(otherUsersSubscription.getId());
-        transactionRuleDTO.setResultingFinancialSubscription(subscriptionDTO);
 
         restTransactionRuleMockMvc
             .perform(

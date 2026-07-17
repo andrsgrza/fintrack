@@ -6,6 +6,8 @@ import com.fintrack.app.service.FinancialTransactionQueryService;
 import com.fintrack.app.service.FinancialTransactionService;
 import com.fintrack.app.service.criteria.FinancialTransactionCriteria;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.FinancialTransactionRulePreviewRequestDTO;
+import com.fintrack.app.service.dto.FinancialTransactionRulePreviewResponseDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
@@ -83,6 +85,30 @@ public class FinancialTransactionResource {
         return ResponseEntity.created(new URI("/api/financial-transactions/" + financialTransactionDTO.getId()))
             .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, financialTransactionDTO.getId().toString()))
             .body(financialTransactionDTO);
+    }
+
+    /**
+     * {@code POST /financial-transactions/rule-preview} : Preview TransactionRule evaluation for an unsaved draft.
+     *
+     * @param previewNode the draft preview request.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and rule suggestions/conflicts/skips.
+     */
+    @PostMapping("/rule-preview")
+    public ResponseEntity<FinancialTransactionRulePreviewResponseDTO> previewFinancialTransactionRules(
+        @NotNull @RequestBody JsonNode previewNode
+    ) {
+        LOG.debug("REST request to preview FinancialTransaction rules : {}", previewNode);
+        FinancialTransactionRulePreviewRequestDTO previewRequest;
+        try {
+            previewRequest = objectMapper.treeToValue(previewNode, FinancialTransactionRulePreviewRequestDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid rule preview payload", ENTITY_NAME, "invalid");
+        }
+        try {
+            return ResponseEntity.ok(financialTransactionService.previewRules(previewRequest));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
     }
 
     /**

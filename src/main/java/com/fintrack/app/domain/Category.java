@@ -95,10 +95,7 @@ public class Category implements Serializable {
     private Set<Category> childCategories = new HashSet<>();
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "resultingCategory")
-    @JsonIgnoreProperties(
-        value = { "user", "resultingCategory", "resultingFinancialSubscription", "resultingTags", "conditions" },
-        allowSetters = true
-    )
+    @JsonIgnoreProperties(value = { "user", "resultingCategory", "resultingTags", "conditions" }, allowSetters = true)
     private Set<TransactionRule> transactionRules = new HashSet<>();
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "category")

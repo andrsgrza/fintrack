@@ -17,14 +17,12 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
-import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.RecurrenceUnit;
 import com.fintrack.app.domain.enumeration.SubscriptionStatus;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialSubscriptionService;
@@ -136,9 +134,6 @@ class FinancialSubscriptionResourceIT {
 
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
-
-    @Autowired
-    private TransactionRuleRepository transactionRuleRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -2325,28 +2320,6 @@ class FinancialSubscriptionResourceIT {
 
     @Test
     @Transactional
-    void deleteFinancialSubscriptionUsedByTransactionRuleUnlinksAndDeactivatesRule() throws Exception {
-        FinancialSubscription persistedSubscription = persistFinancialSubscription();
-        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
-        transactionRule.setResultingFinancialSubscription(managedSubscriptionReference(persistedSubscription));
-        transactionRule.setActive(true);
-        transactionRuleRepository.saveAndFlush(transactionRule);
-        em.detach(transactionRule);
-
-        restFinancialSubscriptionMockMvc
-            .perform(delete(ENTITY_API_URL_ID, persistedSubscription.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
-
-        assertThat(financialSubscriptionRepository.existsById(persistedSubscription.getId())).isFalse();
-        em.clear();
-        TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
-        assertThat(persistedRule.getResultingFinancialSubscription()).isNull();
-        assertThat(persistedRule.getActive()).isFalse();
-        insertedFinancialSubscription = null;
-    }
-
-    @Test
-    @Transactional
     void deleteFinancialSubscriptionUsedInMultipleEntityTypesCleansAllReferences() throws Exception {
         FinancialSubscription persistedSubscription = persistFinancialSubscription();
 
@@ -2354,12 +2327,7 @@ class FinancialSubscriptionResourceIT {
         financialTransaction.setFinancialSubscription(managedSubscriptionReference(persistedSubscription));
         financialTransactionRepository.saveAndFlush(financialTransaction);
 
-        TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
-        transactionRule.setResultingFinancialSubscription(managedSubscriptionReference(persistedSubscription));
-        transactionRule.setActive(true);
-        transactionRuleRepository.saveAndFlush(transactionRule);
         em.detach(financialTransaction);
-        em.detach(transactionRule);
 
         restFinancialSubscriptionMockMvc
             .perform(delete(ENTITY_API_URL_ID, persistedSubscription.getId()).accept(MediaType.APPLICATION_JSON))
@@ -2368,9 +2336,6 @@ class FinancialSubscriptionResourceIT {
         assertThat(financialSubscriptionRepository.existsById(persistedSubscription.getId())).isFalse();
         em.clear();
         assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getFinancialSubscription()).isNull();
-        TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
-        assertThat(persistedRule.getResultingFinancialSubscription()).isNull();
-        assertThat(persistedRule.getActive()).isFalse();
         insertedFinancialSubscription = null;
     }
 

@@ -1218,7 +1218,7 @@ Happy-path CRUD, required-field checks, criteria per field (`name`, `amount`, `c
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their subscriptions. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules in service:** assign `user` on create; ignore client `user`; preserve owner on update/patch; scope all reads/writes; optional `account` / `category` / `tags` must be owned by **subscription owner** when present. PATCH uses raw `JsonNode` to distinguish absent vs explicit null/empty link fields. DELETE unlinks FT and disables rules before row delete. `status` PAUSED/CANCELLED preserves links. Date and structural guards in service.
+**Domain rules in service:** assign `user` on create; ignore client `user`; preserve owner on update/patch; scope all reads/writes; optional `account` / `category` / `tags` must be owned by **subscription owner** when present. PATCH uses raw `JsonNode` to distinguish absent vs explicit null/empty link fields. DELETE unlinks FT before row delete. `status` PAUSED/CANCELLED preserves links. Date and structural guards in service.
 
 ### Summary counts
 
@@ -1277,8 +1277,7 @@ PATCH bodies use raw JSON so field presence is explicit (`application/merge-patc
 | Test                                                                                  | HTTP     | What it checks                              |
 | ------------------------------------------------------------------------------------- | -------- | ------------------------------------------- |
 | `deleteFinancialSubscriptionUsedByFinancialTransactionUnlinksAndPreservesTransaction` | `DELETE` | FT survives; `financialSubscription = null` |
-| `deleteFinancialSubscriptionUsedByTransactionRuleUnlinksAndDeactivatesRule`           | `DELETE` | Rule output null + `active=false`           |
-| `deleteFinancialSubscriptionUsedInMultipleEntityTypesCleansAllReferences`             | `DELETE` | FT + rule cleaned                           |
+| `deleteFinancialSubscriptionUsedInMultipleEntityTypesCleansAllReferences`             | `DELETE` | FT + tag links cleaned                      |
 | `adminDeleteForeignUsedFinancialSubscriptionSucceedsAndCleansReferences`              | `DELETE` | Admin `204` + cleanup                       |
 | `patchFinancialSubscriptionStatusCancelledSucceeds`                                   | `PATCH`  | `status=CANCELLED` persisted                |
 | `patchFinancialSubscriptionStatusCancelledKeepsTransactionLinked`                     | `PATCH`  | `status=CANCELLED`; FT link preserved       |
@@ -1323,7 +1322,7 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their rules. `ROLE_ADMIN` bypasses filters on the rule itself.
 
-**Link rule:** `resultingCategory` / `resultingFinancialSubscription` / `resultingTags` must belong to the **rule owner** — even when admin edits another user's rule.
+**Link rule:** `resultingCategory` / `resultingTags` must belong to the **rule owner** — even when admin edits another user's rule.
 
 **Domain rules in service:** assign `user` on create; ignore client `user`; preserve owner on update/patch; scope all reads/writes; normalize name/descriptions; enforce normalized per-owner name uniqueness; require at least one output; validate owner-scoped outputs; strict server-owned `createdAt` / `updatedAt`; PUT is a full DTO update; PATCH uses `JsonNode` for output link field presence; delete cleans child conditions + resultingTags join rows.
 
@@ -1331,7 +1330,7 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 | Type            | File                           | Tests   | Custom vs generated                                                                                                                                               |
 | --------------- | ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`    | **128** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + JHipster CRUD/filters                                                 |
+| Integration IT  | `TransactionRuleResourceIT`    | **127** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + JHipster CRUD/filters                                                 |
 | Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                      |
 | Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                         |
 | Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                         |
@@ -1359,12 +1358,12 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 
 #### Link rules — create (4) — ✅ custom
 
-| Test                                                           | HTTP   | What it checks                                   |
-| -------------------------------------------------------------- | ------ | ------------------------------------------------ |
-| `createTransactionRuleWithCategoryOwnedByAnotherUserFails`     | `POST` | Foreign `resultingCategory` → `400`              |
-| `createTransactionRuleWithSubscriptionOwnedByAnotherUserFails` | `POST` | Foreign `resultingFinancialSubscription` → `400` |
-| `createTransactionRuleWithTagOwnedByAnotherUserFails`          | `POST` | Foreign `resultingTags` → `400`                  |
-| `createTransactionRuleWithAccessibleCategorySucceeds`          | `POST` | Own category → `201`                             |
+| Test                                                       | HTTP   | What it checks                      |
+| ---------------------------------------------------------- | ------ | ----------------------------------- |
+| `createTransactionRuleWithCategoryOwnedByAnotherUserFails` | `POST` | Foreign `resultingCategory` → `400` |
+| `createTransactionRuleWithTagOwnedByAnotherUserFails`      | `POST` | Foreign `resultingTags` → `400`     |
+| `createTransactionRuleWithAccessibleCategorySucceeds`      | `POST` | Own category → `201`                |
+| `createTransactionRuleWithAccessibleTagsOnlySucceeds`      | `POST` | Own tags-only output → `201`        |
 
 #### Link rules — PATCH / PUT (5) — ✅ custom
 
@@ -1373,7 +1372,7 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 | `patchTransactionRuleWithoutCategoryFieldPreservesExistingCategory` | `PATCH` | Omit `resultingCategory` → preserved  |
 | `patchTransactionRuleWithNullCategoryClearsCategory`                | `PATCH` | `"resultingCategory": null` → cleared |
 | `patchTransactionRuleWithEmptyTagsClearsTags`                       | `PATCH` | `"resultingTags": []` → cleared       |
-| `updateTransactionRuleWithForeignCategoryOrSubscriptionFails`       | `PUT`   | Foreign category/subscription → `400` |
+| `updateTransactionRuleWithForeignCategoryFails`                     | `PUT`   | Foreign category → `400`              |
 | `patchTransactionRuleWithForeignTagFails`                           | `PATCH` | Foreign tag → `400`                   |
 
 #### Owner-scoped outputs — admin (1) — ✅ custom
@@ -1429,7 +1428,7 @@ Manual verification checklist:
 | --------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------- |
 | `createTransactionRuleWithoutCreatedAtUsesServerTimestamp`      | `POST`   | Server owns `createdAt`                                                                 |
 | `createTransactionRuleWithoutUpdatedAtUsesServerTimestamp`      | `POST`   | Server owns `updatedAt`                                                                 |
-| `createTransactionRuleNormalizesTextFields`                     | `POST`   | Trim name/description/resultingDescription                                              |
+| `createTransactionRuleNormalizesTextFields`                     | `POST`   | Trim name/description                                                                   |
 | `createTransactionRuleWithBlankNameFails`                       | `POST`   | Name blank after trim → `400`                                                           |
 | `createTransactionRuleWithDuplicateNameForSameOwnerFails`       | `POST`   | Name unique per owner, case/trim-insensitive                                            |
 | `createTransactionRuleWithSameNameForDifferentOwnerSucceeds`    | `POST`   | Name uniqueness owner-scoped                                                            |
@@ -1497,6 +1496,111 @@ Rehabilitated create/delete (sin selector User).
 | Medium   | IT      | Rule engine on FT create | ⏳          |
 | Low      | E2E     | UI table isolation       | ⏳          |
 | Low      | Product | Drag-and-drop reorder UI | ⏳ deferred |
+
+### Rule Engine evaluator tests
+
+See [RULE-ENGINE.md](RULE-ENGINE.md). Phase 1 backend-only pure evaluator tests are implemented in `TransactionRuleEvaluationServiceTest` and `TransactionRuleEvaluationServiceIT`.
+
+Implemented Phase 1 coverage:
+
+- inactive rules, rules without conditions, and rules without outputs are ignored;
+- rule order uses `priority ASC, id ASC`;
+- `ALL` requires all conditions true;
+- `ANY` requires at least one condition true;
+- text, amount, enum, account, and date operators are covered;
+- null optional fields do not match, including negative operators;
+- first matching category output wins;
+- later category outputs are skipped;
+- same explicit category creates no conflict;
+- different explicit category creates a conflict and does not override;
+- tags accumulate across matching rules;
+- later duplicate tags are skipped;
+- existing tags are returned with `alreadyPresent=true` and skipped as already present;
+- `alreadyPresent=true` tags are not treated as new tags to add;
+- persisted DB-backed rules load active current-user rules only;
+- persisted evaluation respects `priority ASC, id ASC`;
+- persisted resulting category/tags are fetched without lazy-loading failures;
+- persisted inactive and conditionless rules are ignored defensively.
+
+### Rule Engine apply-on-create tests
+
+Phase 2 backend apply-on-create behavior is covered in `FinancialTransactionResourceIT`.
+
+Implemented Phase 2 coverage:
+
+- create without category applies a suggested category;
+- explicit category is not overridden;
+- create without tags adds suggested tags;
+- explicit tags are preserved while new suggested tags are added;
+- `alreadyPresent=true` / existing suggested tags are not duplicated;
+- explicit different category still allows suggested new tags;
+- no matching rules leave category/tags unchanged;
+- inactive rules are not applied;
+- another user's rules are not applied;
+- admin has no special cross-user rule application on create;
+- update does not apply rules;
+- PATCH does not apply rules;
+- category plus multiple tags are applied once;
+- explicit same category remains and suggested tags still apply.
+
+### Rule Engine draft preview endpoint tests
+
+Phase 3A backend-only draft preview behavior is covered in `FinancialTransactionResourceIT`.
+
+Endpoint: `POST /api/financial-transactions/rule-preview`.
+
+Implemented Phase 3A coverage:
+
+- preview without explicit category returns the suggested category;
+- preview with explicit different category returns category conflict metadata;
+- preview with same explicit category does not produce a conflict;
+- preview without tags returns suggested tags;
+- preview with an explicit tag marks the suggestion as `alreadyPresent=true`;
+- preview with explicit tag plus new suggested tag returns both states;
+- duplicate tag suggestions are reported as skipped duplicate outputs;
+- no matching rules return empty suggestions/conflicts/skips/matches and false booleans;
+- inactive rules are ignored;
+- rules from another user are ignored;
+- foreign account preview is rejected;
+- admin preview for another user's account is rejected;
+- foreign category is rejected;
+- foreign tag is rejected;
+- required draft fields are validated (`accountId`, nonblank `description`, positive `amount`, `flow`, `origin`, `transactionDate`);
+- successful preview does not save a `FinancialTransaction`;
+- preview returns suggestions but does not apply `FILL_EMPTY_ONLY`;
+- no existing-transaction preview endpoint is implemented at `/api/financial-transactions/{id}/rule-preview`;
+- response assertions cover DTO-shaped output rather than full entity graphs.
+
+### Rule Engine manual create preview UI tests
+
+Phase 3B frontend manual create behavior is covered in `financial-transaction-ux.spec.tsx`.
+
+Implemented Phase 3B coverage:
+
+- create mode starts on Step 1 with transaction details only;
+- Step 1 hides category/tags and Save;
+- Step 1 validates required preview fields before calling the preview endpoint;
+- Next calls `POST /api/financial-transactions/rule-preview` with the unsaved draft and `origin=MANUAL`;
+- preview suggestions prepopulate Step 2 category/tags;
+- matched rule names are shown when returned;
+- user can change suggested category before save;
+- user can remove suggested tags before save;
+- explicit selected tags are preserved and new suggested tags are added without duplicates;
+- no suggestions shows empty manual categorization controls;
+- category conflicts show a non-blocking warning;
+- preview failure stays on Step 1 and does not create;
+- Back from Step 2 preserves Step 1 values;
+- Save from Step 2 calls normal create with final category/tags and `origin=MANUAL`;
+- edit mode remains one-step and does not call preview.
+
+Future planned areas:
+
+- exhaustive field/operator/value matrix tests beyond the Phase 1 smoke coverage;
+- deeper `FILL_EMPTY_ONLY` edge-case tests beyond apply-on-create smoke coverage;
+- future origin-policy tests for API/import/ingestion runtime once that policy is decided; no `MANUAL`-only behavior is asserted today;
+- additional mode tests for confirmation and override modes;
+- future one-transaction reevaluation tests;
+- future bulk reevaluation safety tests.
 
 ---
 
