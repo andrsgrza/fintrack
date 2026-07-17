@@ -1454,7 +1454,7 @@ class TransactionIngestionResourceIT {
 
         IngestionRecord ingestionRecord = new IngestionRecord()
             .recordIndex(12345)
-            .status(IngestionRecordStatus.CREATED)
+            .status(IngestionRecordStatus.IMPORTED)
             .createdAt(DEFAULT_CREATED_AT)
             .transactionIngestion(insertedTransactionIngestion)
             .financialTransaction(financialTransaction);

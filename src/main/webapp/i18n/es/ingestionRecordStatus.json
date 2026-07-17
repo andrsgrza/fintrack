@@ -2,9 +2,12 @@
   "fintrackApp": {
     "IngestionRecordStatus": {
       "null": "",
-      "CREATED": "CREATED",
-      "SKIPPED_DUPLICATE": "SKIPPED_DUPLICATE",
-      "REJECTED": "REJECTED"
+      "VALID": "Válida",
+      "DISABLED": "Deshabilitada",
+      "IMPORTED": "Importada",
+      "SKIPPED_DUPLICATE": "Duplicada omitida",
+      "REJECTED": "Rechazada",
+      "FAILED": "Fallida"
     }
   }
 }

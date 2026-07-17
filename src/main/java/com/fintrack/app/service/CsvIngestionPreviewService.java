@@ -158,7 +158,7 @@ public class CsvIngestionPreviewService {
         return new IngestionRecord()
             .recordIndex(row.getRecordIndex())
             .externalRecordId(row.getNormalized().getExternalReference())
-            .status(row.isValid() ? IngestionRecordStatus.CREATED : IngestionRecordStatus.REJECTED)
+            .status(row.isValid() ? IngestionRecordStatus.VALID : IngestionRecordStatus.REJECTED)
             .rawData(rawData(row))
             .errorCode(firstError == null ? null : firstError.getCode())
             .errorMessage(firstError == null ? null : firstError.getMessage())

@@ -2448,9 +2448,9 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 | `adminCanCreateIngestionRecordWithForeignTransactionIngestion`                                                        | Admin POST foreign ingestion OK                     |
 | `createIngestionRecordWithTransactionIngestion/FinancialTransactionOwnedByAnotherUserFails`                           | User foreign parent → `400`                         |
 | `adminCreateIngestionRecordWithCrossOwnerFinancialTransactionFails`                                                   | Admin cross-owner → `400`                           |
-| `createCreatedIngestionRecordWithValidFinancialTransactionSucceeds`                                                   | `CREATED` requires linked FT from same ingestion    |
-| `createCreatedIngestionRecordWithoutFinancialTransactionFails`                                                        | `CREATED` without FT → `400`                        |
-| `createCreatedIngestionRecordWithErrorDetailsFails`                                                                   | `CREATED` cannot have errors                        |
+| `createCreatedIngestionRecordWithValidFinancialTransactionSucceeds`                                                   | `IMPORTED` requires linked FT from same ingestion   |
+| `createCreatedIngestionRecordWithoutFinancialTransactionFails`                                                        | `IMPORTED` without FT → `400`                       |
+| `createCreatedIngestionRecordWithErrorDetailsFails`                                                                   | `IMPORTED` cannot have errors                       |
 | `createSkippedDuplicateWithFinancialTransactionFails`                                                                 | skipped duplicate forbids FT                        |
 | `createRejectedWithErrorMessageSucceeds`                                                                              | `REJECTED` requires normalized errorMessage         |
 | `createRejectedWithoutErrorMessageFails`                                                                              | blank errorMessage → `400`                          |
@@ -2518,7 +2518,7 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 - valid CSV upload creates `TransactionIngestion`, `FileIngestion`, and `IngestionRecord` rows.
 - invalid rows persist as `REJECTED` records when header is valid.
-- valid preview rows use `IngestionRecordStatus.CREATED` and `financialTransaction` remains `null`.
+- valid preview rows use `IngestionRecordStatus.VALID` and `financialTransaction` remains `null`.
 - invalid header creates nothing.
 - inaccessible account rejected and creates nothing.
 - admin foreign account rejected and creates nothing.
@@ -2631,5 +2631,6 @@ Copy this block when hardening the next entity:
 | 2026-07-13 | FinancialAccount balance read model   | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                           |
 | 2026-07-17 | CSV Ingestion I1A/I1B backend         | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted preview endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                         |
 | 2026-07-17 | CSV Ingestion I1C frontend            | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart preview submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                 |
+| 2026-07-17 | CSV Ingestion I2A status lifecycle    | `IngestionRecordStatus.CREATED` removed; preview tests expect `VALID`; imported-record domain tests use `IMPORTED`; frontend preview test renders translated `Valid`/`Rejected`; Liquibase migrates existing `CREATED` rows to `VALID`.                                                                                                   |
 | 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                            |
 | 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal. |

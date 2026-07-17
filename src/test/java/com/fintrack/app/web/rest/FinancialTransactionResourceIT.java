@@ -2202,7 +2202,7 @@ class FinancialTransactionResourceIT {
     void deleteFinancialTransactionLinkedToIngestionRecordRejectsAndUnlinksRecord() throws Exception {
         insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
         IngestionRecord ingestionRecord = IngestionRecordResourceIT.createEntity(em);
-        ingestionRecord.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecord.setStatus(IngestionRecordStatus.IMPORTED);
         ingestionRecord.setFinancialTransaction(financialTransaction);
         em.persist(ingestionRecord);
         em.flush();

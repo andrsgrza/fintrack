@@ -123,7 +123,7 @@ class CsvIngestionPreviewResourceIT {
         List<IngestionRecord> records = recordsFor(ingestion);
         assertThat(records).hasSize(3);
         assertThat(records).allSatisfy(record -> {
-            assertThat(record.getStatus()).isEqualTo(IngestionRecordStatus.CREATED);
+            assertThat(record.getStatus()).isEqualTo(IngestionRecordStatus.VALID);
             assertThat(record.getFinancialTransaction()).isNull();
             assertThat(record.getErrorCode()).isNull();
             assertThat(record.getErrorMessage()).isNull();
@@ -155,7 +155,7 @@ class CsvIngestionPreviewResourceIT {
             .andExpect(jsonPath("$.counts.recordsRejected").value(1))
             .andExpect(jsonPath("$.rows[0].status").value("REJECTED"))
             .andExpect(jsonPath("$.rows[0].errorCode").value("INVALID_TRANSACTION_DATE"))
-            .andExpect(jsonPath("$.rows[1].status").value("CREATED"));
+            .andExpect(jsonPath("$.rows[1].status").value("VALID"));
 
         TransactionIngestion ingestion = transactionIngestionRepository.findAll().get(0);
         List<IngestionRecord> records = recordsFor(ingestion);

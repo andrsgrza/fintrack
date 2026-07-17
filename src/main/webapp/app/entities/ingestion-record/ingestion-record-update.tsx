@@ -88,10 +88,10 @@ export const IngestionRecordUpdate = () => {
   const defaultValues = () =>
     isNew
       ? {
-          status: 'CREATED',
+          status: 'VALID',
         }
       : {
-          status: 'CREATED',
+          status: 'VALID',
           ...ingestionRecordEntity,
           createdAt: convertDateTimeFromServer(ingestionRecordEntity.createdAt),
           financialTransaction: ingestionRecordEntity?.financialTransaction?.id,

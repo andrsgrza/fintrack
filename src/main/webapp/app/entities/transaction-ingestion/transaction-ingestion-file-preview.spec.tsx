@@ -237,7 +237,7 @@ describe('TransactionIngestion file preview workflow', () => {
           {
             ingestionRecordId: 300,
             recordIndex: 1,
-            status: 'CREATED',
+            status: 'VALID',
             transactionDate: '2026-07-13',
             postingDate: '2026-07-13',
             description: 'Salary',
@@ -278,6 +278,8 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(within(counts).getByText('2')).toBeTruthy();
     expect(within(counts).getAllByText('1')).toHaveLength(3);
 
+    expect(screen.getByText('Valid')).toBeTruthy();
+    expect(screen.getByText('Rejected')).toBeTruthy();
     expect(screen.getByText('Income')).toBeTruthy();
     expect(screen.getByText('signedAmount must be nonzero')).toBeTruthy();
   });

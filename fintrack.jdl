@@ -176,9 +176,12 @@ enum ImportFileType {
 }
 
 enum IngestionRecordStatus {
-  CREATED,
+  VALID,
+  DISABLED,
+  IMPORTED,
   SKIPPED_DUPLICATE,
-  REJECTED
+  REJECTED,
+  FAILED
 }
 
 enum ApiTokenStatus {

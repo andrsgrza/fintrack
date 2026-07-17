@@ -27,7 +27,7 @@ Recommendation:
 - Keep `financialTransaction = null` for every `IngestionRecord` in I1.
 - Leave `FinancialTransaction` creation to I2.
 
-The only naming mismatch is `IngestionRecordStatus.CREATED`: in CSV I1 it means "valid preview row ready to create a `FinancialTransaction` later," not "financial transaction already created." That is acceptable for I1; a future enum value such as `VALID` would be clearer but is not required.
+I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that already generated a `FinancialTransaction` will use `IMPORTED` in a later confirm-import slice.
 
 ## 2. Responsibility split using current entities
 
@@ -83,17 +83,17 @@ Role: one persisted preview row per CSV data row.
 
 Recommended I1 values:
 
-| Field                  | Recommendation                                                                               |
-| ---------------------- | -------------------------------------------------------------------------------------------- |
-| `recordIndex`          | 1-based CSV data-row index, excluding the header. The first data row is `1`.                 |
-| `externalRecordId`     | Normalized `externalReference` if present; otherwise `null`.                                 |
-| `status`               | `CREATED` for valid preview rows; `REJECTED` for invalid rows; `SKIPPED_DUPLICATE` deferred. |
-| `rawData`              | JSON string containing `raw`, `normalized`, `errors`, and `warnings`.                        |
-| `errorCode`            | First validation error code for rejected rows; `null` for valid rows.                        |
-| `errorMessage`         | First validation error message for rejected rows; `null` for valid rows.                     |
-| `createdAt`            | Server-owned `now`.                                                                          |
-| `financialTransaction` | `null` in I1.                                                                                |
-| `transactionIngestion` | Required parent.                                                                             |
+| Field                  | Recommendation                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recordIndex`          | 1-based CSV data-row index, excluding the header. The first data row is `1`.                                                                                |
+| `externalRecordId`     | Normalized `externalReference` if present; otherwise `null`.                                                                                                |
+| `status`               | `VALID` for valid preview rows; `REJECTED` for invalid rows; `DISABLED`/`IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` reserved for later review/import lifecycle. |
+| `rawData`              | JSON string containing `raw`, `normalized`, `errors`, and `warnings`.                                                                                       |
+| `errorCode`            | First validation error code for rejected rows; `null` for valid rows.                                                                                       |
+| `errorMessage`         | First validation error message for rejected rows; `null` for valid rows.                                                                                    |
+| `createdAt`            | Server-owned `now`.                                                                                                                                         |
+| `financialTransaction` | `null` in I1.                                                                                                                                               |
+| `transactionIngestion` | Required parent.                                                                                                                                            |
 
 ### ApiIngestion
 
@@ -234,7 +234,7 @@ Response DTO:
     {
       "ingestionRecordId": 3601,
       "recordIndex": 1,
-      "status": "CREATED",
+      "status": "VALID",
       "transactionDate": "2026-07-13",
       "postingDate": null,
       "description": "Uber trip",
@@ -282,22 +282,20 @@ Existing enum values:
 IngestionType: FILE, API
 IngestionStatus: PENDING, PROCESSING, COMPLETED, PARTIALLY_COMPLETED, FAILED
 ImportFileType: CSV, PDF, XLSX, JSON, OFX, OTHER
-IngestionRecordStatus: CREATED, SKIPPED_DUPLICATE, REJECTED
+IngestionRecordStatus: VALID, DISABLED, IMPORTED, SKIPPED_DUPLICATE, REJECTED, FAILED
 ```
 
 Recommended I1 mapping:
 
-| Case                               | TransactionIngestion.status                   | IngestionRecord.status         |
-| ---------------------------------- | --------------------------------------------- | ------------------------------ |
-| Valid header, all rows valid       | `COMPLETED`                                   | `CREATED`                      |
-| Valid header, some rows invalid    | `PARTIALLY_COMPLETED`                         | `CREATED` / `REJECTED`         |
-| Valid header, all rows invalid     | `PARTIALLY_COMPLETED`                         | `REJECTED`                     |
-| Invalid header / rejected file     | No persisted ingestion in I1                  | N/A                            |
-| Completed preview but not imported | `COMPLETED` or `PARTIALLY_COMPLETED` as above | `CREATED` rows remain unlinked |
+| Case                               | TransactionIngestion.status                   | IngestionRecord.status       |
+| ---------------------------------- | --------------------------------------------- | ---------------------------- |
+| Valid header, all rows valid       | `COMPLETED`                                   | `VALID`                      |
+| Valid header, some rows invalid    | `PARTIALLY_COMPLETED`                         | `VALID` / `REJECTED`         |
+| Valid header, all rows invalid     | `PARTIALLY_COMPLETED`                         | `REJECTED`                   |
+| Invalid header / rejected file     | No persisted ingestion in I1                  | N/A                          |
+| Completed preview but not imported | `COMPLETED` or `PARTIALLY_COMPLETED` as above | `VALID` rows remain unlinked |
 
-Existing statuses are sufficient for I1. The main semantic compromise is using `CREATED` for valid preview rows before financial transactions exist. I1 can proceed with this; a future enum cleanup could add `VALID` / `IMPORTED` if the lifecycle becomes confusing.
-
-> **Important:** `IngestionRecordStatus.CREATED` in CSV preview means "valid preview row"; it must not be interpreted as "`FinancialTransaction` created" until I2 changes lifecycle semantics. In I1, every preview record, including `CREATED` records, must have `financialTransaction = null`.
+I2A migrated away from `CREATED`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is reserved for review actions where the user keeps a row for audit but excludes it from import. `REJECTED` rows block future confirm import unless fixed or disabled. TransactionIngestion status is unchanged in I2A.
 
 Counter mapping:
 

@@ -291,7 +291,7 @@ class IngestionRecordResourceIT {
         restIngestionRecordMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(ingestionRecordDTO)))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.status").value(IngestionRecordStatus.CREATED.toString()))
+            .andExpect(jsonPath("$.status").value(IngestionRecordStatus.IMPORTED.toString()))
             .andExpect(jsonPath("$.financialTransaction.id").value(financialTransaction.getId().intValue()));
 
         IngestionRecord persisted = ingestionRecordRepository
@@ -314,7 +314,7 @@ class IngestionRecordResourceIT {
             ingestionRecord.getTransactionIngestion().getId(),
             nextRecordIndex()
         );
-        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.IMPORTED);
         ingestionRecordDTO.setErrorCode(null);
         ingestionRecordDTO.setErrorMessage(null);
 
@@ -1449,7 +1449,7 @@ class IngestionRecordResourceIT {
     @Transactional
     void patchIngestionRecordWithNullFinancialTransactionFails() throws Exception {
         FinancialTransaction financialTransaction = saveFinancialTransactionForIngestion(ingestionRecord.getTransactionIngestion());
-        ingestionRecord.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecord.setStatus(IngestionRecordStatus.IMPORTED);
         ingestionRecord.setErrorCode(null);
         ingestionRecord.setErrorMessage(null);
         ingestionRecord.setFinancialTransaction(financialTransaction);
@@ -1629,7 +1629,7 @@ class IngestionRecordResourceIT {
         Long financialTransactionId
     ) {
         IngestionRecordDTO ingestionRecordDTO = buildCreateIngestionRecordDTO(transactionIngestionId, recordIndex);
-        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.IMPORTED);
         ingestionRecordDTO.setErrorCode(null);
         ingestionRecordDTO.setErrorMessage(null);
         FinancialTransactionDTO financialTransactionDTO = new FinancialTransactionDTO();

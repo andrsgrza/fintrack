@@ -254,21 +254,23 @@ Companion docs:
 
 When the header is valid, invalid rows persist as `REJECTED` `IngestionRecord`s.
 
-| Field / rule         | Decision                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `transactionDate`    | Required ISO date `YYYY-MM-DD`.                                                                               |
-| `postingDate`        | Optional ISO date `YYYY-MM-DD`; blank normalizes to `null`.                                                   |
-| `description`        | Required nonblank after trim; max 500 after trim.                                                             |
-| `signedAmount`       | Required decimal; nonzero; max scale 2.                                                                       |
-| Positive amount      | `signedAmount > 0` normalizes to `flow = IN`.                                                                 |
-| Negative amount      | `signedAmount < 0` normalizes to `flow = OUT`.                                                                |
-| Normalized amount    | `amount = abs(signedAmount)`.                                                                                 |
-| Zero amount          | `signedAmount = 0` invalid, not skipped.                                                                      |
-| `currency`           | Required and must match selected `FinancialAccount.currency`.                                                 |
-| `externalReference`  | Optional; trim; blank to `null`; max 150 after trim.                                                          |
-| `notes`              | Optional; trim; blank to `null`; max 1000 after trim.                                                         |
-| Valid preview status | `IngestionRecordStatus.CREATED` means valid preview row in I1, not an already-created `FinancialTransaction`. |
-| FT link in I1        | `financialTransaction` must remain `null` for every I1 preview row.                                           |
+| Field / rule         | Decision                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `transactionDate`    | Required ISO date `YYYY-MM-DD`.                                                                       |
+| `postingDate`        | Optional ISO date `YYYY-MM-DD`; blank normalizes to `null`.                                           |
+| `description`        | Required nonblank after trim; max 500 after trim.                                                     |
+| `signedAmount`       | Required decimal; nonzero; max scale 2.                                                               |
+| Positive amount      | `signedAmount > 0` normalizes to `flow = IN`.                                                         |
+| Negative amount      | `signedAmount < 0` normalizes to `flow = OUT`.                                                        |
+| Normalized amount    | `amount = abs(signedAmount)`.                                                                         |
+| Zero amount          | `signedAmount = 0` invalid, not skipped.                                                              |
+| `currency`           | Required and must match selected `FinancialAccount.currency`.                                         |
+| `externalReference`  | Optional; trim; blank to `null`; max 150 after trim.                                                  |
+| `notes`              | Optional; trim; blank to `null`; max 1000 after trim.                                                 |
+| Valid preview status | `IngestionRecordStatus.VALID` means valid preview row, not an already-created `FinancialTransaction`. |
+| FT link in I1        | `financialTransaction` must remain `null` for every I1 preview row.                                   |
+
+`CREATED` is no longer a valid `IngestionRecordStatus`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is reserved for future review actions. `REJECTED` rows block future confirm import unless fixed or disabled. `TransactionIngestion.status` is unchanged in I2A.
 
 #### UI
 
