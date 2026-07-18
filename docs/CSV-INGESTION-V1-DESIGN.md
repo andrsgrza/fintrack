@@ -8,7 +8,7 @@ CSV Ingestion v1 starts FINTRACK's file ingestion work using the existing ingest
 - `FileIngestion` as file metadata.
 - `IngestionRecord` as the persisted row preview.
 
-The first implementation slice, I1, is backend persisted preview only. It parses, validates, normalizes, and persists preview rows, but it does not create `FinancialTransaction` rows and does not run the Rule Engine.
+The first implementation slice, I1, is backend persisted preview only. It parses, validates, normalizes, and persists preview rows, but it does not create `FinancialTransaction` rows and does not run the Rule Engine. I2C adds explicit confirm import for ready persisted previews.
 
 ## 1. Current schema fit
 
@@ -27,9 +27,9 @@ Recommendation:
 - Keep `financialTransaction = null` for every `IngestionRecord` in I1.
 - Leave `FinancialTransaction` creation to I2.
 
-I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that already generated a `FinancialTransaction` will use `IMPORTED` in a later confirm-import slice.
+I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. Confirm import remains deferred.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
 
 ## 2. Responsibility split using current entities
 
@@ -299,7 +299,7 @@ Recommended I1 mapping:
 | Invalid header / rejected file             | No persisted ingestion in I1          | N/A                              |
 | Preview ready but not imported             | `READY` or `PARTIALLY_READY` as above | `VALID` rows remain unlinked     |
 
-I2A migrated away from `CREATED`. I2 readiness migration introduced `READY`/`PARTIALLY_READY` for pre-import preview/review. `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows. `PARTIALLY_READY` means blocking rows exist or there are zero `VALID` rows to import. `COMPLETED` and `PARTIALLY_COMPLETED` are import-result statuses; `PARTIALLY_COMPLETED` is reserved for future/exceptional partial import scenarios and should not be used by CSV Confirm Import v1. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is used by review actions where the user keeps a row for audit but excludes it from import. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but an ingestion with only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. `REJECTED`/`FAILED` rows make the batch `PARTIALLY_READY` unless disabled/fixed.
+I2A migrated away from `CREATED`. I2 readiness migration introduced `READY`/`PARTIALLY_READY` for pre-import preview/review. `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows. `PARTIALLY_READY` means blocking rows exist or there are zero `VALID` rows to import. `COMPLETED` and `PARTIALLY_COMPLETED` are import-result statuses; `PARTIALLY_COMPLETED` is reserved for future/exceptional partial import scenarios and should not be used by CSV Confirm Import v1. `IMPORTED` is used for rows that generated a `FinancialTransaction` during confirm import. `DISABLED` is used by review actions where the user keeps a row for audit but excludes it from import. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but an ingestion with only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. `REJECTED`/`FAILED` rows make the batch `PARTIALLY_READY` unless disabled/fixed.
 
 I2B.2 row edits replace `rawData.normalized`, recalculate `rawData.errors`/`rawData.warnings`, and leave `rawData.raw` unchanged as the original CSV audit payload. Editable normalized fields are `transactionDate`, `postingDate`, `description`, `signedAmount`, `currency`, `externalReference`, and `notes`. `amount` and `flow` are always derived from `signedAmount`; clients cannot edit status, amount, flow, parent ingestion, record index, raw CSV data, or financial transaction links. Editing is allowed only for `VALID` and `REJECTED` rows; valid results become `VALID`, invalid results become `REJECTED`. `DISABLED` rows must be enabled before editing. `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are immutable in this slice.
 
@@ -400,14 +400,14 @@ I1:
 - Preview rows do not include category/tag suggestions.
 - I1 focuses only on parsing, validation, normalization, and persisted `IngestionRecord` rows.
 
-I2:
+I2C:
 
 - Confirm import creates `FinancialTransaction` rows from valid `IngestionRecord` rows.
 - Imported transactions should use `origin = FILE_IMPORT`.
-- Rule Engine `FILL_EMPTY_ONLY` should be explicitly applied during confirm import unless a clear design issue is found.
-- Rule Engine use must be explicit and tested, not an accidental side effect of calling a generic save path.
-- Category/tags from rules fill empty values only.
-- No import UI rule suggestions in I2 unless separately designed.
+- Confirm import uses `rawData.normalized` as the source of transaction fields.
+- Confirm import does not run the Rule Engine in CSV v1.
+- Imported transactions have no category, no tags, and no financial subscription unless a later slice explicitly designs import-time suggestions/review.
+- No import UI rule suggestions in I2C.
 
 Future:
 
@@ -444,7 +444,7 @@ Preview screen:
   - `error`
 - Expandable raw row if useful.
 - No `FinancialTransaction` rows are created in I1.
-- Confirm/import button is absent until I2.
+- Confirm Import appears only on the persisted review page when the recalculated parent status is `READY` and at least one `VALID` row exists.
 
 Future shortcut:
 
@@ -499,11 +499,16 @@ UI composition conventions:
 
 ### I2 — Confirm import
 
-- Add confirm import endpoint.
-- Create `FinancialTransaction` rows from valid `IngestionRecord` rows.
-- Use `origin = FILE_IMPORT`.
-- Explicitly apply Rule Engine `FILL_EMPTY_ONLY` unless a later design finds a clear reason not to.
-- Tests for creation, ownership, counters, linking, duplicates, and Rule Engine behavior.
+- Add `POST /api/transaction-ingestions/{id}/confirm`. **Implemented.**
+- Recalculate readiness from persisted records before import. **Implemented.**
+- Require `READY`: at least one `VALID` row and zero `REJECTED`/`FAILED` rows. **Implemented.**
+- Create `FinancialTransaction` rows from `VALID` `IngestionRecord` rows. **Implemented.**
+- Use `origin = FILE_IMPORT`. **Implemented.**
+- Set imported row status to `IMPORTED` and link each row to its created `FinancialTransaction`. **Implemented.**
+- Leave `DISABLED` rows skipped/read-only. **Implemented.**
+- Mark parent `TransactionIngestion` `COMPLETED` after a successful all-or-nothing import. **Implemented.**
+- Do not produce `PARTIALLY_COMPLETED` in CSV v1. **Implemented.**
+- Do not run the Rule Engine during CSV v1 confirm import. **Implemented.**
 
 ### I3 — Duplicate/idempotency improvements
 
@@ -611,4 +616,4 @@ Already decided and not open for I1:
 - account comes through `TransactionIngestion`.
 - I1 does not run Rule Engine.
 - I1 does not create `FinancialTransaction` rows.
-- I2 should explicitly apply Rule Engine `FILL_EMPTY_ONLY` during confirm import unless a later design finds a clear reason not to.
+- I2C confirm import does not run the Rule Engine; import-time suggestions/review are deferred.

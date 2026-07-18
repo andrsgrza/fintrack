@@ -55,6 +55,7 @@ public class CsvIngestionPreviewService {
     private final CurrentUserService currentUserService;
     private final CanonicalCsvIngestionParser parser;
     private final ObjectMapper objectMapper;
+    private final CsvIngestionReadinessService csvIngestionReadinessService;
 
     public CsvIngestionPreviewService(
         FinancialAccountRepository financialAccountRepository,
@@ -63,7 +64,8 @@ public class CsvIngestionPreviewService {
         IngestionRecordRepository ingestionRecordRepository,
         CurrentUserService currentUserService,
         CanonicalCsvIngestionParser parser,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        CsvIngestionReadinessService csvIngestionReadinessService
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
@@ -72,6 +74,7 @@ public class CsvIngestionPreviewService {
         this.currentUserService = currentUserService;
         this.parser = parser;
         this.objectMapper = objectMapper;
+        this.csvIngestionReadinessService = csvIngestionReadinessService;
     }
 
     public CsvIngestionPreviewResponseDTO createPreview(Long accountId, MultipartFile file) {
@@ -82,7 +85,7 @@ public class CsvIngestionPreviewService {
         List<CsvIngestionValidationMessage> warnings = duplicateChecksumWarnings(account.getId(), checksum);
 
         Instant startedAt = Instant.now();
-        IngestionStatus status = previewReadinessStatus(parseResult.getValidRows(), parseResult.getRecordsRejected());
+        IngestionStatus status = csvIngestionReadinessService.readinessStatus(parseResult.getValidRows(), parseResult.getRecordsRejected());
 
         TransactionIngestion transactionIngestion = new TransactionIngestion()
             .ingestionType(IngestionType.FILE)
@@ -144,7 +147,7 @@ public class CsvIngestionPreviewService {
         response.setFileIngestionId(fileIngestion.getId());
         response.setStatus(transactionIngestion.getStatus());
         response.setSourceLabel(transactionIngestion.getSourceLabel());
-        response.setCounts(counts(records));
+        response.setCounts(csvIngestionReadinessService.snapshot(records).counts());
         response.setWarnings(List.of());
         response.setFileMetadata(fileMetadata(fileIngestion));
         response.setRows(records.stream().map(this::toRowDto).toList());
@@ -235,38 +238,6 @@ public class CsvIngestionPreviewService {
         return counts;
     }
 
-    private IngestionStatus previewReadinessStatus(int validRows, int rejectedOrFailedRows) {
-        return rejectedOrFailedRows > 0 || validRows == 0 ? IngestionStatus.PARTIALLY_READY : IngestionStatus.READY;
-    }
-
-    private CsvIngestionPreviewCountsDTO counts(List<IngestionRecord> records) {
-        int imported = 0;
-        int skipped = 0;
-        int rejected = 0;
-        int valid = 0;
-        for (IngestionRecord record : records) {
-            if (record.getStatus() == IngestionRecordStatus.IMPORTED) {
-                imported++;
-            } else if (
-                record.getStatus() == IngestionRecordStatus.DISABLED || record.getStatus() == IngestionRecordStatus.SKIPPED_DUPLICATE
-            ) {
-                skipped++;
-            } else if (record.getStatus() == IngestionRecordStatus.REJECTED || record.getStatus() == IngestionRecordStatus.FAILED) {
-                rejected++;
-            } else if (record.getStatus() == IngestionRecordStatus.VALID) {
-                valid++;
-            }
-        }
-        CsvIngestionPreviewCountsDTO counts = new CsvIngestionPreviewCountsDTO();
-        counts.setRecordsReceived(records.size());
-        counts.setRecordsCreated(imported);
-        counts.setRecordsSkipped(skipped);
-        counts.setRecordsRejected(rejected);
-        counts.setValidRows(valid);
-        counts.setInvalidRows(rejected);
-        return counts;
-    }
-
     private CsvIngestionFileMetadataDTO fileMetadata(FileIngestion fileIngestion) {
         CsvIngestionFileMetadataDTO metadata = new CsvIngestionFileMetadataDTO();
         metadata.setOriginalFilename(fileIngestion.getOriginalFilename());
@@ -287,6 +258,7 @@ public class CsvIngestionPreviewService {
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());
+        dto.setFinancialTransactionId(record.getFinancialTransaction() == null ? null : record.getFinancialTransaction().getId());
         dto.setTransactionDate(normalized.getTransactionDate());
         dto.setPostingDate(normalized.getPostingDate());
         dto.setDescription(normalized.getDescription());
@@ -309,6 +281,7 @@ public class CsvIngestionPreviewService {
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());
+        dto.setFinancialTransactionId(record.getFinancialTransaction() == null ? null : record.getFinancialTransaction().getId());
         dto.setTransactionDate(parseLocalDate(normalized, "transactionDate"));
         dto.setPostingDate(parseLocalDate(normalized, "postingDate"));
         dto.setDescription(textOrNull(normalized, "description"));

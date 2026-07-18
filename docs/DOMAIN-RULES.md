@@ -1223,52 +1223,56 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### I1 — persisted preview
 
-| Rule                     | Decision                                                                                                                                                                                                           | Status       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
-| Parent batch             | `TransactionIngestion` is the parent import batch/process and owns the target `FinancialAccount`                                                                                                                   | **Done**     |
-| File metadata            | `FileIngestion` is metadata only and links 1:1 to `TransactionIngestion`; it does not have its own account field                                                                                                   | **Done**     |
-| Account derivation       | `FileIngestion` derives account through `TransactionIngestion.account`                                                                                                                                             | **Done**     |
-| Preview records          | `IngestionRecord` represents one CSV data row                                                                                                                                                                      | **Done**     |
-| No transactions in I1    | CSV preview creates no `FinancialTransaction` rows                                                                                                                                                                 | **Done**     |
-| No Rule Engine in I1     | CSV preview does not run Rule Engine                                                                                                                                                                               | **Done**     |
-| Preview status semantics | `IngestionRecord.status = VALID` means valid preview row, ready for future confirm import                                                                                                                          | **Done**     |
-| Parent readiness status  | `TransactionIngestion.status = READY` means at least one `VALID` row and no `REJECTED`/`FAILED`; `PARTIALLY_READY` means blocking rows exist or zero `VALID` rows exist                                            | **Done**     |
-| Import-result statuses   | `COMPLETED`/`PARTIALLY_COMPLETED` are import-result statuses; CSV preview/review and CSV Confirm Import v1 should not produce `PARTIALLY_COMPLETED`                                                                | **Done**     |
-| Preview record link      | `IngestionRecord.financialTransaction` must be `null` for every I1/I2A preview row, including `VALID` rows                                                                                                         | **Done**     |
-| Imported status          | `IMPORTED` is reserved for rows that generated a `FinancialTransaction` in a later confirm-import slice                                                                                                            | **Deferred** |
-| Disabled status          | `DISABLED` keeps the row for audit/review and excludes it from future confirm import; top-level blocking errors are cleared, rawData remains traceable                                                             | **Done**     |
-| Disable review action    | `VALID`/`REJECTED` rows can become `DISABLED`; `IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` are not review-editable in I2B                                                                                              | **Done**     |
-| Enable review action     | `DISABLED` rows revalidate current normalized values; valid rows become `VALID`, invalid rows become `REJECTED`                                                                                                    | **Done**     |
-| Edit review action       | Only `VALID`/`REJECTED` rows can edit normalized values; edit revalidates and returns `VALID` or `REJECTED`; `DISABLED` rows must be enabled before editing; `IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` are immutable | **Done**     |
-| Edit derived fields      | Review edit never trusts client `amount`, `flow`, or `status`; `amount` and `flow` are derived from `signedAmount`                                                                                                 | **Done**     |
-| Persisted review page    | `/transaction-ingestion/{id}/file-preview` loads persisted rows and read-only `FileIngestion` metadata; FileIngestion CRUD is not the product flow                                                                 | **Done**     |
-| Raw/normalized payload   | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON; row edit keeps `rawData.raw` unchanged and replaces `rawData.normalized`                                                 | **Done**     |
-| Rejected uploads         | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred                                                               | **Done**     |
-| Duplicate file checksum  | Same checksum/account is warning-only in I1; it does not block preview                                                                                                                                             | **Done**     |
+| Rule                     | Decision                                                                                                                                                                                                           | Status   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Parent batch             | `TransactionIngestion` is the parent import batch/process and owns the target `FinancialAccount`                                                                                                                   | **Done** |
+| File metadata            | `FileIngestion` is metadata only and links 1:1 to `TransactionIngestion`; it does not have its own account field                                                                                                   | **Done** |
+| Account derivation       | `FileIngestion` derives account through `TransactionIngestion.account`                                                                                                                                             | **Done** |
+| Preview records          | `IngestionRecord` represents one CSV data row                                                                                                                                                                      | **Done** |
+| No transactions in I1    | CSV preview creates no `FinancialTransaction` rows                                                                                                                                                                 | **Done** |
+| No Rule Engine in I1     | CSV preview does not run Rule Engine                                                                                                                                                                               | **Done** |
+| Preview status semantics | `IngestionRecord.status = VALID` means valid preview row, ready for future confirm import                                                                                                                          | **Done** |
+| Parent readiness status  | `TransactionIngestion.status = READY` means at least one `VALID` row and no `REJECTED`/`FAILED`; `PARTIALLY_READY` means blocking rows exist or zero `VALID` rows exist                                            | **Done** |
+| Import-result statuses   | `COMPLETED`/`PARTIALLY_COMPLETED` are import-result statuses; CSV preview/review and CSV Confirm Import v1 should not produce `PARTIALLY_COMPLETED`                                                                | **Done** |
+| Preview record link      | `IngestionRecord.financialTransaction` must be `null` for preview/review rows until confirm import; `IMPORTED` rows require a linked transaction from the same ingestion                                           | **Done** |
+| Imported status          | Confirm Import turns imported `VALID` rows into `IMPORTED` rows linked to their generated `FinancialTransaction`                                                                                                   | **Done** |
+| Disabled status          | `DISABLED` keeps the row for audit/review and excludes it from future confirm import; top-level blocking errors are cleared, rawData remains traceable                                                             | **Done** |
+| Disable review action    | `VALID`/`REJECTED` rows can become `DISABLED`; `IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` are not review-editable in I2B                                                                                              | **Done** |
+| Enable review action     | `DISABLED` rows revalidate current normalized values; valid rows become `VALID`, invalid rows become `REJECTED`                                                                                                    | **Done** |
+| Edit review action       | Only `VALID`/`REJECTED` rows can edit normalized values; edit revalidates and returns `VALID` or `REJECTED`; `DISABLED` rows must be enabled before editing; `IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` are immutable | **Done** |
+| Edit derived fields      | Review edit never trusts client `amount`, `flow`, or `status`; `amount` and `flow` are derived from `signedAmount`                                                                                                 | **Done** |
+| Persisted review page    | `/transaction-ingestion/{id}/file-preview` loads persisted rows and read-only `FileIngestion` metadata; FileIngestion CRUD is not the product flow                                                                 | **Done** |
+| Raw/normalized payload   | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON; row edit keeps `rawData.raw` unchanged and replaces `rawData.normalized`                                                 | **Done** |
+| Rejected uploads         | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred                                                               | **Done** |
+| Duplicate file checksum  | Same checksum/account is warning-only in I1; it does not block preview                                                                                                                                             | **Done** |
 
-**Readiness recalculation:** CSV preview/review sets the parent to `PARTIALLY_READY` when any row is `REJECTED`/`FAILED` or when there are zero `VALID` rows. Otherwise it sets `READY`. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but a batch containing only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. Confirm Import remains deferred; no `FinancialTransaction` rows are created and the Rule Engine is not invoked in this slice.
-| Minimal preview UI | TransactionIngestion “New File Import” workflow selects account, uploads CSV, shows persisted preview summary/warnings/rows, and has no confirm/import action | **Done** |
+**Readiness recalculation:** CSV preview/review/confirm share the same readiness source of truth. The parent is `PARTIALLY_READY` when any row is `REJECTED`/`FAILED` or when there are zero `VALID` rows. Otherwise it is `READY`. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but a batch containing only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. Confirm Import recalculates readiness from persisted records before importing and only proceeds when the recalculated status is `READY`.
+
+| Minimal preview UI | TransactionIngestion “New File Import” workflow selects account, uploads CSV, shows persisted preview summary/warnings/rows, and shows Confirm Import only for ready reviews with valid rows | **Done** |
 
 ### Canonical CSV transaction rules
 
-| Rule                 | Decision                                                                                         | Status   |
-| -------------------- | ------------------------------------------------------------------------------------------------ | -------- |
-| Contract             | Header must be exact, ordered, and case-sensitive                                                | **Done** |
-| Sign convention      | Positive `signedAmount` → `flow = IN`                                                            | **Done** |
-| Sign convention      | Negative `signedAmount` → `flow = OUT`                                                           | **Done** |
-| Amount normalization | Preview `amount = abs(signedAmount)`; I2 will use this when creating `FinancialTransaction` rows | **Done** |
-| Zero amount          | `signedAmount = 0` is invalid, not skipped                                                       | **Done** |
-| Currency             | Row `currency` must match selected account currency                                              | **Done** |
-| Account type         | CSV sign convention is canonical; do not infer flow from bank/account type/kind                  | **Done** |
+| Rule                 | Decision                                                                                                                         | Status   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Contract             | Header must be exact, ordered, and case-sensitive                                                                                | **Done** |
+| Sign convention      | Positive `signedAmount` → `flow = IN`                                                                                            | **Done** |
+| Sign convention      | Negative `signedAmount` → `flow = OUT`                                                                                           | **Done** |
+| Amount normalization | Preview/review `amount = abs(signedAmount)`; confirm import uses the normalized amount when creating `FinancialTransaction` rows | **Done** |
+| Zero amount          | `signedAmount = 0` is invalid, not skipped                                                                                       | **Done** |
+| Currency             | Row `currency` must match selected account currency                                                                              | **Done** |
+| Account type         | CSV sign convention is canonical; do not infer flow from bank/account type/kind                                                  | **Done** |
 
 ### I2 — confirm import
 
-| Rule                   | Decision                                                                                                       | Status       |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------ |
-| Confirm import         | Create `FinancialTransaction` rows from valid preview records                                                  | **Planned**  |
-| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                               | **Planned**  |
-| Rule Engine            | Explicitly apply Rule Engine `FILL_EMPTY_ONLY` during confirm import unless a later design finds a clear issue | **Planned**  |
-| Evaluation persistence | Do not persist Rule Engine evaluation results in I2 unless separately designed                                 | **Deferred** |
+| Rule                   | Decision                                                                                                                                                 | Status   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Confirm import         | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` preview records only after recalculating `READY` status | **Done** |
+| Source fields          | Imported transactions are built from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                                          | **Done** |
+| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                                                                         | **Done** |
+| Row transitions        | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                  | **Done** |
+| Parent transition      | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new          | **Done** |
+| Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine                                                                                                    | **Done** |
+| Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                      | **Done** |
 
 ---
 

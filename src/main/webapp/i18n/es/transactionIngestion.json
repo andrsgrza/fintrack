@@ -81,6 +81,11 @@
         "enable": "Habilitar",
         "rowDisabled": "Fila deshabilitada",
         "rowEnabled": "Fila habilitada",
+        "confirmImport": "Confirmar importación",
+        "fixRejectedRows": "Corrige o deshabilita las filas rechazadas antes de importar.",
+        "noValidRows": "No hay filas válidas para importar.",
+        "importCompleted": "Importación completada.",
+        "importProcessing": "La importación está en proceso.",
         "ingestionStatus": {
           "READY": "Lista para importar",
           "PARTIALLY_READY": "Requiere revisión",
@@ -95,7 +100,8 @@
           "fileRequired": "El archivo CSV es obligatorio.",
           "previewFailed": "No se pudo crear la vista previa. Revisa el archivo e inténtalo de nuevo.",
           "reviewLoadFailed": "No se pudo cargar la vista previa persistida.",
-          "reviewFailed": "No se pudo actualizar la fila de vista previa. Revisa la fila e inténtalo de nuevo."
+          "reviewFailed": "No se pudo actualizar la fila de vista previa. Revisa la fila e inténtalo de nuevo.",
+          "confirmFailed": "No se pudo confirmar la importación. Revisa el estado de la vista previa e inténtalo de nuevo."
         }
       }
     }

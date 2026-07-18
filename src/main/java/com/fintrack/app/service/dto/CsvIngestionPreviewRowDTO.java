@@ -17,6 +17,8 @@ public class CsvIngestionPreviewRowDTO implements Serializable {
 
     private IngestionRecordStatus status;
 
+    private Long financialTransactionId;
+
     private LocalDate transactionDate;
 
     private LocalDate postingDate;
@@ -63,6 +65,14 @@ public class CsvIngestionPreviewRowDTO implements Serializable {
 
     public void setStatus(IngestionRecordStatus status) {
         this.status = status;
+    }
+
+    public Long getFinancialTransactionId() {
+        return financialTransactionId;
+    }
+
+    public void setFinancialTransactionId(Long financialTransactionId) {
+        this.financialTransactionId = financialTransactionId;
     }
 
     public LocalDate getTransactionDate() {

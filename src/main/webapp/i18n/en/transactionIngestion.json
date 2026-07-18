@@ -81,6 +81,11 @@
         "enable": "Enable",
         "rowDisabled": "Row disabled",
         "rowEnabled": "Row enabled",
+        "confirmImport": "Confirm Import",
+        "fixRejectedRows": "Fix or disable rejected rows before importing.",
+        "noValidRows": "There are no valid rows to import.",
+        "importCompleted": "Import completed.",
+        "importProcessing": "Import is processing.",
         "ingestionStatus": {
           "READY": "Ready to import",
           "PARTIALLY_READY": "Needs review",
@@ -95,7 +100,8 @@
           "fileRequired": "CSV file is required.",
           "previewFailed": "Could not create file preview. Check the file and try again.",
           "reviewLoadFailed": "Could not load the persisted preview.",
-          "reviewFailed": "Could not update the preview row. Check the row and try again."
+          "reviewFailed": "Could not update the preview row. Check the row and try again.",
+          "confirmFailed": "Could not confirm import. Check the review status and try again."
         }
       }
     }

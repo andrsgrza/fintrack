@@ -26,6 +26,7 @@ interface ICsvIngestionPreviewRow {
   ingestionRecordId?: number;
   recordIndex?: number;
   status?: string;
+  financialTransactionId?: number | null;
   transactionDate?: string;
   postingDate?: string | null;
   description?: string;
@@ -68,6 +69,18 @@ interface ICsvIngestionRecordReviewResponse {
   status?: string;
   counts?: ICsvIngestionPreviewCounts;
   row?: ICsvIngestionPreviewRow;
+}
+
+interface ICsvIngestionConfirmImportResponse {
+  transactionIngestionId?: number;
+  status?: string;
+  createdNow?: number;
+  alreadyImported?: number;
+  skipped?: number;
+  rejected?: number;
+  failed?: number;
+  counts?: ICsvIngestionPreviewCounts;
+  rows?: ICsvIngestionPreviewRow[];
 }
 
 interface ICsvIngestionPreviewRowEditDraft {
@@ -174,6 +187,7 @@ export const TransactionIngestionFilePreview = () => {
   const [preview, setPreview] = useState<ICsvIngestionPreviewResponse | null>(null);
   const [loadingReview, setLoadingReview] = useState(false);
   const [reviewActionInProgress, setReviewActionInProgress] = useState<number | null>(null);
+  const [confirmingImport, setConfirmingImport] = useState(false);
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<ICsvIngestionPreviewRowEditDraft>({});
 
@@ -225,6 +239,22 @@ export const TransactionIngestionFilePreview = () => {
         }),
       };
     });
+  };
+
+  const applyConfirmResponse = (data: ICsvIngestionConfirmImportResponse) => {
+    setPreview(currentPreview => {
+      if (!currentPreview) {
+        return currentPreview;
+      }
+      return {
+        ...currentPreview,
+        status: data.status ?? currentPreview.status,
+        counts: data.counts ?? currentPreview.counts,
+        rows: data.rows ?? currentPreview.rows,
+      };
+    });
+    setEditingRecordId(null);
+    setEditDraft({});
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -319,14 +349,35 @@ export const TransactionIngestionFilePreview = () => {
     }
   };
 
-  const canDisable = (row: ICsvIngestionPreviewRow) => ['VALID', 'REJECTED'].includes(row.status ?? '');
-  const canEnable = (row: ICsvIngestionPreviewRow) => row.status === 'DISABLED';
-  const canEdit = (row: ICsvIngestionPreviewRow) => editableRowStatuses.includes(row.status ?? '');
-
   const counts = preview?.counts ?? {};
   const rows = preview?.rows ?? [];
   const warnings = preview?.warnings ?? [];
   const fileMetadata = preview?.fileMetadata;
+  const reviewActionsEnabled = preview?.status === 'READY' || preview?.status === 'PARTIALLY_READY';
+  const confirmAvailable = preview?.status === 'READY' && (counts.validRows ?? 0) > 0;
+  const processing = preview?.status === 'PROCESSING' || confirmingImport;
+
+  const canDisable = (row: ICsvIngestionPreviewRow) => reviewActionsEnabled && ['VALID', 'REJECTED'].includes(row.status ?? '');
+  const canEnable = (row: ICsvIngestionPreviewRow) => reviewActionsEnabled && row.status === 'DISABLED';
+  const canEdit = (row: ICsvIngestionPreviewRow) => reviewActionsEnabled && editableRowStatuses.includes(row.status ?? '');
+
+  const confirmImport = async () => {
+    if (!preview?.transactionIngestionId || !confirmAvailable) {
+      return;
+    }
+    setBackendError(null);
+    setConfirmingImport(true);
+    try {
+      const response = await axios.post<ICsvIngestionConfirmImportResponse>(
+        `api/transaction-ingestions/${preview.transactionIngestionId}/confirm`,
+      );
+      applyConfirmResponse(response.data);
+    } catch (error) {
+      setBackendError(translate('fintrackApp.transactionIngestion.filePreview.errors.confirmFailed'));
+    } finally {
+      setConfirmingImport(false);
+    }
+  };
 
   const renderCreateForm = () => (
     <Row className="justify-content-center">
@@ -438,6 +489,33 @@ export const TransactionIngestionFilePreview = () => {
 
         {preview ? (
           <>
+            {preview.status === 'PARTIALLY_READY' ? (
+              <Alert color="warning" data-cy="filePreviewConfirmBlocked" fade={false}>
+                {(counts.validRows ?? 0) === 0 ? (
+                  <Translate contentKey="fintrackApp.transactionIngestion.filePreview.noValidRows">
+                    There are no valid rows to import.
+                  </Translate>
+                ) : (
+                  <Translate contentKey="fintrackApp.transactionIngestion.filePreview.fixRejectedRows">
+                    Fix or disable rejected rows before importing.
+                  </Translate>
+                )}
+              </Alert>
+            ) : null}
+
+            {preview.status === 'COMPLETED' ? (
+              <Alert color="success" data-cy="filePreviewCompleted" fade={false}>
+                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.importCompleted">Import completed.</Translate>
+              </Alert>
+            ) : null}
+
+            {preview.status === 'PROCESSING' ? (
+              <Alert color="info" data-cy="filePreviewProcessing" fade={false}>
+                <Spinner size="sm" />{' '}
+                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.importProcessing">Import is processing.</Translate>
+              </Alert>
+            ) : null}
+
             {warnings.length > 0 ? (
               <Alert color="warning" data-cy="filePreviewWarnings" fade={false}>
                 <strong>
@@ -547,6 +625,15 @@ export const TransactionIngestionFilePreview = () => {
               </Col>
             </Row>
 
+            {confirmAvailable ? (
+              <div className="mb-3">
+                <Button color="success" disabled={confirmingImport} onClick={confirmImport} data-cy="filePreviewConfirmImport">
+                  {confirmingImport ? <Spinner size="sm" /> : null}{' '}
+                  <Translate contentKey="fintrackApp.transactionIngestion.filePreview.confirmImport">Confirm Import</Translate>
+                </Button>
+              </div>
+            ) : null}
+
             <div className="table-responsive">
               <Table responsive data-cy="filePreviewRows">
                 <thead>
@@ -592,7 +679,7 @@ export const TransactionIngestionFilePreview = () => {
                 </thead>
                 <tbody>
                   {rows.map(row => {
-                    const actionBusy = reviewActionInProgress === row.ingestionRecordId;
+                    const actionBusy = processing || reviewActionInProgress === row.ingestionRecordId;
                     const isEditing = editingRecordId === row.ingestionRecordId;
                     return (
                       <tr key={row.ingestionRecordId ?? row.recordIndex} className={row.status === 'DISABLED' ? 'text-muted' : ''}>

@@ -13,11 +13,11 @@ import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
+import com.fintrack.app.service.CsvIngestionReadinessService.CsvIngestionReadinessSnapshot;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRawRow;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
-import com.fintrack.app.service.dto.CsvIngestionPreviewCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionPreviewRowDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
@@ -38,19 +38,22 @@ public class CsvIngestionRecordReviewService {
     private final CurrentUserService currentUserService;
     private final CanonicalCsvIngestionParser parser;
     private final ObjectMapper objectMapper;
+    private final CsvIngestionReadinessService csvIngestionReadinessService;
 
     public CsvIngestionRecordReviewService(
         TransactionIngestionRepository transactionIngestionRepository,
         IngestionRecordRepository ingestionRecordRepository,
         CurrentUserService currentUserService,
         CanonicalCsvIngestionParser parser,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        CsvIngestionReadinessService csvIngestionReadinessService
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.currentUserService = currentUserService;
         this.parser = parser;
         this.objectMapper = objectMapper;
+        this.csvIngestionReadinessService = csvIngestionReadinessService;
     }
 
     public CsvIngestionRecordReviewResponseDTO disable(Long ingestionId, Long recordId) {
@@ -132,6 +135,9 @@ public class CsvIngestionRecordReviewService {
         if (record.getTransactionIngestion().getIngestionType() != IngestionType.FILE) {
             throw new IllegalArgumentException("Only file ingestion records can be reviewed");
         }
+        if (!isReviewableParentStatus(record.getTransactionIngestion().getStatus())) {
+            throw new IllegalArgumentException("Only ready or partially ready file ingestions can be reviewed");
+        }
         return record;
     }
 
@@ -170,6 +176,10 @@ public class CsvIngestionRecordReviewService {
 
     private boolean isEditableStatus(IngestionRecordStatus status) {
         return status == IngestionRecordStatus.VALID || status == IngestionRecordStatus.REJECTED;
+    }
+
+    private boolean isReviewableParentStatus(IngestionStatus status) {
+        return status == IngestionStatus.READY || status == IngestionStatus.PARTIALLY_READY;
     }
 
     private String updateRawDataStatus(IngestionRecord record, CsvRowResult result, boolean edited) {
@@ -252,54 +262,20 @@ public class CsvIngestionRecordReviewService {
 
     private CsvIngestionRecordReviewResponseDTO response(IngestionRecord record) {
         TransactionIngestion ingestion = record.getTransactionIngestion();
-        CsvIngestionPreviewCountsDTO counts = recalculateCounts(ingestion);
+        CsvIngestionReadinessSnapshot snapshot = recalculateReadiness(ingestion);
         CsvIngestionRecordReviewResponseDTO response = new CsvIngestionRecordReviewResponseDTO();
         response.setTransactionIngestionId(ingestion.getId());
-        response.setStatus(ingestion.getStatus());
-        response.setCounts(counts);
+        response.setStatus(snapshot.status());
+        response.setCounts(snapshot.counts());
         response.setRow(toRowDto(record));
         return response;
     }
 
-    private CsvIngestionPreviewCountsDTO recalculateCounts(TransactionIngestion ingestion) {
+    private CsvIngestionReadinessSnapshot recalculateReadiness(TransactionIngestion ingestion) {
         List<IngestionRecord> records = ingestionRecordRepository.findAllByTransactionIngestionIdOrderByRecordIndexAsc(ingestion.getId());
-        int imported = 0;
-        int skipped = 0;
-        int rejected = 0;
-        int valid = 0;
-        for (IngestionRecord record : records) {
-            if (record.getStatus() == IngestionRecordStatus.IMPORTED) {
-                imported++;
-            } else if (
-                record.getStatus() == IngestionRecordStatus.DISABLED || record.getStatus() == IngestionRecordStatus.SKIPPED_DUPLICATE
-            ) {
-                skipped++;
-            } else if (record.getStatus() == IngestionRecordStatus.REJECTED || record.getStatus() == IngestionRecordStatus.FAILED) {
-                rejected++;
-            } else if (record.getStatus() == IngestionRecordStatus.VALID) {
-                valid++;
-            }
-        }
-
-        ingestion.setRecordsReceived(records.size());
-        ingestion.setRecordsCreated(imported);
-        ingestion.setRecordsSkipped(skipped);
-        ingestion.setRecordsRejected(rejected);
-        ingestion.setStatus(previewReadinessStatus(valid, rejected));
+        CsvIngestionReadinessSnapshot snapshot = csvIngestionReadinessService.applyReadiness(ingestion, records);
         transactionIngestionRepository.save(ingestion);
-
-        CsvIngestionPreviewCountsDTO counts = new CsvIngestionPreviewCountsDTO();
-        counts.setRecordsReceived(records.size());
-        counts.setRecordsCreated(imported);
-        counts.setRecordsSkipped(skipped);
-        counts.setRecordsRejected(rejected);
-        counts.setValidRows(valid);
-        counts.setInvalidRows(rejected);
-        return counts;
-    }
-
-    private IngestionStatus previewReadinessStatus(int validRows, int rejectedOrFailedRows) {
-        return rejectedOrFailedRows > 0 || validRows == 0 ? IngestionStatus.PARTIALLY_READY : IngestionStatus.READY;
+        return snapshot;
     }
 
     private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record) {
@@ -309,6 +285,7 @@ public class CsvIngestionRecordReviewService {
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());
+        dto.setFinancialTransactionId(record.getFinancialTransaction() == null ? null : record.getFinancialTransaction().getId());
         dto.setTransactionDate(parseLocalDate(normalized, "transactionDate"));
         dto.setPostingDate(parseLocalDate(normalized, "postingDate"));
         dto.setDescription(textOrNull(normalized, "description"));

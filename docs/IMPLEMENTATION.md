@@ -894,8 +894,8 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 | Form     | ✅ Select account, upload canonical CSV, submit preview.                                                                                                             |
 | Redirect | ✅ Successful upload redirects to recoverable `/transaction-ingestion/{id}/file-preview` review page.                                                                |
 | Result   | ✅ Show persisted preview summary, read-only FileIngestion metadata, non-blocking warnings, preview-only notice, and read-only row table.                            |
-| Review   | ✅ Enable/disable row review actions and edit normalized review-row values; no confirm import in this slice.                                                         |
-| Confirm  | ✅ No confirm/import action in I1.                                                                                                                                   |
+| Review   | ✅ Enable/disable row review actions and edit normalized review-row values.                                                                                          |
+| Confirm  | ✅ Confirm Import appears on the persisted review page only when the recalculated status is `READY` and at least one `VALID` row exists.                             |
 | Shortcut | Deferred; later FinancialAccount detail shortcut should reuse the same flow with account preselected.                                                                |
 | Tests    | ✅ `transaction-ingestion-file-preview.spec.tsx`.                                                                                                                    |
 
@@ -910,18 +910,22 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 | Status      | ✅ Editing is allowed only for `VALID` and `REJECTED`, revalidates, and returns `VALID` or `REJECTED`; `DISABLED` rows must be enabled before editing; `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are rejected.           |
 | Counters    | ✅ Counts are recalculated after edit; `DISABLED` rows count as skipped and do not block readiness by themselves; `REJECTED`/`FAILED` rows or zero `VALID` rows make the batch `PARTIALLY_READY`; otherwise the batch is `READY`. |
 | Status enum | ✅ `READY`/`PARTIALLY_READY` are pre-import review statuses; `COMPLETED`/`PARTIALLY_COMPLETED` are import-result statuses; `PARTIALLY_COMPLETED` is reserved and is not produced by CSV preview/review.                           |
-| Not done    | ✅ No `FinancialTransaction` creation, no Rule Engine invocation, no confirm/import action, no ApiIngestion change, no CSV mapper, no PDF upload, no FinancialAccount shortcut.                                                   |
+| Not done    | ✅ No `FinancialTransaction` creation in preview/review actions, no Rule Engine invocation, no ApiIngestion change, no CSV mapper, no PDF upload, no FinancialAccount shortcut.                                                   |
 
 #### I2 — confirm import
 
-| Item        | Plan                                                                                                                                                                           |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Endpoint    | Confirm import endpoint.                                                                                                                                                       |
-| Creation    | Create `FinancialTransaction` rows from valid preview records.                                                                                                                 |
-| Origin      | Imported transactions use `origin = FILE_IMPORT`.                                                                                                                              |
-| Record link | Link each imported `IngestionRecord` to its created `FinancialTransaction`.                                                                                                    |
-| Rule Engine | Explicitly apply Rule Engine `FILL_EMPTY_ONLY` during confirm import unless a later design finds a clear issue. This must be tested and must not be an accidental side effect. |
-| Counters    | Update import counters according to created/skipped/rejected rows.                                                                                                             |
+| Item             | Status                                                                                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint         | ✅ `POST /api/transaction-ingestions/{id}/confirm`.                                                                                                                  |
+| Shared readiness | ✅ Preview, review actions, and confirm use the same readiness calculation: `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows.               |
+| Creation         | ✅ Creates `FinancialTransaction` rows from `VALID` preview records only.                                                                                            |
+| Source payload   | ✅ Uses `IngestionRecord.rawData.normalized` for transaction date, posting date, description, amount, flow, external reference, and notes.                           |
+| Origin           | ✅ Imported transactions use `origin = FILE_IMPORT`.                                                                                                                 |
+| Record link      | ✅ Each imported row becomes `IMPORTED` and links to its created `FinancialTransaction`.                                                                             |
+| Skipped rows     | ✅ `DISABLED` rows remain disabled/skipped and do not block readiness by themselves.                                                                                 |
+| Parent status    | ✅ Successful confirm is all-or-nothing and marks the parent `COMPLETED`; retrying a completed import is idempotent and creates no duplicate transactions.           |
+| Rule Engine      | ✅ CSV v1 confirm import does not invoke the Rule Engine; category, tags, and financial subscription remain empty unless a later slice explicitly designs import UX. |
+| Counters         | ✅ Import counters are recalculated after confirm.                                                                                                                   |
 
 ---
 
@@ -1158,6 +1162,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-17 | CSV Ingestion I2B review flow ✅: upload page redirects to persisted TransactionIngestion review page; GET review endpoint returns FileIngestion metadata, counts and rows; enable/disable row actions implemented.                                                                                                                                                          |
 | 2026-07-18 | CSV Ingestion I2B.2 normalized row edit ✅: PATCH review-row endpoint + inline UI edit for normalized fields; `rawData.raw` preserved; `amount`/`flow` derived from `signedAmount`; edit revalidates `VALID`/`REJECTED`; `DISABLED` must be enabled before editing; confirm import, FinancialTransaction creation and Rule Engine remain deferred.                           |
 | 2026-07-18 | CSV Ingestion readiness status migration ✅: added `READY`/`PARTIALLY_READY` as pre-import review statuses; FILE preview/review now produces readiness statuses, not `COMPLETED`/`PARTIALLY_COMPLETED`; Liquibase maps old FILE preview `COMPLETED -> READY` and `PARTIALLY_COMPLETED -> PARTIALLY_READY`; `PARTIALLY_COMPLETED` remains reserved.                           |
+| 2026-07-18 | CSV Ingestion I2C confirm import ✅: `POST /api/transaction-ingestions/{id}/confirm` recalculates readiness, imports `VALID` rows from `rawData.normalized` into `FinancialTransaction` with `origin = FILE_IMPORT`, marks rows `IMPORTED`, keeps disabled rows skipped, marks parent `COMPLETED`, supports completed retry idempotently, and does not run Rule Engine.      |
 | 2026-07-11 | Grupo 1 delete confirmation dialogs ✅: domain-aware UX copy for UDP, AATP, Tag, Category; CAD informational-only (no confirm). i18n en/es.                                                                                                                                                                                                                                  |
 | 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                                                                                        |
 | 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6.                                                                    |

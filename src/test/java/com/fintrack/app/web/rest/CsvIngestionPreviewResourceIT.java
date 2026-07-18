@@ -610,11 +610,7 @@ class CsvIngestionPreviewResourceIT {
         ingestion.setIngestionType(IngestionType.FILE);
         ingestion = transactionIngestionRepository.saveAndFlush(ingestion);
 
-        IngestionRecord record = IngestionRecordResourceIT.createEntity(em);
-        record.setTransactionIngestion(ingestion);
-        record.setStatus(IngestionRecordStatus.VALID);
-        record.setFinancialTransaction(null);
-        record = ingestionRecordRepository.saveAndFlush(record);
+        IngestionRecord record = validRecordFor(ingestion, 1);
 
         mockMvc
             .perform(
@@ -645,6 +641,208 @@ class CsvIngestionPreviewResourceIT {
         IngestionRecord secondRecord = recordsFor(secondIngestion).get(0);
 
         mockMvc.perform(post(reviewUrl(firstIngestion, secondRecord, "disable"))).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void confirmReadyIngestionCreatesFinancialTransactionsFromNormalizedRows() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+        IngestionRecord disabledRecord = recordsFor(ingestion).get(0);
+        JsonNode originalRaw = objectMapper.readTree(disabledRecord.getRawData()).path("raw");
+        mockMvc.perform(post(reviewUrl(ingestion, disabledRecord, "disable"))).andExpect(status().isOk());
+
+        mockMvc
+            .perform(post(confirmUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(2))
+            .andExpect(jsonPath("$.alreadyImported").value(0))
+            .andExpect(jsonPath("$.skipped").value(1))
+            .andExpect(jsonPath("$.rejected").value(0))
+            .andExpect(jsonPath("$.failed").value(0))
+            .andExpect(jsonPath("$.counts.recordsReceived").value(3))
+            .andExpect(jsonPath("$.counts.recordsCreated").value(2))
+            .andExpect(jsonPath("$.counts.recordsSkipped").value(1))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0))
+            .andExpect(jsonPath("$.counts.validRows").value(0))
+            .andExpect(jsonPath("$.rows[0].status").value("DISABLED"))
+            .andExpect(jsonPath("$.rows[1].status").value("IMPORTED"))
+            .andExpect(jsonPath("$.rows[1].financialTransactionId").exists())
+            .andExpect(jsonPath("$.rows[2].status").value("IMPORTED"))
+            .andExpect(jsonPath("$.rows[2].financialTransactionId").exists());
+
+        TransactionIngestion completed = transactionIngestionRepository.findById(ingestion.getId()).orElseThrow();
+        assertThat(completed.getStatus()).isEqualTo(IngestionStatus.COMPLETED);
+        assertThat(completed.getRecordsCreated()).isEqualTo(2);
+        assertThat(completed.getRecordsSkipped()).isEqualTo(1);
+        assertThat(completed.getRecordsRejected()).isZero();
+        assertThat(completed.getCompletedAt()).isNotNull();
+
+        List<IngestionRecord> records = recordsFor(completed);
+        assertThat(records.get(0).getStatus()).isEqualTo(IngestionRecordStatus.DISABLED);
+        assertThat(objectMapper.readTree(records.get(0).getRawData()).path("raw")).isEqualTo(originalRaw);
+        assertThat(records.get(1).getStatus()).isEqualTo(IngestionRecordStatus.IMPORTED);
+        assertThat(records.get(1).getFinancialTransaction()).isNotNull();
+        assertThat(records.get(1).getErrorCode()).isNull();
+        assertThat(records.get(1).getErrorMessage()).isNull();
+
+        List<FinancialTransaction> financialTransactions = financialTransactionRepository.findAll();
+        assertThat(financialTransactions).hasSize(2);
+        FinancialTransaction oxxo = financialTransactions
+            .stream()
+            .filter(transaction -> transaction.getDescription().equals("OXXO AGUILAS"))
+            .findFirst()
+            .orElseThrow();
+        assertThat(oxxo.getTransactionDate()).isEqualTo(LocalDate.parse("2026-01-16"));
+        assertThat(oxxo.getPostingDate()).isNull();
+        assertThat(oxxo.getAmount()).isEqualByComparingTo("274.00");
+        assertThat(oxxo.getFlow().name()).isEqualTo("OUT");
+        assertThat(oxxo.getOrigin().name()).isEqualTo("FILE_IMPORT");
+        assertThat(oxxo.getTransactionIngestion().getId()).isEqualTo(ingestion.getId());
+        assertThat(oxxo.getAccount().getId()).isEqualTo(ingestion.getAccount().getId());
+        assertThat(oxxo.getCategory()).isNull();
+        assertThat(oxxo.getFinancialSubscription()).isNull();
+        assertThat(oxxo.getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void confirmCompletedIngestionIsIdempotent() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+
+        mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.createdNow").value(1));
+        long financialTransactionCountAfterFirstConfirm = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(post(confirmUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(0))
+            .andExpect(jsonPath("$.alreadyImported").value(1));
+
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountAfterFirstConfirm);
+    }
+
+    @Test
+    @Transactional
+    void confirmRecalculatesReadinessAndRejectsStaleReadyWithRejectedRows() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        ingestion.setStatus(IngestionStatus.READY);
+        transactionIngestionRepository.saveAndFlush(ingestion);
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(post(confirmUrl(ingestion)))
+            .andExpect(status().isBadRequest())
+            .andExpect(
+                jsonPath("$.detail").value(
+                    "Cannot confirm import because ingestion is not ready. Fix or disable rejected rows and ensure at least one valid row exists."
+                )
+            );
+
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.PARTIALLY_READY
+        );
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void confirmRecalculatesStalePartiallyReadyToReadyAndImports() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+        ingestion.setStatus(IngestionStatus.PARTIALLY_READY);
+        transactionIngestionRepository.saveAndFlush(ingestion);
+
+        mockMvc
+            .perform(post(confirmUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(1));
+
+        assertThat(financialTransactionRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional
+    void confirmRejectsNotReadyAndDisallowedStatusesWithoutImporting() throws Exception {
+        TransactionIngestion partiallyReady = createPreviewWithInvalidRow();
+        mockMvc.perform(post(confirmUrl(partiallyReady))).andExpect(status().isBadRequest());
+        assertThat(financialTransactionRepository.count()).isZero();
+
+        TransactionIngestion noValidRows = createPreviewWithSingleValidRow();
+        mockMvc.perform(post(reviewUrl(noValidRows, recordsFor(noValidRows).get(0), "disable"))).andExpect(status().isOk());
+        mockMvc.perform(post(confirmUrl(noValidRows))).andExpect(status().isBadRequest());
+        assertThat(financialTransactionRepository.count()).isZero();
+
+        for (IngestionStatus status : List.of(
+            IngestionStatus.PENDING,
+            IngestionStatus.PROCESSING,
+            IngestionStatus.FAILED,
+            IngestionStatus.PARTIALLY_COMPLETED
+        )) {
+            TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+            ingestion.setStatus(status);
+            transactionIngestionRepository.saveAndFlush(ingestion);
+            mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isBadRequest());
+        }
+
+        assertThat(financialTransactionRepository.count()).isZero();
+    }
+
+    @Test
+    @Transactional
+    void confirmRejectsCorruptFinancialTransactionLinks() throws Exception {
+        TransactionIngestion importedWithoutTransaction = createPreviewWithSingleValidRow();
+        IngestionRecord importedRecord = recordsFor(importedWithoutTransaction).get(0);
+        importedRecord.setStatus(IngestionRecordStatus.IMPORTED);
+        importedRecord.setFinancialTransaction(null);
+        ingestionRecordRepository.saveAndFlush(importedRecord);
+        importedWithoutTransaction.setStatus(IngestionStatus.COMPLETED);
+        transactionIngestionRepository.saveAndFlush(importedWithoutTransaction);
+
+        mockMvc.perform(post(confirmUrl(importedWithoutTransaction))).andExpect(status().isBadRequest());
+
+        TransactionIngestion validWithTransaction = createPreviewWithSingleValidRow();
+        IngestionRecord validRecord = recordsFor(validWithTransaction).get(0);
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(validWithTransaction.getAccount());
+        financialTransaction.setTransactionIngestion(validWithTransaction);
+        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        validRecord.setFinancialTransaction(financialTransaction);
+        ingestionRecordRepository.saveAndFlush(validRecord);
+
+        mockMvc.perform(post(confirmUrl(validWithTransaction))).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void completedIngestionRowsCannotBeReviewed() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isOk());
+
+        mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isBadRequest());
+        mockMvc.perform(post(reviewUrl(ingestion, record, "enable"))).andExpect(status().isBadRequest());
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Edit", "10.00", "MXN", null, null)))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void confirmForeignIngestionIsRejected() throws Exception {
+        FinancialAccount otherUsersAccount = createAccountForUser(createOtherUser());
+        TransactionIngestion ingestion = TransactionIngestionResourceIT.createEntity(em);
+        ingestion.setAccount(otherUsersAccount);
+        ingestion.setIngestionType(IngestionType.FILE);
+        ingestion.setStatus(IngestionStatus.READY);
+        ingestion = transactionIngestionRepository.saveAndFlush(ingestion);
+
+        mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isBadRequest());
     }
 
     private FinancialAccount createCurrentUserAccount() {
@@ -692,6 +890,10 @@ class CsvIngestionPreviewResourceIT {
         return action == null ? url : url + "/" + action;
     }
 
+    private String confirmUrl(TransactionIngestion ingestion) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/confirm";
+    }
+
     private Map<String, Object> reviewPayload(
         String transactionDate,
         String postingDate,
@@ -713,6 +915,33 @@ class CsvIngestionPreviewResourceIT {
         payload.put("flow", "IN");
         payload.put("status", "IMPORTED");
         return payload;
+    }
+
+    private IngestionRecord validRecordFor(TransactionIngestion ingestion, int recordIndex) throws Exception {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("transactionDate", "2026-01-16");
+        row.put("postingDate", null);
+        row.put("description", "OXXO AGUILAS");
+        row.put("signedAmount", "-274.00");
+        row.put("amount", "274.00");
+        row.put("flow", "OUT");
+        row.put("currency", "MXN");
+        row.put("externalReference", null);
+        row.put("notes", null);
+
+        Map<String, Object> rawData = new LinkedHashMap<>();
+        rawData.put("raw", row);
+        rawData.put("normalized", row);
+        rawData.put("errors", List.of());
+        rawData.put("warnings", List.of());
+
+        IngestionRecord record = new IngestionRecord()
+            .recordIndex(recordIndex)
+            .status(IngestionRecordStatus.VALID)
+            .rawData(objectMapper.writeValueAsString(rawData))
+            .createdAt(java.time.Instant.now())
+            .transactionIngestion(ingestion);
+        return ingestionRecordRepository.saveAndFlush(record);
     }
 
     private FinancialAccount createAccountForUser(User user) {

@@ -681,6 +681,123 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
   });
 
+  it('shows Confirm Import when review is ready with valid rows', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
+  });
+
+  it('does not allow confirm when review needs fixes', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    renderPersistedReview();
+
+    expect(await screen.findByText('Needs review')).toBeTruthy();
+    expect(screen.getByText('Fix or disable rejected rows before importing.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
+  });
+
+  it('does not allow confirm when no valid rows exist', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'PARTIALLY_READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [{ ...persistedReviewResponse.data.rows[0], status: 'DISABLED' }],
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('There are no valid rows to import.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
+  });
+
+  it('confirm success marks imported rows, leaves disabled rows, and makes review read-only', async () => {
+    const readyRows = [{ ...persistedReviewResponse.data.rows[0] }, { ...persistedReviewResponse.data.rows[2] }];
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: readyRows,
+      },
+    });
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        status: 'COMPLETED',
+        createdNow: 1,
+        alreadyImported: 0,
+        skipped: 1,
+        rejected: 0,
+        failed: 0,
+        counts: { recordsReceived: 2, recordsCreated: 1, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          { ...readyRows[0], status: 'IMPORTED', financialTransactionId: 9001 },
+          { ...readyRows[1], status: 'DISABLED' },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/confirm'));
+    await waitFor(() => expect(screen.getByText('Import completed')).toBeTruthy());
+    expectRowStatus(300, 'Imported');
+    expectRowStatus(302, 'Disabled');
+    expect(within(screen.getByTestId('filePreviewCounts')).getAllByText('0')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /enable/i })).toBeNull();
+  });
+
+  it('completed review loads as read-only', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'COMPLETED',
+        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [{ ...persistedReviewResponse.data.rows[0], status: 'IMPORTED', financialTransactionId: 9001 }],
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('Import completed')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /enable/i })).toBeNull();
+  });
+
+  it('confirm API error displays review error', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    });
+    mockAxiosPost.mockRejectedValue(new Error('confirm failed'));
+    renderPersistedReview();
+
+    expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+
+    expect(await screen.findByText('Could not confirm import. Check the review status and try again.')).toBeTruthy();
+  });
+
   it('cancel leaves edited row unchanged', async () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderPersistedReview();
@@ -695,7 +812,7 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(mockAxiosPatch).not.toHaveBeenCalled();
   });
 
-  it('does not render a confirm/import action', () => {
+  it('does not render confirm import on create page', () => {
     renderFilePreview();
 
     expect(screen.queryByRole('button', { name: /confirm/i })).toBeNull();

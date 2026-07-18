@@ -583,7 +583,7 @@ Do not extend this as:
 
 ## CSV Ingestion v1 — upload/preview workflow
 
-Status: implemented through I2B persisted upload/preview review workflow.
+Status: implemented through I2C persisted upload/preview/review/confirm workflow.
 
 CSV import upload/preview is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
 
@@ -593,16 +593,17 @@ Composition rules:
 - select the target FinancialAccount and upload the canonical CSV;
 - call `POST /api/transaction-ingestions/file-preview`;
 - redirect to the persisted TransactionIngestion review page;
-- show persisted preview summary, read-only file metadata, rows, and review actions;
+- show persisted preview summary, read-only file metadata, rows, review actions, and Confirm Import when ready;
 - do not use generated FileIngestion create as the main product flow;
 - do not embed full FileIngestion CRUD inside TransactionIngestion;
 - use contextual upload/preview components;
 - preview rows are high-volume, so use related-list/table style rather than inline editable child collection;
-- I1/I2B has no confirm/import action;
+- Confirm Import is shown only for `READY` reviews with at least one valid row;
+- completed reviews are read-only;
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
 The creation route is `/transaction-ingestion/file-preview/new`. It renders a minimal account selector, CSV file input, preview submit action, and preview-only notice. After a successful upload it redirects to `/transaction-ingestion/{id}/file-preview`.
 
 The review route is `/transaction-ingestion/{id}/file-preview`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads persisted preview data, shows TransactionIngestion context, displays read-only FileIngestion metadata, shows counts and rows, and supports row enable/disable plus normalized-row edit review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview/review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`.
 
-The parent status shown on the review page uses readiness language before import: `READY` means ready to import, and `PARTIALLY_READY` means the preview needs review or has no valid rows to import. `COMPLETED`/`PARTIALLY_COMPLETED` are import-result statuses and should not normally appear in the current CSV review flow. Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Edit controls render only for `VALID` and `REJECTED` rows. `DISABLED` rows render Enable only and must be enabled before editing. Imported/skipped/failed rows do not render edit controls. No `FinancialTransaction` rows are created from the UI, no Rule Engine is invoked, and no confirm/import action is rendered.
+The parent status shown on the review page uses readiness language before import: `READY` means ready to import, and `PARTIALLY_READY` means the preview needs review or has no valid rows to import. `COMPLETED` means confirm import finished and the review is read-only. `PARTIALLY_COMPLETED` is reserved and should not normally appear in CSV v1. Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Edit controls render only for `VALID` and `REJECTED` rows while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows render Enable only and must be enabled before editing. Imported/skipped/failed rows do not render edit controls. Confirm Import calls the backend confirm endpoint, imports `VALID` rows, keeps `DISABLED` rows skipped, updates the review from the response, and does not invoke the Rule Engine.
