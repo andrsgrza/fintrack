@@ -333,11 +333,12 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(screen.getByText('Imported')).toBeTruthy();
     expect(screen.getByText('Income')).toBeTruthy();
     expect(screen.getByText('signedAmount must be nonzero')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: /disable/i })).toHaveLength(2);
     expect(screen.getByRole('button', { name: /enable/i })).toBeTruthy();
     expectRowStatus(302, 'Disabled');
     expect(within(rowForRecord(302)).queryByText('signedAmount must be nonzero')).toBeNull();
+    expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
   });
 
   it('disable action updates row status and counts from response', async () => {
@@ -359,6 +360,7 @@ describe('TransactionIngestion file preview workflow', () => {
     expectRowStatus(300, 'Disabled');
     expect(within(rowForRecord(300)).getByRole('button', { name: /enable/i })).toBeTruthy();
     expect(within(rowForRecord(300)).queryByRole('button', { name: /disable/i })).toBeNull();
+    expect(within(rowForRecord(300)).queryByRole('button', { name: /edit/i })).toBeNull();
   });
 
   it('enable action updates row status and counts from response', async () => {
@@ -550,29 +552,14 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(screen.getAllByText('signedAmount must be nonzero')).toHaveLength(2);
   });
 
-  it('edits a disabled row with valid values and does not edit amount or flow directly', async () => {
+  it('does not show edit for disabled rows', async () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
-    mockAxiosPatch.mockResolvedValue({
-      data: {
-        transactionIngestionId: 100,
-        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 1, validRows: 2, invalidRows: 1 },
-        row: { ...persistedReviewResponse.data.rows[2], status: 'VALID', description: 'Enabled by edit' },
-      },
-    });
     renderPersistedReview();
 
     await screen.findByText('Disabled row');
-    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[2]);
 
-    expect(screen.queryByLabelText('Amount')).toBeNull();
-    expect(screen.queryByLabelText('Flow')).toBeNull();
-
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Enabled by edit' } });
-    fireEvent.click(screen.getByRole('button', { name: /save row/i }));
-
-    await waitFor(() => expect(mockAxiosPatch).toHaveBeenCalledWith(expect.stringContaining('/records/302'), expect.any(Object)));
-    expect(await screen.findByText('Enabled by edit')).toBeTruthy();
-    expectRowStatus(302, 'Valid');
+    expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
   });
 
   it('cancel leaves edited row unchanged', async () => {

@@ -113,7 +113,7 @@ const recordStatusLabel = (status?: string) => {
   return translate(`fintrackApp.IngestionRecordStatus.${status}`, status);
 };
 
-const editableRowStatuses = ['VALID', 'REJECTED', 'DISABLED'];
+const editableRowStatuses = ['VALID', 'REJECTED'];
 
 const rowToEditDraft = (row: ICsvIngestionPreviewRow): ICsvIngestionPreviewRowEditDraft => ({
   transactionDate: row.transactionDate ?? '',

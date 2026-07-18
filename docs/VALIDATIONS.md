@@ -272,13 +272,13 @@ When the header is valid, invalid rows persist as `REJECTED` `IngestionRecord`s.
 
 `CREATED` is no longer a valid `IngestionRecordStatus`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` means the row is kept for audit/review but excluded from future confirm import. `REJECTED` rows block future confirm import unless fixed by editing normalized review-row values or disabled. `TransactionIngestion.status` enum is unchanged in I2A/I2B.
 
-Persisted review-row edit reuses the same canonical validation and normalization rules as preview/enable. Editable fields are `transactionDate`, `postingDate`, `description`, `signedAmount`, `currency`, `externalReference`, and `notes`. `amount` and `flow` are derived from `signedAmount`; clients cannot edit them directly and cannot set row `status`. Editing `VALID`, `REJECTED`, or `DISABLED` rows revalidates the submitted normalized values. Valid results become `VALID`; invalid results become `REJECTED`. `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are rejected by review edit.
+Persisted review-row edit reuses the same canonical validation and normalization rules as preview/enable. Editable fields are `transactionDate`, `postingDate`, `description`, `signedAmount`, `currency`, `externalReference`, and `notes`. `amount` and `flow` are derived from `signedAmount`; clients cannot edit them directly and cannot set row `status`. Editing is allowed only for `VALID` and `REJECTED` rows. Valid results become `VALID`; invalid results become `REJECTED`. `DISABLED` rows are rejected by review edit and must be enabled before editing. `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are rejected by review edit.
 
 #### UI
 
 The UI creation page is a minimal `TransactionIngestion` workflow at `/transaction-ingestion/file-preview/new`. It requires selecting an account and a file before submit, but it does not duplicate canonical CSV validation in the browser. Backend validation remains the source of truth. The UI posts multipart `accountId` + `file`, then redirects to `/transaction-ingestion/{id}/file-preview`.
 
-The persisted review page loads preview data by `TransactionIngestion` id, displays read-only `FileIngestion` metadata, renders statuses strictly from `IngestionRecord.status`, and supports enable/disable plus normalized-row edit review actions. `DISABLED` rows do not block the batch. Enabling a disabled row revalidates the current normalized values. Editing a disabled row re-enables it according to validation. Confirm import remains deferred.
+The persisted review page loads preview data by `TransactionIngestion` id, displays read-only `FileIngestion` metadata, renders statuses strictly from `IngestionRecord.status`, and supports enable/disable plus normalized-row edit review actions. `DISABLED` rows do not block the batch. Enabling a disabled row revalidates the current normalized values. Disabled rows cannot be edited until they are enabled and return to `VALID` or `REJECTED`. Confirm import remains deferred.
 
 ### 15. ApiAccessToken
 

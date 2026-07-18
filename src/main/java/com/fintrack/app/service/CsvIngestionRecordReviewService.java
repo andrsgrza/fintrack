@@ -91,8 +91,11 @@ public class CsvIngestionRecordReviewService {
 
     public CsvIngestionRecordReviewResponseDTO edit(Long ingestionId, Long recordId, CsvIngestionRecordReviewRequestDTO request) {
         IngestionRecord record = resolveAccessibleRecord(ingestionId, recordId);
+        if (record.getStatus() == IngestionRecordStatus.DISABLED) {
+            throw new IllegalArgumentException("Disabled rows must be enabled before editing.");
+        }
         if (!isEditableStatus(record.getStatus())) {
-            throw new IllegalArgumentException("Only valid, rejected or disabled preview rows can be edited");
+            throw new IllegalArgumentException("Only valid or rejected preview rows can be edited");
         }
         rejectLinkedFinancialTransaction(record);
 
@@ -166,9 +169,7 @@ public class CsvIngestionRecordReviewService {
     }
 
     private boolean isEditableStatus(IngestionRecordStatus status) {
-        return (
-            status == IngestionRecordStatus.VALID || status == IngestionRecordStatus.REJECTED || status == IngestionRecordStatus.DISABLED
-        );
+        return status == IngestionRecordStatus.VALID || status == IngestionRecordStatus.REJECTED;
     }
 
     private String updateRawDataStatus(IngestionRecord record, CsvRowResult result, boolean edited) {

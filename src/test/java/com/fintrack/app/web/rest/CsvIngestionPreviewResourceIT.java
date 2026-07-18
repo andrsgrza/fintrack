@@ -493,7 +493,7 @@ class CsvIngestionPreviewResourceIT {
 
     @Test
     @Transactional
-    void editDisabledRowReenablesAccordingToValidation() throws Exception {
+    void editDisabledRowIsRejected() throws Exception {
         TransactionIngestion ingestion = createPreviewWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
         mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
@@ -506,23 +506,12 @@ class CsvIngestionPreviewResourceIT {
                         objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Enabled by edit", "10.00", "MXN", null, null))
                     )
             )
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.row.status").value("VALID"))
-            .andExpect(jsonPath("$.counts.recordsSkipped").value(0));
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Disabled rows must be enabled before editing."))
+            .andExpect(jsonPath("$.message").value("error.invalid"));
 
-        mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
-
-        mockMvc
-            .perform(
-                patch(reviewUrl(ingestion, record, null))
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "", "10.00", "MXN", null, null)))
-            )
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.row.status").value("REJECTED"))
-            .andExpect(jsonPath("$.row.errorCode").value("DESCRIPTION_REQUIRED"))
-            .andExpect(jsonPath("$.counts.recordsSkipped").value(0))
-            .andExpect(jsonPath("$.counts.recordsRejected").value(1));
+        IngestionRecord unchanged = ingestionRecordRepository.findById(record.getId()).orElseThrow();
+        assertThat(unchanged.getStatus()).isEqualTo(IngestionRecordStatus.DISABLED);
     }
 
     @Test
