@@ -126,6 +126,30 @@ public class TransactionIngestionResource {
         }
     }
 
+    /**
+     * {@code POST /transaction-ingestions/:id/file-ingestion} : Upload a canonical CSV for an existing pending FILE
+     * TransactionIngestion.
+     *
+     * This workflow command derives FileIngestion metadata server-side, persists IngestionRecords and updates the parent
+     * readiness counters/status. It does not create FinancialTransactions and does not run the Rule Engine.
+     *
+     * @param id the existing pending FILE TransactionIngestion id.
+     * @param file the canonical CSV upload.
+     * @return the persisted preview response.
+     */
+    @PostMapping(value = "/{id}/file-ingestion", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CsvIngestionPreviewResponseDTO> uploadFileIngestion(
+        @PathVariable("id") Long id,
+        @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        LOG.debug("REST request to upload CSV FileIngestion for transaction ingestion : {}", id);
+        try {
+            return ResponseEntity.ok(csvIngestionPreviewService.uploadFileToPendingTransactionIngestion(id, file));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
     @GetMapping("/{id}/file-preview")
     public ResponseEntity<CsvIngestionPreviewResponseDTO> getFilePreview(@PathVariable("id") Long id) {
         LOG.debug("REST request to get CSV FileIngestion preview for transaction ingestion : {}", id);

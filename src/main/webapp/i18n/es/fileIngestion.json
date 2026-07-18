@@ -14,6 +14,14 @@
       "delete": {
         "question": "File Ingestion {{ id }} no se puede eliminar directamente. Elimina el flujo padre Transaction Ingestion para limpiar esta metadata de archivo."
       },
+      "upload": {
+        "csvFile": "Archivo CSV",
+        "submit": "Subir CSV",
+        "error": "No se pudo subir el CSV.",
+        "fileRequired": "El archivo CSV es obligatorio.",
+        "parentHelp": "Selecciona un Transaction Ingestion FILE pendiente. La metadata se derivará del CSV subido.",
+        "fileHelp": "Sube un CSV canónico. La metadata del archivo y los registros de ingestión los crea el servidor."
+      },
       "detail": {
         "title": "File Ingestion"
       },

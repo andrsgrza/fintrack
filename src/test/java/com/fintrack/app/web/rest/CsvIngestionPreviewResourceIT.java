@@ -50,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 class CsvIngestionPreviewResourceIT {
 
     private static final String FILE_PREVIEW_URL = "/api/transaction-ingestions/file-preview";
+    private static final String PARENT_FILE_INGESTION_URL = "/api/transaction-ingestions/{id}/file-ingestion";
 
     private static final String VALID_CSV =
         """
@@ -226,6 +227,146 @@ class CsvIngestionPreviewResourceIT {
             .andExpect(status().isBadRequest());
 
         assertNothingCreated();
+    }
+
+    @Test
+    @Transactional
+    void uploadFileToPendingFileTransactionIngestionCreatesMetadataRecordsAndReadyParent() throws Exception {
+        TransactionIngestion parent = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, parent.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionIngestionId").value(parent.getId()))
+            .andExpect(jsonPath("$.status").value("READY"))
+            .andExpect(jsonPath("$.fileMetadata.originalFilename").value("canonical.csv"))
+            .andExpect(jsonPath("$.fileMetadata.fileType").value("CSV"))
+            .andExpect(jsonPath("$.counts.recordsReceived").value(3))
+            .andExpect(jsonPath("$.counts.recordsCreated").value(0))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0))
+            .andExpect(jsonPath("$.counts.validRows").value(3));
+
+        TransactionIngestion updatedParent = transactionIngestionRepository.findById(parent.getId()).orElseThrow();
+        assertThat(updatedParent.getStatus()).isEqualTo(IngestionStatus.READY);
+        assertThat(updatedParent.getSourceLabel()).isEqualTo("Canonical CSV: canonical.csv");
+        assertThat(updatedParent.getRecordsReceived()).isEqualTo(3);
+        assertThat(updatedParent.getRecordsCreated()).isZero();
+        assertThat(updatedParent.getRecordsSkipped()).isZero();
+        assertThat(updatedParent.getRecordsRejected()).isZero();
+        assertThat(updatedParent.getStartedAt()).isNotNull();
+        assertThat(updatedParent.getCompletedAt()).isNotNull();
+
+        FileIngestion fileIngestion = fileIngestionRepository.findAll().get(0);
+        assertThat(fileIngestion.getTransactionIngestion().getId()).isEqualTo(parent.getId());
+        assertThat(fileIngestion.getChecksum()).isEqualTo(sha256Hex(VALID_CSV));
+        assertThat(fileIngestion.getStorageKey()).isNull();
+        assertThat(fileIngestion.getParserName()).isEqualTo("fintrack-canonical-csv");
+        assertThat(fileIngestion.getParserVersion()).isEqualTo("1.0");
+        assertThat(fileIngestion.getStatementStartDate()).isEqualTo(LocalDate.parse("2026-01-15"));
+        assertThat(recordsFor(parent)).hasSize(3);
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void uploadFileToPendingParentWithInvalidRowsMakesParentPartiallyReady() throws Exception {
+        TransactionIngestion parent = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        String csv =
+            """
+            transactionDate,postingDate,description,signedAmount,currency,externalReference,notes
+            nope,,,-0.001,USD,,
+            2026-01-16,,OXXO AGUILAS,-274.00,MXN,,
+            """;
+
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, parent.getId()).file(csvFile("mixed.csv", csv)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
+            .andExpect(jsonPath("$.counts.recordsReceived").value(2))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(1))
+            .andExpect(jsonPath("$.rows[0].status").value("REJECTED"))
+            .andExpect(jsonPath("$.rows[1].status").value("VALID"));
+
+        TransactionIngestion updatedParent = transactionIngestionRepository.findById(parent.getId()).orElseThrow();
+        assertThat(updatedParent.getStatus()).isEqualTo(IngestionStatus.PARTIALLY_READY);
+        assertThat(updatedParent.getRecordsRejected()).isEqualTo(1);
+        assertThat(recordsFor(parent))
+            .extracting(IngestionRecord::getStatus)
+            .containsExactly(IngestionRecordStatus.REJECTED, IngestionRecordStatus.VALID);
+    }
+
+    @Test
+    @Transactional
+    void uploadFileToParentRejectsNonFileForeignNonPendingAndMissingFile() throws Exception {
+        TransactionIngestion nonFileParent = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        nonFileParent.setIngestionType(IngestionType.API);
+        transactionIngestionRepository.saveAndFlush(nonFileParent);
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, nonFileParent.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isBadRequest());
+
+        TransactionIngestion nonPendingParent = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        nonPendingParent.setStatus(IngestionStatus.READY);
+        transactionIngestionRepository.saveAndFlush(nonPendingParent);
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, nonPendingParent.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isBadRequest());
+
+        TransactionIngestion foreignParent = createPendingFileTransactionIngestion(createAccountForUser(createOtherUser()));
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, foreignParent.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isBadRequest());
+
+        TransactionIngestion missingFileParent = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        mockMvc.perform(multipart(PARENT_FILE_INGESTION_URL, missingFileParent.getId())).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = "ROLE_ADMIN")
+    void adminCannotUploadFileToForeignPendingTransactionIngestion() throws Exception {
+        TransactionIngestion foreignParent = createPendingFileTransactionIngestion(createAccountForUser(createOtherUser()));
+
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, foreignParent.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isBadRequest());
+
+        assertThat(fileIngestionRepository.findAll()).isEmpty();
+        assertThat(ingestionRecordRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void uploadFileToParentRejectsExistingChildrenAndCreatedFinancialTransactions() throws Exception {
+        TransactionIngestion parentWithFile = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        fileIngestionRepository.saveAndFlush(
+            new FileIngestion()
+                .originalFilename("existing.csv")
+                .fileType(ImportFileType.CSV)
+                .createdAt(java.time.Instant.now())
+                .transactionIngestion(parentWithFile)
+        );
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, parentWithFile.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isBadRequest());
+
+        TransactionIngestion parentWithRecords = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        validRecordFor(parentWithRecords, 1);
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, parentWithRecords.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isBadRequest());
+
+        TransactionIngestion parentWithFinancialTransactions = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(parentWithFinancialTransactions.getAccount());
+        financialTransaction.setTransactionIngestion(parentWithFinancialTransactions);
+        financialTransactionRepository.saveAndFlush(financialTransaction);
+        mockMvc
+            .perform(
+                multipart(PARENT_FILE_INGESTION_URL, parentWithFinancialTransactions.getId()).file(csvFile("canonical.csv", VALID_CSV))
+            )
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -847,6 +988,23 @@ class CsvIngestionPreviewResourceIT {
 
     private FinancialAccount createCurrentUserAccount() {
         return createAccountForUser(currentMockUser());
+    }
+
+    private TransactionIngestion createPendingFileTransactionIngestion(FinancialAccount account) {
+        TransactionIngestion ingestion = TransactionIngestionResourceIT.createEntity(em);
+        ingestion.setAccount(account);
+        ingestion.setIngestionType(IngestionType.FILE);
+        ingestion.setStatus(IngestionStatus.PENDING);
+        ingestion.setSourceLabel(null);
+        ingestion.setStartedAt(java.time.Instant.now());
+        ingestion.setCompletedAt(null);
+        ingestion.setRecordsReceived(0);
+        ingestion.setRecordsCreated(0);
+        ingestion.setRecordsSkipped(0);
+        ingestion.setRecordsRejected(0);
+        ingestion.setErrorMessage(null);
+        ingestion.setCreatedAt(java.time.Instant.now());
+        return transactionIngestionRepository.saveAndFlush(ingestion);
     }
 
     private TransactionIngestion createPreviewWithValidRows() throws Exception {

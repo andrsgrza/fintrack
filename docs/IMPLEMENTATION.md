@@ -871,6 +871,7 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 | Item               | Plan                                                                                                                                                        |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Endpoint           | `POST /api/transaction-ingestions/file-preview` multipart with `accountId` + `file`.                                                                        |
+| Parent upload      | `POST /api/transaction-ingestions/{id}/file-ingestion` multipart with `file` attaches CSV metadata/records to an existing owned `PENDING` FILE parent.      |
 | Ownership          | Resolve account ownership before creating anything. Admin has no special import bypass.                                                                     |
 | Parent             | Create `TransactionIngestion` with `ingestionType = FILE`.                                                                                                  |
 | File child         | Create `FileIngestion` metadata with `fileType = CSV`, `parserName = fintrack-canonical-csv`, `parserVersion = 1.0`, SHA-256 checksum, `storageKey = null`. |
@@ -888,16 +889,16 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 
 #### I1C — minimal UI
 
-| Item     | Status                                                                                                                                                               |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Entry    | ✅ TransactionIngestion domain workflow at `/transaction-ingestion/file-preview/new`, linked from the TransactionIngestion list; not generated FileIngestion create. |
-| Form     | ✅ Select account, upload canonical CSV, submit preview.                                                                                                             |
-| Redirect | ✅ Successful upload redirects to recoverable `/transaction-ingestion/{id}/file-preview` review page.                                                                |
-| Result   | ✅ Show persisted preview summary, read-only FileIngestion metadata, non-blocking warnings, preview-only notice, and read-only row table.                            |
-| Review   | ✅ Enable/disable row review actions and edit normalized review-row values.                                                                                          |
-| Confirm  | ✅ Confirm Import appears on the persisted review page only when the recalculated status is `READY` and at least one `VALID` row exists.                             |
-| Shortcut | Deferred; later FinancialAccount detail shortcut should reuse the same flow with account preselected.                                                                |
-| Tests    | ✅ `transaction-ingestion-file-preview.spec.tsx`.                                                                                                                    |
+| Item     | Status                                                                                                                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entry    | ✅ TransactionIngestion domain workflow at `/transaction-ingestion/file-preview/new`, linked from the TransactionIngestion list; FileIngestion create is parent-scoped upload, not metadata CRUD. |
+| Form     | ✅ Select account and upload canonical CSV in TransactionIngestion preview creation, or select pending FILE parent and CSV file from `/file-ingestion/new`.                                       |
+| Redirect | ✅ Successful upload redirects to recoverable `/transaction-ingestion/{id}/file-preview` review page.                                                                                             |
+| Result   | ✅ Show persisted preview summary, read-only FileIngestion metadata, non-blocking warnings, preview-only notice, and read-only row table.                                                         |
+| Review   | ✅ Enable/disable row review actions and edit normalized review-row values.                                                                                                                       |
+| Confirm  | ✅ Confirm Import appears on the persisted review page only when the recalculated status is `READY` and at least one `VALID` row exists.                                                          |
+| Shortcut | Deferred; later FinancialAccount detail shortcut should reuse the same flow with account preselected.                                                                                             |
+| Tests    | ✅ `transaction-ingestion-file-preview.spec.tsx`.                                                                                                                                                 |
 
 #### I2B.2 — edit normalized review rows
 

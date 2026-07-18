@@ -14,6 +14,7 @@ import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser;
@@ -51,6 +52,7 @@ public class CsvIngestionPreviewService {
     private final FinancialAccountRepository financialAccountRepository;
     private final TransactionIngestionRepository transactionIngestionRepository;
     private final FileIngestionRepository fileIngestionRepository;
+    private final FinancialTransactionRepository financialTransactionRepository;
     private final IngestionRecordRepository ingestionRecordRepository;
     private final CurrentUserService currentUserService;
     private final CanonicalCsvIngestionParser parser;
@@ -61,6 +63,7 @@ public class CsvIngestionPreviewService {
         FinancialAccountRepository financialAccountRepository,
         TransactionIngestionRepository transactionIngestionRepository,
         FileIngestionRepository fileIngestionRepository,
+        FinancialTransactionRepository financialTransactionRepository,
         IngestionRecordRepository ingestionRecordRepository,
         CurrentUserService currentUserService,
         CanonicalCsvIngestionParser parser,
@@ -70,6 +73,7 @@ public class CsvIngestionPreviewService {
         this.financialAccountRepository = financialAccountRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.fileIngestionRepository = fileIngestionRepository;
+        this.financialTransactionRepository = financialTransactionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.currentUserService = currentUserService;
         this.parser = parser;
@@ -85,21 +89,58 @@ public class CsvIngestionPreviewService {
         List<CsvIngestionValidationMessage> warnings = duplicateChecksumWarnings(account.getId(), checksum);
 
         Instant startedAt = Instant.now();
-        IngestionStatus status = csvIngestionReadinessService.readinessStatus(parseResult.getValidRows(), parseResult.getRecordsRejected());
-
         TransactionIngestion transactionIngestion = new TransactionIngestion()
             .ingestionType(IngestionType.FILE)
+            .status(IngestionStatus.PENDING)
+            .sourceLabel(null)
+            .startedAt(startedAt)
+            .completedAt(null)
+            .recordsReceived(0)
+            .recordsCreated(0)
+            .recordsSkipped(0)
+            .recordsRejected(0)
+            .errorMessage(null)
+            .createdAt(startedAt)
+            .account(account);
+        return persistFilePreview(transactionIngestion, file, bytes, checksum, parseResult, warnings);
+    }
+
+    public CsvIngestionPreviewResponseDTO uploadFileToPendingTransactionIngestion(Long transactionIngestionId, MultipartFile file) {
+        TransactionIngestion transactionIngestion = resolveCurrentUserPendingFileIngestion(transactionIngestionId);
+        validateCanAttachFileIngestion(transactionIngestion);
+
+        byte[] bytes = readFileBytes(file);
+        String checksum = sha256Hex(bytes);
+        CsvParseResult parseResult = parser.parse(bytes, transactionIngestion.getAccount().getCurrency());
+        List<CsvIngestionValidationMessage> warnings = duplicateChecksumWarnings(transactionIngestion.getAccount().getId(), checksum);
+
+        return persistFilePreview(transactionIngestion, file, bytes, checksum, parseResult, warnings);
+    }
+
+    private CsvIngestionPreviewResponseDTO persistFilePreview(
+        TransactionIngestion transactionIngestion,
+        MultipartFile file,
+        byte[] bytes,
+        String checksum,
+        CsvParseResult parseResult,
+        List<CsvIngestionValidationMessage> warnings
+    ) {
+        Instant now = Instant.now();
+        IngestionStatus status = csvIngestionReadinessService.readinessStatus(parseResult.getValidRows(), parseResult.getRecordsRejected());
+
+        transactionIngestion
             .status(status)
             .sourceLabel(sourceLabel(file))
-            .startedAt(startedAt)
+            .startedAt(now)
             .completedAt(Instant.now())
             .recordsReceived(parseResult.getRecordsReceived())
             .recordsCreated(0)
             .recordsSkipped(0)
             .recordsRejected(parseResult.getRecordsRejected())
-            .errorMessage(null)
-            .createdAt(startedAt)
-            .account(account);
+            .errorMessage(null);
+        if (transactionIngestion.getCreatedAt() == null) {
+            transactionIngestion.setCreatedAt(now);
+        }
         transactionIngestion = transactionIngestionRepository.save(transactionIngestion);
 
         FileIngestion fileIngestion = new FileIngestion()
@@ -161,6 +202,36 @@ public class CsvIngestionPreviewService {
         return financialAccountRepository
             .findOneWithToOneRelationshipsByIdAndUserLogin(accountId, currentUserService.getCurrentUserLogin())
             .orElseThrow(() -> new IllegalArgumentException("Account is not accessible"));
+    }
+
+    private TransactionIngestion resolveCurrentUserPendingFileIngestion(Long transactionIngestionId) {
+        if (transactionIngestionId == null) {
+            throw new IllegalArgumentException("Transaction ingestion is required");
+        }
+        return transactionIngestionRepository
+            .findOneWithToOneRelationshipsByIdAndAccountUserLogin(transactionIngestionId, currentUserService.getCurrentUserLogin())
+            .orElseThrow(() -> new IllegalArgumentException("Transaction ingestion is not accessible"));
+    }
+
+    private void validateCanAttachFileIngestion(TransactionIngestion transactionIngestion) {
+        if (transactionIngestion.getIngestionType() != IngestionType.FILE) {
+            throw new IllegalArgumentException("Transaction ingestion must be FILE");
+        }
+        if (transactionIngestion.getStatus() != IngestionStatus.PENDING) {
+            throw new IllegalArgumentException("Transaction ingestion must be PENDING before file upload");
+        }
+        if (transactionIngestion.getAccount() == null || transactionIngestion.getAccount().getId() == null) {
+            throw new IllegalArgumentException("Transaction ingestion account is required");
+        }
+        if (fileIngestionRepository.existsByTransactionIngestionId(transactionIngestion.getId())) {
+            throw new IllegalArgumentException("Transaction ingestion already has file metadata");
+        }
+        if (ingestionRecordRepository.existsByTransactionIngestionId(transactionIngestion.getId())) {
+            throw new IllegalArgumentException("Transaction ingestion already has records");
+        }
+        if (financialTransactionRepository.existsByTransactionIngestionId(transactionIngestion.getId())) {
+            throw new IllegalArgumentException("Transaction ingestion already has financial transactions");
+        }
     }
 
     private byte[] readFileBytes(MultipartFile file) {

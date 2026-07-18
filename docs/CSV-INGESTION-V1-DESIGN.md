@@ -29,7 +29,7 @@ Recommendation:
 
 I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. `/file-ingestion/new` is not metadata CRUD; it is a parent-scoped CSV upload command that attaches server-derived file metadata and records to an existing pending FILE `TransactionIngestion`. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
 
 ## 2. Responsibility split using current entities
 
@@ -215,6 +215,19 @@ Input:
 
 - `accountId`: target `FinancialAccount` id.
 - `file`: uploaded canonical CSV file.
+
+For an already-created pending FILE parent, use the parent command endpoint:
+
+```http
+POST /api/transaction-ingestions/{id}/file-ingestion
+Content-Type: multipart/form-data
+```
+
+Input:
+
+- `file`: uploaded canonical CSV file.
+
+This endpoint validates that the parent is owned by the current user, has `ingestionType = FILE`, has `status = PENDING`, has no existing `FileIngestion`, has no existing `IngestionRecord`s, and has no created `FinancialTransaction`s. It derives all `FileIngestion` metadata server-side, persists records, updates parent source/timestamps/counters/readiness, creates no `FinancialTransaction`s, and does not invoke the Rule Engine.
 
 Response DTO:
 

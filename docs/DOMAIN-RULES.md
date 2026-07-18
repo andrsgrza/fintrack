@@ -1228,6 +1228,7 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | Parent batch             | `TransactionIngestion` is the parent import batch/process and owns the target `FinancialAccount`                                                                                                                   | **Done** |
 | File metadata            | `FileIngestion` is metadata only and links 1:1 to `TransactionIngestion`; it does not have its own account field                                                                                                   | **Done** |
 | Account derivation       | `FileIngestion` derives account through `TransactionIngestion.account`                                                                                                                                             | **Done** |
+| Parent-scoped upload     | `/file-ingestion/new` is not metadata CRUD; it selects an eligible pending FILE parent and uploads CSV through `POST /api/transaction-ingestions/{id}/file-ingestion`                                              | **Done** |
 | Preview records          | `IngestionRecord` represents one CSV data row                                                                                                                                                                      | **Done** |
 | No transactions in I1    | CSV preview creates no `FinancialTransaction` rows                                                                                                                                                                 | **Done** |
 | No Rule Engine in I1     | CSV preview does not run Rule Engine                                                                                                                                                                               | **Done** |
@@ -1249,6 +1250,7 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 **Readiness recalculation:** CSV preview/review/confirm share the same readiness source of truth. The parent is `PARTIALLY_READY` when any row is `REJECTED`/`FAILED` or when there are zero `VALID` rows. Otherwise it is `READY`. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but a batch containing only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. Confirm Import recalculates readiness from persisted records before importing and only proceeds when the recalculated status is `READY`.
 
 | Minimal preview UI | TransactionIngestion “New File Import” workflow selects account, uploads CSV, shows persisted preview summary/warnings/rows, and shows Confirm Import only for ready reviews with valid rows | **Done** |
+| FileIngestion create cleanup | FileIngestion create shows only parent selector + CSV file input; metadata fields are derived server-side and hidden from create UI | **Done** |
 
 ### Canonical CSV transaction rules
 

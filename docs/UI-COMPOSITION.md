@@ -594,7 +594,7 @@ Composition rules:
 - call `POST /api/transaction-ingestions/file-preview`;
 - redirect to the persisted TransactionIngestion review page;
 - show persisted preview summary, read-only file metadata, rows, review actions, and Confirm Import when ready;
-- do not use generated FileIngestion create as the main product flow;
+- do not expose editable FileIngestion metadata fields as a product create flow;
 - do not embed full FileIngestion CRUD inside TransactionIngestion;
 - use contextual upload/preview components;
 - preview rows are high-volume, so use related-list/table style rather than inline editable child collection;
@@ -603,6 +603,8 @@ Composition rules:
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
 The creation route is `/transaction-ingestion/file-preview/new`. It renders a minimal account selector, CSV file input, preview submit action, and preview-only notice. After a successful upload it redirects to `/transaction-ingestion/{id}/file-preview`.
+
+The standalone `/file-ingestion/new` route is also treated as a TransactionIngestion workflow command, not metadata CRUD. It renders only an eligible pending FILE `TransactionIngestion` selector and a CSV file input, posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`, derives all `FileIngestion` metadata server-side, creates `IngestionRecord` rows, updates the parent readiness/counters, and redirects to `/transaction-ingestion/{id}/file-preview`. Future embedded usage from a parent page should hide the parent selector because the parent context is already known.
 
 The review route is `/transaction-ingestion/{id}/file-preview`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads persisted preview data, shows TransactionIngestion context, displays read-only FileIngestion metadata, shows counts and rows, and supports row enable/disable plus normalized-row edit review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview/review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`.
 

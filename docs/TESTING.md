@@ -2517,6 +2517,8 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 ### I1B resource/integration tests — persisted preview
 
 - valid CSV upload creates `TransactionIngestion`, `FileIngestion`, and `IngestionRecord` rows.
+- parent-scoped CSV upload to `POST /api/transaction-ingestions/{id}/file-ingestion` creates `FileIngestion` metadata and `IngestionRecord` rows for an existing owned `PENDING` FILE parent.
+- parent-scoped upload rejects non-FILE, non-owned, non-`PENDING`, already-has-file, already-has-records, already-has-created-transactions, and missing-file cases.
 - invalid rows persist as `REJECTED` records when header is valid.
 - valid preview rows use `IngestionRecordStatus.VALID` and `financialTransaction` remains `null`.
 - invalid header creates nothing.
@@ -2550,6 +2552,14 @@ Covered by `transaction-ingestion-file-preview.spec.tsx`.
 - `PARTIALLY_COMPLETED` renders as Import partially completed / Importación parcialmente completada, but it is not expected in the current CSV review flow.
 - Duplicate checksum warning renders as a non-blocking warning.
 - Row table renders statuses strictly from `row.status`, including `DISABLED`.
+
+`file-ingestion-update.spec.tsx` covers the cleaned `/file-ingestion/new` route:
+
+- create mode shows only the TransactionIngestion parent selector and CSV file input.
+- server-owned metadata fields such as original filename, file type, content type, file size, checksum, parser, storage key, and statement dates are not rendered on create.
+- submit posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`.
+- success redirects to `/transaction-ingestion/{id}/file-preview`.
+- backend validation errors are shown and the file input is cleared after failure.
 - Enable/disable actions update row status and counts.
 - Edit action appears for `VALID` and `REJECTED` rows, but not for `DISABLED` or imported/immutable rows.
 - Editing a rejected row with valid values renders it as valid.

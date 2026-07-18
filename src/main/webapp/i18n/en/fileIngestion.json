@@ -14,6 +14,14 @@
       "delete": {
         "question": "File Ingestion {{ id }} cannot be deleted directly. Delete the parent Transaction Ingestion flow to clean up this file metadata."
       },
+      "upload": {
+        "csvFile": "CSV file",
+        "submit": "Upload CSV",
+        "error": "CSV upload failed.",
+        "fileRequired": "CSV file is required.",
+        "parentHelp": "Select a pending FILE Transaction Ingestion. Metadata will be derived from the uploaded CSV.",
+        "fileHelp": "Upload a canonical CSV. File metadata and ingestion records are created by the server."
+      },
       "detail": {
         "title": "File Ingestion"
       },

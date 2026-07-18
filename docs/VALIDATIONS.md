@@ -57,25 +57,25 @@ Companion docs:
 
 ## Summary matrix
 
-| #   | Entity                   | DTO | Entity | DB  | Service | REST | Notes                                                                                                |
-| --- | ------------------------ | --- | ------ | --- | ------- | ---- | ---------------------------------------------------------------------------------------------------- |
-| 1   | FinancialAccount         | ✅  | ✅     | ✅  | ✅      | ✅   | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor         |
-| 2   | FinancialTransaction     | ✅  | ✅     | ✅  | ✅      | ✅   | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0 |
-| 3   | CreditAccountDetails     | ✅  | ✅     | ✅  | ✅      | ✅   | CREDIT_CARD + 1:1 + immutable account                                                                |
-| 4   | Category                 | ✅  | ✅     | ✅  | ✅      | ✅   | Sibling-unique `name` per owner+type+parent (trim, case-insensitive)                                 |
-| 5   | Tag                      | ✅  | ✅     | ✅  | ✅      | ✅   | Per-owner case-insensitive unique `name`; server-owned timestamps; CRUD UX hides raw relationships   |
-| 6   | TransactionRule          | ✅  | ✅     | ✅  | ✅      | ✅   | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                         |
-| 7   | TransactionRuleCondition | ✅  | ✅     | ✅  | ✅      | ✅   | Parent immutable; field/operator/value semantics                                                     |
-| 8   | FinancialSubscription    | ✅  | ✅     | ✅  | ✅      | ✅   | Links + PATCH JsonNode                                                                               |
-| 9   | Budget                   | ✅  | ✅     | ✅  | ✅      | ✅   | M2M owned; PATCH JsonNode link semantics                                                             |
-| 10  | InternalTransfer         | ✅  | ✅     | ✅  | ✅      | ✅   | `createdAt` server; pair validation                                                                  |
-| 11  | TransactionIngestion     | ✅  | ✅     | ✅  | ✅      | ✅   | Lifecycle + counter consistency; server fields optional in DTO                                       |
-| 12  | FileIngestion            | ✅  | ✅     | ✅  | ✅      | ✅   | Parent FILE + 1:1; `createdAt` server                                                                |
-| 13  | ApiIngestion             | ✅  | ✅     | ✅  | ✅      | ✅   | Token snapshots (11C) ✅; `requestId` unique                                                         |
-| 14  | IngestionRecord          | ✅  | ✅     | 🟡  | ✅      | ✅   | `recordIndex`/`externalRecordId` unique per ingestion in service                                     |
-| 15  | ApiAccessToken           | ✅  | ✅     | ✅  | ✅      | ✅   | Server-generated secrets; `rawToken` once; not in GET                                                |
-| 16  | ApiAccessTokenPermission | 🟡  | ✅     | ✅  | ✅      | ✅   | Duplicate (token, permission)                                                                        |
-| 17  | UserDashboardPreference  | 🟡  | ✅     | 🟡  | ✅      | ✅   | `configuration` required DB not DTO; 1:1 service guard                                               |
+| #   | Entity                   | DTO | Entity | DB  | Service | REST | Notes                                                                                                         |
+| --- | ------------------------ | --- | ------ | --- | ------- | ---- | ------------------------------------------------------------------------------------------------------------- |
+| 1   | FinancialAccount         | ✅  | ✅     | ✅  | ✅      | ✅   | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor                  |
+| 2   | FinancialTransaction     | ✅  | ✅     | ✅  | ✅      | ✅   | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0          |
+| 3   | CreditAccountDetails     | ✅  | ✅     | ✅  | ✅      | ✅   | CREDIT_CARD + 1:1 + immutable account                                                                         |
+| 4   | Category                 | ✅  | ✅     | ✅  | ✅      | ✅   | Sibling-unique `name` per owner+type+parent (trim, case-insensitive)                                          |
+| 5   | Tag                      | ✅  | ✅     | ✅  | ✅      | ✅   | Per-owner case-insensitive unique `name`; server-owned timestamps; CRUD UX hides raw relationships            |
+| 6   | TransactionRule          | ✅  | ✅     | ✅  | ✅      | ✅   | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                                  |
+| 7   | TransactionRuleCondition | ✅  | ✅     | ✅  | ✅      | ✅   | Parent immutable; field/operator/value semantics                                                              |
+| 8   | FinancialSubscription    | ✅  | ✅     | ✅  | ✅      | ✅   | Links + PATCH JsonNode                                                                                        |
+| 9   | Budget                   | ✅  | ✅     | ✅  | ✅      | ✅   | M2M owned; PATCH JsonNode link semantics                                                                      |
+| 10  | InternalTransfer         | ✅  | ✅     | ✅  | ✅      | ✅   | `createdAt` server; pair validation                                                                           |
+| 11  | TransactionIngestion     | ✅  | ✅     | ✅  | ✅      | ✅   | Lifecycle + counter consistency; server fields optional in DTO                                                |
+| 12  | FileIngestion            | ✅  | ✅     | ✅  | ✅      | ✅   | Parent FILE + 1:1; `createdAt` server; create UI uploads CSV for a pending parent instead of editing metadata |
+| 13  | ApiIngestion             | ✅  | ✅     | ✅  | ✅      | ✅   | Token snapshots (11C) ✅; `requestId` unique                                                                  |
+| 14  | IngestionRecord          | ✅  | ✅     | 🟡  | ✅      | ✅   | `recordIndex`/`externalRecordId` unique per ingestion in service                                              |
+| 15  | ApiAccessToken           | ✅  | ✅     | ✅  | ✅      | ✅   | Server-generated secrets; `rawToken` once; not in GET                                                         |
+| 16  | ApiAccessTokenPermission | 🟡  | ✅     | ✅  | ✅      | ✅   | Duplicate (token, permission)                                                                                 |
+| 17  | UserDashboardPreference  | 🟡  | ✅     | 🟡  | ✅      | ✅   | `configuration` required DB not DTO; 1:1 service guard                                                        |
 
 ---
 
