@@ -693,6 +693,8 @@ describe('TransactionIngestion file preview workflow', () => {
     renderPersistedReview();
 
     expect(await screen.findByText('Ready to import')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.queryByText(/translation-not-found/i)).toBeNull();
     expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
   });
 
@@ -701,6 +703,8 @@ describe('TransactionIngestion file preview workflow', () => {
     renderPersistedReview();
 
     expect(await screen.findByText('Needs review')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.queryByText(/translation-not-found/i)).toBeNull();
     expect(screen.getByText('Fix or disable rejected rows before importing.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
   });
@@ -756,6 +760,9 @@ describe('TransactionIngestion file preview workflow', () => {
     expectRowStatus(300, 'Imported');
     expectRowStatus(302, 'Disabled');
     expect(within(screen.getByTestId('filePreviewCounts')).getAllByText('0')).toHaveLength(3);
+    expect(screen.queryByText('Preview only — no transactions were created.')).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Error' })).toBeNull();
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
@@ -767,13 +774,22 @@ describe('TransactionIngestion file preview workflow', () => {
       data: {
         ...persistedReviewResponse.data,
         status: 'COMPLETED',
-        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
-        rows: [{ ...persistedReviewResponse.data.rows[0], status: 'IMPORTED', financialTransactionId: 9001 }],
+        counts: { recordsReceived: 2, recordsCreated: 1, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          { ...persistedReviewResponse.data.rows[0], status: 'IMPORTED', financialTransactionId: 9001 },
+          { ...persistedReviewResponse.data.rows[2], status: 'DISABLED', transactionDate: '' },
+        ],
       },
     });
     renderPersistedReview();
 
     expect(await screen.findByText('Import completed')).toBeTruthy();
+    expect(screen.queryByText('Preview only — no transactions were created.')).toBeNull();
+    expectRowStatus(300, 'Imported');
+    expectRowStatus(302, 'Disabled');
+    expect(rowForRecord(302).textContent).toContain('Disabled row');
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Error' })).toBeNull();
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();

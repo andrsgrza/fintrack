@@ -73,6 +73,7 @@
         "externalReference": "Referencia externa",
         "notes": "Notas",
         "error": "Error",
+        "actions": "Acciones",
         "edit": "Editar",
         "saveRow": "Guardar fila",
         "cancel": "Cancelar",
@@ -86,6 +87,7 @@
         "noValidRows": "No hay filas válidas para importar.",
         "importCompleted": "Importación completada.",
         "importProcessing": "La importación está en proceso.",
+        "importFailed": "La importación falló.",
         "ingestionStatus": {
           "READY": "Lista para importar",
           "PARTIALLY_READY": "Requiere revisión",

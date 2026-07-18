@@ -73,6 +73,7 @@
         "externalReference": "External reference",
         "notes": "Notes",
         "error": "Error",
+        "actions": "Actions",
         "edit": "Edit",
         "saveRow": "Save row",
         "cancel": "Cancel",
@@ -86,6 +87,7 @@
         "noValidRows": "There are no valid rows to import.",
         "importCompleted": "Import completed.",
         "importProcessing": "Import is processing.",
+        "importFailed": "Import failed.",
         "ingestionStatus": {
           "READY": "Ready to import",
           "PARTIALLY_READY": "Needs review",

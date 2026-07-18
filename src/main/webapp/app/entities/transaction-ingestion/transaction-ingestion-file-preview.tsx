@@ -354,8 +354,13 @@ export const TransactionIngestionFilePreview = () => {
   const warnings = preview?.warnings ?? [];
   const fileMetadata = preview?.fileMetadata;
   const reviewActionsEnabled = preview?.status === 'READY' || preview?.status === 'PARTIALLY_READY';
+  const completed = preview?.status === 'COMPLETED';
+  const failed = preview?.status === 'FAILED';
   const confirmAvailable = preview?.status === 'READY' && (counts.validRows ?? 0) > 0;
   const processing = preview?.status === 'PROCESSING' || confirmingImport;
+  const showPreviewOnlyBanner = reviewActionsEnabled;
+  const showActionsColumn = reviewActionsEnabled;
+  const showErrorColumn = !completed || rows.some(row => row.errorMessage || row.errorCode);
 
   const canDisable = (row: ICsvIngestionPreviewRow) => reviewActionsEnabled && ['VALID', 'REJECTED'].includes(row.status ?? '');
   const canEnable = (row: ICsvIngestionPreviewRow) => reviewActionsEnabled && row.status === 'DISABLED';
@@ -469,11 +474,13 @@ export const TransactionIngestionFilePreview = () => {
           <Translate contentKey="fintrackApp.transactionIngestion.filePreview.reviewTitle">Review import</Translate>
         </h2>
 
-        <Alert color="info" fade={false}>
-          <Translate contentKey="fintrackApp.transactionIngestion.filePreview.previewOnly">
-            Preview only — no transactions were created.
-          </Translate>
-        </Alert>
+        {showPreviewOnlyBanner ? (
+          <Alert color="info" fade={false}>
+            <Translate contentKey="fintrackApp.transactionIngestion.filePreview.previewOnly">
+              Preview only — no transactions were created.
+            </Translate>
+          </Alert>
+        ) : null}
 
         {backendError ? (
           <Alert color="danger" data-cy="filePreviewBackendError" fade={false}>
@@ -513,6 +520,12 @@ export const TransactionIngestionFilePreview = () => {
               <Alert color="info" data-cy="filePreviewProcessing" fade={false}>
                 <Spinner size="sm" />{' '}
                 <Translate contentKey="fintrackApp.transactionIngestion.filePreview.importProcessing">Import is processing.</Translate>
+              </Alert>
+            ) : null}
+
+            {failed ? (
+              <Alert color="danger" data-cy="filePreviewFailed" fade={false}>
+                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.importFailed">Import failed.</Translate>
               </Alert>
             ) : null}
 
@@ -669,12 +682,16 @@ export const TransactionIngestionFilePreview = () => {
                     <th>
                       <Translate contentKey="fintrackApp.transactionIngestion.filePreview.notes">Notes</Translate>
                     </th>
-                    <th>
-                      <Translate contentKey="fintrackApp.transactionIngestion.filePreview.error">Error</Translate>
-                    </th>
-                    <th>
-                      <Translate contentKey="entity.action.actions">Actions</Translate>
-                    </th>
+                    {showErrorColumn ? (
+                      <th>
+                        <Translate contentKey="fintrackApp.transactionIngestion.filePreview.error">Error</Translate>
+                      </th>
+                    ) : null}
+                    {showActionsColumn ? (
+                      <th>
+                        <Translate contentKey="fintrackApp.transactionIngestion.filePreview.actions">Actions</Translate>
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -775,34 +792,36 @@ export const TransactionIngestionFilePreview = () => {
                             row.notes
                           )}
                         </td>
-                        <td>{row.errorMessage || row.errorCode}</td>
-                        <td className="text-end">
-                          {isEditing ? (
-                            <>
-                              <Button size="sm" color="primary" disabled={actionBusy} onClick={() => saveEditingRow(row)}>
-                                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.saveRow">Save row</Translate>
-                              </Button>{' '}
-                              <Button size="sm" color="secondary" disabled={actionBusy} onClick={cancelEditingRow}>
-                                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.cancel">Cancel</Translate>
+                        {showErrorColumn ? <td>{row.errorMessage || row.errorCode}</td> : null}
+                        {showActionsColumn ? (
+                          <td className="text-end">
+                            {isEditing ? (
+                              <>
+                                <Button size="sm" color="primary" disabled={actionBusy} onClick={() => saveEditingRow(row)}>
+                                  <Translate contentKey="fintrackApp.transactionIngestion.filePreview.saveRow">Save row</Translate>
+                                </Button>{' '}
+                                <Button size="sm" color="secondary" disabled={actionBusy} onClick={cancelEditingRow}>
+                                  <Translate contentKey="fintrackApp.transactionIngestion.filePreview.cancel">Cancel</Translate>
+                                </Button>
+                              </>
+                            ) : null}
+                            {!isEditing && canEdit(row) ? (
+                              <Button size="sm" color="primary" disabled={actionBusy} onClick={() => startEditingRow(row)}>
+                                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.edit">Edit</Translate>
                               </Button>
-                            </>
-                          ) : null}
-                          {!isEditing && canEdit(row) ? (
-                            <Button size="sm" color="primary" disabled={actionBusy} onClick={() => startEditingRow(row)}>
-                              <Translate contentKey="fintrackApp.transactionIngestion.filePreview.edit">Edit</Translate>
-                            </Button>
-                          ) : null}{' '}
-                          {!isEditing && canDisable(row) ? (
-                            <Button size="sm" color="warning" disabled={actionBusy} onClick={() => performRowAction(row, 'disable')}>
-                              <Translate contentKey="fintrackApp.transactionIngestion.filePreview.disable">Disable</Translate>
-                            </Button>
-                          ) : null}
-                          {!isEditing && canEnable(row) ? (
-                            <Button size="sm" color="success" disabled={actionBusy} onClick={() => performRowAction(row, 'enable')}>
-                              <Translate contentKey="fintrackApp.transactionIngestion.filePreview.enable">Enable</Translate>
-                            </Button>
-                          ) : null}
-                        </td>
+                            ) : null}{' '}
+                            {!isEditing && canDisable(row) ? (
+                              <Button size="sm" color="warning" disabled={actionBusy} onClick={() => performRowAction(row, 'disable')}>
+                                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.disable">Disable</Translate>
+                              </Button>
+                            ) : null}
+                            {!isEditing && canEnable(row) ? (
+                              <Button size="sm" color="success" disabled={actionBusy} onClick={() => performRowAction(row, 'enable')}>
+                                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.enable">Enable</Translate>
+                              </Button>
+                            ) : null}
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}
