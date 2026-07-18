@@ -336,9 +336,19 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: /disable/i })).toHaveLength(2);
     expect(screen.getByRole('button', { name: /enable/i })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.queryByText(/translation-not-found/i)).toBeNull();
+    expect(within(rowForRecord(300)).getByRole('button', { name: /edit/i })).toBeTruthy();
+    expect(within(rowForRecord(300)).getByRole('button', { name: /disable/i })).toBeTruthy();
+    expect(within(rowForRecord(300)).queryByRole('button', { name: /enable/i })).toBeNull();
+    expect(within(rowForRecord(301)).getByRole('button', { name: /edit/i })).toBeTruthy();
+    expect(within(rowForRecord(301)).getByRole('button', { name: /disable/i })).toBeTruthy();
+    expect(within(rowForRecord(301)).queryByRole('button', { name: /enable/i })).toBeNull();
     expectRowStatus(302, 'Disabled');
     expect(within(rowForRecord(302)).queryByText('signedAmount must be nonzero')).toBeNull();
     expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(within(rowForRecord(302)).queryByRole('button', { name: /disable/i })).toBeNull();
+    expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
   });
 
   it('renders ingestion readiness and import-result status labels', async () => {
@@ -794,6 +804,8 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /enable/i })).toBeNull();
+    expect(rowForRecord(300).querySelector('input, select, textarea')).toBeNull();
+    expect(rowForRecord(302).querySelector('input, select, textarea')).toBeNull();
   });
 
   it('confirm API error displays review error', async () => {
@@ -812,6 +824,11 @@ describe('TransactionIngestion file preview workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
     expect(await screen.findByText('Could not confirm import. Check the review status and try again.')).toBeTruthy();
+    expect(screen.queryByText('Import completed')).toBeNull();
+    expect(screen.getByText('Preview only — no transactions were created.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
+    expect(within(rowForRecord(300)).getByRole('button', { name: /edit/i })).toBeTruthy();
+    expect(within(rowForRecord(300)).getByRole('button', { name: /disable/i })).toBeTruthy();
   });
 
   it('cancel leaves edited row unchanged', async () => {
