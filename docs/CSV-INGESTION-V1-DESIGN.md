@@ -29,7 +29,7 @@ Recommendation:
 
 I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that already generated a `FinancialTransaction` will use `IMPORTED` in a later confirm-import slice.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and enable/disable preview rows. Confirm import remains deferred.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. Confirm import remains deferred.
 
 ## 2. Responsibility split using current entities
 
@@ -297,7 +297,9 @@ Recommended I1 mapping:
 | Invalid header / rejected file     | No persisted ingestion in I1                  | N/A                          |
 | Completed preview but not imported | `COMPLETED` or `PARTIALLY_COMPLETED` as above | `VALID` rows remain unlinked |
 
-I2A migrated away from `CREATED`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is reserved for review actions where the user keeps a row for audit but excludes it from import. `REJECTED` rows block future confirm import unless fixed or disabled. TransactionIngestion status is unchanged in I2A.
+I2A migrated away from `CREATED`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is used by review actions where the user keeps a row for audit but excludes it from import. `REJECTED` rows block future confirm import unless fixed by editing normalized values or disabled. TransactionIngestion status enum is unchanged in I2A/I2B.
+
+I2B.2 row edits replace `rawData.normalized`, recalculate `rawData.errors`/`rawData.warnings`, and leave `rawData.raw` unchanged as the original CSV audit payload. Editable normalized fields are `transactionDate`, `postingDate`, `description`, `signedAmount`, `currency`, `externalReference`, and `notes`. `amount` and `flow` are always derived from `signedAmount`; clients cannot edit status, amount, flow, parent ingestion, record index, raw CSV data, or financial transaction links. Editing `VALID`, `REJECTED`, or `DISABLED` rows revalidates the submitted normalized values; valid results become `VALID`, invalid results become `REJECTED`. `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are immutable in this slice.
 
 Counter mapping:
 

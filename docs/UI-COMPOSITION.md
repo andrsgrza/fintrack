@@ -598,9 +598,11 @@ Composition rules:
 - do not embed full FileIngestion CRUD inside TransactionIngestion;
 - use contextual upload/preview components;
 - preview rows are high-volume, so use related-list/table style rather than inline editable child collection;
-- I1 has no confirm/import action;
+- I1/I2B has no confirm/import action;
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
 The creation route is `/transaction-ingestion/file-preview/new`. It renders a minimal account selector, CSV file input, preview submit action, and preview-only notice. After a successful upload it redirects to `/transaction-ingestion/{id}/file-preview`.
 
-The review route is `/transaction-ingestion/{id}/file-preview`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads persisted preview data, shows TransactionIngestion context, displays read-only FileIngestion metadata, shows counts and rows, and supports row enable/disable review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview/review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`. No `FinancialTransaction` rows are created from the UI and no confirm/import action is rendered.
+The review route is `/transaction-ingestion/{id}/file-preview`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads persisted preview data, shows TransactionIngestion context, displays read-only FileIngestion metadata, shows counts and rows, and supports row enable/disable plus normalized-row edit review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview/review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`.
+
+Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Editing a disabled row re-enables it according to backend validation. Imported/skipped/failed rows do not render edit controls. No `FinancialTransaction` rows are created from the UI, no Rule Engine is invoked, and no confirm/import action is rendered.

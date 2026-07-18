@@ -3,10 +3,12 @@ package com.fintrack.app.web.rest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.FileIngestion;
@@ -30,10 +32,13 @@ import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -384,6 +389,224 @@ class CsvIngestionPreviewResourceIT {
 
     @Test
     @Transactional
+    void editValidRowWithValidDataKeepsRawDataRawAndDerivesAmountAndFlow() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        String originalRaw = objectMapper.readTree(record.getRawData()).path("raw").toString();
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-20", null, "Corrected description", "-274.00", "MXN", null, null)
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("VALID"))
+            .andExpect(jsonPath("$.row.transactionDate").value("2026-01-20"))
+            .andExpect(jsonPath("$.row.description").value("Corrected description"))
+            .andExpect(jsonPath("$.row.signedAmount").value("-274.00"))
+            .andExpect(jsonPath("$.row.amount").value("274.00"))
+            .andExpect(jsonPath("$.row.flow").value("OUT"))
+            .andExpect(jsonPath("$.row.errorCode").doesNotExist())
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0));
+
+        IngestionRecord edited = ingestionRecordRepository.findById(record.getId()).orElseThrow();
+        JsonNode rawData = objectMapper.readTree(edited.getRawData());
+        assertThat(rawData.path("raw").toString()).isEqualTo(originalRaw);
+        assertThat(rawData.path("normalized").path("description").asText()).isEqualTo("Corrected description");
+        assertThat(rawData.path("normalized").path("amount").asText()).isEqualTo("274.00");
+        assertThat(rawData.path("normalized").path("flow").asText()).isEqualTo("OUT");
+        assertThat(rawData.path("errors")).isEmpty();
+        assertThat(rawData.path("review").path("edited").asBoolean()).isTrue();
+        assertThat(rawData.path("review").path("editedBy").asText()).isEqualTo("user");
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void editValidRowWithInvalidDataMarksRejectedAndUpdatesCounters() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Corrected", "0", "MXN", null, null)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("REJECTED"))
+            .andExpect(jsonPath("$.row.errorCode").value("ZERO_SIGNED_AMOUNT"))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(1))
+            .andExpect(jsonPath("$.counts.validRows").value(2));
+
+        IngestionRecord edited = ingestionRecordRepository.findById(record.getId()).orElseThrow();
+        assertThat(edited.getStatus()).isEqualTo(IngestionRecordStatus.REJECTED);
+        assertThat(edited.getErrorCode()).isEqualTo("ZERO_SIGNED_AMOUNT");
+        assertThat(objectMapper.readTree(edited.getRawData()).path("errors")).isNotEmpty();
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.PARTIALLY_COMPLETED
+        );
+    }
+
+    @Test
+    @Transactional
+    void editRejectedRowWithValidOrInvalidDataRevalidates() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        IngestionRecord rejected = recordsFor(ingestion).get(0);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, rejected, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-20", null, "Corrected rejected row", "25.00", "MXN", "fixed-ref", null)
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("VALID"))
+            .andExpect(jsonPath("$.row.externalReference").value("fixed-ref"))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0));
+
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.COMPLETED
+        );
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, rejected, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("bad-date", null, "Still bad", "25.00", "MXN", null, null)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("REJECTED"))
+            .andExpect(jsonPath("$.row.errorCode").value("INVALID_TRANSACTION_DATE"))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(1));
+    }
+
+    @Test
+    @Transactional
+    void editDisabledRowReenablesAccordingToValidation() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Enabled by edit", "10.00", "MXN", null, null))
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("VALID"))
+            .andExpect(jsonPath("$.counts.recordsSkipped").value(0));
+
+        mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "", "10.00", "MXN", null, null)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("REJECTED"))
+            .andExpect(jsonPath("$.row.errorCode").value("DESCRIPTION_REQUIRED"))
+            .andExpect(jsonPath("$.counts.recordsSkipped").value(0))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(1));
+    }
+
+    @Test
+    @Transactional
+    void editRejectsImportedSkippedFailedForeignAndMismatchedRows() throws Exception {
+        TransactionIngestion firstIngestion = createPreviewWithValidRows();
+        IngestionRecord importedRecord = recordsFor(firstIngestion).get(0);
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(firstIngestion.getAccount());
+        financialTransaction.setTransactionIngestion(firstIngestion);
+        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        importedRecord.setStatus(IngestionRecordStatus.IMPORTED);
+        importedRecord.setFinancialTransaction(financialTransaction);
+        ingestionRecordRepository.saveAndFlush(importedRecord);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(firstIngestion, importedRecord, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Edit", "10.00", "MXN", null, null)))
+            )
+            .andExpect(status().isBadRequest());
+
+        TransactionIngestion secondIngestion = createPreviewWithValidRows();
+        IngestionRecord skippedRecord = recordsFor(secondIngestion).get(0);
+        skippedRecord.setStatus(IngestionRecordStatus.SKIPPED_DUPLICATE);
+        ingestionRecordRepository.saveAndFlush(skippedRecord);
+        mockMvc
+            .perform(
+                patch(reviewUrl(secondIngestion, skippedRecord, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Edit", "10.00", "MXN", null, null)))
+            )
+            .andExpect(status().isBadRequest());
+
+        IngestionRecord failedRecord = recordsFor(secondIngestion).get(1);
+        failedRecord.setStatus(IngestionRecordStatus.FAILED);
+        failedRecord.setErrorCode("FAILED");
+        failedRecord.setErrorMessage("failed");
+        ingestionRecordRepository.saveAndFlush(failedRecord);
+        mockMvc
+            .perform(
+                patch(reviewUrl(secondIngestion, failedRecord, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Edit", "10.00", "MXN", null, null)))
+            )
+            .andExpect(status().isBadRequest());
+
+        IngestionRecord mismatchedRecord = recordsFor(secondIngestion).get(2);
+        mockMvc
+            .perform(
+                patch(reviewUrl(firstIngestion, mismatchedRecord, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Edit", "10.00", "MXN", null, null)))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void editForeignAccountRecordIsRejected() throws Exception {
+        FinancialAccount otherUsersAccount = createAccountForUser(createOtherUser());
+        TransactionIngestion ingestion = TransactionIngestionResourceIT.createEntity(em);
+        ingestion.setAccount(otherUsersAccount);
+        ingestion.setIngestionType(IngestionType.FILE);
+        ingestion = transactionIngestionRepository.saveAndFlush(ingestion);
+
+        IngestionRecord record = IngestionRecordResourceIT.createEntity(em);
+        record.setTransactionIngestion(ingestion);
+        record.setStatus(IngestionRecordStatus.VALID);
+        record.setFinancialTransaction(null);
+        record = ingestionRecordRepository.saveAndFlush(record);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Edit", "10.00", "MXN", null, null)))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void importedRowsAndMismatchedRecordsCannotBeReviewed() throws Exception {
         TransactionIngestion firstIngestion = createPreviewWithValidRows();
         IngestionRecord importedRecord = recordsFor(firstIngestion).get(0);
@@ -433,6 +656,29 @@ class CsvIngestionPreviewResourceIT {
     private String reviewUrl(TransactionIngestion ingestion, IngestionRecord record, String action) {
         String url = "/api/transaction-ingestions/" + ingestion.getId() + "/records/" + record.getId();
         return action == null ? url : url + "/" + action;
+    }
+
+    private Map<String, Object> reviewPayload(
+        String transactionDate,
+        String postingDate,
+        String description,
+        String signedAmount,
+        String currency,
+        String externalReference,
+        String notes
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("transactionDate", transactionDate);
+        payload.put("postingDate", postingDate);
+        payload.put("description", description);
+        payload.put("signedAmount", signedAmount);
+        payload.put("currency", currency);
+        payload.put("externalReference", externalReference);
+        payload.put("notes", notes);
+        payload.put("amount", "999999.99");
+        payload.put("flow", "IN");
+        payload.put("status", "IMPORTED");
+        return payload;
     }
 
     private FinancialAccount createAccountForUser(User user) {

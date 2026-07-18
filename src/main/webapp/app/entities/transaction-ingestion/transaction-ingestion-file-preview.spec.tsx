@@ -15,6 +15,7 @@ jest.mock('axios');
 
 const mockAxiosPost = axios.post as jest.Mock;
 const mockAxiosGet = axios.get as jest.Mock;
+const mockAxiosPatch = axios.patch as jest.Mock;
 const mockDispatch = jest.fn();
 const mockGetFinancialAccounts = jest.fn(params => ({ type: 'financialAccount/getEntities', payload: params }));
 let mockState;
@@ -103,6 +104,12 @@ const selectAccount = () => {
   return input;
 };
 
+const rowForRecord = (recordId: number) => screen.getByTestId(`filePreviewRowStatus-${recordId}`).closest('tr') as HTMLElement;
+
+const expectRowStatus = (recordId: number, status: string) => {
+  expect(screen.getByTestId(`filePreviewRowStatus-${recordId}`).textContent).toBe(status);
+};
+
 const successfulPreviewResponse = {
   data: {
     transactionIngestionId: 100,
@@ -187,6 +194,7 @@ describe('TransactionIngestion file preview workflow', () => {
     jest.clearAllMocks();
     mockAxiosPost.mockReset();
     mockAxiosGet.mockReset();
+    mockAxiosPatch.mockReset();
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     mockDispatch.mockImplementation(action => action);
     registerTranslations();
@@ -325,8 +333,11 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(screen.getByText('Imported')).toBeTruthy();
     expect(screen.getByText('Income')).toBeTruthy();
     expect(screen.getByText('signedAmount must be nonzero')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(3);
     expect(screen.getAllByRole('button', { name: /disable/i })).toHaveLength(2);
     expect(screen.getByRole('button', { name: /enable/i })).toBeTruthy();
+    expectRowStatus(302, 'Disabled');
+    expect(within(rowForRecord(302)).queryByText('signedAmount must be nonzero')).toBeNull();
   });
 
   it('disable action updates row status and counts from response', async () => {
@@ -345,7 +356,9 @@ describe('TransactionIngestion file preview workflow', () => {
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/300/disable'));
     await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
-    expect(screen.getByText('Disabled')).toBeTruthy();
+    expectRowStatus(300, 'Disabled');
+    expect(within(rowForRecord(300)).getByRole('button', { name: /enable/i })).toBeTruthy();
+    expect(within(rowForRecord(300)).queryByRole('button', { name: /disable/i })).toBeNull();
   });
 
   it('enable action updates row status and counts from response', async () => {
@@ -364,7 +377,216 @@ describe('TransactionIngestion file preview workflow', () => {
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
     await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
-    expect(screen.getByText('Valid')).toBeTruthy();
+    expectRowStatus(302, 'Valid');
+    expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
+    expect(within(rowForRecord(302)).queryByRole('button', { name: /enable/i })).toBeNull();
+  });
+
+  it('enable action updates invalid disabled row status to rejected from response', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 2, validRows: 1, invalidRows: 2 },
+        row: {
+          ...persistedReviewResponse.data.rows[2],
+          status: 'REJECTED',
+          errorCode: 'DESCRIPTION_REQUIRED',
+          errorMessage: 'description is required',
+        },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Disabled row');
+    fireEvent.click(screen.getByRole('button', { name: /enable/i }));
+
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
+    expectRowStatus(302, 'Rejected');
+    expect(within(rowForRecord(302)).getByText('description is required')).toBeTruthy();
+    expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
+  });
+
+  it('edits a rejected row with valid values and renders it as valid', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPatch.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 2, invalidRows: 0 },
+        row: {
+          ...persistedReviewResponse.data.rows[1],
+          status: 'VALID',
+          transactionDate: '2026-07-14',
+          description: 'Corrected row',
+          signedAmount: '50.00',
+          amount: '50.00',
+          flow: 'IN',
+          errorCode: null,
+          errorMessage: null,
+        },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('signedAmount must be nonzero');
+    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[1]);
+    fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '2026-07-14' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Corrected row' } });
+    fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '50.00' } });
+    fireEvent.click(screen.getByRole('button', { name: /save row/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPatch).toHaveBeenCalledWith('api/transaction-ingestions/100/records/301', {
+        transactionDate: '2026-07-14',
+        postingDate: null,
+        description: 'Corrected row',
+        signedAmount: '50.00',
+        currency: 'MXN',
+        externalReference: null,
+        notes: null,
+      }),
+    );
+    expect(await screen.findByText('Corrected row')).toBeTruthy();
+    expectRowStatus(301, 'Valid');
+    expect(screen.getAllByText('50.00')).toHaveLength(2);
+    expect(screen.queryByText('signedAmount must be nonzero')).toBeNull();
+  });
+
+  it('editing signedAmount sign refreshes derived amount and flow from response row', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPatch.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 1, validRows: 1, invalidRows: 1 },
+        row: {
+          ...persistedReviewResponse.data.rows[0],
+          status: 'VALID',
+          signedAmount: '-100.00',
+          amount: '100.00',
+          flow: 'OUT',
+          errorCode: null,
+          errorMessage: null,
+        },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Salary');
+    expect(within(rowForRecord(300)).getByText('Income')).toBeTruthy();
+
+    fireEvent.click(within(rowForRecord(300)).getByRole('button', { name: /edit/i }));
+    fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '-100.00' } });
+    fireEvent.click(screen.getByRole('button', { name: /save row/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPatch).toHaveBeenCalledWith(
+        'api/transaction-ingestions/100/records/300',
+        expect.objectContaining({ signedAmount: '-100.00' }),
+      ),
+    );
+    expect(within(rowForRecord(300)).getByText('-100.00')).toBeTruthy();
+    expect(within(rowForRecord(300)).getByText('100.00')).toBeTruthy();
+    expect(within(rowForRecord(300)).getByText('Expense')).toBeTruthy();
+    expect(within(rowForRecord(300)).queryByText('Income')).toBeNull();
+  });
+
+  it('does not preserve stale derived fields when response row omits them', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPatch.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 1, validRows: 1, invalidRows: 1 },
+        row: {
+          ingestionRecordId: 300,
+          recordIndex: 1,
+          status: 'VALID',
+          transactionDate: '2026-07-13',
+          postingDate: '2026-07-13',
+          description: 'Salary',
+          signedAmount: '-100.00',
+          currency: 'MXN',
+          errorCode: null,
+          errorMessage: null,
+        },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Salary');
+    fireEvent.click(within(rowForRecord(300)).getByRole('button', { name: /edit/i }));
+    fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '-100.00' } });
+    fireEvent.click(screen.getByRole('button', { name: /save row/i }));
+
+    await waitFor(() => expect(within(rowForRecord(300)).getByText('-100.00')).toBeTruthy());
+    expect(within(rowForRecord(300)).queryByText('Income')).toBeNull();
+  });
+
+  it('edits a valid row with invalid values and renders row error', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPatch.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 2, validRows: 0, invalidRows: 2 },
+        row: {
+          ...persistedReviewResponse.data.rows[0],
+          status: 'REJECTED',
+          signedAmount: '0',
+          amount: null,
+          flow: null,
+          errorCode: 'ZERO_SIGNED_AMOUNT',
+          errorMessage: 'signedAmount must be nonzero',
+        },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Salary');
+    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[0]);
+    fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: /save row/i }));
+
+    await waitFor(() => expect(mockAxiosPatch).toHaveBeenCalledWith(expect.stringContaining('/records/300'), expect.any(Object)));
+    await waitFor(() => expectRowStatus(300, 'Rejected'));
+    expect(screen.getAllByText('signedAmount must be nonzero')).toHaveLength(2);
+  });
+
+  it('edits a disabled row with valid values and does not edit amount or flow directly', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPatch.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 1, validRows: 2, invalidRows: 1 },
+        row: { ...persistedReviewResponse.data.rows[2], status: 'VALID', description: 'Enabled by edit' },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Disabled row');
+    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[2]);
+
+    expect(screen.queryByLabelText('Amount')).toBeNull();
+    expect(screen.queryByLabelText('Flow')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Enabled by edit' } });
+    fireEvent.click(screen.getByRole('button', { name: /save row/i }));
+
+    await waitFor(() => expect(mockAxiosPatch).toHaveBeenCalledWith(expect.stringContaining('/records/302'), expect.any(Object)));
+    expect(await screen.findByText('Enabled by edit')).toBeTruthy();
+    expectRowStatus(302, 'Valid');
+  });
+
+  it('cancel leaves edited row unchanged', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    renderPersistedReview();
+
+    await screen.findByText('Salary');
+    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[0]);
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Unsaved edit' } });
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(screen.getByText('Salary')).toBeTruthy();
+    expect(screen.queryByText('Unsaved edit')).toBeNull();
+    expect(mockAxiosPatch).not.toHaveBeenCalled();
   });
 
   it('does not render a confirm/import action', () => {

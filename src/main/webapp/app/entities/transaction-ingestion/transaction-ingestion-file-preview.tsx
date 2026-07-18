@@ -69,14 +69,24 @@ interface ICsvIngestionRecordReviewResponse {
   row?: ICsvIngestionPreviewRow;
 }
 
+interface ICsvIngestionPreviewRowEditDraft {
+  transactionDate?: string;
+  postingDate?: string;
+  description?: string;
+  signedAmount?: string;
+  currency?: string;
+  externalReference?: string;
+  notes?: string;
+}
+
 const createPreviewApiUrl = 'api/transaction-ingestions/file-preview';
 
-const renderFlow = (flow?: string) => {
+const flowLabel = (flow?: string) => {
   if (!flow) {
     return '';
   }
 
-  return <Translate contentKey={`fintrackApp.TransactionFlow.${flow}`}>{flow}</Translate>;
+  return translate(`fintrackApp.TransactionFlow.${flow}`, flow);
 };
 
 const renderWarningMessage = (warning: ICsvIngestionPreviewMessage) => {
@@ -94,6 +104,56 @@ const renderIngestionStatus = (status?: string) => {
 
   return <Translate contentKey={`fintrackApp.transactionIngestion.filePreview.ingestionStatus.${status}`}>{status}</Translate>;
 };
+
+const recordStatusLabel = (status?: string) => {
+  if (!status) {
+    return '';
+  }
+
+  return translate(`fintrackApp.IngestionRecordStatus.${status}`, status);
+};
+
+const editableRowStatuses = ['VALID', 'REJECTED', 'DISABLED'];
+
+const rowToEditDraft = (row: ICsvIngestionPreviewRow): ICsvIngestionPreviewRowEditDraft => ({
+  transactionDate: row.transactionDate ?? '',
+  postingDate: row.postingDate ?? '',
+  description: row.description ?? '',
+  signedAmount: row.signedAmount ?? '',
+  currency: row.currency ?? '',
+  externalReference: row.externalReference ?? '',
+  notes: row.notes ?? '',
+});
+
+const optionalBlankToNull = (value?: string) => (value === undefined || value.trim() === '' ? null : value);
+
+const editDraftPayload = (draft: ICsvIngestionPreviewRowEditDraft) => ({
+  transactionDate: draft.transactionDate ?? null,
+  postingDate: optionalBlankToNull(draft.postingDate),
+  description: draft.description ?? null,
+  signedAmount: draft.signedAmount ?? null,
+  currency: draft.currency ?? null,
+  externalReference: optionalBlankToNull(draft.externalReference),
+  notes: optionalBlankToNull(draft.notes),
+});
+
+const replaceReviewRow = (currentRow: ICsvIngestionPreviewRow, updatedRow: ICsvIngestionPreviewRow): ICsvIngestionPreviewRow => ({
+  ingestionRecordId: updatedRow.ingestionRecordId ?? currentRow.ingestionRecordId,
+  recordIndex: updatedRow.recordIndex ?? currentRow.recordIndex,
+  status: updatedRow.status,
+  transactionDate: updatedRow.transactionDate,
+  postingDate: updatedRow.postingDate,
+  description: updatedRow.description,
+  signedAmount: updatedRow.signedAmount,
+  amount: updatedRow.amount,
+  flow: updatedRow.flow,
+  currency: updatedRow.currency,
+  externalReference: updatedRow.externalReference,
+  notes: updatedRow.notes,
+  errorCode: updatedRow.errorCode,
+  errorMessage: updatedRow.errorMessage,
+  warnings: updatedRow.warnings ?? [],
+});
 
 export const TransactionIngestionFilePreview = () => {
   const dispatch = useAppDispatch();
@@ -113,6 +173,8 @@ export const TransactionIngestionFilePreview = () => {
   const [preview, setPreview] = useState<ICsvIngestionPreviewResponse | null>(null);
   const [loadingReview, setLoadingReview] = useState(false);
   const [reviewActionInProgress, setReviewActionInProgress] = useState<number | null>(null);
+  const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<ICsvIngestionPreviewRowEditDraft>({});
 
   useEffect(() => {
     if (!isReviewPage) {
@@ -145,6 +207,7 @@ export const TransactionIngestionFilePreview = () => {
     if (!data.row) {
       return;
     }
+    const updatedRow = data.row;
     setPreview(currentPreview => {
       if (!currentPreview) {
         return currentPreview;
@@ -152,9 +215,12 @@ export const TransactionIngestionFilePreview = () => {
       return {
         ...currentPreview,
         counts: data.counts ?? currentPreview.counts,
-        rows: (currentPreview.rows ?? []).map(row =>
-          row.ingestionRecordId === data.row?.ingestionRecordId ? { ...row, ...data.row } : row,
-        ),
+        rows: (currentPreview.rows ?? []).map(row => {
+          const sameRecord =
+            row.ingestionRecordId === updatedRow.ingestionRecordId ||
+            (updatedRow.ingestionRecordId === undefined && row.recordIndex === updatedRow.recordIndex);
+          return sameRecord ? replaceReviewRow(row, updatedRow) : row;
+        }),
       };
     });
   };
@@ -213,8 +279,47 @@ export const TransactionIngestionFilePreview = () => {
     }
   };
 
+  const startEditingRow = (row: ICsvIngestionPreviewRow) => {
+    if (!row.ingestionRecordId) {
+      return;
+    }
+    setBackendError(null);
+    setEditingRecordId(row.ingestionRecordId);
+    setEditDraft(rowToEditDraft(row));
+  };
+
+  const updateEditDraft = (field: keyof ICsvIngestionPreviewRowEditDraft, value: string) => {
+    setEditDraft(currentDraft => ({ ...currentDraft, [field]: value }));
+  };
+
+  const cancelEditingRow = () => {
+    setEditingRecordId(null);
+    setEditDraft({});
+  };
+
+  const saveEditingRow = async (row: ICsvIngestionPreviewRow) => {
+    if (!row.ingestionRecordId || !preview?.transactionIngestionId) {
+      return;
+    }
+    setBackendError(null);
+    setReviewActionInProgress(row.ingestionRecordId);
+    try {
+      const response = await axios.patch<ICsvIngestionRecordReviewResponse>(
+        `api/transaction-ingestions/${preview.transactionIngestionId}/records/${row.ingestionRecordId}`,
+        editDraftPayload(editDraft),
+      );
+      applyReviewResponse(response.data);
+      cancelEditingRow();
+    } catch (error) {
+      setBackendError(translate('fintrackApp.transactionIngestion.filePreview.errors.reviewFailed'));
+    } finally {
+      setReviewActionInProgress(null);
+    }
+  };
+
   const canDisable = (row: ICsvIngestionPreviewRow) => ['VALID', 'REJECTED'].includes(row.status ?? '');
   const canEnable = (row: ICsvIngestionPreviewRow) => row.status === 'DISABLED';
+  const canEdit = (row: ICsvIngestionPreviewRow) => editableRowStatuses.includes(row.status ?? '');
 
   const counts = preview?.counts ?? {};
   const rows = preview?.rows ?? [];
@@ -486,33 +591,124 @@ export const TransactionIngestionFilePreview = () => {
                 <tbody>
                   {rows.map(row => {
                     const actionBusy = reviewActionInProgress === row.ingestionRecordId;
+                    const isEditing = editingRecordId === row.ingestionRecordId;
                     return (
                       <tr key={row.ingestionRecordId ?? row.recordIndex} className={row.status === 'DISABLED' ? 'text-muted' : ''}>
                         <td>{row.recordIndex}</td>
                         <td>
-                          {row.status ? (
-                            <Translate contentKey={`fintrackApp.IngestionRecordStatus.${row.status}`}>{row.status}</Translate>
+                          <span data-testid={`filePreviewRowStatus-${row.ingestionRecordId ?? row.recordIndex}`}>
+                            {recordStatusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <Input
+                              bsSize="sm"
+                              aria-label={translate('fintrackApp.transactionIngestion.filePreview.transactionDate')}
+                              value={editDraft.transactionDate ?? ''}
+                              onChange={event => updateEditDraft('transactionDate', event.target.value)}
+                            />
                           ) : (
-                            ''
+                            row.transactionDate
                           )}
                         </td>
-                        <td>{row.transactionDate}</td>
-                        <td>{row.postingDate}</td>
-                        <td>{row.description}</td>
-                        <td>{row.signedAmount}</td>
+                        <td>
+                          {isEditing ? (
+                            <Input
+                              bsSize="sm"
+                              aria-label={translate('fintrackApp.transactionIngestion.filePreview.postingDate')}
+                              value={editDraft.postingDate ?? ''}
+                              onChange={event => updateEditDraft('postingDate', event.target.value)}
+                            />
+                          ) : (
+                            row.postingDate
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <Input
+                              bsSize="sm"
+                              aria-label={translate('fintrackApp.transactionIngestion.filePreview.description')}
+                              value={editDraft.description ?? ''}
+                              onChange={event => updateEditDraft('description', event.target.value)}
+                            />
+                          ) : (
+                            row.description
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <Input
+                              bsSize="sm"
+                              aria-label={translate('fintrackApp.transactionIngestion.filePreview.signedAmount')}
+                              value={editDraft.signedAmount ?? ''}
+                              onChange={event => updateEditDraft('signedAmount', event.target.value)}
+                            />
+                          ) : (
+                            row.signedAmount
+                          )}
+                        </td>
                         <td>{row.amount}</td>
-                        <td>{renderFlow(row.flow)}</td>
-                        <td>{row.currency}</td>
-                        <td>{row.externalReference}</td>
-                        <td>{row.notes}</td>
+                        <td>{flowLabel(row.flow)}</td>
+                        <td>
+                          {isEditing ? (
+                            <Input
+                              bsSize="sm"
+                              aria-label={translate('fintrackApp.transactionIngestion.filePreview.currency')}
+                              value={editDraft.currency ?? ''}
+                              onChange={event => updateEditDraft('currency', event.target.value)}
+                            />
+                          ) : (
+                            row.currency
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <Input
+                              bsSize="sm"
+                              aria-label={translate('fintrackApp.transactionIngestion.filePreview.externalReference')}
+                              value={editDraft.externalReference ?? ''}
+                              onChange={event => updateEditDraft('externalReference', event.target.value)}
+                            />
+                          ) : (
+                            row.externalReference
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <Input
+                              bsSize="sm"
+                              aria-label={translate('fintrackApp.transactionIngestion.filePreview.notes')}
+                              value={editDraft.notes ?? ''}
+                              onChange={event => updateEditDraft('notes', event.target.value)}
+                            />
+                          ) : (
+                            row.notes
+                          )}
+                        </td>
                         <td>{row.errorMessage || row.errorCode}</td>
                         <td className="text-end">
-                          {canDisable(row) ? (
+                          {isEditing ? (
+                            <>
+                              <Button size="sm" color="primary" disabled={actionBusy} onClick={() => saveEditingRow(row)}>
+                                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.saveRow">Save row</Translate>
+                              </Button>{' '}
+                              <Button size="sm" color="secondary" disabled={actionBusy} onClick={cancelEditingRow}>
+                                <Translate contentKey="fintrackApp.transactionIngestion.filePreview.cancel">Cancel</Translate>
+                              </Button>
+                            </>
+                          ) : null}
+                          {!isEditing && canEdit(row) ? (
+                            <Button size="sm" color="primary" disabled={actionBusy} onClick={() => startEditingRow(row)}>
+                              <Translate contentKey="fintrackApp.transactionIngestion.filePreview.edit">Edit</Translate>
+                            </Button>
+                          ) : null}{' '}
+                          {!isEditing && canDisable(row) ? (
                             <Button size="sm" color="warning" disabled={actionBusy} onClick={() => performRowAction(row, 'disable')}>
                               <Translate contentKey="fintrackApp.transactionIngestion.filePreview.disable">Disable</Translate>
                             </Button>
                           ) : null}
-                          {canEnable(row) ? (
+                          {!isEditing && canEnable(row) ? (
                             <Button size="sm" color="success" disabled={actionBusy} onClick={() => performRowAction(row, 'enable')}>
                               <Translate contentKey="fintrackApp.transactionIngestion.filePreview.enable">Enable</Translate>
                             </Button>

@@ -19,7 +19,9 @@ import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
 import com.fintrack.app.service.dto.CsvIngestionPreviewCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionPreviewRowDTO;
+import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -62,7 +64,7 @@ public class CsvIngestionRecordReviewService {
         record.setErrorCode(null);
         record.setErrorMessage(null);
         record.setFinancialTransaction(null);
-        record.setRawData(updateRawDataStatus(record, null));
+        record.setRawData(updateRawDataStatus(record, null, false));
         ingestionRecordRepository.save(record);
 
         return response(record);
@@ -82,6 +84,33 @@ public class CsvIngestionRecordReviewService {
             record.getTransactionIngestion().getAccount().getCurrency()
         );
         applyValidationResult(record, result);
+        ingestionRecordRepository.save(record);
+
+        return response(record);
+    }
+
+    public CsvIngestionRecordReviewResponseDTO edit(Long ingestionId, Long recordId, CsvIngestionRecordReviewRequestDTO request) {
+        IngestionRecord record = resolveAccessibleRecord(ingestionId, recordId);
+        if (!isEditableStatus(record.getStatus())) {
+            throw new IllegalArgumentException("Only valid, rejected or disabled preview rows can be edited");
+        }
+        rejectLinkedFinancialTransaction(record);
+
+        CsvRawRow rawRow = new CsvRawRow(
+            request == null ? null : request.getTransactionDate(),
+            request == null ? null : request.getPostingDate(),
+            request == null ? null : request.getDescription(),
+            request == null ? null : request.getSignedAmount(),
+            request == null ? null : request.getCurrency(),
+            request == null ? null : request.getExternalReference(),
+            request == null ? null : request.getNotes()
+        );
+        CsvRowResult result = parser.validateReviewRow(
+            record.getRecordIndex(),
+            rawRow,
+            record.getTransactionIngestion().getAccount().getCurrency()
+        );
+        applyValidationResult(record, result, true);
         ingestionRecordRepository.save(record);
 
         return response(record);
@@ -110,13 +139,17 @@ public class CsvIngestionRecordReviewService {
     }
 
     private void applyValidationResult(IngestionRecord record, CsvRowResult result) {
+        applyValidationResult(record, result, false);
+    }
+
+    private void applyValidationResult(IngestionRecord record, CsvRowResult result, boolean edited) {
         CsvIngestionValidationMessage firstError = result.getErrors().isEmpty() ? null : result.getErrors().get(0);
         record.setStatus(result.isValid() ? IngestionRecordStatus.VALID : IngestionRecordStatus.REJECTED);
         record.setErrorCode(firstError == null ? null : firstError.getCode());
         record.setErrorMessage(firstError == null ? null : firstError.getMessage());
         record.setExternalRecordId(result.getNormalized().getExternalReference());
         record.setFinancialTransaction(null);
-        record.setRawData(updateRawDataStatus(record, result));
+        record.setRawData(updateRawDataStatus(record, result, edited));
     }
 
     private CsvRawRow rawRowFromNormalized(IngestionRecord record) {
@@ -132,12 +165,25 @@ public class CsvIngestionRecordReviewService {
         );
     }
 
-    private String updateRawDataStatus(IngestionRecord record, CsvRowResult result) {
+    private boolean isEditableStatus(IngestionRecordStatus status) {
+        return (
+            status == IngestionRecordStatus.VALID || status == IngestionRecordStatus.REJECTED || status == IngestionRecordStatus.DISABLED
+        );
+    }
+
+    private String updateRawDataStatus(IngestionRecord record, CsvRowResult result, boolean edited) {
         ObjectNode root = rawData(record);
         if (result != null) {
             root.set("normalized", objectMapper.valueToTree(normalizedMap(result)));
             root.set("errors", objectMapper.valueToTree(result.getErrors()));
             root.set("warnings", objectMapper.valueToTree(result.getWarnings()));
+        }
+        if (edited) {
+            ObjectNode review = root.path("review").isObject() ? (ObjectNode) root.path("review") : objectMapper.createObjectNode();
+            review.put("edited", true);
+            review.put("editedAt", Instant.now().toString());
+            review.put("editedBy", currentUserService.getCurrentUserLogin());
+            root.set("review", review);
         }
         try {
             return objectMapper.writeValueAsString(root);

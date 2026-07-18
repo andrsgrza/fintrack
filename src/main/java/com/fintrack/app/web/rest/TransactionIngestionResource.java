@@ -8,6 +8,7 @@ import com.fintrack.app.service.TransactionIngestionQueryService;
 import com.fintrack.app.service.TransactionIngestionService;
 import com.fintrack.app.service.criteria.TransactionIngestionCriteria;
 import com.fintrack.app.service.dto.CsvIngestionPreviewResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -150,6 +151,20 @@ public class TransactionIngestionResource {
         LOG.debug("REST request to enable CSV ingestion record : {}, {}", ingestionId, recordId);
         try {
             return ResponseEntity.ok(csvIngestionRecordReviewService.enable(ingestionId, recordId));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @PatchMapping("/{ingestionId}/records/{recordId}")
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> editFilePreviewRecord(
+        @PathVariable("ingestionId") Long ingestionId,
+        @PathVariable("recordId") Long recordId,
+        @RequestBody(required = false) CsvIngestionRecordReviewRequestDTO request
+    ) {
+        LOG.debug("REST request to edit CSV ingestion record : {}, {}", ingestionId, recordId);
+        try {
+            return ResponseEntity.ok(csvIngestionRecordReviewService.edit(ingestionId, recordId, request));
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
