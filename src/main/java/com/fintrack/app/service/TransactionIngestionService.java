@@ -481,6 +481,8 @@ public class TransactionIngestionService {
         if (currentStatus == IngestionStatus.PENDING) {
             if (
                 EnumSet.of(
+                    IngestionStatus.READY,
+                    IngestionStatus.PARTIALLY_READY,
                     IngestionStatus.PROCESSING,
                     IngestionStatus.COMPLETED,
                     IngestionStatus.PARTIALLY_COMPLETED,
@@ -491,7 +493,9 @@ public class TransactionIngestionService {
             }
         }
         if (
-            currentStatus == IngestionStatus.PROCESSING &&
+            (currentStatus == IngestionStatus.PROCESSING ||
+                currentStatus == IngestionStatus.READY ||
+                currentStatus == IngestionStatus.PARTIALLY_READY) &&
             EnumSet.of(IngestionStatus.COMPLETED, IngestionStatus.PARTIALLY_COMPLETED, IngestionStatus.FAILED).contains(requestedStatus)
         ) {
             return;
@@ -546,9 +550,28 @@ public class TransactionIngestionService {
         String normalizedError = normalizeOptionalString(transactionIngestion.getErrorMessage(), "Error message", 2000);
         transactionIngestion.setErrorMessage(normalizedError);
 
-        if (status == IngestionStatus.PENDING || status == IngestionStatus.PROCESSING || status == IngestionStatus.COMPLETED) {
+        if (
+            status == IngestionStatus.PENDING ||
+            status == IngestionStatus.READY ||
+            status == IngestionStatus.PARTIALLY_READY ||
+            status == IngestionStatus.PROCESSING ||
+            status == IngestionStatus.COMPLETED
+        ) {
             if (normalizedError != null) {
                 throw new IllegalArgumentException("Error message is only allowed for failed or partially completed ingestions");
+            }
+        }
+        if (status == IngestionStatus.READY) {
+            if (transactionIngestion.getRecordsReceived() <= 0) {
+                throw new IllegalArgumentException("Ready ingestion requires received records");
+            }
+            if (transactionIngestion.getRecordsRejected() > 0) {
+                throw new IllegalArgumentException("Ready ingestion cannot have rejected records");
+            }
+        }
+        if (status == IngestionStatus.PARTIALLY_READY) {
+            if (transactionIngestion.getRecordsReceived() <= 0) {
+                throw new IllegalArgumentException("Partially ready ingestion requires received records");
             }
         }
         if (status == IngestionStatus.COMPLETED && transactionIngestion.getRecordsRejected() > 0) {

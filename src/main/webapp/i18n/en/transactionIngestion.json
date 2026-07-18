@@ -82,9 +82,11 @@
         "rowDisabled": "Row disabled",
         "rowEnabled": "Row enabled",
         "ingestionStatus": {
-          "COMPLETED": "Preview completed",
-          "PARTIALLY_COMPLETED": "Preview completed with errors",
+          "READY": "Ready to import",
+          "PARTIALLY_READY": "Needs review",
           "PROCESSING": "Processing",
+          "COMPLETED": "Import completed",
+          "PARTIALLY_COMPLETED": "Import partially completed",
           "FAILED": "Failed",
           "PENDING": "Pending"
         },

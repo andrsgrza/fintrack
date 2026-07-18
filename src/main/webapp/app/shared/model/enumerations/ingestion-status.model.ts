@@ -1,6 +1,10 @@
 export enum IngestionStatus {
   PENDING = 'PENDING',
 
+  READY = 'READY',
+
+  PARTIALLY_READY = 'PARTIALLY_READY',
+
   PROCESSING = 'PROCESSING',
 
   COMPLETED = 'COMPLETED',

@@ -2544,6 +2544,10 @@ Covered by `transaction-ingestion-file-preview.spec.tsx`.
 - Review page loads persisted preview data by TransactionIngestion id.
 - Review page displays read-only FileIngestion metadata.
 - Persisted review response renders summary counts.
+- `READY` renders as Ready to import / Lista para importar.
+- `PARTIALLY_READY` renders as Needs review / Requiere revisión.
+- `COMPLETED` renders as Import completed / Importación completada.
+- `PARTIALLY_COMPLETED` renders as Import partially completed / Importación parcialmente completada, but it is not expected in the current CSV review flow.
 - Duplicate checksum warning renders as a non-blocking warning.
 - Row table renders statuses strictly from `row.status`, including `DISABLED`.
 - Enable/disable actions update row status and counts.
@@ -2565,6 +2569,15 @@ Covered by `transaction-ingestion-file-preview.spec.tsx`.
 - Edit `REJECTED` with invalid data -> `REJECTED`.
 - Edit `DISABLED` -> `400 Bad Request` with "Disabled rows must be enabled before editing."
 - Edit `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows is rejected.
+- Preview with all valid rows -> parent `READY`.
+- Preview with rejected rows -> parent `PARTIALLY_READY`.
+- Disable last `VALID` row -> parent `PARTIALLY_READY`.
+- Disable one `VALID` row while other valid rows remain and no blocking rows exist -> parent `READY`.
+- Enable valid disabled row with no blocking rows -> parent `READY`.
+- Enable invalid disabled row -> parent `PARTIALLY_READY`.
+- Edit rejected row to valid with no remaining blocking rows -> parent `READY`.
+- Edit valid row to invalid -> parent `PARTIALLY_READY`.
+- CSV preview/review actions do not produce `PARTIALLY_COMPLETED`.
 - `rawData.raw` remains unchanged.
 - `rawData.normalized` updates from the edited normalized values.
 - `rawData.errors` recalculates.

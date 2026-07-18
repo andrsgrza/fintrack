@@ -92,7 +92,7 @@ class CsvIngestionPreviewResourceIT {
         mockMvc
             .perform(multipart(FILE_PREVIEW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.counts.recordsReceived").value(3))
             .andExpect(jsonPath("$.counts.recordsCreated").value(0))
             .andExpect(jsonPath("$.counts.recordsSkipped").value(0))
@@ -108,7 +108,7 @@ class CsvIngestionPreviewResourceIT {
         TransactionIngestion ingestion = ingestions.get(0);
         assertThat(ingestion.getAccount().getId()).isEqualTo(account.getId());
         assertThat(ingestion.getIngestionType()).isEqualTo(IngestionType.FILE);
-        assertThat(ingestion.getStatus()).isEqualTo(IngestionStatus.COMPLETED);
+        assertThat(ingestion.getStatus()).isEqualTo(IngestionStatus.READY);
         assertThat(ingestion.getRecordsReceived()).isEqualTo(3);
         assertThat(ingestion.getRecordsCreated()).isZero();
         assertThat(ingestion.getRecordsSkipped()).isZero();
@@ -158,7 +158,7 @@ class CsvIngestionPreviewResourceIT {
         mockMvc
             .perform(multipart(FILE_PREVIEW_URL).file(csvFile("mixed.csv", csv)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("PARTIALLY_COMPLETED"))
+            .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
             .andExpect(jsonPath("$.counts.recordsReceived").value(2))
             .andExpect(jsonPath("$.counts.recordsRejected").value(1))
             .andExpect(jsonPath("$.rows[0].status").value("REJECTED"))
@@ -290,7 +290,7 @@ class CsvIngestionPreviewResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.transactionIngestionId").value(ingestion.getId()))
             .andExpect(jsonPath("$.fileIngestionId").exists())
-            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.fileMetadata.originalFilename").value("canonical.csv"))
             .andExpect(jsonPath("$.fileMetadata.fileType").value("CSV"))
             .andExpect(jsonPath("$.fileMetadata.parserName").value("fintrack-canonical-csv"))
@@ -311,6 +311,7 @@ class CsvIngestionPreviewResourceIT {
         mockMvc
             .perform(post(reviewUrl(ingestion, record, "disable")))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.row.status").value("DISABLED"))
             .andExpect(jsonPath("$.row.errorCode").doesNotExist())
             .andExpect(jsonPath("$.counts.recordsReceived").value(3))
@@ -323,8 +324,26 @@ class CsvIngestionPreviewResourceIT {
         assertThat(disabled.getFinancialTransaction()).isNull();
         assertThat(disabled.getErrorCode()).isNull();
         assertThat(disabled.getErrorMessage()).isNull();
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
+    }
+
+    @Test
+    @Transactional
+    void disablingLastValidRowMakesBatchPartiallyReady() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+
+        mockMvc
+            .perform(post(reviewUrl(ingestion, record, "disable")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
+            .andExpect(jsonPath("$.row.status").value("DISABLED"))
+            .andExpect(jsonPath("$.counts.recordsSkipped").value(1))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0))
+            .andExpect(jsonPath("$.counts.validRows").value(0));
+
         assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
-            IngestionStatus.COMPLETED
+            IngestionStatus.PARTIALLY_READY
         );
     }
 
@@ -337,13 +356,23 @@ class CsvIngestionPreviewResourceIT {
         mockMvc
             .perform(post(reviewUrl(ingestion, rejected, "disable")))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.row.status").value("DISABLED"))
             .andExpect(jsonPath("$.counts.recordsSkipped").value(1))
             .andExpect(jsonPath("$.counts.recordsRejected").value(0));
 
-        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
-            IngestionStatus.COMPLETED
-        );
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
+    }
+
+    @Test
+    @Transactional
+    void disabledRowsDoNotMakeBatchPartiallyReadyWhenValidRowsRemain() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+
+        mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
+
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
     }
 
     @Test
@@ -357,6 +386,7 @@ class CsvIngestionPreviewResourceIT {
         mockMvc
             .perform(post(reviewUrl(ingestion, rejected, "enable")))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
             .andExpect(jsonPath("$.row.status").value("REJECTED"))
             .andExpect(jsonPath("$.row.errorCode").value("INVALID_TRANSACTION_DATE"))
             .andExpect(jsonPath("$.counts.recordsRejected").value(1));
@@ -374,6 +404,7 @@ class CsvIngestionPreviewResourceIT {
         mockMvc
             .perform(post(reviewUrl(ingestion, record, "enable")))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.row.status").value("VALID"))
             .andExpect(jsonPath("$.row.errorCode").doesNotExist())
             .andExpect(jsonPath("$.counts.recordsSkipped").value(0))
@@ -382,9 +413,7 @@ class CsvIngestionPreviewResourceIT {
         IngestionRecord enabled = ingestionRecordRepository.findById(record.getId()).orElseThrow();
         assertThat(enabled.getFinancialTransaction()).isNull();
         assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
-        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
-            IngestionStatus.COMPLETED
-        );
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
     }
 
     @Test
@@ -406,6 +435,7 @@ class CsvIngestionPreviewResourceIT {
                     )
             )
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.row.status").value("VALID"))
             .andExpect(jsonPath("$.row.transactionDate").value("2026-01-20"))
             .andExpect(jsonPath("$.row.description").value("Corrected description"))
@@ -440,6 +470,7 @@ class CsvIngestionPreviewResourceIT {
                     .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Corrected", "0", "MXN", null, null)))
             )
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
             .andExpect(jsonPath("$.row.status").value("REJECTED"))
             .andExpect(jsonPath("$.row.errorCode").value("ZERO_SIGNED_AMOUNT"))
             .andExpect(jsonPath("$.counts.recordsRejected").value(1))
@@ -450,7 +481,7 @@ class CsvIngestionPreviewResourceIT {
         assertThat(edited.getErrorCode()).isEqualTo("ZERO_SIGNED_AMOUNT");
         assertThat(objectMapper.readTree(edited.getRawData()).path("errors")).isNotEmpty();
         assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
-            IngestionStatus.PARTIALLY_COMPLETED
+            IngestionStatus.PARTIALLY_READY
         );
     }
 
@@ -471,13 +502,12 @@ class CsvIngestionPreviewResourceIT {
                     )
             )
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.row.status").value("VALID"))
             .andExpect(jsonPath("$.row.externalReference").value("fixed-ref"))
             .andExpect(jsonPath("$.counts.recordsRejected").value(0));
 
-        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
-            IngestionStatus.COMPLETED
-        );
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
 
         mockMvc
             .perform(
@@ -486,6 +516,7 @@ class CsvIngestionPreviewResourceIT {
                     .content(objectMapper.writeValueAsBytes(reviewPayload("bad-date", null, "Still bad", "25.00", "MXN", null, null)))
             )
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
             .andExpect(jsonPath("$.row.status").value("REJECTED"))
             .andExpect(jsonPath("$.row.errorCode").value("INVALID_TRANSACTION_DATE"))
             .andExpect(jsonPath("$.counts.recordsRejected").value(1));
@@ -625,6 +656,20 @@ class CsvIngestionPreviewResourceIT {
         mockMvc
             .perform(multipart(FILE_PREVIEW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk());
+        return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
+    }
+
+    private TransactionIngestion createPreviewWithSingleValidRow() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        String csv =
+            """
+            transactionDate,postingDate,description,signedAmount,currency,externalReference,notes
+            2026-01-16,,OXXO AGUILAS,-274.00,MXN,,
+            """;
+        mockMvc
+            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("single-valid.csv", csv)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("READY"));
         return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
     }
 

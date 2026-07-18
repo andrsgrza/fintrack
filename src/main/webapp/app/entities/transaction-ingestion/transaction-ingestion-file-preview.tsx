@@ -65,6 +65,7 @@ interface ICsvIngestionPreviewResponse {
 
 interface ICsvIngestionRecordReviewResponse {
   transactionIngestionId?: number;
+  status?: string;
   counts?: ICsvIngestionPreviewCounts;
   row?: ICsvIngestionPreviewRow;
 }
@@ -102,7 +103,7 @@ const renderIngestionStatus = (status?: string) => {
     return '';
   }
 
-  return <Translate contentKey={`fintrackApp.transactionIngestion.filePreview.ingestionStatus.${status}`}>{status}</Translate>;
+  return translate(`fintrackApp.transactionIngestion.filePreview.ingestionStatus.${status}`, status);
 };
 
 const recordStatusLabel = (status?: string) => {
@@ -214,6 +215,7 @@ export const TransactionIngestionFilePreview = () => {
       }
       return {
         ...currentPreview,
+        status: data.status ?? currentPreview.status,
         counts: data.counts ?? currentPreview.counts,
         rows: (currentPreview.rows ?? []).map(row => {
           const sameRecord =

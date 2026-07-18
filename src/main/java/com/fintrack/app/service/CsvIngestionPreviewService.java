@@ -82,7 +82,7 @@ public class CsvIngestionPreviewService {
         List<CsvIngestionValidationMessage> warnings = duplicateChecksumWarnings(account.getId(), checksum);
 
         Instant startedAt = Instant.now();
-        IngestionStatus status = parseResult.getRecordsRejected() == 0 ? IngestionStatus.COMPLETED : IngestionStatus.PARTIALLY_COMPLETED;
+        IngestionStatus status = previewReadinessStatus(parseResult.getValidRows(), parseResult.getRecordsRejected());
 
         TransactionIngestion transactionIngestion = new TransactionIngestion()
             .ingestionType(IngestionType.FILE)
@@ -233,6 +233,10 @@ public class CsvIngestionPreviewService {
         counts.setValidRows(parseResult.getValidRows());
         counts.setInvalidRows(parseResult.getRecordsRejected());
         return counts;
+    }
+
+    private IngestionStatus previewReadinessStatus(int validRows, int rejectedOrFailedRows) {
+        return rejectedOrFailedRows > 0 || validRows == 0 ? IngestionStatus.PARTIALLY_READY : IngestionStatus.READY;
     }
 
     private CsvIngestionPreviewCountsDTO counts(List<IngestionRecord> records) {

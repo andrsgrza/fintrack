@@ -39,20 +39,20 @@ Role: parent file import batch/process.
 
 Recommended I1 values:
 
-| Field             | Recommendation                                                                                     |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| `ingestionType`   | `FILE`                                                                                             |
-| `status`          | `COMPLETED` if all rows are valid; `PARTIALLY_COMPLETED` if header is valid but some rows reject.  |
-| `sourceLabel`     | `Canonical CSV: <originalFilename>` trimmed to 100 characters.                                     |
-| `startedAt`       | Server `now` at preview creation start.                                                            |
-| `completedAt`     | Server `now` after parsing/persisting preview rows completes.                                      |
-| `recordsReceived` | Total CSV data rows read, excluding header.                                                        |
-| `recordsCreated`  | `0` in I1 because no `FinancialTransaction` rows are created.                                      |
-| `recordsSkipped`  | `0` in I1 unless duplicate/skipped-row semantics are added later.                                  |
-| `recordsRejected` | Invalid row count.                                                                                 |
-| `errorMessage`    | `null` for valid-header previews; not used when the whole file is rejected before persistence.     |
-| `createdAt`       | Server-owned `now`.                                                                                |
-| `account`         | Required target `FinancialAccount`, resolved with normal current-user ownership rules before save. |
+| Field             | Recommendation                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `ingestionType`   | `FILE`                                                                                                     |
+| `status`          | `READY` when at least one row is `VALID` and no rows are `REJECTED`/`FAILED`; otherwise `PARTIALLY_READY`. |
+| `sourceLabel`     | `Canonical CSV: <originalFilename>` trimmed to 100 characters.                                             |
+| `startedAt`       | Server `now` at preview creation start.                                                                    |
+| `completedAt`     | Server `now` after parsing/persisting preview rows completes.                                              |
+| `recordsReceived` | Total CSV data rows read, excluding header.                                                                |
+| `recordsCreated`  | `0` in I1 because no `FinancialTransaction` rows are created.                                              |
+| `recordsSkipped`  | `0` in I1 unless duplicate/skipped-row semantics are added later.                                          |
+| `recordsRejected` | Invalid row count.                                                                                         |
+| `errorMessage`    | `null` for valid-header previews; not used when the whole file is rejected before persistence.             |
+| `createdAt`       | Server-owned `now`.                                                                                        |
+| `account`         | Required target `FinancialAccount`, resolved with normal current-user ownership rules before save.         |
 
 For invalid header, missing file, empty file, inaccessible account, oversized file, or unreadable file: reject the request and create nothing in I1. A persisted `FAILED` ingestion for rejected files can be reconsidered later if audit history for failed upload attempts becomes important.
 
@@ -222,7 +222,7 @@ Response DTO:
 {
   "transactionIngestionId": 3501,
   "fileIngestionId": 3551,
-  "status": "PARTIALLY_COMPLETED",
+  "status": "PARTIALLY_READY",
   "sourceLabel": "Canonical CSV: july.csv",
   "counts": {
     "recordsReceived": 10,
@@ -263,18 +263,18 @@ These limits keep the response and persistence predictable for the first impleme
 
 Error behavior:
 
-| Scenario                         | I1 behavior                                        | Persistence                 |
-| -------------------------------- | -------------------------------------------------- | --------------------------- |
-| Account inaccessible             | `404` or existing ownership error convention       | Create nothing              |
-| Missing file                     | `400 error.invalid`                                | Create nothing              |
-| Empty file                       | `400 error.invalid`                                | Create nothing              |
-| Header-only file                 | `400 error.invalid`                                | Create nothing              |
-| Invalid/missing/reordered header | `400 error.invalid`                                | Create nothing              |
-| Extra columns                    | `400 error.invalid`                                | Create nothing              |
-| File unreadable / malformed CSV  | `400 error.invalid`                                | Create nothing              |
-| Oversized file / too many rows   | `400 error.invalid`                                | Create nothing              |
-| Header valid, some rows invalid  | `200` with persisted preview and rejected rows     | Persist parent/file/records |
-| Header valid, all rows invalid   | `200` with `PARTIALLY_COMPLETED` and rejected rows | Persist parent/file/records |
+| Scenario                         | I1 behavior                                    | Persistence                 |
+| -------------------------------- | ---------------------------------------------- | --------------------------- |
+| Account inaccessible             | `404` or existing ownership error convention   | Create nothing              |
+| Missing file                     | `400 error.invalid`                            | Create nothing              |
+| Empty file                       | `400 error.invalid`                            | Create nothing              |
+| Header-only file                 | `400 error.invalid`                            | Create nothing              |
+| Invalid/missing/reordered header | `400 error.invalid`                            | Create nothing              |
+| Extra columns                    | `400 error.invalid`                            | Create nothing              |
+| File unreadable / malformed CSV  | `400 error.invalid`                            | Create nothing              |
+| Oversized file / too many rows   | `400 error.invalid`                            | Create nothing              |
+| Header valid, some rows invalid  | `200` with persisted preview and rejected rows | Persist parent/file/records |
+| Header valid, all rows invalid   | `200` with `PARTIALLY_READY` and rejected rows | Persist parent/file/records |
 
 ## 5. Lifecycle/status mapping
 
@@ -282,22 +282,24 @@ Existing enum values:
 
 ```java
 IngestionType: FILE, API
-IngestionStatus: PENDING, PROCESSING, COMPLETED, PARTIALLY_COMPLETED, FAILED
+IngestionStatus: PENDING, READY, PARTIALLY_READY, PROCESSING, COMPLETED, PARTIALLY_COMPLETED, FAILED
 ImportFileType: CSV, PDF, XLSX, JSON, OFX, OTHER
 IngestionRecordStatus: VALID, DISABLED, IMPORTED, SKIPPED_DUPLICATE, REJECTED, FAILED
 ```
 
 Recommended I1 mapping:
 
-| Case                               | TransactionIngestion.status                   | IngestionRecord.status       |
-| ---------------------------------- | --------------------------------------------- | ---------------------------- |
-| Valid header, all rows valid       | `COMPLETED`                                   | `VALID`                      |
-| Valid header, some rows invalid    | `PARTIALLY_COMPLETED`                         | `VALID` / `REJECTED`         |
-| Valid header, all rows invalid     | `PARTIALLY_COMPLETED`                         | `REJECTED`                   |
-| Invalid header / rejected file     | No persisted ingestion in I1                  | N/A                          |
-| Completed preview but not imported | `COMPLETED` or `PARTIALLY_COMPLETED` as above | `VALID` rows remain unlinked |
+| Case                                       | TransactionIngestion.status           | IngestionRecord.status           |
+| ------------------------------------------ | ------------------------------------- | -------------------------------- |
+| Valid header, all rows valid               | `READY`                               | `VALID`                          |
+| Valid header, valid + disabled only        | `READY`                               | `VALID` / `DISABLED`             |
+| Valid header, some rows invalid            | `PARTIALLY_READY`                     | `VALID` / `REJECTED`             |
+| Valid header, all rows invalid             | `PARTIALLY_READY`                     | `REJECTED`                       |
+| Valid header, zero valid rows after review | `PARTIALLY_READY`                     | `DISABLED` / `SKIPPED_DUPLICATE` |
+| Invalid header / rejected file             | No persisted ingestion in I1          | N/A                              |
+| Preview ready but not imported             | `READY` or `PARTIALLY_READY` as above | `VALID` rows remain unlinked     |
 
-I2A migrated away from `CREATED`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is used by review actions where the user keeps a row for audit but excludes it from import. `REJECTED` rows block future confirm import unless fixed by editing normalized values or disabled. TransactionIngestion status enum is unchanged in I2A/I2B.
+I2A migrated away from `CREATED`. I2 readiness migration introduced `READY`/`PARTIALLY_READY` for pre-import preview/review. `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows. `PARTIALLY_READY` means blocking rows exist or there are zero `VALID` rows to import. `COMPLETED` and `PARTIALLY_COMPLETED` are import-result statuses; `PARTIALLY_COMPLETED` is reserved for future/exceptional partial import scenarios and should not be used by CSV Confirm Import v1. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is used by review actions where the user keeps a row for audit but excludes it from import. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but an ingestion with only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. `REJECTED`/`FAILED` rows make the batch `PARTIALLY_READY` unless disabled/fixed.
 
 I2B.2 row edits replace `rawData.normalized`, recalculate `rawData.errors`/`rawData.warnings`, and leave `rawData.raw` unchanged as the original CSV audit payload. Editable normalized fields are `transactionDate`, `postingDate`, `description`, `signedAmount`, `currency`, `externalReference`, and `notes`. `amount` and `flow` are always derived from `signedAmount`; clients cannot edit status, amount, flow, parent ingestion, record index, raw CSV data, or financial transaction links. Editing is allowed only for `VALID` and `REJECTED` rows; valid results become `VALID`, invalid results become `REJECTED`. `DISABLED` rows must be enabled before editing. `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are immutable in this slice.
 

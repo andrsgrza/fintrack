@@ -114,7 +114,7 @@ const successfulPreviewResponse = {
   data: {
     transactionIngestionId: 100,
     fileIngestionId: 200,
-    status: 'COMPLETED',
+    status: 'READY',
     sourceLabel: 'Canonical CSV: preview.csv',
     counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
     warnings: [],
@@ -126,7 +126,7 @@ const persistedReviewResponse = {
   data: {
     transactionIngestionId: 100,
     fileIngestionId: 200,
-    status: 'PARTIALLY_COMPLETED',
+    status: 'PARTIALLY_READY',
     sourceLabel: 'Canonical CSV: preview.csv',
     counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 1, validRows: 1, invalidRows: 1 },
     warnings: [],
@@ -317,7 +317,7 @@ describe('TransactionIngestion file preview workflow', () => {
 
     expect(await screen.findByText('preview.csv')).toBeTruthy();
     expect(screen.getByText('fintrack-canonical-csv 1.0')).toBeTruthy();
-    expect(screen.getByText('Preview completed with errors')).toBeTruthy();
+    expect(screen.getByText('Needs review')).toBeTruthy();
     const counts = screen.getByTestId('filePreviewCounts');
     expect(within(counts).getByText('Records received')).toBeTruthy();
     expect(within(counts).getByText('Valid rows')).toBeTruthy();
@@ -341,11 +341,33 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
   });
 
+  it('renders ingestion readiness and import-result status labels', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'READY' } });
+    const { unmount } = renderPersistedReview();
+    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    unmount();
+
+    mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'PARTIALLY_READY' } });
+    const partiallyReady = renderPersistedReview();
+    expect(await screen.findByText('Needs review')).toBeTruthy();
+    partiallyReady.unmount();
+
+    mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'COMPLETED' } });
+    const completed = renderPersistedReview();
+    expect(await screen.findByText('Import completed')).toBeTruthy();
+    completed.unmount();
+
+    mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'PARTIALLY_COMPLETED' } });
+    renderPersistedReview();
+    expect(await screen.findByText('Import partially completed')).toBeTruthy();
+  });
+
   it('disable action updates row status and counts from response', async () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     mockAxiosPost.mockResolvedValue({
       data: {
         transactionIngestionId: 100,
+        status: 'PARTIALLY_READY',
         counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 2, recordsRejected: 1, validRows: 0, invalidRows: 1 },
         row: { ...persistedReviewResponse.data.rows[0], status: 'DISABLED' },
       },
@@ -357,10 +379,37 @@ describe('TransactionIngestion file preview workflow', () => {
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/300/disable'));
     await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
+    expect(screen.getByText('Needs review')).toBeTruthy();
     expectRowStatus(300, 'Disabled');
     expect(within(rowForRecord(300)).getByRole('button', { name: /enable/i })).toBeTruthy();
     expect(within(rowForRecord(300)).queryByRole('button', { name: /disable/i })).toBeNull();
     expect(within(rowForRecord(300)).queryByRole('button', { name: /edit/i })).toBeNull();
+  });
+
+  it('disable last valid row updates displayed batch status to needs review', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    });
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        status: 'PARTIALLY_READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        row: { ...persistedReviewResponse.data.rows[0], status: 'DISABLED' },
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /disable/i }));
+
+    await waitFor(() => expect(screen.getByText('Needs review')).toBeTruthy());
+    expectRowStatus(300, 'Disabled');
   });
 
   it('enable action updates row status and counts from response', async () => {
@@ -368,6 +417,7 @@ describe('TransactionIngestion file preview workflow', () => {
     mockAxiosPost.mockResolvedValue({
       data: {
         transactionIngestionId: 100,
+        status: 'PARTIALLY_READY',
         counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 1, validRows: 2, invalidRows: 1 },
         row: { ...persistedReviewResponse.data.rows[2], status: 'VALID' },
       },
@@ -379,9 +429,36 @@ describe('TransactionIngestion file preview workflow', () => {
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
     await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
+    expect(screen.getByText('Needs review')).toBeTruthy();
     expectRowStatus(302, 'Valid');
     expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
     expect(within(rowForRecord(302)).queryByRole('button', { name: /enable/i })).toBeNull();
+  });
+
+  it('enable valid disabled row updates displayed batch status to ready', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'PARTIALLY_READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [{ ...persistedReviewResponse.data.rows[0], status: 'DISABLED' }],
+      },
+    });
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        row: persistedReviewResponse.data.rows[0],
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('Needs review')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /enable/i }));
+
+    await waitFor(() => expect(screen.getByText('Ready to import')).toBeTruthy());
+    expectRowStatus(300, 'Valid');
   });
 
   it('enable action updates invalid disabled row status to rejected from response', async () => {
@@ -389,6 +466,7 @@ describe('TransactionIngestion file preview workflow', () => {
     mockAxiosPost.mockResolvedValue({
       data: {
         transactionIngestionId: 100,
+        status: 'PARTIALLY_READY',
         counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 2, validRows: 1, invalidRows: 2 },
         row: {
           ...persistedReviewResponse.data.rows[2],
@@ -404,6 +482,7 @@ describe('TransactionIngestion file preview workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /enable/i }));
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
+    expect(screen.getByText('Needs review')).toBeTruthy();
     expectRowStatus(302, 'Rejected');
     expect(within(rowForRecord(302)).getByText('description is required')).toBeTruthy();
     expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
@@ -414,6 +493,7 @@ describe('TransactionIngestion file preview workflow', () => {
     mockAxiosPatch.mockResolvedValue({
       data: {
         transactionIngestionId: 100,
+        status: 'READY',
         counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 2, invalidRows: 0 },
         row: {
           ...persistedReviewResponse.data.rows[1],
@@ -449,6 +529,7 @@ describe('TransactionIngestion file preview workflow', () => {
       }),
     );
     expect(await screen.findByText('Corrected row')).toBeTruthy();
+    expect(screen.getByText('Ready to import')).toBeTruthy();
     expectRowStatus(301, 'Valid');
     expect(screen.getAllByText('50.00')).toHaveLength(2);
     expect(screen.queryByText('signedAmount must be nonzero')).toBeNull();
@@ -528,6 +609,7 @@ describe('TransactionIngestion file preview workflow', () => {
     mockAxiosPatch.mockResolvedValue({
       data: {
         transactionIngestionId: 100,
+        status: 'PARTIALLY_READY',
         counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 2, validRows: 0, invalidRows: 2 },
         row: {
           ...persistedReviewResponse.data.rows[0],
@@ -549,7 +631,44 @@ describe('TransactionIngestion file preview workflow', () => {
 
     await waitFor(() => expect(mockAxiosPatch).toHaveBeenCalledWith(expect.stringContaining('/records/300'), expect.any(Object)));
     await waitFor(() => expectRowStatus(300, 'Rejected'));
+    expect(screen.getByText('Needs review')).toBeTruthy();
     expect(screen.getAllByText('signedAmount must be nonzero')).toHaveLength(2);
+  });
+
+  it('edit valid row to invalid updates displayed batch status to needs review', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    });
+    mockAxiosPatch.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        status: 'PARTIALLY_READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 1, validRows: 0, invalidRows: 1 },
+        row: {
+          ...persistedReviewResponse.data.rows[0],
+          status: 'REJECTED',
+          signedAmount: '0',
+          amount: null,
+          flow: null,
+          errorCode: 'ZERO_SIGNED_AMOUNT',
+          errorMessage: 'signedAmount must be nonzero',
+        },
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+    fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: /save row/i }));
+
+    await waitFor(() => expect(screen.getByText('Needs review')).toBeTruthy());
+    expectRowStatus(300, 'Rejected');
   });
 
   it('does not show edit for disabled rows', async () => {

@@ -1075,23 +1075,23 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### UPDATE / PATCH
 
-| Rule                                   | Decision                                                                                           | Status              |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------- |
-| `account` / `ingestionType` immutable  |                                                                                                    | **Done**            |
-| Server timestamps / counters on create |                                                                                                    | **Done**            |
-| Status lifecycle                       | `PENDING -> PROCESSING/final`; `PROCESSING -> final`; final terminal                               | **Done**            |
-| Counts by status                       | in-progress `processed <= received`; final `processed == received`; status-specific rules          | **Done**            |
-| `completedAt`                          | server-owned; final sets now; non-final requires null                                              | **Done**            |
-| Child metadata consistency             | FILE cannot have API metadata; API cannot have file metadata; final status requires matching child | **Done**            |
-| `status` / counters mutable            |                                                                                                    | **Done** (baseline) |
+| Rule                                   | Decision                                                                                                                                           | Status              |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `account` / `ingestionType` immutable  |                                                                                                                                                    | **Done**            |
+| Server timestamps / counters on create |                                                                                                                                                    | **Done**            |
+| Status lifecycle                       | `PENDING -> READY/PARTIALLY_READY/PROCESSING/final`; `READY`/`PARTIALLY_READY` are pre-import review states; `PROCESSING -> final`; final terminal | **Done**            |
+| Counts by status                       | in-progress `processed <= received`; final `processed == received`; status-specific rules                                                          | **Done**            |
+| `completedAt`                          | server-owned; final sets now; non-final requires null                                                                                              | **Done**            |
+| Child metadata consistency             | FILE cannot have API metadata; API cannot have file metadata; final status requires matching child                                                 | **Done**            |
+| `status` / counters mutable            |                                                                                                                                                    | **Done** (baseline) |
 
 ### Product rules
 
-| Rule                                                   | Decision | Status       |
-| ------------------------------------------------------ | -------- | ------------ |
-| Status machine PENDING → PROCESSING → COMPLETED/FAILED |          | **Proposed** |
-| Counter consistency with records                       |          | **Proposed** |
-| Block delete while PROCESSING?                         |          | **Open**     |
+| Rule                                                                           | Decision | Status       |
+| ------------------------------------------------------------------------------ | -------- | ------------ |
+| Status machine PENDING → READY/PARTIALLY_READY → PROCESSING → COMPLETED/FAILED |          | **Proposed** |
+| Counter consistency with records                                               |          | **Proposed** |
+| Block delete while PROCESSING?                                                 |          | **Open**     |
 
 ---
 
@@ -1232,6 +1232,8 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | No transactions in I1    | CSV preview creates no `FinancialTransaction` rows                                                                                                                                                                 | **Done**     |
 | No Rule Engine in I1     | CSV preview does not run Rule Engine                                                                                                                                                                               | **Done**     |
 | Preview status semantics | `IngestionRecord.status = VALID` means valid preview row, ready for future confirm import                                                                                                                          | **Done**     |
+| Parent readiness status  | `TransactionIngestion.status = READY` means at least one `VALID` row and no `REJECTED`/`FAILED`; `PARTIALLY_READY` means blocking rows exist or zero `VALID` rows exist                                            | **Done**     |
+| Import-result statuses   | `COMPLETED`/`PARTIALLY_COMPLETED` are import-result statuses; CSV preview/review and CSV Confirm Import v1 should not produce `PARTIALLY_COMPLETED`                                                                | **Done**     |
 | Preview record link      | `IngestionRecord.financialTransaction` must be `null` for every I1/I2A preview row, including `VALID` rows                                                                                                         | **Done**     |
 | Imported status          | `IMPORTED` is reserved for rows that generated a `FinancialTransaction` in a later confirm-import slice                                                                                                            | **Deferred** |
 | Disabled status          | `DISABLED` keeps the row for audit/review and excludes it from future confirm import; top-level blocking errors are cleared, rawData remains traceable                                                             | **Done**     |
@@ -1243,7 +1245,9 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | Raw/normalized payload   | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON; row edit keeps `rawData.raw` unchanged and replaces `rawData.normalized`                                                 | **Done**     |
 | Rejected uploads         | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred                                                               | **Done**     |
 | Duplicate file checksum  | Same checksum/account is warning-only in I1; it does not block preview                                                                                                                                             | **Done**     |
-| Minimal preview UI       | TransactionIngestion “New File Import” workflow selects account, uploads CSV, shows persisted preview summary/warnings/rows, and has no confirm/import action                                                      | **Done**     |
+
+**Readiness recalculation:** CSV preview/review sets the parent to `PARTIALLY_READY` when any row is `REJECTED`/`FAILED` or when there are zero `VALID` rows. Otherwise it sets `READY`. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but a batch containing only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. Confirm Import remains deferred; no `FinancialTransaction` rows are created and the Rule Engine is not invoked in this slice.
+| Minimal preview UI | TransactionIngestion “New File Import” workflow selects account, uploads CSV, shows persisted preview summary/warnings/rows, and has no confirm/import action | **Done** |
 
 ### Canonical CSV transaction rules
 

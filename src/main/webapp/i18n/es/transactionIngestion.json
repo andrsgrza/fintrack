@@ -82,9 +82,11 @@
         "rowDisabled": "Fila deshabilitada",
         "rowEnabled": "Fila habilitada",
         "ingestionStatus": {
-          "COMPLETED": "Vista previa completada",
-          "PARTIALLY_COMPLETED": "Vista previa completada con errores",
+          "READY": "Lista para importar",
+          "PARTIALLY_READY": "Requiere revisión",
           "PROCESSING": "Procesando",
+          "COMPLETED": "Importación completada",
+          "PARTIALLY_COMPLETED": "Importación parcialmente completada",
           "FAILED": "Fallida",
           "PENDING": "Pendiente"
         },

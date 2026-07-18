@@ -255,6 +255,7 @@ public class CsvIngestionRecordReviewService {
         CsvIngestionPreviewCountsDTO counts = recalculateCounts(ingestion);
         CsvIngestionRecordReviewResponseDTO response = new CsvIngestionRecordReviewResponseDTO();
         response.setTransactionIngestionId(ingestion.getId());
+        response.setStatus(ingestion.getStatus());
         response.setCounts(counts);
         response.setRow(toRowDto(record));
         return response;
@@ -284,7 +285,7 @@ public class CsvIngestionRecordReviewService {
         ingestion.setRecordsCreated(imported);
         ingestion.setRecordsSkipped(skipped);
         ingestion.setRecordsRejected(rejected);
-        ingestion.setStatus(rejected == 0 ? IngestionStatus.COMPLETED : IngestionStatus.PARTIALLY_COMPLETED);
+        ingestion.setStatus(previewReadinessStatus(valid, rejected));
         transactionIngestionRepository.save(ingestion);
 
         CsvIngestionPreviewCountsDTO counts = new CsvIngestionPreviewCountsDTO();
@@ -295,6 +296,10 @@ public class CsvIngestionRecordReviewService {
         counts.setValidRows(valid);
         counts.setInvalidRows(rejected);
         return counts;
+    }
+
+    private IngestionStatus previewReadinessStatus(int validRows, int rejectedOrFailedRows) {
+        return rejectedOrFailedRows > 0 || validRows == 0 ? IngestionStatus.PARTIALLY_READY : IngestionStatus.READY;
     }
 
     private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record) {
