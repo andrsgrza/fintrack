@@ -20,6 +20,8 @@ public class CsvIngestionPreviewResponseDTO implements Serializable {
 
     private List<CsvIngestionValidationMessage> warnings = new ArrayList<>();
 
+    private CsvIngestionFileMetadataDTO fileMetadata;
+
     private List<CsvIngestionPreviewRowDTO> rows = new ArrayList<>();
 
     public Long getTransactionIngestionId() {
@@ -68,6 +70,14 @@ public class CsvIngestionPreviewResponseDTO implements Serializable {
 
     public void setWarnings(List<CsvIngestionValidationMessage> warnings) {
         this.warnings = warnings;
+    }
+
+    public CsvIngestionFileMetadataDTO getFileMetadata() {
+        return fileMetadata;
+    }
+
+    public void setFileMetadata(CsvIngestionFileMetadataDTO fileMetadata) {
+        this.fileMetadata = fileMetadata;
     }
 
     public List<CsvIngestionPreviewRowDTO> getRows() {

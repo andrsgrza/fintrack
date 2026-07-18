@@ -1,6 +1,8 @@
 package com.fintrack.app.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
@@ -20,6 +22,7 @@ import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvParseResult;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRawRow;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
+import com.fintrack.app.service.dto.CsvIngestionFileMetadataDTO;
 import com.fintrack.app.service.dto.CsvIngestionPreviewCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionPreviewResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionPreviewRowDTO;
@@ -27,6 +30,7 @@ import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -42,6 +46,7 @@ public class CsvIngestionPreviewService {
 
     private static final String PARSER_NAME = "fintrack-canonical-csv";
     private static final String PARSER_VERSION = "1.0";
+    private static final TypeReference<List<CsvIngestionValidationMessage>> VALIDATION_MESSAGE_LIST = new TypeReference<>() {};
 
     private final FinancialAccountRepository financialAccountRepository;
     private final TransactionIngestionRepository transactionIngestionRepository;
@@ -118,6 +123,34 @@ public class CsvIngestionPreviewService {
         return toResponse(transactionIngestion, fileIngestion, records, parseResult, warnings);
     }
 
+    @Transactional(readOnly = true)
+    public CsvIngestionPreviewResponseDTO getPreview(Long transactionIngestionId) {
+        TransactionIngestion transactionIngestion = transactionIngestionRepository
+            .findOneWithToOneRelationshipsByIdAndAccountUserLogin(transactionIngestionId, currentUserService.getCurrentUserLogin())
+            .orElseThrow(() -> new IllegalArgumentException("Transaction ingestion is not accessible"));
+        if (transactionIngestion.getIngestionType() != IngestionType.FILE) {
+            throw new IllegalArgumentException("Only file ingestions have a file preview");
+        }
+
+        FileIngestion fileIngestion = fileIngestionRepository
+            .findOneByTransactionIngestionId(transactionIngestionId)
+            .orElseThrow(() -> new IllegalArgumentException("File ingestion metadata was not found"));
+        List<IngestionRecord> records = ingestionRecordRepository.findAllByTransactionIngestionIdOrderByRecordIndexAsc(
+            transactionIngestionId
+        );
+
+        CsvIngestionPreviewResponseDTO response = new CsvIngestionPreviewResponseDTO();
+        response.setTransactionIngestionId(transactionIngestion.getId());
+        response.setFileIngestionId(fileIngestion.getId());
+        response.setStatus(transactionIngestion.getStatus());
+        response.setSourceLabel(transactionIngestion.getSourceLabel());
+        response.setCounts(counts(records));
+        response.setWarnings(List.of());
+        response.setFileMetadata(fileMetadata(fileIngestion));
+        response.setRows(records.stream().map(this::toRowDto).toList());
+        return response;
+    }
+
     private FinancialAccount resolveCurrentUserAccount(Long accountId) {
         if (accountId == null) {
             throw new IllegalArgumentException("Account is required");
@@ -181,6 +214,7 @@ public class CsvIngestionPreviewService {
         response.setSourceLabel(transactionIngestion.getSourceLabel());
         response.setCounts(counts(parseResult));
         response.setWarnings(warnings);
+        response.setFileMetadata(fileMetadata(fileIngestion));
 
         List<CsvIngestionPreviewRowDTO> rows = new ArrayList<>();
         for (int i = 0; i < parseResult.getRows().size(); i++) {
@@ -199,6 +233,48 @@ public class CsvIngestionPreviewService {
         counts.setValidRows(parseResult.getValidRows());
         counts.setInvalidRows(parseResult.getRecordsRejected());
         return counts;
+    }
+
+    private CsvIngestionPreviewCountsDTO counts(List<IngestionRecord> records) {
+        int imported = 0;
+        int skipped = 0;
+        int rejected = 0;
+        int valid = 0;
+        for (IngestionRecord record : records) {
+            if (record.getStatus() == IngestionRecordStatus.IMPORTED) {
+                imported++;
+            } else if (
+                record.getStatus() == IngestionRecordStatus.DISABLED || record.getStatus() == IngestionRecordStatus.SKIPPED_DUPLICATE
+            ) {
+                skipped++;
+            } else if (record.getStatus() == IngestionRecordStatus.REJECTED || record.getStatus() == IngestionRecordStatus.FAILED) {
+                rejected++;
+            } else if (record.getStatus() == IngestionRecordStatus.VALID) {
+                valid++;
+            }
+        }
+        CsvIngestionPreviewCountsDTO counts = new CsvIngestionPreviewCountsDTO();
+        counts.setRecordsReceived(records.size());
+        counts.setRecordsCreated(imported);
+        counts.setRecordsSkipped(skipped);
+        counts.setRecordsRejected(rejected);
+        counts.setValidRows(valid);
+        counts.setInvalidRows(rejected);
+        return counts;
+    }
+
+    private CsvIngestionFileMetadataDTO fileMetadata(FileIngestion fileIngestion) {
+        CsvIngestionFileMetadataDTO metadata = new CsvIngestionFileMetadataDTO();
+        metadata.setOriginalFilename(fileIngestion.getOriginalFilename());
+        metadata.setFileType(fileIngestion.getFileType());
+        metadata.setContentType(fileIngestion.getContentType());
+        metadata.setFileSizeBytes(fileIngestion.getFileSizeBytes());
+        metadata.setChecksum(fileIngestion.getChecksum());
+        metadata.setParserName(fileIngestion.getParserName());
+        metadata.setParserVersion(fileIngestion.getParserVersion());
+        metadata.setStatementStartDate(fileIngestion.getStatementStartDate());
+        metadata.setStatementEndDate(fileIngestion.getStatementEndDate());
+        return metadata;
     }
 
     private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record, CsvRowResult row) {
@@ -220,6 +296,67 @@ public class CsvIngestionPreviewService {
         dto.setErrorMessage(record.getErrorMessage());
         dto.setWarnings(row.getWarnings());
         return dto;
+    }
+
+    private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record) {
+        JsonNode root = rawDataNode(record);
+        JsonNode normalized = root.path("normalized");
+        CsvIngestionPreviewRowDTO dto = new CsvIngestionPreviewRowDTO();
+        dto.setIngestionRecordId(record.getId());
+        dto.setRecordIndex(record.getRecordIndex());
+        dto.setStatus(record.getStatus());
+        dto.setTransactionDate(parseLocalDate(normalized, "transactionDate"));
+        dto.setPostingDate(parseLocalDate(normalized, "postingDate"));
+        dto.setDescription(textOrNull(normalized, "description"));
+        dto.setSignedAmount(textOrNull(normalized, "signedAmount"));
+        dto.setAmount(textOrNull(normalized, "amount"));
+        dto.setFlow(parseFlow(normalized));
+        dto.setCurrency(parseCurrency(normalized));
+        dto.setExternalReference(textOrNull(normalized, "externalReference"));
+        dto.setNotes(textOrNull(normalized, "notes"));
+        dto.setErrorCode(record.getErrorCode());
+        dto.setErrorMessage(record.getErrorMessage());
+        dto.setWarnings(messages(root.path("warnings")));
+        return dto;
+    }
+
+    private JsonNode rawDataNode(IngestionRecord record) {
+        try {
+            return record.getRawData() == null ? objectMapper.createObjectNode() : objectMapper.readTree(record.getRawData());
+        } catch (JsonProcessingException e) {
+            return objectMapper.createObjectNode();
+        }
+    }
+
+    private LocalDate parseLocalDate(JsonNode node, String fieldName) {
+        String value = textOrNull(node, fieldName);
+        return value == null ? null : LocalDate.parse(value);
+    }
+
+    private com.fintrack.app.domain.enumeration.TransactionFlow parseFlow(JsonNode normalized) {
+        String value = textOrNull(normalized, "flow");
+        return value == null ? null : com.fintrack.app.domain.enumeration.TransactionFlow.valueOf(value);
+    }
+
+    private com.fintrack.app.domain.enumeration.CurrencyCode parseCurrency(JsonNode normalized) {
+        String value = textOrNull(normalized, "currency");
+        return value == null ? null : com.fintrack.app.domain.enumeration.CurrencyCode.valueOf(value);
+    }
+
+    private List<CsvIngestionValidationMessage> messages(JsonNode node) {
+        if (!node.isArray()) {
+            return List.of();
+        }
+        return objectMapper.convertValue(node, VALIDATION_MESSAGE_LIST);
+    }
+
+    private String textOrNull(JsonNode node, String fieldName) {
+        JsonNode value = node.path(fieldName);
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        String text = value.asText();
+        return text == null || text.isBlank() ? null : text;
     }
 
     private String rawData(CsvRowResult row) {

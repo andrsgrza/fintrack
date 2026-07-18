@@ -14,6 +14,7 @@ import { TransactionIngestionFilePreview } from './transaction-ingestion-file-pr
 jest.mock('axios');
 
 const mockAxiosPost = axios.post as jest.Mock;
+const mockAxiosGet = axios.get as jest.Mock;
 const mockDispatch = jest.fn();
 const mockGetFinancialAccounts = jest.fn(params => ({ type: 'financialAccount/getEntities', payload: params }));
 let mockState;
@@ -57,6 +58,19 @@ const renderFilePreview = () => {
     <MemoryRouter initialEntries={['/transaction-ingestion/file-preview/new']}>
       <Routes>
         <Route path="/transaction-ingestion/file-preview/new" element={<TransactionIngestionFilePreview />} />
+        <Route path="/transaction-ingestion/:id/file-preview" element={<TransactionIngestionFilePreview />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+};
+
+const renderPersistedReview = () => {
+  mockState = baseState;
+
+  return render(
+    <MemoryRouter initialEntries={['/transaction-ingestion/100/file-preview']}>
+      <Routes>
+        <Route path="/transaction-ingestion/:id/file-preview" element={<TransactionIngestionFilePreview />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -101,10 +115,79 @@ const successfulPreviewResponse = {
   },
 };
 
+const persistedReviewResponse = {
+  data: {
+    transactionIngestionId: 100,
+    fileIngestionId: 200,
+    status: 'PARTIALLY_COMPLETED',
+    sourceLabel: 'Canonical CSV: preview.csv',
+    counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 1, validRows: 1, invalidRows: 1 },
+    warnings: [],
+    fileMetadata: {
+      originalFilename: 'preview.csv',
+      fileType: 'CSV',
+      contentType: 'text/csv',
+      fileSizeBytes: 123,
+      checksum: 'abc123',
+      parserName: 'fintrack-canonical-csv',
+      parserVersion: '1.0',
+      statementStartDate: '2026-07-13',
+      statementEndDate: '2026-07-14',
+    },
+    rows: [
+      {
+        ingestionRecordId: 300,
+        recordIndex: 1,
+        status: 'VALID',
+        transactionDate: '2026-07-13',
+        postingDate: '2026-07-13',
+        description: 'Salary',
+        signedAmount: '100.00',
+        amount: '100.00',
+        flow: 'IN',
+        currency: 'MXN',
+        externalReference: 'abc',
+      },
+      {
+        ingestionRecordId: 301,
+        recordIndex: 2,
+        status: 'REJECTED',
+        description: '',
+        signedAmount: '0',
+        currency: 'MXN',
+        errorCode: 'ZERO_SIGNED_AMOUNT',
+        errorMessage: 'signedAmount must be nonzero',
+      },
+      {
+        ingestionRecordId: 302,
+        recordIndex: 3,
+        status: 'DISABLED',
+        description: 'Disabled row',
+        signedAmount: '-12.00',
+        amount: '12.00',
+        flow: 'OUT',
+        currency: 'MXN',
+      },
+      {
+        ingestionRecordId: 303,
+        recordIndex: 4,
+        status: 'IMPORTED',
+        description: 'Imported row',
+        signedAmount: '-10.00',
+        amount: '10.00',
+        flow: 'OUT',
+        currency: 'MXN',
+      },
+    ],
+  },
+};
+
 describe('TransactionIngestion file preview workflow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAxiosPost.mockReset();
+    mockAxiosGet.mockReset();
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     mockDispatch.mockImplementation(action => action);
     registerTranslations();
   });
@@ -184,26 +267,22 @@ describe('TransactionIngestion file preview workflow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /preview/i }).hasAttribute('disabled')).toBe(true));
 
     resolvePreview(successfulPreviewResponse);
-    await screen.findByText('Preview created');
+    await screen.findByRole('heading', { name: /review import|file import preview/i });
   });
 
-  it('clears selected file after successful preview while preserving account and result', async () => {
+  it('redirects to persisted review route after successful preview', async () => {
     mockAxiosPost.mockResolvedValue(successfulPreviewResponse);
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderFilePreview();
     const account = selectAccount();
     const fileInput = uploadCsv();
 
     fireEvent.click(screen.getByRole('button', { name: /preview/i }));
 
-    expect(await screen.findByText('Preview created')).toBeTruthy();
+    expect(await screen.findByText('preview.csv')).toBeTruthy();
+    expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-ingestions/100/file-preview');
     expect(account.value).toBe('10');
     expect(fileInput.value).toBe('');
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    expect(await screen.findByText('CSV file is required.')).toBeTruthy();
-    expect(mockAxiosPost).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Preview created')).toBeTruthy();
   });
 
   it('clears selected file after failed preview while preserving account', async () => {
@@ -224,64 +303,68 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(mockAxiosPost).toHaveBeenCalledTimes(1);
   });
 
-  it('renders summary counts, duplicate checksum warning, and rejected row error after success', async () => {
-    mockAxiosPost.mockResolvedValue({
-      data: {
-        transactionIngestionId: 100,
-        fileIngestionId: 200,
-        status: 'PARTIALLY_COMPLETED',
-        sourceLabel: 'Canonical CSV: preview.csv',
-        counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 1, validRows: 1, invalidRows: 1 },
-        warnings: [{ code: 'DUPLICATE_FILE_CHECKSUM', message: 'duplicate' }],
-        rows: [
-          {
-            ingestionRecordId: 300,
-            recordIndex: 1,
-            status: 'VALID',
-            transactionDate: '2026-07-13',
-            postingDate: '2026-07-13',
-            description: 'Salary',
-            signedAmount: '100.00',
-            amount: '100.00',
-            flow: 'IN',
-            currency: 'MXN',
-            externalReference: 'abc',
-          },
-          {
-            ingestionRecordId: 301,
-            recordIndex: 2,
-            status: 'REJECTED',
-            description: '',
-            signedAmount: '0',
-            currency: 'MXN',
-            errorCode: 'ZERO_SIGNED_AMOUNT',
-            errorMessage: 'signedAmount must be nonzero',
-          },
-        ],
-      },
-    });
-    renderFilePreview();
-    selectAccount();
-    uploadCsv();
+  it('review page loads persisted preview metadata, counts, statuses, and actions', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    renderPersistedReview();
 
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    expect(await screen.findByText('Preview created')).toBeTruthy();
-    expect(screen.getAllByText('Preview only — no transactions were created.')).toHaveLength(2);
-    expect(screen.getByText('A file with the same checksum was already previewed for this account.')).toBeTruthy();
-
+    expect(await screen.findByText('preview.csv')).toBeTruthy();
+    expect(screen.getByText('fintrack-canonical-csv 1.0')).toBeTruthy();
+    expect(screen.getByText('Preview completed with errors')).toBeTruthy();
     const counts = screen.getByTestId('filePreviewCounts');
     expect(within(counts).getByText('Records received')).toBeTruthy();
     expect(within(counts).getByText('Valid rows')).toBeTruthy();
     expect(within(counts).getByText('Invalid rows')).toBeTruthy();
+    expect(within(counts).getByText('Disabled rows')).toBeTruthy();
     expect(within(counts).getByText('Records rejected')).toBeTruthy();
-    expect(within(counts).getByText('2')).toBeTruthy();
-    expect(within(counts).getAllByText('1')).toHaveLength(3);
+    expect(within(counts).getByText('3')).toBeTruthy();
+    expect(within(counts).getAllByText('1')).toHaveLength(4);
 
     expect(screen.getByText('Valid')).toBeTruthy();
     expect(screen.getByText('Rejected')).toBeTruthy();
+    expect(screen.getByText('Disabled')).toBeTruthy();
+    expect(screen.getByText('Imported')).toBeTruthy();
     expect(screen.getByText('Income')).toBeTruthy();
     expect(screen.getByText('signedAmount must be nonzero')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /disable/i })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /enable/i })).toBeTruthy();
+  });
+
+  it('disable action updates row status and counts from response', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 2, recordsRejected: 1, validRows: 0, invalidRows: 1 },
+        row: { ...persistedReviewResponse.data.rows[0], status: 'DISABLED' },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Salary');
+    fireEvent.click(screen.getAllByRole('button', { name: /disable/i })[0]);
+
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/300/disable'));
+    await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
+    expect(screen.getByText('Disabled')).toBeTruthy();
+  });
+
+  it('enable action updates row status and counts from response', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 1, validRows: 2, invalidRows: 1 },
+        row: { ...persistedReviewResponse.data.rows[2], status: 'VALID' },
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Disabled row');
+    fireEvent.click(screen.getByRole('button', { name: /enable/i }));
+
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
+    await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
+    expect(screen.getByText('Valid')).toBeTruthy();
   });
 
   it('does not render a confirm/import action', () => {

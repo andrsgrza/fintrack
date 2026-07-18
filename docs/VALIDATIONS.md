@@ -270,11 +270,13 @@ When the header is valid, invalid rows persist as `REJECTED` `IngestionRecord`s.
 | Valid preview status | `IngestionRecordStatus.VALID` means valid preview row, not an already-created `FinancialTransaction`. |
 | FT link in I1        | `financialTransaction` must remain `null` for every I1 preview row.                                   |
 
-`CREATED` is no longer a valid `IngestionRecordStatus`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` is reserved for future review actions. `REJECTED` rows block future confirm import unless fixed or disabled. `TransactionIngestion.status` is unchanged in I2A.
+`CREATED` is no longer a valid `IngestionRecordStatus`. `IMPORTED` is reserved for rows that generate a `FinancialTransaction` during a later confirm-import slice. `DISABLED` means the row is kept for audit/review but excluded from future confirm import. `REJECTED` rows block future confirm import unless fixed in a later edit slice or disabled. `TransactionIngestion.status` is unchanged in I2A/I2B.
 
 #### UI
 
-The I1C UI is a minimal `TransactionIngestion` workflow at `/transaction-ingestion/file-preview/new`. It requires selecting an account and a file before submit, but it does not duplicate canonical CSV validation in the browser. Backend validation remains the source of truth. The UI posts multipart `accountId` + `file`, displays the persisted preview response, shows duplicate-checksum warnings as non-blocking, and does not render a confirm/import action.
+The UI creation page is a minimal `TransactionIngestion` workflow at `/transaction-ingestion/file-preview/new`. It requires selecting an account and a file before submit, but it does not duplicate canonical CSV validation in the browser. Backend validation remains the source of truth. The UI posts multipart `accountId` + `file`, then redirects to `/transaction-ingestion/{id}/file-preview`.
+
+The persisted review page loads preview data by `TransactionIngestion` id, displays read-only `FileIngestion` metadata, renders statuses strictly from `IngestionRecord.status`, and supports enable/disable review actions. `DISABLED` rows do not block the batch. Enabling a disabled row revalidates the current normalized values. Confirm import remains deferred.
 
 ### 15. ApiAccessToken
 

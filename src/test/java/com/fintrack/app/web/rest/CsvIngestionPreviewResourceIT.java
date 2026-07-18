@@ -1,7 +1,9 @@
 package com.fintrack.app.web.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -9,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
@@ -272,8 +275,164 @@ class CsvIngestionPreviewResourceIT {
         assertThat(fileIngestionRepository.findAll()).hasSize(2);
     }
 
+    @Test
+    @Transactional
+    void getPersistedFilePreviewReturnsMetadataCountsAndRows() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+
+        mockMvc
+            .perform(get("/api/transaction-ingestions/" + ingestion.getId() + "/file-preview"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionIngestionId").value(ingestion.getId()))
+            .andExpect(jsonPath("$.fileIngestionId").exists())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.fileMetadata.originalFilename").value("canonical.csv"))
+            .andExpect(jsonPath("$.fileMetadata.fileType").value("CSV"))
+            .andExpect(jsonPath("$.fileMetadata.parserName").value("fintrack-canonical-csv"))
+            .andExpect(jsonPath("$.counts.recordsReceived").value(3))
+            .andExpect(jsonPath("$.counts.validRows").value(3))
+            .andExpect(jsonPath("$.rows[0].status").value("VALID"))
+            .andExpect(jsonPath("$.rows[0].financialTransaction").doesNotExist());
+
+        assertThat(financialTransactionRepository.count()).isZero();
+    }
+
+    @Test
+    @Transactional
+    void disableValidRowMarksDisabledAndRecalculatesCounters() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+
+        mockMvc
+            .perform(post(reviewUrl(ingestion, record, "disable")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("DISABLED"))
+            .andExpect(jsonPath("$.row.errorCode").doesNotExist())
+            .andExpect(jsonPath("$.counts.recordsReceived").value(3))
+            .andExpect(jsonPath("$.counts.recordsSkipped").value(1))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0))
+            .andExpect(jsonPath("$.counts.validRows").value(2));
+
+        IngestionRecord disabled = ingestionRecordRepository.findById(record.getId()).orElseThrow();
+        assertThat(disabled.getStatus()).isEqualTo(IngestionRecordStatus.DISABLED);
+        assertThat(disabled.getFinancialTransaction()).isNull();
+        assertThat(disabled.getErrorCode()).isNull();
+        assertThat(disabled.getErrorMessage()).isNull();
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.COMPLETED
+        );
+    }
+
+    @Test
+    @Transactional
+    void disableRejectedRowStopsBlockingBatch() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        IngestionRecord rejected = recordsFor(ingestion).get(0);
+
+        mockMvc
+            .perform(post(reviewUrl(ingestion, rejected, "disable")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("DISABLED"))
+            .andExpect(jsonPath("$.counts.recordsSkipped").value(1))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0));
+
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.COMPLETED
+        );
+    }
+
+    @Test
+    @Transactional
+    void enableDisabledRejectedRowRevalidatesCurrentNormalizedValues() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        IngestionRecord rejected = recordsFor(ingestion).get(0);
+
+        mockMvc.perform(post(reviewUrl(ingestion, rejected, "disable"))).andExpect(status().isOk());
+
+        mockMvc
+            .perform(post(reviewUrl(ingestion, rejected, "enable")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("REJECTED"))
+            .andExpect(jsonPath("$.row.errorCode").value("INVALID_TRANSACTION_DATE"))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(1));
+    }
+
+    @Test
+    @Transactional
+    void enableDisabledValidRowReturnsToValid() throws Exception {
+        TransactionIngestion ingestion = createPreviewWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
+
+        mockMvc
+            .perform(post(reviewUrl(ingestion, record, "enable")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("VALID"))
+            .andExpect(jsonPath("$.row.errorCode").doesNotExist())
+            .andExpect(jsonPath("$.counts.recordsSkipped").value(0))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0));
+
+        IngestionRecord enabled = ingestionRecordRepository.findById(record.getId()).orElseThrow();
+        assertThat(enabled.getFinancialTransaction()).isNull();
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.COMPLETED
+        );
+    }
+
+    @Test
+    @Transactional
+    void importedRowsAndMismatchedRecordsCannotBeReviewed() throws Exception {
+        TransactionIngestion firstIngestion = createPreviewWithValidRows();
+        IngestionRecord importedRecord = recordsFor(firstIngestion).get(0);
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(firstIngestion.getAccount());
+        financialTransaction.setTransactionIngestion(firstIngestion);
+        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        importedRecord.setStatus(IngestionRecordStatus.IMPORTED);
+        importedRecord.setFinancialTransaction(financialTransaction);
+        ingestionRecordRepository.saveAndFlush(importedRecord);
+
+        mockMvc.perform(post(reviewUrl(firstIngestion, importedRecord, "disable"))).andExpect(status().isBadRequest());
+        mockMvc.perform(post(reviewUrl(firstIngestion, importedRecord, "enable"))).andExpect(status().isBadRequest());
+
+        TransactionIngestion secondIngestion = createPreviewWithValidRows();
+        IngestionRecord secondRecord = recordsFor(secondIngestion).get(0);
+
+        mockMvc.perform(post(reviewUrl(firstIngestion, secondRecord, "disable"))).andExpect(status().isBadRequest());
+    }
+
     private FinancialAccount createCurrentUserAccount() {
         return createAccountForUser(currentMockUser());
+    }
+
+    private TransactionIngestion createPreviewWithValidRows() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        mockMvc
+            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk());
+        return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
+    }
+
+    private TransactionIngestion createPreviewWithInvalidRow() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        String csv =
+            """
+            transactionDate,postingDate,description,signedAmount,currency,externalReference,notes
+            nope,,,-0.001,USD,,
+            2026-01-16,,OXXO AGUILAS,-274.00,MXN,,
+            """;
+        mockMvc
+            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("mixed.csv", csv)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk());
+        return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
+    }
+
+    private String reviewUrl(TransactionIngestion ingestion, IngestionRecord record, String action) {
+        String url = "/api/transaction-ingestions/" + ingestion.getId() + "/records/" + record.getId();
+        return action == null ? url : url + "/" + action;
     }
 
     private FinancialAccount createAccountForUser(User user) {

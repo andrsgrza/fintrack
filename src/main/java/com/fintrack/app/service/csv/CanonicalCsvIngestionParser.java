@@ -84,13 +84,26 @@ public class CanonicalCsvIngestionParser {
 
     private CsvRowResult validateRow(int recordIndex, List<String> columns, CurrencyCode accountCurrency) {
         CsvRawRow raw = rawRow(columns);
+        CsvRowResult row = validateRawRow(recordIndex, raw, accountCurrency);
+        if (columns.size() != EXPECTED_HEADER.size()) {
+            List<CsvIngestionValidationMessage> errors = new ArrayList<>(row.getErrors());
+            errors.add(0, new CsvIngestionValidationMessage("INVALID_COLUMN_COUNT", "CSV row must contain exactly 7 columns"));
+            return new CsvRowResult(recordIndex, raw, row.getNormalized(), errors, row.getWarnings());
+        }
+        return row;
+    }
+
+    public CsvRowResult validateReviewRow(int recordIndex, CsvRawRow raw, CurrencyCode accountCurrency) {
+        if (accountCurrency == null) {
+            throw new CsvIngestionFileException("ACCOUNT_CURRENCY_REQUIRED", "Account currency is required");
+        }
+        return validateRawRow(recordIndex, raw, accountCurrency);
+    }
+
+    private CsvRowResult validateRawRow(int recordIndex, CsvRawRow raw, CurrencyCode accountCurrency) {
         CsvNormalizedRow normalized = new CsvNormalizedRow();
         List<CsvIngestionValidationMessage> errors = new ArrayList<>();
         List<CsvIngestionValidationMessage> warnings = new ArrayList<>();
-
-        if (columns.size() != EXPECTED_HEADER.size()) {
-            errors.add(new CsvIngestionValidationMessage("INVALID_COLUMN_COUNT", "CSV row must contain exactly 7 columns"));
-        }
 
         LocalDate transactionDate = parseRequiredDate(raw.getTransactionDate(), "transactionDate", "INVALID_TRANSACTION_DATE", errors);
         normalized.setTransactionDate(transactionDate);

@@ -3,10 +3,12 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.CsvIngestionPreviewService;
+import com.fintrack.app.service.CsvIngestionRecordReviewService;
 import com.fintrack.app.service.TransactionIngestionQueryService;
 import com.fintrack.app.service.TransactionIngestionService;
 import com.fintrack.app.service.criteria.TransactionIngestionCriteria;
 import com.fintrack.app.service.dto.CsvIngestionPreviewResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
@@ -51,17 +53,21 @@ public class TransactionIngestionResource {
 
     private final CsvIngestionPreviewService csvIngestionPreviewService;
 
+    private final CsvIngestionRecordReviewService csvIngestionRecordReviewService;
+
     private final ObjectMapper objectMapper;
 
     public TransactionIngestionResource(
         TransactionIngestionService transactionIngestionService,
         TransactionIngestionQueryService transactionIngestionQueryService,
         CsvIngestionPreviewService csvIngestionPreviewService,
+        CsvIngestionRecordReviewService csvIngestionRecordReviewService,
         ObjectMapper objectMapper
     ) {
         this.transactionIngestionService = transactionIngestionService;
         this.transactionIngestionQueryService = transactionIngestionQueryService;
         this.csvIngestionPreviewService = csvIngestionPreviewService;
+        this.csvIngestionRecordReviewService = csvIngestionRecordReviewService;
         this.objectMapper = objectMapper;
     }
 
@@ -108,6 +114,42 @@ public class TransactionIngestionResource {
         LOG.debug("REST request to create CSV FileIngestion preview for account : {}", accountId);
         try {
             return ResponseEntity.ok(csvIngestionPreviewService.createPreview(accountId, file));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @GetMapping("/{id}/file-preview")
+    public ResponseEntity<CsvIngestionPreviewResponseDTO> getFilePreview(@PathVariable("id") Long id) {
+        LOG.debug("REST request to get CSV FileIngestion preview for transaction ingestion : {}", id);
+        try {
+            return ResponseEntity.ok(csvIngestionPreviewService.getPreview(id));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @PostMapping("/{ingestionId}/records/{recordId}/disable")
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> disableFilePreviewRecord(
+        @PathVariable("ingestionId") Long ingestionId,
+        @PathVariable("recordId") Long recordId
+    ) {
+        LOG.debug("REST request to disable CSV ingestion record : {}, {}", ingestionId, recordId);
+        try {
+            return ResponseEntity.ok(csvIngestionRecordReviewService.disable(ingestionId, recordId));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @PostMapping("/{ingestionId}/records/{recordId}/enable")
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> enableFilePreviewRecord(
+        @PathVariable("ingestionId") Long ingestionId,
+        @PathVariable("recordId") Long recordId
+    ) {
+        LOG.debug("REST request to enable CSV ingestion record : {}, {}", ingestionId, recordId);
+        try {
+            return ResponseEntity.ok(csvIngestionRecordReviewService.enable(ingestionId, recordId));
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }

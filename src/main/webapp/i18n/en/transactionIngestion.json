@@ -43,12 +43,23 @@
         "csvHint": "Expected header: transactionDate,postingDate,description,signedAmount,currency,externalReference,notes",
         "preview": "Preview",
         "previewCreated": "Preview created",
+        "reviewTitle": "Review import",
         "previewOnly": "Preview only — no transactions were created.",
         "transactionIngestionId": "Transaction Ingestion ID",
         "fileIngestionId": "File Ingestion ID",
+        "fileMetadata": "File metadata",
+        "originalFilename": "Original filename",
+        "fileType": "File type",
+        "contentType": "Content type",
+        "fileSizeBytes": "File size bytes",
+        "checksum": "Checksum",
+        "parser": "Parser",
+        "statementPeriod": "Statement period",
         "recordsReceived": "Records received",
         "validRows": "Valid rows",
         "invalidRows": "Invalid rows",
+        "disabledRows": "Disabled rows",
+        "omittedRows": "Omitted rows",
         "recordsRejected": "Records rejected",
         "warnings": "Warnings",
         "duplicateFile": "A file with the same checksum was already previewed for this account.",
@@ -60,11 +71,26 @@
         "flow": "Flow",
         "currency": "Currency",
         "externalReference": "External reference",
+        "notes": "Notes",
         "error": "Error",
+        "edit": "Edit",
+        "disable": "Disable",
+        "enable": "Enable",
+        "rowDisabled": "Row disabled",
+        "rowEnabled": "Row enabled",
+        "ingestionStatus": {
+          "COMPLETED": "Preview completed",
+          "PARTIALLY_COMPLETED": "Preview completed with errors",
+          "PROCESSING": "Processing",
+          "FAILED": "Failed",
+          "PENDING": "Pending"
+        },
         "errors": {
           "accountRequired": "Account is required.",
           "fileRequired": "CSV file is required.",
-          "previewFailed": "Could not create file preview. Check the file and try again."
+          "previewFailed": "Could not create file preview. Check the file and try again.",
+          "reviewLoadFailed": "Could not load the persisted preview.",
+          "reviewFailed": "Could not update the preview row. Check the row and try again."
         }
       }
     }

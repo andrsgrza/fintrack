@@ -16,6 +16,7 @@ const TransactionIngestionRoutes = () => (
     <Route path="file-preview/new" element={<TransactionIngestionFilePreview />} />
     <Route path=":id">
       <Route index element={<TransactionIngestionDetail />} />
+      <Route path="file-preview" element={<TransactionIngestionFilePreview />} />
       <Route path="edit" element={<TransactionIngestionUpdate />} />
       <Route path="delete" element={<TransactionIngestionDeleteDialog />} />
     </Route>

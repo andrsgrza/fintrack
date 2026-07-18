@@ -2536,12 +2536,17 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 Covered by `transaction-ingestion-file-preview.spec.tsx`.
 
 - TransactionIngestion list renders the contextual "New File Import" route action.
-- Preview page renders account selector, CSV file input, preview-only notice, and Preview button.
+- Preview creation page renders account selector, CSV file input, preview-only notice, and Preview button.
 - Account is required before submit.
 - File is required before submit.
 - Successful submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file-preview`.
-- Persisted preview response renders summary counts.
+- Successful submit redirects to `/transaction-ingestion/{id}/file-preview`.
+- Review page loads persisted preview data by TransactionIngestion id.
+- Review page displays read-only FileIngestion metadata.
+- Persisted review response renders summary counts.
 - Duplicate checksum warning renders as a non-blocking warning.
+- Row table renders statuses strictly from `row.status`, including `DISABLED`.
+- Enable/disable actions update row status and counts.
 - Rejected row error renders in the row table.
 - No confirm/import action is rendered in I1C.
 
@@ -2632,5 +2637,6 @@ Copy this block when hardening the next entity:
 | 2026-07-17 | CSV Ingestion I1A/I1B backend         | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted preview endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                         |
 | 2026-07-17 | CSV Ingestion I1C frontend            | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart preview submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                 |
 | 2026-07-17 | CSV Ingestion I2A status lifecycle    | `IngestionRecordStatus.CREATED` removed; preview tests expect `VALID`; imported-record domain tests use `IMPORTED`; frontend preview test renders translated `Valid`/`Rejected`; Liquibase migrates existing `CREATED` rows to `VALID`.                                                                                                   |
+| 2026-07-17 | CSV Ingestion I2B review flow         | Backend IT covers persisted GET review, FileIngestion metadata, enable/disable transitions, counters/status recalculation, imported-row guard and mismatched parent guard. Frontend tests cover redirect to review page, metadata/status rendering, enable/disable actions, and no confirm/import action.                                 |
 | 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                            |
 | 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal. |

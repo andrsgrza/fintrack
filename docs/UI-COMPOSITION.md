@@ -583,7 +583,7 @@ Do not extend this as:
 
 ## CSV Ingestion v1 — upload/preview workflow
 
-Status: implemented through I2A minimal upload/preview status lifecycle.
+Status: implemented through I2B persisted upload/preview review workflow.
 
 CSV import upload/preview is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
 
@@ -592,7 +592,8 @@ Composition rules:
 - start from TransactionIngestion list/page with a contextual "New File Import" action;
 - select the target FinancialAccount and upload the canonical CSV;
 - call `POST /api/transaction-ingestions/file-preview`;
-- show persisted preview summary and rows;
+- redirect to the persisted TransactionIngestion review page;
+- show persisted preview summary, read-only file metadata, rows, and review actions;
 - do not use generated FileIngestion create as the main product flow;
 - do not embed full FileIngestion CRUD inside TransactionIngestion;
 - use contextual upload/preview components;
@@ -600,4 +601,6 @@ Composition rules:
 - I1 has no confirm/import action;
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
-The implemented route is `/transaction-ingestion/file-preview/new`. It renders a minimal account selector, CSV file input, preview submit action, preview-only notice, summary counts, global warnings, and a read-only row table. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview rows. In I2A, valid preview rows use `VALID`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses instead of raw enum names. No `FinancialTransaction` rows are created from the UI and no confirm/import action is rendered.
+The creation route is `/transaction-ingestion/file-preview/new`. It renders a minimal account selector, CSV file input, preview submit action, and preview-only notice. After a successful upload it redirects to `/transaction-ingestion/{id}/file-preview`.
+
+The review route is `/transaction-ingestion/{id}/file-preview`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads persisted preview data, shows TransactionIngestion context, displays read-only FileIngestion metadata, shows counts and rows, and supports row enable/disable review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview/review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`. No `FinancialTransaction` rows are created from the UI and no confirm/import action is rendered.

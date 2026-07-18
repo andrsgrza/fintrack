@@ -43,12 +43,23 @@
         "csvHint": "Encabezado esperado: transactionDate,postingDate,description,signedAmount,currency,externalReference,notes",
         "preview": "Vista previa",
         "previewCreated": "Vista previa creada",
+        "reviewTitle": "Revisar importación",
         "previewOnly": "Solo vista previa — no se crearon transacciones.",
         "transactionIngestionId": "ID de importación de transacciones",
         "fileIngestionId": "ID de archivo importado",
+        "fileMetadata": "Metadata del archivo",
+        "originalFilename": "Nombre original del archivo",
+        "fileType": "Tipo de archivo",
+        "contentType": "Tipo de contenido",
+        "fileSizeBytes": "Tamaño del archivo en bytes",
+        "checksum": "Checksum",
+        "parser": "Parser",
+        "statementPeriod": "Periodo del estado de cuenta",
         "recordsReceived": "Registros recibidos",
         "validRows": "Filas válidas",
         "invalidRows": "Filas inválidas",
+        "disabledRows": "Filas deshabilitadas",
+        "omittedRows": "Filas omitidas",
         "recordsRejected": "Registros rechazados",
         "warnings": "Advertencias",
         "duplicateFile": "Ya se previsualizó un archivo con el mismo checksum para esta cuenta.",
@@ -60,11 +71,26 @@
         "flow": "Flujo",
         "currency": "Moneda",
         "externalReference": "Referencia externa",
+        "notes": "Notas",
         "error": "Error",
+        "edit": "Editar",
+        "disable": "Deshabilitar",
+        "enable": "Habilitar",
+        "rowDisabled": "Fila deshabilitada",
+        "rowEnabled": "Fila habilitada",
+        "ingestionStatus": {
+          "COMPLETED": "Vista previa completada",
+          "PARTIALLY_COMPLETED": "Vista previa completada con errores",
+          "PROCESSING": "Procesando",
+          "FAILED": "Fallida",
+          "PENDING": "Pendiente"
+        },
         "errors": {
           "accountRequired": "La cuenta es obligatoria.",
           "fileRequired": "El archivo CSV es obligatorio.",
-          "previewFailed": "No se pudo crear la vista previa. Revisa el archivo e inténtalo de nuevo."
+          "previewFailed": "No se pudo crear la vista previa. Revisa el archivo e inténtalo de nuevo.",
+          "reviewLoadFailed": "No se pudo cargar la vista previa persistida.",
+          "reviewFailed": "No se pudo actualizar la fila de vista previa. Revisa la fila e inténtalo de nuevo."
         }
       }
     }

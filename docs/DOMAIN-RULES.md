@@ -1234,7 +1234,10 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | Preview status semantics | `IngestionRecord.status = VALID` means valid preview row, ready for future confirm import                                                                     | **Done**     |
 | Preview record link      | `IngestionRecord.financialTransaction` must be `null` for every I1/I2A preview row, including `VALID` rows                                                    | **Done**     |
 | Imported status          | `IMPORTED` is reserved for rows that generated a `FinancialTransaction` in a later confirm-import slice                                                       | **Deferred** |
-| Disabled status          | `DISABLED` is reserved for future review actions where a row is kept but excluded from import                                                                 | **Deferred** |
+| Disabled status          | `DISABLED` keeps the row for audit/review and excludes it from future confirm import; top-level blocking errors are cleared, rawData remains traceable        | **Done**     |
+| Disable review action    | `VALID`/`REJECTED` rows can become `DISABLED`; `IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` are not review-editable in I2B                                         | **Done**     |
+| Enable review action     | `DISABLED` rows revalidate current normalized values; valid rows become `VALID`, invalid rows become `REJECTED`                                               | **Done**     |
+| Persisted review page    | `/transaction-ingestion/{id}/file-preview` loads persisted rows and read-only `FileIngestion` metadata; FileIngestion CRUD is not the product flow            | **Done**     |
 | Raw/normalized payload   | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON                                                                      | **Done**     |
 | Rejected uploads         | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred          | **Done**     |
 | Duplicate file checksum  | Same checksum/account is warning-only in I1; it does not block preview                                                                                        | **Done**     |

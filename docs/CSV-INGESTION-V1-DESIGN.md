@@ -29,6 +29,8 @@ Recommendation:
 
 I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that already generated a `FinancialTransaction` will use `IMPORTED` in a later confirm-import slice.
 
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and enable/disable preview rows. Confirm import remains deferred.
+
 ## 2. Responsibility split using current entities
 
 ### TransactionIngestion
@@ -419,7 +421,8 @@ TransactionIngestion page/list:
 - User selects account.
 - User uploads canonical CSV.
 - Submit preview.
-- Show persisted preview result.
+- Redirect to `/transaction-ingestion/{id}/file-preview`.
+- Show persisted review result, read-only file metadata, counts, rows, and enable/disable review actions.
 
 Preview screen:
 
