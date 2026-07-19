@@ -218,6 +218,38 @@ class CsvIngestionPreviewResourceIT {
 
     @Test
     @Transactional
+    void canonicalFileWorkflowRejectsInvalidHeaderWithoutPersisting() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+
+        mockMvc
+            .perform(
+                multipart(FILE_WORKFLOW_URL)
+                    .file(csvFile("invalid.csv", "transactionDate,description,signedAmount,currency\n2026-01-15,Coffee,-10.00,MXN"))
+                    .param("accountId", account.getId().toString())
+            )
+            .andExpect(status().isBadRequest());
+
+        assertNothingCreated();
+    }
+
+    @Test
+    @Transactional
+    void canonicalFileWorkflowRejectsInaccessibleAccountWithoutPersisting() throws Exception {
+        FinancialAccount otherUsersAccount = createAccountForUser(createOtherUser());
+
+        mockMvc
+            .perform(
+                multipart(FILE_WORKFLOW_URL)
+                    .file(csvFile("canonical.csv", VALID_CSV))
+                    .param("accountId", otherUsersAccount.getId().toString())
+            )
+            .andExpect(status().isBadRequest());
+
+        assertNothingCreated();
+    }
+
+    @Test
+    @Transactional
     void invalidRowsPersistAsRejectedRecords() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         String csv =
