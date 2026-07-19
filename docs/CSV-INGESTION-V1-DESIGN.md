@@ -6,15 +6,15 @@ CSV Ingestion v1 starts FINTRACK's file ingestion work using the existing ingest
 
 - `TransactionIngestion` as the parent import process.
 - `FileIngestion` as file metadata.
-- `IngestionRecord` as the persisted row preview.
+- `IngestionRecord` as the persisted review row.
 
-The first implementation slice, I1, is backend persisted preview only. It parses, validates, normalizes, and persists preview rows, but it does not create `FinancialTransaction` rows and does not run the Rule Engine. I2C adds explicit confirm import for ready persisted previews.
+The first implementation slice, I1, is backend persisted workflow only. It parses, validates, normalizes, and persists review rows, but it does not create `FinancialTransaction` rows and does not run the Rule Engine. I2C adds explicit confirm import for ready persisted workflows.
 
 ## 1. Current schema fit
 
-I1 can be implemented without schema changes. This is an approved product/design decision for CSV preview v1.
+I1 can be implemented without schema changes. This is an approved product/design decision for CSV workflow v1.
 
-The current model has enough structure for a canonical CSV preview:
+The current model has enough structure for a canonical CSV workflow:
 
 - `TransactionIngestion` owns the import batch, target account, lifecycle status, and counters.
 - `FileIngestion` stores file metadata, checksum, parser name/version, and statement date range.
@@ -23,13 +23,13 @@ The current model has enough structure for a canonical CSV preview:
 Recommendation:
 
 - Do not add normalized transaction columns in I1.
-- Use `IngestionRecord.rawData` JSON as the I1 storage mechanism for original raw values, normalized preview values, warnings, and validation errors.
+- Use `IngestionRecord.rawData` JSON as the I1 storage mechanism for original raw values, normalized review values, warnings, and validation errors.
 - Keep `financialTransaction = null` for every `IngestionRecord` in I1.
 - Leave `FinancialTransaction` creation to I2.
 
-I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
+I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid review rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and preview rows in one submit, then redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. `/transaction-ingestion/file-preview/new` remains as a compatibility/delegated preview route. `/file-ingestion/new` is not metadata CRUD; it is a parent-scoped CSV upload command that attaches server-derived file metadata and records to an existing pending FILE `TransactionIngestion`. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and review rows in one submit, then redirects to canonical workflow detail `/transaction-ingestion/{id}`, where the user can return later to inspect parent summary, read-only FileIngestion metadata, and review rows. `/file-ingestion/new` is not metadata CRUD; it is a parent-scoped CSV upload command that attaches server-derived file metadata and records to an existing pending FILE `TransactionIngestion`. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
 
 ## 2. Responsibility split using current entities
 
@@ -44,13 +44,13 @@ Recommended I1 values:
 | `ingestionType`   | `FILE`                                                                                                     |
 | `status`          | `READY` when at least one row is `VALID` and no rows are `REJECTED`/`FAILED`; otherwise `PARTIALLY_READY`. |
 | `sourceLabel`     | `Canonical CSV: <originalFilename>` trimmed to 100 characters.                                             |
-| `startedAt`       | Server `now` at preview creation start.                                                                    |
-| `completedAt`     | Server `now` after parsing/persisting preview rows completes.                                              |
+| `startedAt`       | Server `now` at workflow creation start.                                                                   |
+| `completedAt`     | Server `now` after parsing/persisting review rows completes.                                               |
 | `recordsReceived` | Total CSV data rows read, excluding header.                                                                |
 | `recordsCreated`  | `0` in I1 because no `FinancialTransaction` rows are created.                                              |
 | `recordsSkipped`  | `0` in I1 unless duplicate/skipped-row semantics are added later.                                          |
 | `recordsRejected` | Invalid row count.                                                                                         |
-| `errorMessage`    | `null` for valid-header previews; not used when the whole file is rejected before persistence.             |
+| `errorMessage`    | `null` for valid-header workflows; not used when the whole file is rejected before persistence.            |
 | `createdAt`       | Server-owned `now`.                                                                                        |
 | `account`         | Required target `FinancialAccount`, resolved with normal current-user ownership rules before save.         |
 
@@ -81,21 +81,21 @@ Deriving statement dates from valid rows makes the metadata useful without requi
 
 ### IngestionRecord
 
-Role: one persisted preview row per CSV data row.
+Role: one persisted workflow row per CSV data row.
 
 Recommended I1 values:
 
-| Field                  | Recommendation                                                                                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `recordIndex`          | 1-based CSV data-row index, excluding the header. The first data row is `1`.                                                                                |
-| `externalRecordId`     | Normalized `externalReference` if present; otherwise `null`.                                                                                                |
-| `status`               | `VALID` for valid preview rows; `REJECTED` for invalid rows; `DISABLED`/`IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` reserved for later review/import lifecycle. |
-| `rawData`              | JSON string containing `raw`, `normalized`, `errors`, and `warnings`.                                                                                       |
-| `errorCode`            | First validation error code for rejected rows; `null` for valid rows.                                                                                       |
-| `errorMessage`         | First validation error message for rejected rows; `null` for valid rows.                                                                                    |
-| `createdAt`            | Server-owned `now`.                                                                                                                                         |
-| `financialTransaction` | `null` in I1.                                                                                                                                               |
-| `transactionIngestion` | Required parent.                                                                                                                                            |
+| Field                  | Recommendation                                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recordIndex`          | 1-based CSV data-row index, excluding the header. The first data row is `1`.                                                                               |
+| `externalRecordId`     | Normalized `externalReference` if present; otherwise `null`.                                                                                               |
+| `status`               | `VALID` for valid review rows; `REJECTED` for invalid rows; `DISABLED`/`IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` reserved for later review/import lifecycle. |
+| `rawData`              | JSON string containing `raw`, `normalized`, `errors`, and `warnings`.                                                                                      |
+| `errorCode`            | First validation error code for rejected rows; `null` for valid rows.                                                                                      |
+| `errorMessage`         | First validation error message for rejected rows; `null` for valid rows.                                                                                   |
+| `createdAt`            | Server-owned `now`.                                                                                                                                        |
+| `financialTransaction` | `null` in I1.                                                                                                                                              |
+| `transactionIngestion` | Required parent.                                                                                                                                           |
 
 ### ApiIngestion
 
@@ -103,7 +103,7 @@ Untouched in this phase.
 
 ## 3. `rawData` JSON contract
 
-Recommendation: include raw values, normalized preview values, all row-level errors, and warnings in `rawData`.
+Recommendation: include raw values, normalized review values, all row-level errors, and warnings in `rawData`.
 
 `errorCode` and `errorMessage` should duplicate the first error for simple querying and list display. `rawData.errors` remains the complete row error list.
 
@@ -216,19 +216,15 @@ Input:
 - `accountId`: target `FinancialAccount` id.
 - `file`: uploaded canonical CSV file.
 
-It creates the parent `TransactionIngestion`, file metadata, and persisted preview rows in one workflow.
+It creates the parent `TransactionIngestion`, file metadata, and persisted workflow rows in one workflow.
 
-The compatibility/delegated preview endpoint remains:
+The canonical workflow detail endpoint is:
 
 ```http
-POST /api/transaction-ingestions/file-preview
-Content-Type: multipart/form-data
+GET /api/transaction-ingestions/{id}/workflow
 ```
 
-Input:
-
-- `accountId`: target `FinancialAccount` id.
-- `file`: uploaded canonical CSV file.
+It returns persisted parent status/counts, read-only file metadata, warnings, and review rows. It does not create `FinancialTransaction` rows.
 
 For an already-created pending FILE parent, use the parent command endpoint:
 
@@ -286,22 +282,22 @@ For v1, return all rows in the response up to the accepted file limits:
 - max file size: 2 MB.
 - max data rows: 5,000.
 
-These limits keep the response and persistence predictable for the first implementation. If real files exceed this, introduce paginated preview retrieval before raising the limits.
+These limits keep the response and persistence predictable for the first implementation. If real files exceed this, introduce paginated workflow retrieval before raising the limits.
 
 Error behavior:
 
-| Scenario                         | I1 behavior                                    | Persistence                 |
-| -------------------------------- | ---------------------------------------------- | --------------------------- |
-| Account inaccessible             | `404` or existing ownership error convention   | Create nothing              |
-| Missing file                     | `400 error.invalid`                            | Create nothing              |
-| Empty file                       | `400 error.invalid`                            | Create nothing              |
-| Header-only file                 | `400 error.invalid`                            | Create nothing              |
-| Invalid/missing/reordered header | `400 error.invalid`                            | Create nothing              |
-| Extra columns                    | `400 error.invalid`                            | Create nothing              |
-| File unreadable / malformed CSV  | `400 error.invalid`                            | Create nothing              |
-| Oversized file / too many rows   | `400 error.invalid`                            | Create nothing              |
-| Header valid, some rows invalid  | `200` with persisted preview and rejected rows | Persist parent/file/records |
-| Header valid, all rows invalid   | `200` with `PARTIALLY_READY` and rejected rows | Persist parent/file/records |
+| Scenario                         | I1 behavior                                     | Persistence                 |
+| -------------------------------- | ----------------------------------------------- | --------------------------- |
+| Account inaccessible             | `404` or existing ownership error convention    | Create nothing              |
+| Missing file                     | `400 error.invalid`                             | Create nothing              |
+| Empty file                       | `400 error.invalid`                             | Create nothing              |
+| Header-only file                 | `400 error.invalid`                             | Create nothing              |
+| Invalid/missing/reordered header | `400 error.invalid`                             | Create nothing              |
+| Extra columns                    | `400 error.invalid`                             | Create nothing              |
+| File unreadable / malformed CSV  | `400 error.invalid`                             | Create nothing              |
+| Oversized file / too many rows   | `400 error.invalid`                             | Create nothing              |
+| Header valid, some rows invalid  | `200` with persisted workflow and rejected rows | Persist parent/file/records |
+| Header valid, all rows invalid   | `200` with `PARTIALLY_READY` and rejected rows  | Persist parent/file/records |
 
 ## 5. Lifecycle/status mapping
 
@@ -326,7 +322,7 @@ Recommended I1 mapping:
 | Invalid header / rejected file             | No persisted ingestion in I1          | N/A                              |
 | Preview ready but not imported             | `READY` or `PARTIALLY_READY` as above | `VALID` rows remain unlinked     |
 
-I2A migrated away from `CREATED`. I2 readiness migration introduced `READY`/`PARTIALLY_READY` for pre-import preview/review. `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows. `PARTIALLY_READY` means blocking rows exist or there are zero `VALID` rows to import. `COMPLETED` and `PARTIALLY_COMPLETED` are import-result statuses; `PARTIALLY_COMPLETED` is reserved for future/exceptional partial import scenarios and should not be used by CSV Confirm Import v1. `IMPORTED` is used for rows that generated a `FinancialTransaction` during confirm import. `DISABLED` is used by review actions where the user keeps a row for audit but excludes it from import. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but an ingestion with only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. `REJECTED`/`FAILED` rows make the batch `PARTIALLY_READY` unless disabled/fixed.
+I2A migrated away from `CREATED`. I2 readiness migration introduced `READY`/`PARTIALLY_READY` for pre-import review. `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows. `PARTIALLY_READY` means blocking rows exist or there are zero `VALID` rows to import. `COMPLETED` and `PARTIALLY_COMPLETED` are import-result statuses; `PARTIALLY_COMPLETED` is reserved for future/exceptional partial import scenarios and should not be used by CSV Confirm Import v1. `IMPORTED` is used for rows that generated a `FinancialTransaction` during confirm import. `DISABLED` is used by review actions where the user keeps a row for audit but excludes it from import. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but an ingestion with only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. `REJECTED`/`FAILED` rows make the batch `PARTIALLY_READY` unless disabled/fixed.
 
 I2B.2 row edits replace `rawData.normalized`, recalculate `rawData.errors`/`rawData.warnings`, and leave `rawData.raw` unchanged as the original CSV audit payload. Editable normalized fields are `transactionDate`, `postingDate`, `description`, `signedAmount`, `currency`, `externalReference`, and `notes`. `amount` and `flow` are always derived from `signedAmount`; clients cannot edit status, amount, flow, parent ingestion, record index, raw CSV data, or financial transaction links. Editing is allowed only for `VALID` and `REJECTED` rows; valid results become `VALID`, invalid results become `REJECTED`. `DISABLED` rows must be enabled before editing. `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are immutable in this slice.
 
@@ -400,7 +396,7 @@ I1 must use normal-user ownership rules:
 
 - Current user must own the target account.
 - Admin has no special import bypass.
-- Admin cannot preview/import into another user's account.
+- Admin cannot import into another user's account.
 - Account is resolved before any ingestion rows are created.
 - Account currency must match every row currency.
 - Account type does not affect sign semantics; canonical CSV sign rules are account-type independent.
@@ -411,8 +407,8 @@ I1 must use normal-user ownership rules:
 I1 recommendation:
 
 - Compute SHA-256 checksum and store it in `FileIngestion.checksum`.
-- If the same checksum was previously ingested for the same account, return a warning in the response and optionally in row/global preview metadata.
-- Do not block preview solely on checksum in I1.
+- If the same checksum was previously ingested for the same account, return a warning in the response and optionally in row/global workflow metadata.
+- Do not block upload/review solely on checksum in I1.
 - Do not reject row-level duplicates based on weak heuristics in I1.
 - Defer existing-transaction duplicate detection to I2/I3.
 
@@ -438,7 +434,7 @@ I2C:
 
 Future:
 
-- Optional per-row category/tag suggestion preview.
+- Optional per-row category/tag suggestions.
 - Optional bulk review before import.
 - Bulk reevaluation remains deferred.
 
@@ -452,8 +448,8 @@ TransactionIngestion page/list:
 - User selects account.
 - User selects ingestion type; `FILE` shows CSV upload and `API` shows a TBD placeholder.
 - User uploads canonical CSV.
-- Submit preview.
-- Redirect to `/transaction-ingestion/{id}/file-preview`.
+- Submit upload.
+- Redirect to `/transaction-ingestion/{id}`.
 - Show persisted review result, read-only file metadata, counts, rows, and enable/disable review actions.
 
 Preview screen:
@@ -493,8 +489,8 @@ ApiIngestion:
 UI composition conventions:
 
 - Do not embed full `FileIngestion` CRUD inside `TransactionIngestion`.
-- Use contextual upload/preview components, not generated child CRUD.
-- For high-volume records, use a related list or paginated preview table, not an inline editable collection.
+- Use contextual upload/review components, not generated child CRUD.
+- For high-volume records, use a related list or paginated review table, not an inline editable collection.
 - Preserve generated CRUD pages as fallback/debug where useful.
 
 ## 11. Proposed implementation phases
@@ -507,22 +503,22 @@ UI composition conventions:
 - Unit tests only.
 - No persistence yet.
 
-### I1B — Persisted preview endpoint
+### I1B — Persisted workflow endpoint
 
 - Add `POST /api/transaction-ingestions/file` for canonical parent workflow creation.
-- Keep `POST /api/transaction-ingestions/file-preview` as compatibility/delegated preview.
+- Add `GET /api/transaction-ingestions/{id}/workflow` for canonical workflow detail/review data.
 - Resolve account ownership first.
 - Create `TransactionIngestion`.
 - Create `FileIngestion`.
 - Create `IngestionRecord` rows.
-- Return preview DTO.
+- Return workflow DTO.
 - Integration/resource tests.
 - No `FinancialTransaction` creation.
 - No Rule Engine.
 
 ### I1C — Minimal UI
 
-- Add TransactionIngestion upload/preview flow. **Implemented.**
+- Add TransactionIngestion upload/review flow. **Implemented.**
 - Show summary and row table. **Implemented.**
 - No confirm/import action yet. **Implemented.**
 
@@ -548,7 +544,7 @@ UI composition conventions:
 ### I4 — FinancialAccount shortcut
 
 - Add "Import transactions" from account detail.
-- Reuse same backend endpoint and preview UI.
+- Reuse same backend endpoint and workflow UI.
 - Preselect account.
 
 ### I5 — CSV mapper, if needed
@@ -603,8 +599,8 @@ UI composition conventions:
 
 - account required.
 - file required.
-- multipart preview submit.
-- preview summary renders counts.
+- multipart workflow submit.
+- workflow summary renders counts.
 - duplicate checksum warning renders.
 - invalid row errors render.
 - no confirm/import action in I1.
@@ -629,7 +625,7 @@ No open product questions remain for I1.
 
 Closed decisions:
 
-1. Repeated checksum for the same account is warning-only in I1; it does not block preview.
+1. Repeated checksum for the same account is warning-only in I1; it does not block upload/review.
 2. File limits are 2 MB and 5,000 data rows.
 3. Invalid/rejected uploads create nothing in I1. This includes invalid header, missing file, empty file, header-only file, unreadable file, and oversized file. Persisted `FAILED` ingestion rows for rejected uploads remain deferred.
 

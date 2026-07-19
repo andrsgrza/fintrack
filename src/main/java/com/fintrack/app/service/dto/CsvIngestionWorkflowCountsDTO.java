@@ -2,7 +2,7 @@ package com.fintrack.app.service.dto;
 
 import java.io.Serializable;
 
-public class CsvIngestionPreviewCountsDTO implements Serializable {
+public class CsvIngestionWorkflowCountsDTO implements Serializable {
 
     private Integer recordsReceived;
 

@@ -62,7 +62,7 @@ const renderCreateForm = () => {
     <MemoryRouter initialEntries={['/file-ingestion/new']}>
       <Routes>
         <Route path="/file-ingestion/new" element={<FileIngestionUpdate />} />
-        <Route path="/transaction-ingestion/:id/file-preview" element={<div>Review route</div>} />
+        <Route path="/transaction-ingestion/:id" element={<div>Review route</div>} />
       </Routes>
     </MemoryRouter>,
   );

@@ -99,11 +99,11 @@ export const TransactionIngestionUpdate = () => {
       return;
     }
     if (!selectedAccountId) {
-      setCreateError(translate('fintrackApp.transactionIngestion.filePreview.errors.accountRequired'));
+      setCreateError(translate('fintrackApp.transactionIngestion.workflow.errors.accountRequired'));
       return;
     }
     if (!selectedFile) {
-      setCreateError(translate('fintrackApp.transactionIngestion.filePreview.errors.fileRequired'));
+      setCreateError(translate('fintrackApp.transactionIngestion.workflow.errors.fileRequired'));
       return;
     }
 
@@ -116,7 +116,7 @@ export const TransactionIngestionUpdate = () => {
       const response = await axios.post('api/transaction-ingestions/file', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      navigate(`/transaction-ingestion/${response.data.transactionIngestionId}/file-preview`);
+      navigate(`/transaction-ingestion/${response.data.transactionIngestionId}`);
     } catch (error) {
       setCreateError(createErrorMessage(error));
     } finally {
@@ -236,7 +236,7 @@ export const TransactionIngestionUpdate = () => {
                   {selectedIngestionType === 'FILE' ? (
                     <div className="mb-3">
                       <Label for="transaction-ingestion-csv-file">
-                        <Translate contentKey="fintrackApp.transactionIngestion.filePreview.csvFile">CSV file</Translate>
+                        <Translate contentKey="fintrackApp.transactionIngestion.workflow.csvFile">CSV file</Translate>
                       </Label>
                       <Input
                         id="transaction-ingestion-csv-file"
@@ -248,7 +248,7 @@ export const TransactionIngestionUpdate = () => {
                         onChange={onFileChange}
                       />
                       <FormText>
-                        <Translate contentKey="fintrackApp.transactionIngestion.filePreview.csvHint">
+                        <Translate contentKey="fintrackApp.transactionIngestion.workflow.csvHint">
                           Expected header: transactionDate,postingDate,description,signedAmount,currency,externalReference,notes
                         </Translate>
                       </FormText>
@@ -418,7 +418,7 @@ export const TransactionIngestionUpdate = () => {
                 <FontAwesomeIcon icon="save" />
                 &nbsp;
                 {isNew ? (
-                  <Translate contentKey="fintrackApp.transactionIngestion.create.submitFile">Create preview</Translate>
+                  <Translate contentKey="fintrackApp.transactionIngestion.create.submitFile">Create workflow</Translate>
                 ) : (
                   <Translate contentKey="entity.action.save">Save</Translate>
                 )}

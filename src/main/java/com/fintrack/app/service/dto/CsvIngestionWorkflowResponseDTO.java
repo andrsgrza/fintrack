@@ -6,7 +6,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CsvIngestionPreviewResponseDTO implements Serializable {
+public class CsvIngestionWorkflowResponseDTO implements Serializable {
 
     private Long transactionIngestionId;
 
@@ -16,13 +16,13 @@ public class CsvIngestionPreviewResponseDTO implements Serializable {
 
     private String sourceLabel;
 
-    private CsvIngestionPreviewCountsDTO counts;
+    private CsvIngestionWorkflowCountsDTO counts;
 
     private List<CsvIngestionValidationMessage> warnings = new ArrayList<>();
 
     private CsvIngestionFileMetadataDTO fileMetadata;
 
-    private List<CsvIngestionPreviewRowDTO> rows = new ArrayList<>();
+    private List<CsvIngestionWorkflowRecordDTO> rows = new ArrayList<>();
 
     public Long getTransactionIngestionId() {
         return transactionIngestionId;
@@ -56,11 +56,11 @@ public class CsvIngestionPreviewResponseDTO implements Serializable {
         this.sourceLabel = sourceLabel;
     }
 
-    public CsvIngestionPreviewCountsDTO getCounts() {
+    public CsvIngestionWorkflowCountsDTO getCounts() {
         return counts;
     }
 
-    public void setCounts(CsvIngestionPreviewCountsDTO counts) {
+    public void setCounts(CsvIngestionWorkflowCountsDTO counts) {
         this.counts = counts;
     }
 
@@ -80,11 +80,11 @@ public class CsvIngestionPreviewResponseDTO implements Serializable {
         this.fileMetadata = fileMetadata;
     }
 
-    public List<CsvIngestionPreviewRowDTO> getRows() {
+    public List<CsvIngestionWorkflowRecordDTO> getRows() {
         return rows;
     }
 
-    public void setRows(List<CsvIngestionPreviewRowDTO> rows) {
+    public void setRows(List<CsvIngestionWorkflowRecordDTO> rows) {
         this.rows = rows;
     }
 }

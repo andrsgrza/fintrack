@@ -11,7 +11,7 @@ The current CSV ingestion architecture has a healthy aggregate/workflow shape:
 
 The canonical product flow is the custom CSV workflow:
 
-1. create persisted CSV preview;
+1. create persisted CSV workflow;
 2. review persisted rows;
 3. edit normalized rows for `VALID` / `REJECTED`;
 4. enable or disable rows;
@@ -29,26 +29,26 @@ Before adding a FinancialAccount import shortcut or Rule Engine behavior for imp
 | Field                   | Classification                         | Current behavior                                                                                                                               |
 | ----------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`                    | Immutable identity                     | Assigned by the database.                                                                                                                      |
-| `ingestionType`         | Immutable after creation               | CSV preview creates `FILE`; should not change afterward.                                                                                       |
+| `ingestionType`         | Immutable after creation               | CSV workflow creates `FILE`; should not change afterward.                                                                                      |
 | `status`                | System-owned mutable                   | Preview sets `READY` or `PARTIALLY_READY`; row actions recalculate readiness; confirm import sets `COMPLETED`; failure paths may use `FAILED`. |
 | `sourceLabel`           | System metadata                        | Preview uses `Canonical CSV: <filename>`; should not be normal product-user editable.                                                          |
-| `startedAt`             | System-owned immutable                 | Set during preview creation.                                                                                                                   |
-| `completedAt`           | System-owned lifecycle timestamp       | Set when preview parsing/persistence completes; updated when confirm import completes.                                                         |
+| `startedAt`             | System-owned immutable                 | Set during workflow creation.                                                                                                                  |
+| `completedAt`           | System-owned lifecycle timestamp       | Set when workflow parsing/persistence completes; updated when confirm import completes.                                                        |
 | `recordsReceived`       | Derived/recalculated                   | Total persisted records.                                                                                                                       |
 | `recordsCreated`        | Derived/recalculated                   | Count of `IMPORTED` records after confirm import.                                                                                              |
 | `recordsSkipped`        | Derived/recalculated                   | Count of `DISABLED` + `SKIPPED_DUPLICATE`.                                                                                                     |
 | `recordsRejected`       | Derived/recalculated                   | Count of `REJECTED` + `FAILED`.                                                                                                                |
 | `errorMessage`          | System-owned mutable                   | Used for failed/error lifecycle states.                                                                                                        |
 | `createdAt`             | Server-owned immutable                 | Set on create.                                                                                                                                 |
-| `account`               | Relationship, immutable after creation | Preview resolves an account accessible to the current user.                                                                                    |
-| `fileIngestion`         | Child relationship                     | Created together with CSV preview.                                                                                                             |
+| `account`               | Relationship, immutable after creation | Workflow upload resolves an account accessible to the current user.                                                                            |
+| `fileIngestion`         | Child relationship                     | Created together with CSV workflow.                                                                                                            |
 | `apiIngestion`          | Child relationship                     | Not used by CSV ingestion.                                                                                                                     |
 | `financialTransactions` | Child relationship                     | Created by Confirm Import from valid rows.                                                                                                     |
-| `records`               | Child relationship                     | Created during preview; mutated through contextual row-review actions.                                                                         |
+| `records`               | Child relationship                     | Created during CSV workflow upload; mutated through contextual row-review actions.                                                             |
 
 Lifecycle changes today:
 
-- Preview creation creates the parent, file metadata, and records.
+- Workflow upload creates the parent, file metadata, and records.
 - Enable row revalidates a disabled record and recalculates parent readiness/counts.
 - Disable row marks a valid/rejected record as disabled and recalculates parent readiness/counts.
 - Edit row updates normalized row data, derives validation status/errors/amount/flow, and recalculates parent readiness/counts.
@@ -61,7 +61,7 @@ Lifecycle changes today:
 | ---------------------- | ------------------------ | --------------------------------------------------- |
 | `id`                   | Immutable identity       | Assigned by the database.                           |
 | `originalFilename`     | Read-only metadata       | Derived from the uploaded filename.                 |
-| `fileType`             | Read-only metadata       | CSV preview sets `CSV`.                             |
+| `fileType`             | Read-only metadata       | CSV workflow sets `CSV`.                            |
 | `contentType`          | Read-only metadata       | Comes from the multipart upload.                    |
 | `fileSizeBytes`        | Read-only metadata       | Derived from uploaded bytes length.                 |
 | `checksum`             | Derived metadata         | SHA-256 of uploaded file bytes.                     |
@@ -71,27 +71,27 @@ Lifecycle changes today:
 | `statementStartDate`   | Derived from parsed file | Minimum valid `transactionDate` in parsed rows.     |
 | `statementEndDate`     | Derived from parsed file | Maximum valid `transactionDate` in parsed rows.     |
 | `transactionIngestion` | Required relationship    | Parent `TransactionIngestion`.                      |
-| `createdAt`            | Server-owned immutable   | Set during preview creation.                        |
+| `createdAt`            | Server-owned immutable   | Set during workflow creation.                       |
 
 No `FileIngestion` field should be editable from product UI. It is metadata about an uploaded file, not a user-managed resource.
 
 ### IngestionRecord
 
-| Field                        | Classification                       | Current behavior                                                                                                                                          |
-| ---------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                         | Immutable identity                   | Assigned by the database.                                                                                                                                 |
-| `recordIndex`                | Immutable row identity               | CSV row index persisted during preview.                                                                                                                   |
-| `externalRecordId`           | Normalized metadata                  | Derived from normalized `externalReference`, when present.                                                                                                |
-| `status`                     | Validation/review state              | Preview sets `VALID` or `REJECTED`; disable sets `DISABLED`; enable revalidates to `VALID` or `REJECTED`; confirm sets imported valid rows to `IMPORTED`. |
-| `rawData.raw`                | Immutable original input             | Snapshot of original CSV row values.                                                                                                                      |
-| `rawData.normalized`         | Review-editable normalized candidate | Edited by users through the custom review row editor.                                                                                                     |
-| `rawData.errors`             | Derived/recalculated                 | Rebuilt by the validation pipeline.                                                                                                                       |
-| `rawData.warnings`           | Derived/recalculated                 | Rebuilt by the validation pipeline.                                                                                                                       |
-| `rawData.review`             | Review metadata                      | Added/updated when normalized row values are edited.                                                                                                      |
-| `errorCode` / `errorMessage` | Derived validation summary           | First validation error for display/search; cleared when valid/disabled.                                                                                   |
-| `createdAt`                  | Server-owned immutable               | Set during preview creation.                                                                                                                              |
-| `financialTransaction`       | Relationship created on confirm      | `null` until confirm import; then points to the created transaction for `IMPORTED` rows.                                                                  |
-| `transactionIngestion`       | Parent relationship immutable        | Parent ingestion.                                                                                                                                         |
+| Field                        | Classification                       | Current behavior                                                                                                                                         |
+| ---------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                         | Immutable identity                   | Assigned by the database.                                                                                                                                |
+| `recordIndex`                | Immutable row identity               | CSV row index persisted during workflow upload.                                                                                                          |
+| `externalRecordId`           | Normalized metadata                  | Derived from normalized `externalReference`, when present.                                                                                               |
+| `status`                     | Validation/review state              | Upload sets `VALID` or `REJECTED`; disable sets `DISABLED`; enable revalidates to `VALID` or `REJECTED`; confirm sets imported valid rows to `IMPORTED`. |
+| `rawData.raw`                | Immutable original input             | Snapshot of original CSV row values.                                                                                                                     |
+| `rawData.normalized`         | Review-editable normalized candidate | Edited by users through the custom review row editor.                                                                                                    |
+| `rawData.errors`             | Derived/recalculated                 | Rebuilt by the validation pipeline.                                                                                                                      |
+| `rawData.warnings`           | Derived/recalculated                 | Rebuilt by the validation pipeline.                                                                                                                      |
+| `rawData.review`             | Review metadata                      | Added/updated when normalized row values are edited.                                                                                                     |
+| `errorCode` / `errorMessage` | Derived validation summary           | First validation error for display/search; cleared when valid/disabled.                                                                                  |
+| `createdAt`                  | Server-owned immutable               | Set during workflow creation.                                                                                                                            |
+| `financialTransaction`       | Relationship created on confirm      | `null` until confirm import; then points to the created transaction for `IMPORTED` rows.                                                                 |
+| `transactionIngestion`       | Parent relationship immutable        | Parent ingestion.                                                                                                                                        |
 
 Confirmed intended behavior:
 
@@ -105,15 +105,13 @@ Confirmed intended behavior:
 
 ### TransactionIngestion views
 
-| Route                                     | Component                                | Origin                     | Current role                     | Actions/fields                                                                                             |
-| ----------------------------------------- | ---------------------------------------- | -------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `/transaction-ingestion`                  | `transaction-ingestion.tsx`              | JHipster generated, edited | Mixed: list plus CSV entry point | Shows ingestion fields; has custom file import button, but also generated create/edit/delete actions.      |
-| `/transaction-ingestion/new`              | `transaction-ingestion-update.tsx`       | Generated, edited          | Mostly debug/admin               | Generic create path; not the canonical CSV workflow.                                                       |
-| `/transaction-ingestion/:id`              | `transaction-ingestion-detail.tsx`       | Generated                  | Mostly debug/admin               | Shows generic detail fields; does not serve as the custom review page.                                     |
-| `/transaction-ingestion/:id/edit`         | `transaction-ingestion-update.tsx`       | Generated, edited          | Mostly debug/admin               | Exposes lifecycle/status/counter-style fields. Risky for product users.                                    |
-| `/transaction-ingestion/:id/delete`       | Delete dialog                            | Generated                  | Useful parent cleanup            | Deletes parent and related ingestion/file/record/created transaction data through backend orchestration.   |
-| `/transaction-ingestion/file-preview/new` | `transaction-ingestion-file-preview.tsx` | Custom CSV feature         | Canonical product UI             | Upload CSV, choose account, create persisted preview.                                                      |
-| `/transaction-ingestion/:id/file-preview` | `transaction-ingestion-file-preview.tsx` | Custom CSV feature         | Canonical product UI             | Review rows, edit normalized values, enable/disable rows, confirm import, show completed read-only review. |
+| Route                               | Component                                   | Origin                     | Current role                     | Actions/fields                                                                                                       |
+| ----------------------------------- | ------------------------------------------- | -------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `/transaction-ingestion`            | `transaction-ingestion.tsx`                 | JHipster generated, edited | Mixed: list plus CSV entry point | Shows ingestion fields; has custom file import button, but also generated create/edit/delete actions.                |
+| `/transaction-ingestion/new`        | `transaction-ingestion-update.tsx`          | Generated, edited          | Canonical product UI             | Parent-centered FILE create workflow: select account/type, upload CSV, create parent + file metadata + records.      |
+| `/transaction-ingestion/:id`        | `transaction-ingestion-workflow-detail.tsx` | Custom CSV feature         | Canonical product UI             | Workflow detail/review page: parent summary, embedded file metadata, review rows, confirm/read-only completed state. |
+| `/transaction-ingestion/:id/edit`   | `transaction-ingestion-update.tsx`          | Generated, edited          | Mostly debug/admin               | Exposes lifecycle/status/counter-style fields. Risky for product users.                                              |
+| `/transaction-ingestion/:id/delete` | Delete dialog                               | Generated                  | Useful parent cleanup            | Deletes parent and related ingestion/file/record/created transaction data through backend orchestration.             |
 
 ### FileIngestion views
 
@@ -145,7 +143,7 @@ The custom CSV workflow follows the intended composition rules documented in `do
 - Completed ingestions are read-only.
 - Full child CRUD is not embedded arbitrarily into parent CRUD.
 
-The gap is not the custom workflow. The gap is navigation and page ownership: generated CRUD pages still appear as normal entity pages. That weakens the product model because users can discover screens that do not match the domain language.
+The custom workflow now owns the canonical create/detail/review routes. The remaining gap is broader navigation and page ownership: generated child CRUD pages can still appear as normal entity pages. That weakens the product model because users can discover screens that do not match the domain language.
 
 Generated CRUD pages may still be useful as development/debug tools, but they should not be treated as canonical user-facing product UI.
 
@@ -157,20 +155,20 @@ Generated CRUD pages may still be useful as development/debug tools, but they sh
 
 3. `IngestionRecord` generated create/edit contradicts contextual row-review semantics and can expose raw JSON, status, errors, and transaction links outside the ingestion workflow.
 
-4. `TransactionIngestion` detail does not naturally route users to the CSV review page for FILE ingestions.
+4. `TransactionIngestion` detail now routes to the workflow detail/review page, but `FileIngestion` and `IngestionRecord` standalone pages can still confuse product ownership.
 
 5. `FileIngestion` and `IngestionRecord` are still visible in the normal Entities menu, even though their product meaning is child metadata/review state.
 
 6. Backend has some admin-access branches in generic services. For future Rule Engine import behavior, avoid designing any admin cross-user evaluation behavior; rule application should remain scoped to the current user/account owner as already decided.
 
-7. Rule Engine behavior for imports should not be mixed into preview/edit-row validation. Preview validates CSV rows. Rule application belongs at transaction creation time during Confirm Import.
+7. Rule Engine behavior for imports should not be mixed into upload/edit-row validation. CSV review validates CSV rows. Rule application belongs at transaction creation time during Confirm Import.
 
 ## 6. Recommendations
 
-Canonical product UI should be:
+Canonical product UI is now:
 
-- `/transaction-ingestion/file-preview/new`
-- `/transaction-ingestion/{id}/file-preview`
+- `/transaction-ingestion/new`
+- `/transaction-ingestion/{id}`
 - a cleaned `TransactionIngestion` list that links FILE ingestions to the review page.
 
 Generated/debug-only UI should be:
@@ -191,7 +189,7 @@ Recommended FinancialAccount shortcut shape:
 
 - Add “Import CSV” from FinancialAccount detail.
 - Route to the existing upload page with the account preselected.
-- Reuse the same preview/review/confirm flow.
+- Reuse the same review/confirm flow.
 - Do not create a new FileIngestion flow.
 - Do not duplicate parser/review logic.
 
@@ -199,7 +197,7 @@ Recommended Rule Engine import placement:
 
 - Apply rules during Confirm Import when creating each `FinancialTransaction`.
 - Use the same `FILL_EMPTY_ONLY` contract as manual create.
-- Do not apply rules during preview creation.
+- Do not apply rules during CSV workflow upload.
 - Do not apply rules during row edit.
 - Do not persist evaluation results in this phase.
 - Do not mutate `rawData.raw`.
@@ -210,7 +208,7 @@ Recommended Rule Engine import placement:
 1. Navigation/product cleanup:
 
    - remove or hide `FileIngestion` and `IngestionRecord` from the normal Entities menu;
-   - change TransactionIngestion list actions so FILE ingestions go to `/transaction-ingestion/{id}/file-preview`;
+   - keep TransactionIngestion list actions pointing to `/transaction-ingestion/{id}`;
    - hide generic create/edit where they are not product-safe.
 
 2. FinancialAccount import shortcut:
@@ -222,7 +220,7 @@ Recommended Rule Engine import placement:
 3. Rule Engine import design doc update:
 
    - explicitly document that import rule application happens during Confirm Import;
-   - clarify that preview/review remains CSV validation only.
+   - clarify that review remains CSV validation only.
 
 4. Rule Engine import implementation:
    - for each `VALID` ingestion row, build the `FinancialTransaction` draft;
@@ -252,7 +250,7 @@ Backend files inspected:
 - `src/main/java/com/fintrack/app/service/TransactionIngestionService.java`
 - `src/main/java/com/fintrack/app/service/FileIngestionService.java`
 - `src/main/java/com/fintrack/app/service/IngestionRecordService.java`
-- `src/main/java/com/fintrack/app/service/CsvIngestionPreviewService.java`
+- `src/main/java/com/fintrack/app/service/CsvIngestionWorkflowService.java`
 - `src/main/java/com/fintrack/app/service/CsvIngestionRecordReviewService.java`
 - `src/main/java/com/fintrack/app/service/CsvIngestionConfirmImportService.java`
 - `src/main/java/com/fintrack/app/service/CsvIngestionReadinessService.java`
@@ -266,8 +264,8 @@ Frontend files inspected:
 - `src/main/webapp/app/entities/transaction-ingestion/transaction-ingestion.tsx`
 - `src/main/webapp/app/entities/transaction-ingestion/transaction-ingestion-detail.tsx`
 - `src/main/webapp/app/entities/transaction-ingestion/transaction-ingestion-update.tsx`
-- `src/main/webapp/app/entities/transaction-ingestion/transaction-ingestion-file-preview.tsx`
-- `src/main/webapp/app/entities/transaction-ingestion/transaction-ingestion-file-preview.spec.tsx`
+- `src/main/webapp/app/entities/transaction-ingestion/transaction-ingestion-workflow-detail.tsx`
+- `src/main/webapp/app/entities/transaction-ingestion/transaction-ingestion-workflow-detail.spec.tsx`
 - `src/main/webapp/app/entities/file-ingestion/index.tsx`
 - `src/main/webapp/app/entities/file-ingestion/file-ingestion.tsx`
 - `src/main/webapp/app/entities/file-ingestion/file-ingestion-detail.tsx`

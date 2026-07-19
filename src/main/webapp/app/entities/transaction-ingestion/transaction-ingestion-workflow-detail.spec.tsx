@@ -9,7 +9,7 @@ import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enIngestionStatus from 'app/../i18n/en/ingestionStatus.json';
 import enIngestionRecordStatus from 'app/../i18n/en/ingestionRecordStatus.json';
 import { TransactionIngestion } from './transaction-ingestion';
-import { TransactionIngestionFilePreview } from './transaction-ingestion-file-preview';
+import { TransactionIngestionWorkflowDetail } from './transaction-ingestion-workflow-detail';
 
 jest.mock('axios');
 
@@ -39,6 +39,21 @@ const baseState = {
   },
   transactionIngestion: {
     entities: [],
+    entity: {
+      id: 100,
+      ingestionType: 'FILE',
+      status: 'PARTIALLY_READY',
+      sourceLabel: 'Canonical CSV: workflow.csv',
+      startedAt: '2026-07-13T16:00:00Z',
+      completedAt: '2026-07-13T16:01:00Z',
+      recordsReceived: 3,
+      recordsCreated: 0,
+      recordsSkipped: 1,
+      recordsRejected: 1,
+      errorMessage: null,
+      createdAt: '2026-07-13T15:59:00Z',
+      account: { id: 10, name: 'Checking account' },
+    },
     loading: false,
     totalItems: 0,
   },
@@ -52,26 +67,19 @@ const registerTranslations = () => {
   TranslatorContext.setLocale('en');
 };
 
-const renderFilePreview = () => {
-  mockState = baseState;
+const renderPersistedReview = (path = '/transaction-ingestion/100', entity = baseState.transactionIngestion.entity) => {
+  mockState = {
+    ...baseState,
+    transactionIngestion: {
+      ...baseState.transactionIngestion,
+      entity,
+    },
+  };
 
   return render(
-    <MemoryRouter initialEntries={['/transaction-ingestion/file-preview/new']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/transaction-ingestion/file-preview/new" element={<TransactionIngestionFilePreview />} />
-        <Route path="/transaction-ingestion/:id/file-preview" element={<TransactionIngestionFilePreview />} />
-      </Routes>
-    </MemoryRouter>,
-  );
-};
-
-const renderPersistedReview = () => {
-  mockState = baseState;
-
-  return render(
-    <MemoryRouter initialEntries={['/transaction-ingestion/100/file-preview']}>
-      <Routes>
-        <Route path="/transaction-ingestion/:id/file-preview" element={<TransactionIngestionFilePreview />} />
+        <Route path="/transaction-ingestion/:id" element={<TransactionIngestionWorkflowDetail />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -89,37 +97,10 @@ const renderList = () => {
   );
 };
 
-const uploadCsv = () => {
-  const file = new File(['transactionDate,postingDate,description,signedAmount,currency,externalReference,notes'], 'preview.csv', {
-    type: 'text/csv',
-  });
-  const input = screen.getByLabelText('CSV file') as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [file] } });
-  return input;
-};
-
-const selectAccount = () => {
-  const input = screen.getByLabelText('Account') as HTMLSelectElement;
-  fireEvent.change(input, { target: { value: '10' } });
-  return input;
-};
-
-const rowForRecord = (recordId: number) => screen.getByTestId(`filePreviewRowStatus-${recordId}`).closest('tr') as HTMLElement;
+const rowForRecord = (recordId: number) => screen.getByTestId(`workflowRowStatus-${recordId}`).closest('tr') as HTMLElement;
 
 const expectRowStatus = (recordId: number, status: string) => {
-  expect(screen.getByTestId(`filePreviewRowStatus-${recordId}`).textContent).toBe(status);
-};
-
-const successfulPreviewResponse = {
-  data: {
-    transactionIngestionId: 100,
-    fileIngestionId: 200,
-    status: 'READY',
-    sourceLabel: 'Canonical CSV: preview.csv',
-    counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
-    warnings: [],
-    rows: [],
-  },
+  expect(screen.getByTestId(`workflowRowStatus-${recordId}`).textContent).toBe(status);
 };
 
 const persistedReviewResponse = {
@@ -127,19 +108,21 @@ const persistedReviewResponse = {
     transactionIngestionId: 100,
     fileIngestionId: 200,
     status: 'PARTIALLY_READY',
-    sourceLabel: 'Canonical CSV: preview.csv',
+    sourceLabel: 'Canonical CSV: workflow.csv',
     counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 1, validRows: 1, invalidRows: 1 },
     warnings: [],
     fileMetadata: {
-      originalFilename: 'preview.csv',
+      originalFilename: 'workflow.csv',
       fileType: 'CSV',
       contentType: 'text/csv',
       fileSizeBytes: 123,
       checksum: 'abc123',
+      storageKey: null,
       parserName: 'fintrack-canonical-csv',
       parserVersion: '1.0',
       statementStartDate: '2026-07-13',
       statementEndDate: '2026-07-14',
+      createdAt: '2026-07-13T16:00:00Z',
     },
     rows: [
       {
@@ -189,7 +172,7 @@ const persistedReviewResponse = {
   },
 };
 
-describe('TransactionIngestion file preview workflow', () => {
+describe('TransactionIngestion file workflow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAxiosPost.mockReset();
@@ -207,118 +190,25 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(newFileImport.getAttribute('href')).toBe('/transaction-ingestion/new');
   });
 
-  it('renders account selector, file input, and Preview button', () => {
-    renderFilePreview();
-
-    expect(mockGetFinancialAccounts).toHaveBeenCalledWith({ sort: 'name,asc' });
-    expect(screen.getByRole('heading', { name: /file import preview/i })).toBeTruthy();
-    expect(screen.getByLabelText('Account')).toBeTruthy();
-    expect(screen.getByText('Checking account (MXN)')).toBeTruthy();
-    expect(screen.getByLabelText('CSV file')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /preview/i })).toBeTruthy();
-    expect(screen.getAllByText('Preview only — no transactions were created.')).toHaveLength(1);
-  });
-
-  it('requires account before submit', async () => {
-    renderFilePreview();
-    uploadCsv();
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    expect(await screen.findByText('Account is required.')).toBeTruthy();
-    expect(mockAxiosPost).not.toHaveBeenCalled();
-  });
-
-  it('requires file before submit', async () => {
-    renderFilePreview();
-    selectAccount();
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    expect(await screen.findByText('CSV file is required.')).toBeTruthy();
-    expect(mockAxiosPost).not.toHaveBeenCalled();
-  });
-
-  it('submits multipart request to file-preview endpoint', async () => {
-    mockAxiosPost.mockResolvedValue(successfulPreviewResponse);
-    renderFilePreview();
-    selectAccount();
-    uploadCsv();
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledTimes(1));
-    expect(mockAxiosPost).toHaveBeenCalledWith(
-      'api/transaction-ingestions/file-preview',
-      expect.any(FormData),
-      expect.objectContaining({ headers: { 'Content-Type': 'multipart/form-data' } }),
-    );
-
-    const formData = mockAxiosPost.mock.calls[0][1] as FormData;
-    expect(formData.get('accountId')).toBe('10');
-    expect(formData.get('file')).toBeTruthy();
-  });
-
-  it('disables Preview while upload is in progress', async () => {
-    let resolvePreview;
-    mockAxiosPost.mockReturnValue(
-      new Promise(resolve => {
-        resolvePreview = resolve;
-      }),
-    );
-    renderFilePreview();
-    selectAccount();
-    uploadCsv();
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    await waitFor(() => expect(screen.getByRole('button', { name: /preview/i }).hasAttribute('disabled')).toBe(true));
-
-    resolvePreview(successfulPreviewResponse);
-    await screen.findByRole('heading', { name: /review import|file import preview/i });
-  });
-
-  it('redirects to persisted review route after successful preview', async () => {
-    mockAxiosPost.mockResolvedValue(successfulPreviewResponse);
-    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
-    renderFilePreview();
-    const account = selectAccount();
-    const fileInput = uploadCsv();
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    expect(await screen.findByText('preview.csv')).toBeTruthy();
-    expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-ingestions/100/file-preview');
-    expect(account.value).toBe('10');
-    expect(fileInput.value).toBe('');
-  });
-
-  it('clears selected file after failed preview while preserving account', async () => {
-    mockAxiosPost.mockRejectedValue(new Error('upload failed'));
-    renderFilePreview();
-    const account = selectAccount();
-    const fileInput = uploadCsv();
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    expect(await screen.findByText('Could not create file preview. Check the file and try again.')).toBeTruthy();
-    expect(account.value).toBe('10');
-    expect(fileInput.value).toBe('');
-
-    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
-
-    expect(await screen.findByText('CSV file is required.')).toBeTruthy();
-    expect(mockAxiosPost).toHaveBeenCalledTimes(1);
-  });
-
-  it('review page loads persisted preview metadata, counts, statuses, and actions', async () => {
+  it('canonical detail page loads parent summary, file metadata, counts, statuses, and actions', async () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderPersistedReview();
 
-    expect(await screen.findByText('preview.csv')).toBeTruthy();
-    expect(screen.getByText('fintrack-canonical-csv 1.0')).toBeTruthy();
-    expect(screen.getByText('Needs review')).toBeTruthy();
-    const counts = screen.getByTestId('filePreviewCounts');
+    expect(await screen.findByText('workflow.csv')).toBeTruthy();
+    expect(screen.getByText('Parent summary')).toBeTruthy();
+    expect(screen.getByText('Checking account')).toBeTruthy();
+    expect(screen.getByText('FILE')).toBeTruthy();
+    expect(screen.getByText('Parser name')).toBeTruthy();
+    expect(screen.getByText('fintrack-canonical-csv')).toBeTruthy();
+    expect(screen.getByText('Parser version')).toBeTruthy();
+    expect(screen.getByText('1.0')).toBeTruthy();
+    expect(screen.getByText('Statement start date')).toBeTruthy();
+    expect(screen.getAllByText('2026-07-13').length).toBeGreaterThan(0);
+    expect(screen.getByText('Statement end date')).toBeTruthy();
+    expect(screen.getByText('2026-07-14')).toBeTruthy();
+    expect(screen.getByText('Ingestion records')).toBeTruthy();
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
+    const counts = screen.getByTestId('workflowCounts');
     expect(within(counts).getByText('Records received')).toBeTruthy();
     expect(within(counts).getByText('Valid rows')).toBeTruthy();
     expect(within(counts).getByText('Invalid rows')).toBeTruthy();
@@ -351,25 +241,54 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
   });
 
+  it('API ingestion detail shows TBD placeholder and does not load file workflow', async () => {
+    renderPersistedReview('/transaction-ingestion/100', {
+      ...baseState.transactionIngestion.entity,
+      ingestionType: 'API',
+      status: 'PENDING',
+      sourceLabel: 'API ingestion',
+    });
+
+    expect(await screen.findByText('API ingestion detail is not implemented yet.')).toBeTruthy();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('workflowCounts')).toBeNull();
+  });
+
+  it('PENDING FILE ingestion without file metadata shows unavailable state without crashing', async () => {
+    mockAxiosGet.mockRejectedValue(new Error('not available'));
+    renderPersistedReview('/transaction-ingestion/100', {
+      ...baseState.transactionIngestion.entity,
+      status: 'PENDING',
+      sourceLabel: null,
+      recordsReceived: 0,
+      recordsSkipped: 0,
+      recordsRejected: 0,
+    });
+
+    expect(await screen.findByText('No file workflow metadata or review rows are available yet.')).toBeTruthy();
+    expect(screen.getByText('Parent summary')).toBeTruthy();
+    expect(screen.queryByTestId('workflowCounts')).toBeNull();
+  });
+
   it('renders ingestion readiness and import-result status labels', async () => {
     mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'READY' } });
     const { unmount } = renderPersistedReview();
-    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
     unmount();
 
     mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'PARTIALLY_READY' } });
     const partiallyReady = renderPersistedReview();
-    expect(await screen.findByText('Needs review')).toBeTruthy();
+    expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
     partiallyReady.unmount();
 
     mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'COMPLETED' } });
     const completed = renderPersistedReview();
-    expect(await screen.findByText('Import completed')).toBeTruthy();
+    expect((await screen.findAllByText('Import completed')).length).toBeGreaterThan(0);
     completed.unmount();
 
     mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'PARTIALLY_COMPLETED' } });
     renderPersistedReview();
-    expect(await screen.findByText('Import partially completed')).toBeTruthy();
+    expect((await screen.findAllByText('Import partially completed')).length).toBeGreaterThan(0);
   });
 
   it('disable action updates row status and counts from response', async () => {
@@ -388,8 +307,8 @@ describe('TransactionIngestion file preview workflow', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /disable/i })[0]);
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/300/disable'));
-    await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
-    expect(screen.getByText('Needs review')).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByTestId('workflowCounts')).getByText('2')).toBeTruthy());
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expectRowStatus(300, 'Disabled');
     expect(within(rowForRecord(300)).getByRole('button', { name: /enable/i })).toBeTruthy();
     expect(within(rowForRecord(300)).queryByRole('button', { name: /disable/i })).toBeNull();
@@ -415,10 +334,10 @@ describe('TransactionIngestion file preview workflow', () => {
     });
     renderPersistedReview();
 
-    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /disable/i }));
 
-    await waitFor(() => expect(screen.getByText('Needs review')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Disabled');
   });
 
@@ -438,8 +357,8 @@ describe('TransactionIngestion file preview workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /enable/i }));
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
-    await waitFor(() => expect(within(screen.getByTestId('filePreviewCounts')).getByText('2')).toBeTruthy());
-    expect(screen.getByText('Needs review')).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByTestId('workflowCounts')).getByText('2')).toBeTruthy());
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expectRowStatus(302, 'Valid');
     expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
     expect(within(rowForRecord(302)).queryByRole('button', { name: /enable/i })).toBeNull();
@@ -464,10 +383,10 @@ describe('TransactionIngestion file preview workflow', () => {
     });
     renderPersistedReview();
 
-    expect(await screen.findByText('Needs review')).toBeTruthy();
+    expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /enable/i }));
 
-    await waitFor(() => expect(screen.getByText('Ready to import')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('Ready to import').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Valid');
   });
 
@@ -492,7 +411,7 @@ describe('TransactionIngestion file preview workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /enable/i }));
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
-    expect(screen.getByText('Needs review')).toBeTruthy();
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expectRowStatus(302, 'Rejected');
     expect(within(rowForRecord(302)).getByText('description is required')).toBeTruthy();
     expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
@@ -539,7 +458,7 @@ describe('TransactionIngestion file preview workflow', () => {
       }),
     );
     expect(await screen.findByText('Corrected row')).toBeTruthy();
-    expect(screen.getByText('Ready to import')).toBeTruthy();
+    expect(screen.getAllByText('Ready to import').length).toBeGreaterThan(0);
     expectRowStatus(301, 'Valid');
     expect(screen.getAllByText('50.00')).toHaveLength(2);
     expect(screen.queryByText('signedAmount must be nonzero')).toBeNull();
@@ -641,7 +560,7 @@ describe('TransactionIngestion file preview workflow', () => {
 
     await waitFor(() => expect(mockAxiosPatch).toHaveBeenCalledWith(expect.stringContaining('/records/300'), expect.any(Object)));
     await waitFor(() => expectRowStatus(300, 'Rejected'));
-    expect(screen.getByText('Needs review')).toBeTruthy();
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expect(screen.getAllByText('signedAmount must be nonzero')).toHaveLength(2);
   });
 
@@ -672,12 +591,12 @@ describe('TransactionIngestion file preview workflow', () => {
     });
     renderPersistedReview();
 
-    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /edit/i }));
     fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: /save row/i }));
 
-    await waitFor(() => expect(screen.getByText('Needs review')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Rejected');
   });
 
@@ -702,7 +621,7 @@ describe('TransactionIngestion file preview workflow', () => {
     });
     renderPersistedReview();
 
-    expect(await screen.findByText('Ready to import')).toBeTruthy();
+    expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
     expect(screen.queryByText(/translation-not-found/i)).toBeNull();
     expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
@@ -712,7 +631,7 @@ describe('TransactionIngestion file preview workflow', () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderPersistedReview();
 
-    expect(await screen.findByText('Needs review')).toBeTruthy();
+    expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
     expect(screen.queryByText(/translation-not-found/i)).toBeNull();
     expect(screen.getByText('Fix or disable rejected rows before importing.')).toBeTruthy();
@@ -766,11 +685,11 @@ describe('TransactionIngestion file preview workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/confirm'));
-    await waitFor(() => expect(screen.getByText('Import completed')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('Import completed').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Imported');
     expectRowStatus(302, 'Disabled');
-    expect(within(screen.getByTestId('filePreviewCounts')).getAllByText('0')).toHaveLength(3);
-    expect(screen.queryByText('Preview only — no transactions were created.')).toBeNull();
+    expect(within(screen.getByTestId('workflowCounts')).getAllByText('0')).toHaveLength(3);
+    expect(screen.queryByText('No transactions were created yet.')).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Error' })).toBeNull();
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
@@ -793,8 +712,8 @@ describe('TransactionIngestion file preview workflow', () => {
     });
     renderPersistedReview();
 
-    expect(await screen.findByText('Import completed')).toBeTruthy();
-    expect(screen.queryByText('Preview only — no transactions were created.')).toBeNull();
+    expect((await screen.findAllByText('Import completed')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('No transactions were created yet.')).toBeNull();
     expectRowStatus(300, 'Imported');
     expectRowStatus(302, 'Disabled');
     expect(rowForRecord(302).textContent).toContain('Disabled row');
@@ -825,7 +744,7 @@ describe('TransactionIngestion file preview workflow', () => {
 
     expect(await screen.findByText('Could not confirm import. Check the review status and try again.')).toBeTruthy();
     expect(screen.queryByText('Import completed')).toBeNull();
-    expect(screen.getByText('Preview only — no transactions were created.')).toBeTruthy();
+    expect(screen.getByText('No transactions were created yet.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
     expect(within(rowForRecord(300)).getByRole('button', { name: /edit/i })).toBeTruthy();
     expect(within(rowForRecord(300)).getByRole('button', { name: /disable/i })).toBeTruthy();
@@ -843,12 +762,5 @@ describe('TransactionIngestion file preview workflow', () => {
     expect(screen.getByText('Salary')).toBeTruthy();
     expect(screen.queryByText('Unsaved edit')).toBeNull();
     expect(mockAxiosPatch).not.toHaveBeenCalled();
-  });
-
-  it('does not render confirm import on create page', () => {
-    renderFilePreview();
-
-    expect(screen.queryByRole('button', { name: /confirm/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /import/i })).toBeNull();
   });
 });

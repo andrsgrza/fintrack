@@ -9,9 +9,9 @@ public class CsvIngestionRecordReviewResponseDTO implements Serializable {
 
     private IngestionStatus status;
 
-    private CsvIngestionPreviewCountsDTO counts;
+    private CsvIngestionWorkflowCountsDTO counts;
 
-    private CsvIngestionPreviewRowDTO row;
+    private CsvIngestionWorkflowRecordDTO row;
 
     public Long getTransactionIngestionId() {
         return transactionIngestionId;
@@ -29,19 +29,19 @@ public class CsvIngestionRecordReviewResponseDTO implements Serializable {
         this.status = status;
     }
 
-    public CsvIngestionPreviewCountsDTO getCounts() {
+    public CsvIngestionWorkflowCountsDTO getCounts() {
         return counts;
     }
 
-    public void setCounts(CsvIngestionPreviewCountsDTO counts) {
+    public void setCounts(CsvIngestionWorkflowCountsDTO counts) {
         this.counts = counts;
     }
 
-    public CsvIngestionPreviewRowDTO getRow() {
+    public CsvIngestionWorkflowRecordDTO getRow() {
         return row;
     }
 
-    public void setRow(CsvIngestionPreviewRowDTO row) {
+    public void setRow(CsvIngestionWorkflowRecordDTO row) {
         this.row = row;
     }
 }

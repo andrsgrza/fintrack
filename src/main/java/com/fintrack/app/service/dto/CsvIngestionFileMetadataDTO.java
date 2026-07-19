@@ -2,6 +2,7 @@ package com.fintrack.app.service.dto;
 
 import com.fintrack.app.domain.enumeration.ImportFileType;
 import java.io.Serializable;
+import java.time.Instant;
 import java.time.LocalDate;
 
 public class CsvIngestionFileMetadataDTO implements Serializable {
@@ -16,6 +17,8 @@ public class CsvIngestionFileMetadataDTO implements Serializable {
 
     private String checksum;
 
+    private String storageKey;
+
     private String parserName;
 
     private String parserVersion;
@@ -23,6 +26,8 @@ public class CsvIngestionFileMetadataDTO implements Serializable {
     private LocalDate statementStartDate;
 
     private LocalDate statementEndDate;
+
+    private Instant createdAt;
 
     public String getOriginalFilename() {
         return originalFilename;
@@ -64,6 +69,14 @@ public class CsvIngestionFileMetadataDTO implements Serializable {
         this.checksum = checksum;
     }
 
+    public String getStorageKey() {
+        return storageKey;
+    }
+
+    public void setStorageKey(String storageKey) {
+        this.storageKey = storageKey;
+    }
+
     public String getParserName() {
         return parserName;
     }
@@ -94,5 +107,13 @@ public class CsvIngestionFileMetadataDTO implements Serializable {
 
     public void setStatementEndDate(LocalDate statementEndDate) {
         this.statementEndDate = statementEndDate;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
     }
 }

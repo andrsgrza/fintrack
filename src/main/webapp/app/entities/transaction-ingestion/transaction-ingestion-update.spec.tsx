@@ -61,7 +61,7 @@ const renderCreateForm = () => {
     <MemoryRouter initialEntries={['/transaction-ingestion/new']}>
       <Routes>
         <Route path="/transaction-ingestion/new" element={<TransactionIngestionUpdate />} />
-        <Route path="/transaction-ingestion/:id/file-preview" element={<div>Review route</div>} />
+        <Route path="/transaction-ingestion/:id" element={<div>Review route</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -114,7 +114,7 @@ describe('TransactionIngestion create workflow form', () => {
 
     expect(screen.getByText('API ingestion is coming soon.')).not.toBeNull();
     expect(screen.queryByLabelText('CSV file')).toBeNull();
-    expect(screen.getByRole('button', { name: /Create preview/ })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: /Create workflow/ })).toHaveProperty('disabled', true);
   });
 
   it('submits FILE create as multipart to canonical workflow endpoint and redirects to review route', async () => {
@@ -123,7 +123,7 @@ describe('TransactionIngestion create workflow form', () => {
 
     selectAccount();
     uploadFile();
-    fireEvent.click(screen.getByRole('button', { name: /Create preview/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Create workflow/ }));
 
     await waitFor(() => {
       expect(mockAxiosPost).toHaveBeenCalledWith(
@@ -141,7 +141,7 @@ describe('TransactionIngestion create workflow form', () => {
 
     selectAccount();
     const input = uploadFile();
-    fireEvent.click(screen.getByRole('button', { name: /Create preview/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Create workflow/ }));
 
     await waitFor(() => expect(screen.getByText('CSV file is required')).not.toBeNull());
     expect(input.value).toBe('');

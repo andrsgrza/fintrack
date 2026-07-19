@@ -1543,7 +1543,7 @@ Implemented Phase 2 coverage:
 - category plus multiple tags are applied once;
 - explicit same category remains and suggested tags still apply.
 
-### Rule Engine draft preview endpoint tests
+### Rule Engine draft workflow endpoint tests
 
 Phase 3A backend-only draft preview behavior is covered in `FinancialTransactionResourceIT`.
 
@@ -1568,10 +1568,10 @@ Implemented Phase 3A coverage:
 - required draft fields are validated (`accountId`, nonblank `description`, positive `amount`, `flow`, `origin`, `transactionDate`);
 - successful preview does not save a `FinancialTransaction`;
 - preview returns suggestions but does not apply `FILL_EMPTY_ONLY`;
-- no existing-transaction preview endpoint is implemented at `/api/financial-transactions/{id}/rule-preview`;
+- no existing-transaction workflow endpoint is implemented at `/api/financial-transactions/{id}/rule-preview`;
 - response assertions cover DTO-shaped output rather than full entity graphs.
 
-### Rule Engine manual create preview UI tests
+### Rule Engine manual create workflow UI tests
 
 Phase 3B frontend manual create behavior is covered in `financial-transaction-ux.spec.tsx`.
 
@@ -1579,7 +1579,7 @@ Implemented Phase 3B coverage:
 
 - create mode starts on Step 1 with transaction details only;
 - Step 1 hides category/tags and Save;
-- Step 1 validates required preview fields before calling the preview endpoint;
+- Step 1 validates required preview fields before calling the workflow endpoint;
 - Next calls `POST /api/financial-transactions/rule-preview` with the unsaved draft and `origin=MANUAL`;
 - preview suggestions prepopulate Step 2 category/tags;
 - matched rule names are shown when returned;
@@ -2486,7 +2486,7 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 ## CSV Ingestion v1 tests
 
-**Scope:** canonical CSV import workflow. I1 creates persisted previews. I2B adds review actions. I2C confirms ready previews into `FinancialTransaction` rows. CSV v1 confirm import does not run the Rule Engine.
+**Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. CSV v1 confirm import does not run the Rule Engine.
 
 ### I1A unit tests — parser/validator
 
@@ -2514,13 +2514,13 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 - row limit: 5,000 data rows max.
 - file size limit: 2 MB max.
 
-### I1B resource/integration tests — persisted preview
+### I1B resource/integration tests — persisted workflow
 
 - valid CSV upload creates `TransactionIngestion`, `FileIngestion`, and `IngestionRecord` rows.
 - parent-scoped CSV upload to `POST /api/transaction-ingestions/{id}/file-ingestion` creates `FileIngestion` metadata and `IngestionRecord` rows for an existing owned `PENDING` FILE parent.
 - parent-scoped upload rejects non-FILE, non-owned, non-`PENDING`, already-has-file, already-has-records, already-has-created-transactions, and missing-file cases.
 - invalid rows persist as `REJECTED` records when header is valid.
-- valid preview rows use `IngestionRecordStatus.VALID` and `financialTransaction` remains `null`.
+- valid review rows use `IngestionRecordStatus.VALID` and `financialTransaction` remains `null`.
 - invalid header creates nothing.
 - inaccessible account rejected and creates nothing.
 - admin foreign account rejected and creates nothing.
@@ -2533,23 +2533,27 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 - no `FinancialTransaction` rows created.
 - Rule Engine not invoked.
 
-### I1C frontend tests — minimal upload/preview UI
+### I1C frontend tests — minimal upload/review UI
 
-Covered by `transaction-ingestion-file-preview.spec.tsx`.
+Covered by `transaction-ingestion-workflow-detail.spec.tsx`.
 
 - TransactionIngestion list renders the contextual "New File Import" route action.
 - The contextual "New File Import" action points to the canonical `/transaction-ingestion/new` workflow.
 - TransactionIngestion create mode shows Account, Ingestion Type, and CSV file only for FILE imports.
 - TransactionIngestion create mode hides lifecycle/system-owned fields and counters.
 - TransactionIngestion create mode posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`.
-- TransactionIngestion create mode redirects to `/transaction-ingestion/{id}/file-preview`.
+- TransactionIngestion create mode redirects to `/transaction-ingestion/{id}`.
 - TransactionIngestion create mode shows API ingestion as TBD and does not allow API submit.
-- Preview creation page renders account selector, CSV file input, preview-only notice, and Preview button.
+- `/transaction-ingestion/{id}` renders canonical workflow detail for FILE ingestions.
+- `/transaction-ingestion/{id}` shows parent summary, embedded FileIngestion metadata, and IngestionRecord review/result rows.
+- `/transaction-ingestion/{id}` is the only canonical workflow detail route.
+- `/transaction-ingestion/{id}` shows API TBD for API ingestions without loading FILE workflow data.
+- `/transaction-ingestion/{id}` handles PENDING FILE ingestions without file metadata without crashing.
 - Account is required before submit.
 - File is required before submit.
-- Successful submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file-preview`.
-- Successful submit redirects to `/transaction-ingestion/{id}/file-preview`.
-- Review page loads persisted preview data by TransactionIngestion id.
+- Successful submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`.
+- Successful submit redirects to `/transaction-ingestion/{id}`.
+- Review page loads persisted workflow data by TransactionIngestion id from `GET /api/transaction-ingestions/{id}/workflow`.
 - Review page displays read-only FileIngestion metadata.
 - Persisted review response renders summary counts.
 - `READY` renders as Ready to import / Lista para importar.
@@ -2564,7 +2568,7 @@ Covered by `transaction-ingestion-file-preview.spec.tsx`.
 - create mode shows only the TransactionIngestion parent selector and CSV file input.
 - server-owned metadata fields such as original filename, file type, content type, file size, checksum, parser, storage key, and statement dates are not rendered on create.
 - submit posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`.
-- success redirects to `/transaction-ingestion/{id}/file-preview`.
+- success redirects to `/transaction-ingestion/{id}`.
 - backend validation errors are shown and the file input is cleared after failure.
 - Enable/disable actions update row status and counts.
 - Edit action appears for `VALID` and `REJECTED` rows, but not for `DISABLED` or imported/immutable rows.
@@ -2596,7 +2600,7 @@ Covered by `transaction-ingestion-file-preview.spec.tsx`.
 - Enable invalid disabled row -> parent `PARTIALLY_READY`.
 - Edit rejected row to valid with no remaining blocking rows -> parent `READY`.
 - Edit valid row to invalid -> parent `PARTIALLY_READY`.
-- CSV preview/review actions do not produce `PARTIALLY_COMPLETED`.
+- CSV review actions do not produce `PARTIALLY_COMPLETED`.
 - `rawData.raw` remains unchanged.
 - `rawData.normalized` updates from the edited normalized values.
 - `rawData.errors` recalculates.
@@ -2605,11 +2609,11 @@ Covered by `transaction-ingestion-file-preview.spec.tsx`.
 - counts and `TransactionIngestion.status` recalculate after edit.
 - record/ingestion mismatch is rejected.
 - review row actions do not create `FinancialTransaction` rows.
-- Rule Engine is not invoked by preview/review actions.
+- Rule Engine is not invoked by review actions.
 
 ### I2C resource/integration tests — confirm import
 
-- confirm import creates `FinancialTransaction` rows from valid preview rows.
+- confirm import creates `FinancialTransaction` rows from valid review rows.
 - imported transactions use `origin = FILE_IMPORT`.
 - `IngestionRecord` links to created `FinancialTransaction`.
 - confirm uses `rawData.normalized` transaction date, posting date, description, amount, flow, external reference, and notes.
@@ -2702,9 +2706,9 @@ Copy this block when hardening the next entity:
 | 2026-07-12 | FinancialTransaction domain rules     | 101 IT, 10 service unit; JsonNode presence semantics, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup.                                                                                                                                                                                                                                                                    |
 | 2026-07-12 | FinancialAccount domain rules         | 118 IT, 12 service unit; delete orchestration for ingestion/transaction trees and account-level links, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                                                                                                                                                         |
 | 2026-07-13 | FinancialAccount balance read model   | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                                                                                                                                                                    |
-| 2026-07-17 | CSV Ingestion I1A/I1B backend         | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted preview endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                                                                                                                                                                  |
-| 2026-07-17 | CSV Ingestion I1C frontend            | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart preview submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                                                                                                                                                          |
-| 2026-07-17 | CSV Ingestion I2A status lifecycle    | `IngestionRecordStatus.CREATED` removed; preview tests expect `VALID`; imported-record domain tests use `IMPORTED`; frontend preview test renders translated `Valid`/`Rejected`; Liquibase migrates existing `CREATED` rows to `VALID`.                                                                                                                                                                                                                                            |
+| 2026-07-17 | CSV Ingestion I1A/I1B backend         | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted workflow endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                                                                                                                                                                 |
+| 2026-07-17 | CSV Ingestion I1C frontend            | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart workflow submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                                                                                                                                                         |
+| 2026-07-17 | CSV Ingestion I2A status lifecycle    | `IngestionRecordStatus.CREATED` removed; review tests expect `VALID`; imported-record domain tests use `IMPORTED`; frontend review test renders translated `Valid`/`Rejected`; Liquibase migrates existing `CREATED` rows to `VALID`.                                                                                                                                                                                                                                              |
 | 2026-07-17 | CSV Ingestion I2B review flow         | Backend IT covers persisted GET review, FileIngestion metadata, enable/disable transitions, counters/status recalculation, imported-row guard and mismatched parent guard. Frontend tests cover redirect to review page, metadata/status rendering, enable/disable actions, and no confirm/import action.                                                                                                                                                                          |
 | 2026-07-18 | CSV Ingestion I2B.2 row edit          | Backend IT covers PATCH normalized row edit for `VALID`/`REJECTED`, `DISABLED` edit rejection, immutable imported/skipped/failed rows, rawData raw preservation, derived amount/flow, counters/status recalculation, and no `FinancialTransaction` creation. Frontend tests cover inline edit, disabled rows without Edit, save/cancel, derived-field read-only behavior, and no confirm/import action.                                                                            |
 | 2026-07-18 | CSV Ingestion I2C confirm import      | Backend IT covers ready confirm, normalized payload mapping, `FILE_IMPORT` origin, imported row links, disabled rows skipped, stale readiness recalculation, completed idempotent retry, corrupt link guards, completed review read-only, foreign rejection, and no Rule Engine/category/tag/subscription application. Frontend tests cover Confirm Import visibility, not-ready blocking, completed read-only review, imported/disabled row display, and confirm error rendering. |

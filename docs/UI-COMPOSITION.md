@@ -537,11 +537,11 @@ Deferred for this workflow:
 - override confirmation UI;
 - atomic backend command endpoint.
 
-FinancialTransaction manual create owns the implemented Rule Engine preview UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+FinancialTransaction manual create owns the implemented Rule Engine workflow UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
 ## FinancialTransaction manual create — two-step Rule Engine UX
 
-Status: implemented for manual create only. Phase 3A provides the backend preview endpoint, and Phase 3B uses it from the FinancialTransaction create form.
+Status: implemented for manual create only. Phase 3A provides the backend workflow endpoint, and Phase 3B uses it from the FinancialTransaction create form.
 
 Phase 3B manual create composition:
 
@@ -581,11 +581,11 @@ Do not extend this as:
 - audit log;
 - `MANUAL`-only backend apply behavior.
 
-## CSV Ingestion v1 — upload/preview workflow
+## CSV Ingestion v1 — upload/review workflow
 
-Status: implemented through I2C persisted upload/preview/review/confirm workflow.
+Status: implemented through I2C persisted upload/review/confirm workflow.
 
-CSV import upload/preview is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
+CSV import upload/review is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
 
 Composition rules:
 
@@ -593,21 +593,19 @@ Composition rules:
 - select the target FinancialAccount and upload the canonical CSV;
 - call `POST /api/transaction-ingestions/file`;
 - redirect to the persisted TransactionIngestion review page;
-- show persisted preview summary, read-only file metadata, rows, review actions, and Confirm Import when ready;
+- show persisted workflow summary, read-only file metadata, rows, review actions, and Confirm Import when ready;
 - do not expose editable FileIngestion metadata fields as a product create flow;
 - do not embed full FileIngestion CRUD inside TransactionIngestion;
-- use contextual upload/preview components;
-- preview rows are high-volume, so use related-list/table style rather than inline editable child collection;
+- use contextual upload/review components;
+- review rows are high-volume, so use related-list/table style rather than inline editable child collection;
 - Confirm Import is shown only for `READY` reviews with at least one valid row;
 - completed reviews are read-only;
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
-The canonical creation route is `/transaction-ingestion/new`. In create mode it is a parent-centered FILE ingestion workflow: it renders only Account, Ingestion Type, and a CSV file input for `FILE`; API ingestion shows a TBD placeholder and cannot be submitted. It hides lifecycle/system-owned fields such as status, source label, started/completed timestamps, counters, error message, and created timestamp. A successful FILE submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`, creates the parent `TransactionIngestion`, `FileIngestion` metadata, and preview `IngestionRecord` rows in one backend workflow, then redirects to `/transaction-ingestion/{id}/file-preview`.
+The canonical creation route is `/transaction-ingestion/new`. In create mode it is a parent-centered FILE ingestion workflow: it renders only Account, Ingestion Type, and a CSV file input for `FILE`; API ingestion shows a TBD placeholder and cannot be submitted. It hides lifecycle/system-owned fields such as status, source label, started/completed timestamps, counters, error message, and created timestamp. A successful FILE submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`, creates the parent `TransactionIngestion`, `FileIngestion` metadata, and `IngestionRecord` review rows in one backend workflow, then redirects to `/transaction-ingestion/{id}`.
 
-The older `/transaction-ingestion/file-preview/new` route remains available as a compatibility/delegated preview page and still posts to `POST /api/transaction-ingestions/file-preview`.
+The standalone `/file-ingestion/new` route is also treated as a TransactionIngestion workflow command, not metadata CRUD. It renders only an eligible pending FILE `TransactionIngestion` selector and a CSV file input, posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`, derives all `FileIngestion` metadata server-side, creates `IngestionRecord` rows, updates the parent readiness/counters, and redirects to `/transaction-ingestion/{id}`. Future embedded usage from a parent page should hide the parent selector because the parent context is already known.
 
-The standalone `/file-ingestion/new` route is also treated as a TransactionIngestion workflow command, not metadata CRUD. It renders only an eligible pending FILE `TransactionIngestion` selector and a CSV file input, posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`, derives all `FileIngestion` metadata server-side, creates `IngestionRecord` rows, updates the parent readiness/counters, and redirects to `/transaction-ingestion/{id}/file-preview`. Future embedded usage from a parent page should hide the parent selector because the parent context is already known.
+The canonical workflow detail/review route is `/transaction-ingestion/{id}`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads workflow data through `GET /api/transaction-ingestions/{id}/workflow`, shows the parent summary, embeds read-only FileIngestion metadata for FILE ingestions, shows counts and rows, and supports row enable/disable plus normalized-row edit review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`. API ingestion detail remains TBD.
 
-The review route is `/transaction-ingestion/{id}/file-preview`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads persisted preview data, shows TransactionIngestion context, displays read-only FileIngestion metadata, shows counts and rows, and supports row enable/disable plus normalized-row edit review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are preview/review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`.
-
-The parent status shown on the review page uses readiness language before import: `READY` means ready to import, and `PARTIALLY_READY` means the preview needs review or has no valid rows to import. `COMPLETED` means confirm import finished and the review is read-only. `PARTIALLY_COMPLETED` is reserved and should not normally appear in CSV v1. Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Edit controls render only for `VALID` and `REJECTED` rows while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows render Enable only and must be enabled before editing. Imported/skipped/failed rows do not render edit controls. Confirm Import calls the backend confirm endpoint, imports `VALID` rows, keeps `DISABLED` rows skipped, updates the review from the response, and does not invoke the Rule Engine.
+The parent status shown on the review page uses readiness language before import: `READY` means ready to import, and `PARTIALLY_READY` means the workflow needs review or has no valid rows to import. `COMPLETED` means confirm import finished and the review is read-only. `PARTIALLY_COMPLETED` is reserved and should not normally appear in CSV v1. Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Edit controls render only for `VALID` and `REJECTED` rows while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows render Enable only and must be enabled before editing. Imported/skipped/failed rows do not render edit controls. Confirm Import calls the backend confirm endpoint, imports `VALID` rows, keeps `DISABLED` rows skipped, updates the review from the response, and does not invoke the Rule Engine.

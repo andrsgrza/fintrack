@@ -96,7 +96,7 @@ export const FileIngestionUpdate = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const persistedTransactionIngestionId = response.data?.transactionIngestionId ?? transactionIngestionId;
-      navigate(`/transaction-ingestion/${persistedTransactionIngestionId}/file-preview`);
+      navigate(`/transaction-ingestion/${persistedTransactionIngestionId}`);
     } catch (error) {
       setUploadError(uploadErrorMessage(error));
     } finally {

@@ -18,8 +18,8 @@ import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.CsvIngestionReadinessService.CsvIngestionReadinessSnapshot;
 import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
-import com.fintrack.app.service.dto.CsvIngestionPreviewCountsDTO;
-import com.fintrack.app.service.dto.CsvIngestionPreviewRowDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -95,7 +95,7 @@ public class CsvIngestionConfirmImportService {
             }
         }
 
-        CsvIngestionPreviewCountsDTO counts = csvIngestionReadinessService.snapshot(records).counts();
+        CsvIngestionWorkflowCountsDTO counts = csvIngestionReadinessService.snapshot(records).counts();
         csvIngestionReadinessService.applyCounts(ingestion, counts);
         ingestion.setStatus(IngestionStatus.COMPLETED);
         ingestion.setCompletedAt(now);
@@ -172,7 +172,7 @@ public class CsvIngestionConfirmImportService {
     }
 
     private CsvIngestionConfirmImportResponseDTO response(TransactionIngestion ingestion, List<IngestionRecord> records, int createdNow) {
-        CsvIngestionPreviewCountsDTO counts = csvIngestionReadinessService.snapshot(records).counts();
+        CsvIngestionWorkflowCountsDTO counts = csvIngestionReadinessService.snapshot(records).counts();
         CsvIngestionConfirmImportResponseDTO response = new CsvIngestionConfirmImportResponseDTO();
         response.setTransactionIngestionId(ingestion.getId());
         response.setStatus(ingestion.getStatus());
@@ -190,9 +190,9 @@ public class CsvIngestionConfirmImportService {
         return (int) records.stream().filter(record -> record.getStatus() == status).count();
     }
 
-    private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record) {
+    private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record) {
         JsonNode normalized = rawData(record).path("normalized");
-        CsvIngestionPreviewRowDTO dto = new CsvIngestionPreviewRowDTO();
+        CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());

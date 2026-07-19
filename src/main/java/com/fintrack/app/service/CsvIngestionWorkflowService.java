@@ -24,9 +24,9 @@ import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRawRow;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
 import com.fintrack.app.service.dto.CsvIngestionFileMetadataDTO;
-import com.fintrack.app.service.dto.CsvIngestionPreviewCountsDTO;
-import com.fintrack.app.service.dto.CsvIngestionPreviewResponseDTO;
-import com.fintrack.app.service.dto.CsvIngestionPreviewRowDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowResponseDTO;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -43,7 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @Transactional
-public class CsvIngestionPreviewService {
+public class CsvIngestionWorkflowService {
 
     private static final String PARSER_NAME = "fintrack-canonical-csv";
     private static final String PARSER_VERSION = "1.0";
@@ -59,7 +59,7 @@ public class CsvIngestionPreviewService {
     private final ObjectMapper objectMapper;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
 
-    public CsvIngestionPreviewService(
+    public CsvIngestionWorkflowService(
         FinancialAccountRepository financialAccountRepository,
         TransactionIngestionRepository transactionIngestionRepository,
         FileIngestionRepository fileIngestionRepository,
@@ -81,7 +81,7 @@ public class CsvIngestionPreviewService {
         this.csvIngestionReadinessService = csvIngestionReadinessService;
     }
 
-    public CsvIngestionPreviewResponseDTO createPreview(Long accountId, MultipartFile file) {
+    public CsvIngestionWorkflowResponseDTO createWorkflow(Long accountId, MultipartFile file) {
         FinancialAccount account = resolveCurrentUserAccount(accountId);
         byte[] bytes = readFileBytes(file);
         String checksum = sha256Hex(bytes);
@@ -102,10 +102,10 @@ public class CsvIngestionPreviewService {
             .errorMessage(null)
             .createdAt(startedAt)
             .account(account);
-        return persistFilePreview(transactionIngestion, file, bytes, checksum, parseResult, warnings);
+        return persistWorkflow(transactionIngestion, file, bytes, checksum, parseResult, warnings);
     }
 
-    public CsvIngestionPreviewResponseDTO uploadFileToPendingTransactionIngestion(Long transactionIngestionId, MultipartFile file) {
+    public CsvIngestionWorkflowResponseDTO uploadFileToPendingTransactionIngestion(Long transactionIngestionId, MultipartFile file) {
         TransactionIngestion transactionIngestion = resolveCurrentUserPendingFileIngestion(transactionIngestionId);
         validateCanAttachFileIngestion(transactionIngestion);
 
@@ -114,10 +114,10 @@ public class CsvIngestionPreviewService {
         CsvParseResult parseResult = parser.parse(bytes, transactionIngestion.getAccount().getCurrency());
         List<CsvIngestionValidationMessage> warnings = duplicateChecksumWarnings(transactionIngestion.getAccount().getId(), checksum);
 
-        return persistFilePreview(transactionIngestion, file, bytes, checksum, parseResult, warnings);
+        return persistWorkflow(transactionIngestion, file, bytes, checksum, parseResult, warnings);
     }
 
-    private CsvIngestionPreviewResponseDTO persistFilePreview(
+    private CsvIngestionWorkflowResponseDTO persistWorkflow(
         TransactionIngestion transactionIngestion,
         MultipartFile file,
         byte[] bytes,
@@ -168,12 +168,12 @@ public class CsvIngestionPreviewService {
     }
 
     @Transactional(readOnly = true)
-    public CsvIngestionPreviewResponseDTO getPreview(Long transactionIngestionId) {
+    public CsvIngestionWorkflowResponseDTO getWorkflow(Long transactionIngestionId) {
         TransactionIngestion transactionIngestion = transactionIngestionRepository
             .findOneWithToOneRelationshipsByIdAndAccountUserLogin(transactionIngestionId, currentUserService.getCurrentUserLogin())
             .orElseThrow(() -> new IllegalArgumentException("Transaction ingestion is not accessible"));
         if (transactionIngestion.getIngestionType() != IngestionType.FILE) {
-            throw new IllegalArgumentException("Only file ingestions have a file preview");
+            throw new IllegalArgumentException("Only FILE ingestions have workflow file metadata");
         }
 
         FileIngestion fileIngestion = fileIngestionRepository
@@ -183,7 +183,7 @@ public class CsvIngestionPreviewService {
             transactionIngestionId
         );
 
-        CsvIngestionPreviewResponseDTO response = new CsvIngestionPreviewResponseDTO();
+        CsvIngestionWorkflowResponseDTO response = new CsvIngestionWorkflowResponseDTO();
         response.setTransactionIngestionId(transactionIngestion.getId());
         response.setFileIngestionId(fileIngestion.getId());
         response.setStatus(transactionIngestion.getStatus());
@@ -253,7 +253,7 @@ public class CsvIngestionPreviewService {
             return List.of(
                 new CsvIngestionValidationMessage(
                     "DUPLICATE_FILE_CHECKSUM",
-                    "A file with the same checksum was already previewed for this account"
+                    "A file with the same checksum was already uploaded for this account"
                 )
             );
         }
@@ -274,14 +274,14 @@ public class CsvIngestionPreviewService {
             .transactionIngestion(transactionIngestion);
     }
 
-    private CsvIngestionPreviewResponseDTO toResponse(
+    private CsvIngestionWorkflowResponseDTO toResponse(
         TransactionIngestion transactionIngestion,
         FileIngestion fileIngestion,
         List<IngestionRecord> records,
         CsvParseResult parseResult,
         List<CsvIngestionValidationMessage> warnings
     ) {
-        CsvIngestionPreviewResponseDTO response = new CsvIngestionPreviewResponseDTO();
+        CsvIngestionWorkflowResponseDTO response = new CsvIngestionWorkflowResponseDTO();
         response.setTransactionIngestionId(transactionIngestion.getId());
         response.setFileIngestionId(fileIngestion.getId());
         response.setStatus(transactionIngestion.getStatus());
@@ -290,7 +290,7 @@ public class CsvIngestionPreviewService {
         response.setWarnings(warnings);
         response.setFileMetadata(fileMetadata(fileIngestion));
 
-        List<CsvIngestionPreviewRowDTO> rows = new ArrayList<>();
+        List<CsvIngestionWorkflowRecordDTO> rows = new ArrayList<>();
         for (int i = 0; i < parseResult.getRows().size(); i++) {
             rows.add(toRowDto(records.get(i), parseResult.getRows().get(i)));
         }
@@ -298,8 +298,8 @@ public class CsvIngestionPreviewService {
         return response;
     }
 
-    private CsvIngestionPreviewCountsDTO counts(CsvParseResult parseResult) {
-        CsvIngestionPreviewCountsDTO counts = new CsvIngestionPreviewCountsDTO();
+    private CsvIngestionWorkflowCountsDTO counts(CsvParseResult parseResult) {
+        CsvIngestionWorkflowCountsDTO counts = new CsvIngestionWorkflowCountsDTO();
         counts.setRecordsReceived(parseResult.getRecordsReceived());
         counts.setRecordsCreated(0);
         counts.setRecordsSkipped(0);
@@ -316,16 +316,18 @@ public class CsvIngestionPreviewService {
         metadata.setContentType(fileIngestion.getContentType());
         metadata.setFileSizeBytes(fileIngestion.getFileSizeBytes());
         metadata.setChecksum(fileIngestion.getChecksum());
+        metadata.setStorageKey(fileIngestion.getStorageKey());
         metadata.setParserName(fileIngestion.getParserName());
         metadata.setParserVersion(fileIngestion.getParserVersion());
         metadata.setStatementStartDate(fileIngestion.getStatementStartDate());
         metadata.setStatementEndDate(fileIngestion.getStatementEndDate());
+        metadata.setCreatedAt(fileIngestion.getCreatedAt());
         return metadata;
     }
 
-    private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record, CsvRowResult row) {
+    private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record, CsvRowResult row) {
         CsvNormalizedRow normalized = row.getNormalized();
-        CsvIngestionPreviewRowDTO dto = new CsvIngestionPreviewRowDTO();
+        CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());
@@ -345,10 +347,10 @@ public class CsvIngestionPreviewService {
         return dto;
     }
 
-    private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record) {
+    private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record) {
         JsonNode root = rawDataNode(record);
         JsonNode normalized = root.path("normalized");
-        CsvIngestionPreviewRowDTO dto = new CsvIngestionPreviewRowDTO();
+        CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());
@@ -416,7 +418,7 @@ public class CsvIngestionPreviewService {
         try {
             return objectMapper.writeValueAsString(root);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Could not serialize CSV row preview", e);
+            throw new IllegalArgumentException("Could not serialize CSV workflow row", e);
         }
     }
 

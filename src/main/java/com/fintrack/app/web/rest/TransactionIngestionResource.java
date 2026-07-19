@@ -3,15 +3,15 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.CsvIngestionConfirmImportService;
-import com.fintrack.app.service.CsvIngestionPreviewService;
 import com.fintrack.app.service.CsvIngestionRecordReviewService;
+import com.fintrack.app.service.CsvIngestionWorkflowService;
 import com.fintrack.app.service.TransactionIngestionQueryService;
 import com.fintrack.app.service.TransactionIngestionService;
 import com.fintrack.app.service.criteria.TransactionIngestionCriteria;
 import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
-import com.fintrack.app.service.dto.CsvIngestionPreviewResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
@@ -54,7 +54,7 @@ public class TransactionIngestionResource {
 
     private final TransactionIngestionQueryService transactionIngestionQueryService;
 
-    private final CsvIngestionPreviewService csvIngestionPreviewService;
+    private final CsvIngestionWorkflowService csvIngestionWorkflowService;
 
     private final CsvIngestionRecordReviewService csvIngestionRecordReviewService;
 
@@ -65,14 +65,14 @@ public class TransactionIngestionResource {
     public TransactionIngestionResource(
         TransactionIngestionService transactionIngestionService,
         TransactionIngestionQueryService transactionIngestionQueryService,
-        CsvIngestionPreviewService csvIngestionPreviewService,
+        CsvIngestionWorkflowService csvIngestionWorkflowService,
         CsvIngestionRecordReviewService csvIngestionRecordReviewService,
         CsvIngestionConfirmImportService csvIngestionConfirmImportService,
         ObjectMapper objectMapper
     ) {
         this.transactionIngestionService = transactionIngestionService;
         this.transactionIngestionQueryService = transactionIngestionQueryService;
-        this.csvIngestionPreviewService = csvIngestionPreviewService;
+        this.csvIngestionWorkflowService = csvIngestionWorkflowService;
         this.csvIngestionRecordReviewService = csvIngestionRecordReviewService;
         this.csvIngestionConfirmImportService = csvIngestionConfirmImportService;
         this.objectMapper = objectMapper;
@@ -104,47 +104,24 @@ public class TransactionIngestionResource {
     }
 
     /**
-     * {@code POST /transaction-ingestions/file-preview} : Parse and persist a canonical CSV ingestion preview.
-     *
-     * I1 preview creates TransactionIngestion, FileIngestion and IngestionRecord rows only.
-     * It does not create FinancialTransactions and does not run the Rule Engine.
-     *
-     * @param accountId the target account id.
-     * @param file the canonical CSV upload.
-     * @return the persisted preview response.
-     */
-    @PostMapping(value = "/file-preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<CsvIngestionPreviewResponseDTO> createFilePreview(
-        @RequestParam(value = "accountId", required = false) Long accountId,
-        @RequestPart(value = "file", required = false) MultipartFile file
-    ) {
-        LOG.debug("REST request to create CSV FileIngestion preview for account : {}", accountId);
-        try {
-            return ResponseEntity.ok(csvIngestionPreviewService.createPreview(accountId, file));
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
-        }
-    }
-
-    /**
      * {@code POST /transaction-ingestions/file} : Canonical FILE TransactionIngestion create workflow.
      *
-     * Creates the TransactionIngestion parent, derives FileIngestion metadata from the uploaded CSV, persists preview
+     * Creates the TransactionIngestion parent, derives FileIngestion metadata from the uploaded CSV, persists
      * IngestionRecords, and returns the recoverable review DTO. It does not create FinancialTransactions and does not
      * run the Rule Engine.
      *
      * @param accountId the target account id.
      * @param file the canonical CSV upload.
-     * @return the persisted preview response.
+     * @return the persisted workflow response.
      */
     @PostMapping(value = "/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<CsvIngestionPreviewResponseDTO> createFileTransactionIngestion(
+    public ResponseEntity<CsvIngestionWorkflowResponseDTO> createFileTransactionIngestion(
         @RequestParam(value = "accountId", required = false) Long accountId,
         @RequestPart(value = "file", required = false) MultipartFile file
     ) {
         LOG.debug("REST request to create FILE TransactionIngestion workflow for account : {}", accountId);
         try {
-            return ResponseEntity.ok(csvIngestionPreviewService.createPreview(accountId, file));
+            return ResponseEntity.ok(csvIngestionWorkflowService.createWorkflow(accountId, file));
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
@@ -159,33 +136,33 @@ public class TransactionIngestionResource {
      *
      * @param id the existing pending FILE TransactionIngestion id.
      * @param file the canonical CSV upload.
-     * @return the persisted preview response.
+     * @return the persisted workflow response.
      */
     @PostMapping(value = "/{id}/file-ingestion", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<CsvIngestionPreviewResponseDTO> uploadFileIngestion(
+    public ResponseEntity<CsvIngestionWorkflowResponseDTO> uploadFileIngestion(
         @PathVariable("id") Long id,
         @RequestPart(value = "file", required = false) MultipartFile file
     ) {
         LOG.debug("REST request to upload CSV FileIngestion for transaction ingestion : {}", id);
         try {
-            return ResponseEntity.ok(csvIngestionPreviewService.uploadFileToPendingTransactionIngestion(id, file));
+            return ResponseEntity.ok(csvIngestionWorkflowService.uploadFileToPendingTransactionIngestion(id, file));
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
     }
 
-    @GetMapping("/{id}/file-preview")
-    public ResponseEntity<CsvIngestionPreviewResponseDTO> getFilePreview(@PathVariable("id") Long id) {
-        LOG.debug("REST request to get CSV FileIngestion preview for transaction ingestion : {}", id);
+    @GetMapping("/{id}/workflow")
+    public ResponseEntity<CsvIngestionWorkflowResponseDTO> getWorkflow(@PathVariable("id") Long id) {
+        LOG.debug("REST request to get CSV TransactionIngestion workflow detail : {}", id);
         try {
-            return ResponseEntity.ok(csvIngestionPreviewService.getPreview(id));
+            return ResponseEntity.ok(csvIngestionWorkflowService.getWorkflow(id));
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
     }
 
     @PostMapping("/{ingestionId}/records/{recordId}/disable")
-    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> disableFilePreviewRecord(
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> disableWorkflowRecord(
         @PathVariable("ingestionId") Long ingestionId,
         @PathVariable("recordId") Long recordId
     ) {
@@ -198,7 +175,7 @@ public class TransactionIngestionResource {
     }
 
     @PostMapping("/{ingestionId}/records/{recordId}/enable")
-    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> enableFilePreviewRecord(
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> enableWorkflowRecord(
         @PathVariable("ingestionId") Long ingestionId,
         @PathVariable("recordId") Long recordId
     ) {
@@ -211,7 +188,7 @@ public class TransactionIngestionResource {
     }
 
     @PatchMapping("/{ingestionId}/records/{recordId}")
-    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> editFilePreviewRecord(
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> editWorkflowRecord(
         @PathVariable("ingestionId") Long ingestionId,
         @PathVariable("recordId") Long recordId,
         @RequestBody(required = false) CsvIngestionRecordReviewRequestDTO request
@@ -225,7 +202,7 @@ public class TransactionIngestionResource {
     }
 
     @PostMapping("/{id}/confirm")
-    public ResponseEntity<CsvIngestionConfirmImportResponseDTO> confirmFilePreviewImport(@PathVariable("id") Long id) {
+    public ResponseEntity<CsvIngestionConfirmImportResponseDTO> confirmWorkflowImport(@PathVariable("id") Long id) {
         LOG.debug("REST request to confirm CSV FileIngestion import : {}", id);
         try {
             return ResponseEntity.ok(csvIngestionConfirmImportService.confirm(id));

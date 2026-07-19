@@ -18,9 +18,9 @@ import com.fintrack.app.service.csv.CanonicalCsvIngestionParser;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRawRow;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
-import com.fintrack.app.service.dto.CsvIngestionPreviewRowDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,7 +59,7 @@ public class CsvIngestionRecordReviewService {
     public CsvIngestionRecordReviewResponseDTO disable(Long ingestionId, Long recordId) {
         IngestionRecord record = resolveAccessibleRecord(ingestionId, recordId);
         if (record.getStatus() != IngestionRecordStatus.VALID && record.getStatus() != IngestionRecordStatus.REJECTED) {
-            throw new IllegalArgumentException("Only valid or rejected preview rows can be disabled");
+            throw new IllegalArgumentException("Only valid or rejected workflow rows can be disabled");
         }
         rejectLinkedFinancialTransaction(record);
 
@@ -76,7 +76,7 @@ public class CsvIngestionRecordReviewService {
     public CsvIngestionRecordReviewResponseDTO enable(Long ingestionId, Long recordId) {
         IngestionRecord record = resolveAccessibleRecord(ingestionId, recordId);
         if (record.getStatus() != IngestionRecordStatus.DISABLED) {
-            throw new IllegalArgumentException("Only disabled preview rows can be enabled");
+            throw new IllegalArgumentException("Only disabled workflow rows can be enabled");
         }
         rejectLinkedFinancialTransaction(record);
 
@@ -98,7 +98,7 @@ public class CsvIngestionRecordReviewService {
             throw new IllegalArgumentException("Disabled rows must be enabled before editing.");
         }
         if (!isEditableStatus(record.getStatus())) {
-            throw new IllegalArgumentException("Only valid or rejected preview rows can be edited");
+            throw new IllegalArgumentException("Only valid or rejected workflow rows can be edited");
         }
         rejectLinkedFinancialTransaction(record);
 
@@ -278,10 +278,10 @@ public class CsvIngestionRecordReviewService {
         return snapshot;
     }
 
-    private CsvIngestionPreviewRowDTO toRowDto(IngestionRecord record) {
+    private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record) {
         ObjectNode rawData = rawData(record);
         JsonNode normalized = rawData.path("normalized");
-        CsvIngestionPreviewRowDTO dto = new CsvIngestionPreviewRowDTO();
+        CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());

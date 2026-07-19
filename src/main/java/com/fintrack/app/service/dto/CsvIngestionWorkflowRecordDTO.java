@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CsvIngestionPreviewRowDTO implements Serializable {
+public class CsvIngestionWorkflowRecordDTO implements Serializable {
 
     private Long ingestionRecordId;
 

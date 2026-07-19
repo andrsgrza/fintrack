@@ -47,9 +47,8 @@ import org.springframework.transaction.annotation.Transactional;
 @IntegrationTest
 @AutoConfigureMockMvc
 @WithMockUser
-class CsvIngestionPreviewResourceIT {
+class TransactionIngestionWorkflowResourceIT {
 
-    private static final String FILE_PREVIEW_URL = "/api/transaction-ingestions/file-preview";
     private static final String FILE_WORKFLOW_URL = "/api/transaction-ingestions/file";
     private static final String PARENT_FILE_INGESTION_URL = "/api/transaction-ingestions/{id}/file-ingestion";
 
@@ -87,12 +86,12 @@ class CsvIngestionPreviewResourceIT {
 
     @Test
     @Transactional
-    void validCsvUploadCreatesPersistedPreview() throws Exception {
+    void validCsvUploadCreatesPersistedWorkflow() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         long financialTransactionCountBefore = financialTransactionRepository.count();
 
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.counts.recordsReceived").value(3))
@@ -158,6 +157,8 @@ class CsvIngestionPreviewResourceIT {
             .andExpect(jsonPath("$.transactionIngestionId").exists())
             .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.fileMetadata.originalFilename").value("canonical.csv"))
+            .andExpect(jsonPath("$.fileMetadata.storageKey").doesNotExist())
+            .andExpect(jsonPath("$.fileMetadata.createdAt").exists())
             .andExpect(jsonPath("$.counts.recordsReceived").value(3))
             .andExpect(jsonPath("$.counts.recordsCreated").value(0))
             .andExpect(jsonPath("$.counts.recordsRejected").value(0));
@@ -250,6 +251,28 @@ class CsvIngestionPreviewResourceIT {
 
     @Test
     @Transactional
+    void legacyFileWorkflowCreateEndpointIsNotMapped() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+
+        mockMvc
+            .perform(
+                multipart(legacyFileWorkflowUrl()).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString())
+            )
+            .andExpect(status().isMethodNotAllowed());
+
+        assertNothingCreated();
+    }
+
+    @Test
+    @Transactional
+    void legacyFileWorkflowReadEndpointIsNotMapped() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+
+        mockMvc.perform(get(legacyFileWorkflowUrl(ingestion.getId()))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
     void invalidRowsPersistAsRejectedRecords() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         String csv =
@@ -260,7 +283,7 @@ class CsvIngestionPreviewResourceIT {
             """;
 
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("mixed.csv", csv)).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("mixed.csv", csv)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
             .andExpect(jsonPath("$.counts.recordsReceived").value(2))
@@ -285,7 +308,7 @@ class CsvIngestionPreviewResourceIT {
 
         mockMvc
             .perform(
-                multipart(FILE_PREVIEW_URL)
+                multipart(FILE_WORKFLOW_URL)
                     .file(csvFile("invalid.csv", "transactionDate,description,signedAmount,currency\n2026-01-15,Coffee,-10.00,MXN"))
                     .param("accountId", account.getId().toString())
             )
@@ -299,7 +322,7 @@ class CsvIngestionPreviewResourceIT {
     void missingFileCreatesNothing() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
 
-        mockMvc.perform(multipart(FILE_PREVIEW_URL).param("accountId", account.getId().toString())).andExpect(status().isBadRequest());
+        mockMvc.perform(multipart(FILE_WORKFLOW_URL).param("accountId", account.getId().toString())).andExpect(status().isBadRequest());
 
         assertNothingCreated();
     }
@@ -310,7 +333,7 @@ class CsvIngestionPreviewResourceIT {
         FinancialAccount account = createCurrentUserAccount();
 
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("empty.csv", "")).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("empty.csv", "")).param("accountId", account.getId().toString()))
             .andExpect(status().isBadRequest());
 
         assertNothingCreated();
@@ -323,7 +346,7 @@ class CsvIngestionPreviewResourceIT {
 
         mockMvc
             .perform(
-                multipart(FILE_PREVIEW_URL)
+                multipart(FILE_WORKFLOW_URL)
                     .file(csvFile("header.csv", "transactionDate,postingDate,description,signedAmount,currency,externalReference,notes\n"))
                     .param("accountId", account.getId().toString())
             )
@@ -345,6 +368,8 @@ class CsvIngestionPreviewResourceIT {
             .andExpect(jsonPath("$.status").value("READY"))
             .andExpect(jsonPath("$.fileMetadata.originalFilename").value("canonical.csv"))
             .andExpect(jsonPath("$.fileMetadata.fileType").value("CSV"))
+            .andExpect(jsonPath("$.fileMetadata.storageKey").doesNotExist())
+            .andExpect(jsonPath("$.fileMetadata.createdAt").exists())
             .andExpect(jsonPath("$.counts.recordsReceived").value(3))
             .andExpect(jsonPath("$.counts.recordsCreated").value(0))
             .andExpect(jsonPath("$.counts.recordsRejected").value(0))
@@ -479,7 +504,7 @@ class CsvIngestionPreviewResourceIT {
 
         mockMvc
             .perform(
-                multipart(FILE_PREVIEW_URL)
+                multipart(FILE_WORKFLOW_URL)
                     .file(csvFile("canonical.csv", VALID_CSV))
                     .param("accountId", otherUsersAccount.getId().toString())
             )
@@ -496,7 +521,7 @@ class CsvIngestionPreviewResourceIT {
 
         mockMvc
             .perform(
-                multipart(FILE_PREVIEW_URL)
+                multipart(FILE_WORKFLOW_URL)
                     .file(csvFile("canonical.csv", VALID_CSV))
                     .param("accountId", otherUsersAccount.getId().toString())
             )
@@ -511,12 +536,12 @@ class CsvIngestionPreviewResourceIT {
         FinancialAccount account = createCurrentUserAccount();
 
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("first.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("first.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.warnings").isEmpty());
 
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("second.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("second.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.warnings[0].code").value("DUPLICATE_FILE_CHECKSUM"));
 
@@ -526,11 +551,11 @@ class CsvIngestionPreviewResourceIT {
 
     @Test
     @Transactional
-    void getPersistedFilePreviewReturnsMetadataCountsAndRows() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+    void getPersistedWorkflowReturnsMetadataCountsAndRows() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
 
         mockMvc
-            .perform(get("/api/transaction-ingestions/" + ingestion.getId() + "/file-preview"))
+            .perform(get("/api/transaction-ingestions/" + ingestion.getId() + "/workflow"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.transactionIngestionId").value(ingestion.getId()))
             .andExpect(jsonPath("$.fileIngestionId").exists())
@@ -538,6 +563,8 @@ class CsvIngestionPreviewResourceIT {
             .andExpect(jsonPath("$.fileMetadata.originalFilename").value("canonical.csv"))
             .andExpect(jsonPath("$.fileMetadata.fileType").value("CSV"))
             .andExpect(jsonPath("$.fileMetadata.parserName").value("fintrack-canonical-csv"))
+            .andExpect(jsonPath("$.fileMetadata.storageKey").doesNotExist())
+            .andExpect(jsonPath("$.fileMetadata.createdAt").exists())
             .andExpect(jsonPath("$.counts.recordsReceived").value(3))
             .andExpect(jsonPath("$.counts.validRows").value(3))
             .andExpect(jsonPath("$.rows[0].status").value("VALID"))
@@ -549,7 +576,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void disableValidRowMarksDisabledAndRecalculatesCounters() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
 
         mockMvc
@@ -574,7 +601,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void disablingLastValidRowMakesBatchPartiallyReady() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);
 
         mockMvc
@@ -594,7 +621,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void disableRejectedRowStopsBlockingBatch() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        TransactionIngestion ingestion = createWorkflowWithInvalidRow();
         IngestionRecord rejected = recordsFor(ingestion).get(0);
 
         mockMvc
@@ -611,7 +638,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void disabledRowsDoNotMakeBatchPartiallyReadyWhenValidRowsRemain() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
 
         mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
@@ -622,7 +649,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void enableDisabledRejectedRowRevalidatesCurrentNormalizedValues() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        TransactionIngestion ingestion = createWorkflowWithInvalidRow();
         IngestionRecord rejected = recordsFor(ingestion).get(0);
 
         mockMvc.perform(post(reviewUrl(ingestion, rejected, "disable"))).andExpect(status().isOk());
@@ -639,7 +666,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void enableDisabledValidRowReturnsToValid() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
         long financialTransactionCountBefore = financialTransactionRepository.count();
 
@@ -663,7 +690,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void editValidRowWithValidDataKeepsRawDataRawAndDerivesAmountAndFlow() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
         String originalRaw = objectMapper.readTree(record.getRawData()).path("raw").toString();
         long financialTransactionCountBefore = financialTransactionRepository.count();
@@ -704,7 +731,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void editValidRowWithInvalidDataMarksRejectedAndUpdatesCounters() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
 
         mockMvc
@@ -732,7 +759,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void editRejectedRowWithValidOrInvalidDataRevalidates() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        TransactionIngestion ingestion = createWorkflowWithInvalidRow();
         IngestionRecord rejected = recordsFor(ingestion).get(0);
 
         mockMvc
@@ -769,7 +796,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void editDisabledRowIsRejected() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
         mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
 
@@ -792,7 +819,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void editRejectsImportedSkippedFailedForeignAndMismatchedRows() throws Exception {
-        TransactionIngestion firstIngestion = createPreviewWithValidRows();
+        TransactionIngestion firstIngestion = createWorkflowWithValidRows();
         IngestionRecord importedRecord = recordsFor(firstIngestion).get(0);
         FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
         financialTransaction.setAccount(firstIngestion.getAccount());
@@ -810,7 +837,7 @@ class CsvIngestionPreviewResourceIT {
             )
             .andExpect(status().isBadRequest());
 
-        TransactionIngestion secondIngestion = createPreviewWithValidRows();
+        TransactionIngestion secondIngestion = createWorkflowWithValidRows();
         IngestionRecord skippedRecord = recordsFor(secondIngestion).get(0);
         skippedRecord.setStatus(IngestionRecordStatus.SKIPPED_DUPLICATE);
         ingestionRecordRepository.saveAndFlush(skippedRecord);
@@ -868,7 +895,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void importedRowsAndMismatchedRecordsCannotBeReviewed() throws Exception {
-        TransactionIngestion firstIngestion = createPreviewWithValidRows();
+        TransactionIngestion firstIngestion = createWorkflowWithValidRows();
         IngestionRecord importedRecord = recordsFor(firstIngestion).get(0);
         FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
         financialTransaction.setAccount(firstIngestion.getAccount());
@@ -881,7 +908,7 @@ class CsvIngestionPreviewResourceIT {
         mockMvc.perform(post(reviewUrl(firstIngestion, importedRecord, "disable"))).andExpect(status().isBadRequest());
         mockMvc.perform(post(reviewUrl(firstIngestion, importedRecord, "enable"))).andExpect(status().isBadRequest());
 
-        TransactionIngestion secondIngestion = createPreviewWithValidRows();
+        TransactionIngestion secondIngestion = createWorkflowWithValidRows();
         IngestionRecord secondRecord = recordsFor(secondIngestion).get(0);
 
         mockMvc.perform(post(reviewUrl(firstIngestion, secondRecord, "disable"))).andExpect(status().isBadRequest());
@@ -890,7 +917,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void confirmReadyIngestionCreatesFinancialTransactionsFromNormalizedRows() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithValidRows();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord disabledRecord = recordsFor(ingestion).get(0);
         JsonNode originalRaw = objectMapper.readTree(disabledRecord.getRawData()).path("raw");
         mockMvc.perform(post(reviewUrl(ingestion, disabledRecord, "disable"))).andExpect(status().isOk());
@@ -952,7 +979,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void confirmCompletedIngestionIsIdempotent() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
 
         mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.createdNow").value(1));
         long financialTransactionCountAfterFirstConfirm = financialTransactionRepository.count();
@@ -970,7 +997,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void confirmRecalculatesReadinessAndRejectsStaleReadyWithRejectedRows() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithInvalidRow();
+        TransactionIngestion ingestion = createWorkflowWithInvalidRow();
         ingestion.setStatus(IngestionStatus.READY);
         transactionIngestionRepository.saveAndFlush(ingestion);
         long financialTransactionCountBefore = financialTransactionRepository.count();
@@ -993,7 +1020,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void confirmRecalculatesStalePartiallyReadyToReadyAndImports() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         ingestion.setStatus(IngestionStatus.PARTIALLY_READY);
         transactionIngestionRepository.saveAndFlush(ingestion);
 
@@ -1009,11 +1036,11 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void confirmRejectsNotReadyAndDisallowedStatusesWithoutImporting() throws Exception {
-        TransactionIngestion partiallyReady = createPreviewWithInvalidRow();
+        TransactionIngestion partiallyReady = createWorkflowWithInvalidRow();
         mockMvc.perform(post(confirmUrl(partiallyReady))).andExpect(status().isBadRequest());
         assertThat(financialTransactionRepository.count()).isZero();
 
-        TransactionIngestion noValidRows = createPreviewWithSingleValidRow();
+        TransactionIngestion noValidRows = createWorkflowWithSingleValidRow();
         mockMvc.perform(post(reviewUrl(noValidRows, recordsFor(noValidRows).get(0), "disable"))).andExpect(status().isOk());
         mockMvc.perform(post(confirmUrl(noValidRows))).andExpect(status().isBadRequest());
         assertThat(financialTransactionRepository.count()).isZero();
@@ -1024,7 +1051,7 @@ class CsvIngestionPreviewResourceIT {
             IngestionStatus.FAILED,
             IngestionStatus.PARTIALLY_COMPLETED
         )) {
-            TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+            TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
             ingestion.setStatus(status);
             transactionIngestionRepository.saveAndFlush(ingestion);
             mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isBadRequest());
@@ -1036,7 +1063,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void confirmRejectsCorruptFinancialTransactionLinks() throws Exception {
-        TransactionIngestion importedWithoutTransaction = createPreviewWithSingleValidRow();
+        TransactionIngestion importedWithoutTransaction = createWorkflowWithSingleValidRow();
         IngestionRecord importedRecord = recordsFor(importedWithoutTransaction).get(0);
         importedRecord.setStatus(IngestionRecordStatus.IMPORTED);
         importedRecord.setFinancialTransaction(null);
@@ -1046,7 +1073,7 @@ class CsvIngestionPreviewResourceIT {
 
         mockMvc.perform(post(confirmUrl(importedWithoutTransaction))).andExpect(status().isBadRequest());
 
-        TransactionIngestion validWithTransaction = createPreviewWithSingleValidRow();
+        TransactionIngestion validWithTransaction = createWorkflowWithSingleValidRow();
         IngestionRecord validRecord = recordsFor(validWithTransaction).get(0);
         FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
         financialTransaction.setAccount(validWithTransaction.getAccount());
@@ -1061,7 +1088,7 @@ class CsvIngestionPreviewResourceIT {
     @Test
     @Transactional
     void completedIngestionRowsCannotBeReviewed() throws Exception {
-        TransactionIngestion ingestion = createPreviewWithSingleValidRow();
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);
         mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isOk());
 
@@ -1110,15 +1137,15 @@ class CsvIngestionPreviewResourceIT {
         return transactionIngestionRepository.saveAndFlush(ingestion);
     }
 
-    private TransactionIngestion createPreviewWithValidRows() throws Exception {
+    private TransactionIngestion createWorkflowWithValidRows() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk());
         return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
     }
 
-    private TransactionIngestion createPreviewWithSingleValidRow() throws Exception {
+    private TransactionIngestion createWorkflowWithSingleValidRow() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         String csv =
             """
@@ -1126,13 +1153,13 @@ class CsvIngestionPreviewResourceIT {
             2026-01-16,,OXXO AGUILAS,-274.00,MXN,,
             """;
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("single-valid.csv", csv)).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("single-valid.csv", csv)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("READY"));
         return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
     }
 
-    private TransactionIngestion createPreviewWithInvalidRow() throws Exception {
+    private TransactionIngestion createWorkflowWithInvalidRow() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         String csv =
             """
@@ -1141,7 +1168,7 @@ class CsvIngestionPreviewResourceIT {
             2026-01-16,,OXXO AGUILAS,-274.00,MXN,,
             """;
         mockMvc
-            .perform(multipart(FILE_PREVIEW_URL).file(csvFile("mixed.csv", csv)).param("accountId", account.getId().toString()))
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("mixed.csv", csv)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk());
         return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
     }
@@ -1242,6 +1269,14 @@ class CsvIngestionPreviewResourceIT {
         assertThat(transactionIngestionRepository.findAll()).isEmpty();
         assertThat(fileIngestionRepository.findAll()).isEmpty();
         assertThat(ingestionRecordRepository.findAll()).isEmpty();
+    }
+
+    private String legacyFileWorkflowUrl() {
+        return "/api/transaction-ingestions/file-" + "pre" + "view";
+    }
+
+    private String legacyFileWorkflowUrl(Long transactionIngestionId) {
+        return "/api/transaction-ingestions/" + transactionIngestionId + "/file-" + "pre" + "view";
     }
 
     private String sha256Hex(String content) throws Exception {

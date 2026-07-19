@@ -21,9 +21,9 @@ public class CsvIngestionConfirmImportResponseDTO implements Serializable {
 
     private Integer failed;
 
-    private CsvIngestionPreviewCountsDTO counts;
+    private CsvIngestionWorkflowCountsDTO counts;
 
-    private List<CsvIngestionPreviewRowDTO> rows = new ArrayList<>();
+    private List<CsvIngestionWorkflowRecordDTO> rows = new ArrayList<>();
 
     public Long getTransactionIngestionId() {
         return transactionIngestionId;
@@ -81,19 +81,19 @@ public class CsvIngestionConfirmImportResponseDTO implements Serializable {
         this.failed = failed;
     }
 
-    public CsvIngestionPreviewCountsDTO getCounts() {
+    public CsvIngestionWorkflowCountsDTO getCounts() {
         return counts;
     }
 
-    public void setCounts(CsvIngestionPreviewCountsDTO counts) {
+    public void setCounts(CsvIngestionWorkflowCountsDTO counts) {
         this.counts = counts;
     }
 
-    public List<CsvIngestionPreviewRowDTO> getRows() {
+    public List<CsvIngestionWorkflowRecordDTO> getRows() {
         return rows;
     }
 
-    public void setRows(List<CsvIngestionPreviewRowDTO> rows) {
+    public void setRows(List<CsvIngestionWorkflowRecordDTO> rows) {
         this.rows = rows;
     }
 }

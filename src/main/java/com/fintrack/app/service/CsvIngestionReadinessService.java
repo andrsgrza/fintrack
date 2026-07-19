@@ -4,7 +4,7 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
-import com.fintrack.app.service.dto.CsvIngestionPreviewCountsDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -33,7 +33,7 @@ public class CsvIngestionReadinessService {
                 valid++;
             }
         }
-        CsvIngestionPreviewCountsDTO counts = new CsvIngestionPreviewCountsDTO();
+        CsvIngestionWorkflowCountsDTO counts = new CsvIngestionWorkflowCountsDTO();
         counts.setRecordsReceived(records.size());
         counts.setRecordsCreated(imported);
         counts.setRecordsSkipped(skipped);
@@ -50,12 +50,12 @@ public class CsvIngestionReadinessService {
         return snapshot;
     }
 
-    public void applyCounts(TransactionIngestion ingestion, CsvIngestionPreviewCountsDTO counts) {
+    public void applyCounts(TransactionIngestion ingestion, CsvIngestionWorkflowCountsDTO counts) {
         ingestion.setRecordsReceived(counts.getRecordsReceived());
         ingestion.setRecordsCreated(counts.getRecordsCreated());
         ingestion.setRecordsSkipped(counts.getRecordsSkipped());
         ingestion.setRecordsRejected(counts.getRecordsRejected());
     }
 
-    public record CsvIngestionReadinessSnapshot(CsvIngestionPreviewCountsDTO counts, IngestionStatus status) {}
+    public record CsvIngestionReadinessSnapshot(CsvIngestionWorkflowCountsDTO counts, IngestionStatus status) {}
 }
