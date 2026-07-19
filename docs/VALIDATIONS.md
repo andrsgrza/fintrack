@@ -234,7 +234,7 @@ Companion docs:
 
 ### CSV Ingestion v1 preview validation
 
-**Scope:** `POST /api/transaction-ingestions/file-preview` canonical CSV workflow. This is not the generated `FileIngestion` or `IngestionRecord` CRUD contract.
+**Scope:** `POST /api/transaction-ingestions/file` canonical CSV workflow, plus the compatibility/delegated `POST /api/transaction-ingestions/file-preview` route. This is not the generated `FileIngestion` or `IngestionRecord` CRUD contract.
 
 #### File/header
 
@@ -276,7 +276,9 @@ Persisted review-row edit reuses the same canonical validation and normalization
 
 #### UI
 
-The UI creation page is a minimal `TransactionIngestion` workflow at `/transaction-ingestion/file-preview/new`. It requires selecting an account and a file before submit, but it does not duplicate canonical CSV validation in the browser. Backend validation remains the source of truth. The UI posts multipart `accountId` + `file`, then redirects to `/transaction-ingestion/{id}/file-preview`.
+The canonical UI creation page is the minimal `TransactionIngestion` workflow at `/transaction-ingestion/new`. In create mode it shows Account, Ingestion Type, and a CSV file input for `FILE`; API ingestion is displayed as TBD and cannot be submitted. The create form hides lifecycle/system-owned fields (`status`, `sourceLabel`, `startedAt`, `completedAt`, counters, `errorMessage`, `createdAt`). It requires selecting an account and a file before submit, but it does not duplicate canonical CSV validation in the browser. Backend validation remains the source of truth. The UI posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`, then redirects to `/transaction-ingestion/{id}/file-preview`.
+
+The older `/transaction-ingestion/file-preview/new` page remains available as a compatibility/delegated preview route and still posts to `POST /api/transaction-ingestions/file-preview`.
 
 The persisted review page loads preview data by `TransactionIngestion` id, displays read-only `FileIngestion` metadata, renders statuses strictly from `IngestionRecord.status`, and supports enable/disable plus normalized-row edit review actions while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows do not block the batch. Enabling a disabled row revalidates the current normalized values. Disabled rows cannot be edited until they are enabled and return to `VALID` or `REJECTED`. Completed ingestions are read-only.
 

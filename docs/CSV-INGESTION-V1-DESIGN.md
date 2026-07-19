@@ -29,7 +29,7 @@ Recommendation:
 
 I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid preview rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/file-preview/new` creates the persisted preview and redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. `/file-ingestion/new` is not metadata CRUD; it is a parent-scoped CSV upload command that attaches server-derived file metadata and records to an existing pending FILE `TransactionIngestion`. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and preview rows in one submit, then redirects to `/transaction-ingestion/{id}/file-preview`, where the user can return later to inspect read-only FileIngestion metadata and review preview rows. `/transaction-ingestion/file-preview/new` remains as a compatibility/delegated preview route. `/file-ingestion/new` is not metadata CRUD; it is a parent-scoped CSV upload command that attaches server-derived file metadata and records to an existing pending FILE `TransactionIngestion`. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
 
 ## 2. Responsibility split using current entities
 
@@ -204,7 +204,21 @@ Recommended error-code style:
 
 ## 4. Endpoint design for I1
 
-Use one endpoint:
+Use the canonical parent workflow endpoint for product creation:
+
+```http
+POST /api/transaction-ingestions/file
+Content-Type: multipart/form-data
+```
+
+Input:
+
+- `accountId`: target `FinancialAccount` id.
+- `file`: uploaded canonical CSV file.
+
+It creates the parent `TransactionIngestion`, file metadata, and persisted preview rows in one workflow.
+
+The compatibility/delegated preview endpoint remains:
 
 ```http
 POST /api/transaction-ingestions/file-preview
@@ -434,8 +448,9 @@ I1C UI starts from `TransactionIngestion`, not generated `FileIngestion` create.
 
 TransactionIngestion page/list:
 
-- Add "New File Import" button. Implemented at `/transaction-ingestion/file-preview/new`.
+- Add "New File Import" button. Implemented at `/transaction-ingestion/new`.
 - User selects account.
+- User selects ingestion type; `FILE` shows CSV upload and `API` shows a TBD placeholder.
 - User uploads canonical CSV.
 - Submit preview.
 - Redirect to `/transaction-ingestion/{id}/file-preview`.
@@ -494,7 +509,8 @@ UI composition conventions:
 
 ### I1B — Persisted preview endpoint
 
-- Add `POST /api/transaction-ingestions/file-preview`.
+- Add `POST /api/transaction-ingestions/file` for canonical parent workflow creation.
+- Keep `POST /api/transaction-ingestions/file-preview` as compatibility/delegated preview.
 - Resolve account ownership first.
 - Create `TransactionIngestion`.
 - Create `FileIngestion`.

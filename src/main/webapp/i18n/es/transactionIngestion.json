@@ -35,6 +35,11 @@
       "apiIngestion": "Api Ingestion",
       "financialTransactions": "Financial Transactions",
       "records": "Records",
+      "create": {
+        "submitFile": "Crear vista previa",
+        "createFailed": "No se pudo crear la vista previa de importación.",
+        "apiTbd": "La ingestión por API estará disponible próximamente."
+      },
       "filePreview": {
         "title": "Vista previa de importación de archivo",
         "help": "Sube un archivo CSV canónico de FINTRACK para crear una vista previa persistida.",

@@ -50,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 class CsvIngestionPreviewResourceIT {
 
     private static final String FILE_PREVIEW_URL = "/api/transaction-ingestions/file-preview";
+    private static final String FILE_WORKFLOW_URL = "/api/transaction-ingestions/file";
     private static final String PARENT_FILE_INGESTION_URL = "/api/transaction-ingestions/{id}/file-ingestion";
 
     private static final String VALID_CSV =
@@ -143,6 +144,76 @@ class CsvIngestionPreviewResourceIT {
             "Uber, Trip"
         );
         assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void canonicalFileWorkflowCreatesParentFileMetadataAndRecords() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionIngestionId").exists())
+            .andExpect(jsonPath("$.status").value("READY"))
+            .andExpect(jsonPath("$.fileMetadata.originalFilename").value("canonical.csv"))
+            .andExpect(jsonPath("$.counts.recordsReceived").value(3))
+            .andExpect(jsonPath("$.counts.recordsCreated").value(0))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0));
+
+        TransactionIngestion ingestion = transactionIngestionRepository
+            .findAll()
+            .stream()
+            .max(Comparator.comparing(TransactionIngestion::getId))
+            .orElseThrow();
+        assertThat(ingestion.getIngestionType()).isEqualTo(IngestionType.FILE);
+        assertThat(ingestion.getStatus()).isEqualTo(IngestionStatus.READY);
+        assertThat(ingestion.getAccount().getId()).isEqualTo(account.getId());
+        assertThat(fileIngestionRepository.findOneByTransactionIngestionId(ingestion.getId())).isPresent();
+        assertThat(recordsFor(ingestion)).hasSize(3);
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void canonicalFileWorkflowWithInvalidRowsReturnsPartiallyReady() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        String csv =
+            """
+            transactionDate,postingDate,description,signedAmount,currency,externalReference,notes
+            nope,,,-0.001,USD,,
+            2026-01-16,,OXXO AGUILAS,-274.00,MXN,,
+            """;
+
+        mockMvc
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("mixed.csv", csv)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
+            .andExpect(jsonPath("$.counts.recordsReceived").value(2))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(1));
+
+        TransactionIngestion ingestion = transactionIngestionRepository
+            .findAll()
+            .stream()
+            .max(Comparator.comparing(TransactionIngestion::getId))
+            .orElseThrow();
+        assertThat(ingestion.getStatus()).isEqualTo(IngestionStatus.PARTIALLY_READY);
+        assertThat(recordsFor(ingestion))
+            .extracting(IngestionRecord::getStatus)
+            .containsExactly(IngestionRecordStatus.REJECTED, IngestionRecordStatus.VALID);
+    }
+
+    @Test
+    @Transactional
+    void canonicalFileWorkflowRejectsMissingAccountAndMissingFileWithoutPersisting() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+
+        mockMvc.perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV))).andExpect(status().isBadRequest());
+        assertNothingCreated();
+
+        mockMvc.perform(multipart(FILE_WORKFLOW_URL).param("accountId", account.getId().toString())).andExpect(status().isBadRequest());
+        assertNothingCreated();
     }
 
     @Test

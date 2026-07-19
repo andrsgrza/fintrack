@@ -2538,6 +2538,12 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 Covered by `transaction-ingestion-file-preview.spec.tsx`.
 
 - TransactionIngestion list renders the contextual "New File Import" route action.
+- The contextual "New File Import" action points to the canonical `/transaction-ingestion/new` workflow.
+- TransactionIngestion create mode shows Account, Ingestion Type, and CSV file only for FILE imports.
+- TransactionIngestion create mode hides lifecycle/system-owned fields and counters.
+- TransactionIngestion create mode posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`.
+- TransactionIngestion create mode redirects to `/transaction-ingestion/{id}/file-preview`.
+- TransactionIngestion create mode shows API ingestion as TBD and does not allow API submit.
 - Preview creation page renders account selector, CSV file input, preview-only notice, and Preview button.
 - Account is required before submit.
 - File is required before submit.

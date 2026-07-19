@@ -591,7 +591,7 @@ Composition rules:
 
 - start from TransactionIngestion list/page with a contextual "New File Import" action;
 - select the target FinancialAccount and upload the canonical CSV;
-- call `POST /api/transaction-ingestions/file-preview`;
+- call `POST /api/transaction-ingestions/file`;
 - redirect to the persisted TransactionIngestion review page;
 - show persisted preview summary, read-only file metadata, rows, review actions, and Confirm Import when ready;
 - do not expose editable FileIngestion metadata fields as a product create flow;
@@ -602,7 +602,9 @@ Composition rules:
 - completed reviews are read-only;
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
-The creation route is `/transaction-ingestion/file-preview/new`. It renders a minimal account selector, CSV file input, preview submit action, and preview-only notice. After a successful upload it redirects to `/transaction-ingestion/{id}/file-preview`.
+The canonical creation route is `/transaction-ingestion/new`. In create mode it is a parent-centered FILE ingestion workflow: it renders only Account, Ingestion Type, and a CSV file input for `FILE`; API ingestion shows a TBD placeholder and cannot be submitted. It hides lifecycle/system-owned fields such as status, source label, started/completed timestamps, counters, error message, and created timestamp. A successful FILE submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`, creates the parent `TransactionIngestion`, `FileIngestion` metadata, and preview `IngestionRecord` rows in one backend workflow, then redirects to `/transaction-ingestion/{id}/file-preview`.
+
+The older `/transaction-ingestion/file-preview/new` route remains available as a compatibility/delegated preview page and still posts to `POST /api/transaction-ingestions/file-preview`.
 
 The standalone `/file-ingestion/new` route is also treated as a TransactionIngestion workflow command, not metadata CRUD. It renders only an eligible pending FILE `TransactionIngestion` selector and a CSV file input, posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`, derives all `FileIngestion` metadata server-side, creates `IngestionRecord` rows, updates the parent readiness/counters, and redirects to `/transaction-ingestion/{id}/file-preview`. Future embedded usage from a parent page should hide the parent selector because the parent context is already known.
 

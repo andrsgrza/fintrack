@@ -204,7 +204,7 @@ describe('TransactionIngestion file preview workflow', () => {
     renderList();
 
     const newFileImport = screen.getByRole('link', { name: /new file import/i });
-    expect(newFileImport.getAttribute('href')).toBe('/transaction-ingestion/file-preview/new');
+    expect(newFileImport.getAttribute('href')).toBe('/transaction-ingestion/new');
   });
 
   it('renders account selector, file input, and Preview button', () => {

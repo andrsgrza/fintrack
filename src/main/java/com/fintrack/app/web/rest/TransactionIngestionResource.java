@@ -127,6 +127,30 @@ public class TransactionIngestionResource {
     }
 
     /**
+     * {@code POST /transaction-ingestions/file} : Canonical FILE TransactionIngestion create workflow.
+     *
+     * Creates the TransactionIngestion parent, derives FileIngestion metadata from the uploaded CSV, persists preview
+     * IngestionRecords, and returns the recoverable review DTO. It does not create FinancialTransactions and does not
+     * run the Rule Engine.
+     *
+     * @param accountId the target account id.
+     * @param file the canonical CSV upload.
+     * @return the persisted preview response.
+     */
+    @PostMapping(value = "/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CsvIngestionPreviewResponseDTO> createFileTransactionIngestion(
+        @RequestParam(value = "accountId", required = false) Long accountId,
+        @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        LOG.debug("REST request to create FILE TransactionIngestion workflow for account : {}", accountId);
+        try {
+            return ResponseEntity.ok(csvIngestionPreviewService.createPreview(accountId, file));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    /**
      * {@code POST /transaction-ingestions/:id/file-ingestion} : Upload a canonical CSV for an existing pending FILE
      * TransactionIngestion.
      *

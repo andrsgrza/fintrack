@@ -35,6 +35,11 @@
       "apiIngestion": "Api Ingestion",
       "financialTransactions": "Financial Transactions",
       "records": "Records",
+      "create": {
+        "submitFile": "Create preview",
+        "createFailed": "Could not create file ingestion preview.",
+        "apiTbd": "API ingestion is coming soon."
+      },
       "filePreview": {
         "title": "File import preview",
         "help": "Upload a canonical FINTRACK CSV file to create a persisted preview.",
