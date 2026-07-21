@@ -282,6 +282,14 @@ The canonical detail/review page is `/transaction-ingestion/{id}`. It loads work
 
 The persisted review page loads workflow data by `TransactionIngestion` id, displays read-only `FileIngestion` metadata, renders statuses strictly from `IngestionRecord.status`, and supports enable/disable plus normalized-row edit review actions while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows do not block the batch. Enabling a disabled row revalidates the current normalized values. Disabled rows cannot be edited until they are enabled and return to `VALID` or `REJECTED`. Completed ingestions are read-only.
 
+Temporary generated ingestion write surfaces are still validated with their existing service/domain rules, but they are marked technical/deprecated and are not canonical product workflow contracts:
+
+- `POST /api/transaction-ingestions`, `PUT /api/transaction-ingestions/{id}`, and `PATCH /api/transaction-ingestions/{id}`;
+- `POST /api/file-ingestions`, `PUT /api/file-ingestions/{id}`, and `PATCH /api/file-ingestions/{id}`;
+- `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`.
+
+Canonical CSV product writes use TransactionIngestion workflow command endpoints. The generated write paths remain temporarily for generated/debug route compatibility and may be rejected or removed in a later backend hardening slice after the generated technical routes are removed.
+
 Confirm import is exposed as `POST /api/transaction-ingestions/{id}/confirm`. It recalculates readiness from persisted records before importing and only proceeds when the recalculated status is `READY`. `PARTIALLY_READY`, `PENDING`, `PROCESSING`, `FAILED`, and `PARTIALLY_COMPLETED` are rejected for new import work. Retrying a `COMPLETED` ingestion is idempotent and creates no duplicate transactions. CSV v1 confirm import is all-or-nothing: valid rows become `IMPORTED`, link to created `FinancialTransaction` rows, disabled rows stay disabled/skipped, the parent becomes `COMPLETED`, and `PARTIALLY_COMPLETED` is not produced. Imported transactions are built from `rawData.normalized` with `origin = FILE_IMPORT`, parent account, parent transaction ingestion, no category, no tags, and no financial subscription. CSV confirm import does not invoke the Rule Engine.
 
 ### 15. ApiAccessToken

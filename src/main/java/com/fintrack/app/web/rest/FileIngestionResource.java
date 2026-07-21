@@ -45,6 +45,11 @@ public class FileIngestionResource {
     /**
      * {@code POST  /file-ingestions} : Create a new fileIngestion.
      *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
+     *
      * @param fileIngestionDTO the fileIngestionDTO to create.
      * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new fileIngestionDTO, or with status {@code 400 (Bad Request)} if the fileIngestion has already an ID.
      * @throws URISyntaxException if the Location URI syntax is incorrect.
@@ -67,6 +72,11 @@ public class FileIngestionResource {
 
     /**
      * {@code PUT  /file-ingestions/:id} : Updates an existing fileIngestion.
+     *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
      *
      * @param id the id of the fileIngestionDTO to save.
      * @param fileIngestionDTO the fileIngestionDTO to update.
@@ -110,6 +120,11 @@ public class FileIngestionResource {
 
     /**
      * {@code PATCH  /file-ingestions/:id} : Partial updates given fields of an existing fileIngestion, field will ignore if it is null
+     *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
      *
      * @param id the id of the fileIngestionDTO to save.
      * @param patchNode the fields to update.

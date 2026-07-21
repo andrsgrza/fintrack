@@ -2583,6 +2583,13 @@ Generated/debug ingestion UI action cleanup is covered by targeted frontend spec
 - Entities menu still contains FileIngestion and IngestionRecord and marks each with a Technical badge.
 - Routes remain available; tests do not expect redirects or backend behavior changes.
 
+Temporary generated ingestion write surface marking is documentation/comment-only:
+
+- Generated write endpoints for TransactionIngestion, FileIngestion, and IngestionRecord remain behavior-compatible.
+- ResourceIT tests for generated `POST`/`PUT`/`PATCH` write paths continue to assert existing response codes and validations.
+- Frontend reducer thunks may remain while generated technical routes remain.
+- No semantic test expectations change until a later backend hardening slice rejects or removes those write paths.
+
 CSV review row action tests continue to cover the canonical mutation flow:
 
 - Enable/disable actions update row status and counts.

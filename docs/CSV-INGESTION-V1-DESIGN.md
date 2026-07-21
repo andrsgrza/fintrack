@@ -502,6 +502,16 @@ UI composition conventions:
 - For high-volume records, use a related list or paginated review table, not an inline editable collection.
 - Preserve generated CRUD pages as fallback/debug where useful, with clear Technical marking when they are not the canonical workflow.
 
+Temporary generated ingestion write surfaces:
+
+- `/transaction-ingestion/:id/edit`, `POST /api/transaction-ingestions`, `PUT /api/transaction-ingestions/{id}`, and `PATCH /api/transaction-ingestions/{id}` remain generated/technical write surfaces.
+- Generated FileIngestion write routes and `POST`/`PUT`/`PATCH /api/file-ingestions` remain generated/technical write surfaces.
+- Generated IngestionRecord write routes and `POST`/`PUT`/`PATCH /api/ingestion-records` remain generated/technical write surfaces.
+- These are not canonical CSV product workflow paths.
+- Canonical product writes are the TransactionIngestion workflow command endpoints.
+- Generic reducer thunks and ResourceIT coverage may remain until the generated technical routes are removed.
+- A later backend hardening slice may reject or remove the generated write paths.
+
 ## 11. Proposed implementation phases
 
 ### I1A — Parser/validator service

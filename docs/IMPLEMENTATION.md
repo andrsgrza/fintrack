@@ -909,6 +909,16 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 | IngestionRecord      | ✅ Menu/list/create/detail/edit routes remain available and are marked technical/debug; list/detail hide Create/Edit/Delete; row review actions live in TransactionIngestion. |
 | Routes/back end      | ✅ No routes, redirects, backend behavior, DB, JDL, Liquibase, confirm import, Rule Engine, or ApiIngestion behavior changed.                                                 |
 
+#### Temporary generated ingestion write surfaces
+
+| Surface              | Current status                                                                                                                                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TransactionIngestion | Generated `POST /api/transaction-ingestions`, `PUT /api/transaction-ingestions/{id}`, and `PATCH /api/transaction-ingestions/{id}` are marked technical/deprecated in code comments and remain writable. |
+| FileIngestion        | Generated `POST /api/file-ingestions`, `PUT /api/file-ingestions/{id}`, and `PATCH /api/file-ingestions/{id}` are marked technical/deprecated in code comments and remain writable.                      |
+| IngestionRecord      | Generated `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}` are marked technical/deprecated in code comments and remain writable.                |
+| Canonical workflow   | Product writes use TransactionIngestion workflow command endpoints; generated reducer thunks/tests may remain until generated technical routes are removed.                                              |
+| Behavior             | No response codes, validation behavior, routes, redirects, backend commands, DB, JDL, Liquibase, Confirm Import, Rule Engine, or ApiIngestion behavior changed in this marking slice.                    |
+
 #### I2B.2 — edit normalized review rows
 
 | Item        | Status                                                                                                                                                                                                                            |

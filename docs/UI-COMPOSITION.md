@@ -611,3 +611,14 @@ The canonical workflow detail/review route is `/transaction-ingestion/{id}`. It 
 The parent status shown on the review page uses readiness language before import: `READY` means ready to import, and `PARTIALLY_READY` means the workflow needs review or has no valid rows to import. `COMPLETED` means confirm import finished and the review is read-only. `PARTIALLY_COMPLETED` is reserved and should not normally appear in CSV v1. Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Edit controls render only for `VALID` and `REJECTED` rows while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows render Enable only and must be enabled before editing. Imported/skipped/failed rows do not render edit controls. Confirm Import calls the backend confirm endpoint, imports `VALID` rows, keeps `DISABLED` rows skipped, updates the review from the response, and does not invoke the Rule Engine.
 
 Generated ingestion CRUD routes remain available for direct inspection and debugging, but they are not the product workflow. `FileIngestion` and `IngestionRecord` stay in the Entities menu with a compact Technical badge. Their list/detail/create/edit pages show technical/debug context banners where applicable. Product mutation actions that would compete with the parent workflow are hidden: TransactionIngestion list/workflow detail do not show Edit; FileIngestion list/detail do not show Edit/Delete; IngestionRecord list/detail do not show Create/Edit/Delete. Routes remain available for deep links and debugging; no redirects are used.
+
+### Temporary generated ingestion write surfaces
+
+The following generated write surfaces are kept temporarily for generated/debug compatibility, but they are not canonical product workflow paths:
+
+- `/transaction-ingestion/:id/edit` with `PUT /api/transaction-ingestions/{id}` and `PATCH /api/transaction-ingestions/{id}`;
+- generated `POST /api/transaction-ingestions`;
+- generated FileIngestion write routes with `POST /api/file-ingestions`, `PUT /api/file-ingestions/{id}`, and `PATCH /api/file-ingestions/{id}`;
+- generated IngestionRecord write routes with `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`.
+
+Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and tests may remain while these generated technical routes remain. A later backend hardening slice may reject or remove these generated write paths after their technical routes are removed.

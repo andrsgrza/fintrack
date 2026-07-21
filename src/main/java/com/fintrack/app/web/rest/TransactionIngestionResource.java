@@ -81,6 +81,11 @@ public class TransactionIngestionResource {
     /**
      * {@code POST  /transaction-ingestions} : Create a new transactionIngestion.
      *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
+     *
      * @param transactionIngestionDTO the transactionIngestionDTO to create.
      * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new transactionIngestionDTO, or with status {@code 400 (Bad Request)} if the transactionIngestion has already an ID.
      * @throws URISyntaxException if the Location URI syntax is incorrect.
@@ -214,6 +219,11 @@ public class TransactionIngestionResource {
     /**
      * {@code PUT  /transaction-ingestions/:id} : Updates an existing transactionIngestion.
      *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
+     *
      * @param id the id of the transactionIngestionDTO to save.
      * @param transactionIngestionDTO the transactionIngestionDTO to update.
      * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated transactionIngestionDTO,
@@ -250,6 +260,11 @@ public class TransactionIngestionResource {
 
     /**
      * {@code PATCH  /transaction-ingestions/:id} : Partial updates given fields of an existing transactionIngestion, field will ignore if it is null
+     *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
      *
      * @param id the id of the transactionIngestionDTO to save.
      * @param patchNode the fields to update.
