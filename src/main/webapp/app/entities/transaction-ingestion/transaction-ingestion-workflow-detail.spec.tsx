@@ -86,7 +86,14 @@ const renderPersistedReview = (path = '/transaction-ingestion/100', entity = bas
 };
 
 const renderList = () => {
-  mockState = baseState;
+  mockState = {
+    ...baseState,
+    transactionIngestion: {
+      ...baseState.transactionIngestion,
+      entities: [baseState.transactionIngestion.entity],
+      totalItems: 1,
+    },
+  };
 
   return render(
     <MemoryRouter initialEntries={['/transaction-ingestion']}>
@@ -190,6 +197,14 @@ describe('TransactionIngestion file workflow', () => {
     expect(newFileImport.getAttribute('href')).toBe('/transaction-ingestion/new');
   });
 
+  it('does not render TransactionIngestion list Edit action', () => {
+    renderList();
+
+    expect(screen.getByRole('link', { name: /view/i }).getAttribute('href')).toBe('/transaction-ingestion/100');
+    expect(screen.queryByRole('link', { name: /edit/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy();
+  });
+
   it('canonical detail page loads parent summary, file metadata, counts, statuses, and actions', async () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderPersistedReview();
@@ -239,6 +254,15 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
     expect(within(rowForRecord(302)).queryByRole('button', { name: /disable/i })).toBeNull();
     expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
+  });
+
+  it('does not render TransactionIngestion workflow detail Edit action', async () => {
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    renderPersistedReview();
+
+    expect(await screen.findByText('workflow.csv')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /back/i }).getAttribute('href')).toBe('/transaction-ingestion');
+    expect(screen.queryByRole('link', { name: /edit/i })).toBeNull();
   });
 
   it('API ingestion detail shows TBD placeholder and does not load file workflow', async () => {

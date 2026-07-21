@@ -68,6 +68,38 @@ const renderCreateForm = () => {
   );
 };
 
+const renderEditForm = () => {
+  mockState = {
+    ...baseState,
+    fileIngestion: {
+      ...baseState.fileIngestion,
+      entity: {
+        id: 200,
+        originalFilename: 'statement.csv',
+        fileType: 'CSV',
+        contentType: 'text/csv',
+        fileSizeBytes: 123,
+        checksum: 'abc123',
+        storageKey: null,
+        parserName: 'fintrack-canonical-csv',
+        parserVersion: '1.0',
+        statementStartDate: '2026-07-01',
+        statementEndDate: '2026-07-31',
+        createdAt: '2026-07-13T16:00:00Z',
+        transactionIngestion: { id: 10 },
+      },
+    },
+  };
+
+  return render(
+    <MemoryRouter initialEntries={['/file-ingestion/200/edit']}>
+      <Routes>
+        <Route path="/file-ingestion/:id/edit" element={<FileIngestionUpdate />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+};
+
 const selectPendingParent = () => {
   const parentSelector = screen.getByLabelText('Transaction Ingestion') as HTMLSelectElement;
   fireEvent.change(parentSelector, { target: { value: '10' } });
@@ -92,6 +124,9 @@ describe('FileIngestion create upload form', () => {
   it('shows only parent selector and CSV file input in create mode', () => {
     renderCreateForm();
 
+    expect(
+      screen.getByText('Secondary/debug upload flow — the canonical FILE ingestion flow starts from Transaction Ingestion.'),
+    ).toBeTruthy();
     expect(screen.getByLabelText('Transaction Ingestion')).not.toBeNull();
     expect(screen.getByLabelText('CSV file')).not.toBeNull();
     expect(screen.getByRole('option', { name: '10' })).not.toBeNull();
@@ -108,6 +143,13 @@ describe('FileIngestion create upload form', () => {
     expect(screen.queryByLabelText('Parser Version')).toBeNull();
     expect(screen.queryByLabelText('Statement Start Date')).toBeNull();
     expect(screen.queryByLabelText('Statement End Date')).toBeNull();
+  });
+
+  it('marks edit mode as technical while keeping the route available', () => {
+    renderEditForm();
+
+    expect(screen.getByText('Technical view — File metadata is managed by the Transaction Ingestion workflow.')).toBeTruthy();
+    expect(screen.getByLabelText('Original Filename')).toBeTruthy();
   });
 
   it('submits multipart upload to parent command endpoint and redirects to review route', async () => {

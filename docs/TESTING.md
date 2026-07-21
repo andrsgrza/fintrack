@@ -2566,10 +2566,25 @@ Covered by `transaction-ingestion-workflow-detail.spec.tsx`.
 `file-ingestion-update.spec.tsx` covers the cleaned `/file-ingestion/new` route:
 
 - create mode shows only the TransactionIngestion parent selector and CSV file input.
+- create mode is marked as a secondary/debug upload flow.
 - server-owned metadata fields such as original filename, file type, content type, file size, checksum, parser, storage key, and statement dates are not rendered on create.
 - submit posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`.
 - success redirects to `/transaction-ingestion/{id}`.
 - backend validation errors are shown and the file input is cleared after failure.
+
+Generated/debug ingestion UI action cleanup is covered by targeted frontend specs:
+
+- TransactionIngestion list does not render an Edit action while keeping View/Delete and the New File Import workflow action.
+- TransactionIngestion workflow detail does not render an Edit action.
+- FileIngestion list/detail/create/edit pages show technical/debug context markers where applicable.
+- FileIngestion list/detail keep View/context navigation but do not render Edit/Delete actions.
+- IngestionRecord list/detail/create/edit pages show technical/debug context markers where applicable.
+- IngestionRecord list/detail keep View/context navigation but do not render Create/Edit/Delete actions.
+- Entities menu still contains FileIngestion and IngestionRecord and marks each with a Technical badge.
+- Routes remain available; tests do not expect redirects or backend behavior changes.
+
+CSV review row action tests continue to cover the canonical mutation flow:
+
 - Enable/disable actions update row status and counts.
 - Edit action appears for `VALID` and `REJECTED` rows, but not for `DISABLED` or imported/immutable rows.
 - Editing a rejected row with valid values renders it as valid.

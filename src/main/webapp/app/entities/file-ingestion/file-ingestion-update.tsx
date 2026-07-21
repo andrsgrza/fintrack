@@ -142,6 +142,11 @@ export const FileIngestionUpdate = () => {
           <h2 id="fintrackApp.fileIngestion.home.createOrEditLabel" data-cy="FileIngestionCreateUpdateHeading">
             <Translate contentKey="fintrackApp.fileIngestion.home.createOrEditLabel">Create or edit a FileIngestion</Translate>
           </h2>
+          <Alert color="secondary" fade={false} data-cy="technicalViewBanner">
+            <Translate contentKey={isNew ? 'fintrackApp.fileIngestion.secondaryUploadFlow' : 'fintrackApp.fileIngestion.technicalView'}>
+              Secondary/debug upload flow — the canonical FILE ingestion flow starts from Transaction Ingestion.
+            </Translate>
+          </Alert>
         </Col>
       </Row>
       <Row className="justify-content-center">

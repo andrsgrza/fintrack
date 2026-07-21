@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, FormText, Row } from 'reactstrap';
+import { Alert, Button, Col, FormText, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -111,6 +111,11 @@ export const IngestionRecordUpdate = () => {
           <h2 id="fintrackApp.ingestionRecord.home.createOrEditLabel" data-cy="IngestionRecordCreateUpdateHeading">
             <Translate contentKey="fintrackApp.ingestionRecord.home.createOrEditLabel">Create or edit a IngestionRecord</Translate>
           </h2>
+          <Alert color="secondary" fade={false} data-cy="technicalViewBanner">
+            <Translate contentKey="fintrackApp.ingestionRecord.technicalView">
+              Technical view — ingestion rows are managed from the Transaction Ingestion workflow.
+            </Translate>
+          </Alert>
         </Col>
       </Row>
       <Row className="justify-content-center">

@@ -231,18 +231,6 @@ export const TransactionIngestion = () => {
                         </span>
                       </Button>
                       <Button
-                        tag={Link}
-                        to={`/transaction-ingestion/${transactionIngestion.id}/edit?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`}
-                        color="primary"
-                        size="sm"
-                        data-cy="entityEditButton"
-                      >
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.edit">Edit</Translate>
-                        </span>
-                      </Button>
-                      <Button
                         onClick={() =>
                           (window.location.href = `/transaction-ingestion/${transactionIngestion.id}/delete?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`)
                         }

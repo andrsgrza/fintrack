@@ -900,6 +900,15 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 | Shortcut | Deferred; later FinancialAccount detail shortcut should reuse the same flow with account preselected.                                                                                                        |
 | Tests    | ✅ `transaction-ingestion-workflow-detail.spec.tsx`.                                                                                                                                                         |
 
+#### Ingestion generated/debug UI cleanup
+
+| Area                 | Status                                                                                                                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TransactionIngestion | ✅ List and workflow detail keep View/Delete/navigation as applicable but hide Edit, because the FILE workflow is managed through create/review/confirm actions.              |
+| FileIngestion        | ✅ Menu/list/create/detail/edit remain available and are marked technical/debug; list/detail hide Edit/Delete; `/file-ingestion/new` remains a parent-scoped upload command.  |
+| IngestionRecord      | ✅ Menu/list/create/detail/edit routes remain available and are marked technical/debug; list/detail hide Create/Edit/Delete; row review actions live in TransactionIngestion. |
+| Routes/back end      | ✅ No routes, redirects, backend behavior, DB, JDL, Liquibase, confirm import, Rule Engine, or ApiIngestion behavior changed.                                                 |
+
 #### I2B.2 — edit normalized review rows
 
 | Item        | Status                                                                                                                                                                                                                            |

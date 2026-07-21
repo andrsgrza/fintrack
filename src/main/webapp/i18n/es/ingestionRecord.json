@@ -14,6 +14,8 @@
       "delete": {
         "question": "¿Seguro que quiere eliminar Ingestion Record {{ id }}?"
       },
+      "technicalView": "Vista técnica — las filas de ingestión se administran desde el flujo de Transaction Ingestion.",
+      "workflowLink": "Abrir flujo",
       "detail": {
         "title": "Ingestion Record"
       },

@@ -452,7 +452,7 @@ TransactionIngestion page/list:
 - Redirect to `/transaction-ingestion/{id}`.
 - Show persisted review result, read-only file metadata, counts, rows, and enable/disable review actions.
 
-Preview screen:
+Workflow review screen:
 
 - Summary counts.
 - Rows table:
@@ -479,8 +479,17 @@ Future shortcut:
 FileIngestion:
 
 - Not the main create UX.
-- Generated create/edit does not need polish for I1.
-- Later list/detail can remain debug/admin-ish metadata views if useful.
+- Generated pages remain available for technical/debug inspection.
+- List/detail/create/edit show technical/debug context markers where applicable.
+- List/detail hide Edit/Delete because file metadata is server-derived and parent-owned.
+- `/file-ingestion/new` remains available as the parent-scoped upload command for an existing pending FILE `TransactionIngestion`.
+
+IngestionRecord:
+
+- Not the main create/edit UX.
+- Generated pages remain available for technical/debug inspection.
+- List/detail/create/edit show technical/debug context markers where applicable.
+- List/detail hide Create/Edit/Delete because review-row actions are managed from the TransactionIngestion workflow review page.
 
 ApiIngestion:
 
@@ -491,7 +500,7 @@ UI composition conventions:
 - Do not embed full `FileIngestion` CRUD inside `TransactionIngestion`.
 - Use contextual upload/review components, not generated child CRUD.
 - For high-volume records, use a related list or paginated review table, not an inline editable collection.
-- Preserve generated CRUD pages as fallback/debug where useful.
+- Preserve generated CRUD pages as fallback/debug where useful, with clear Technical marking when they are not the canonical workflow.
 
 ## 11. Proposed implementation phases
 
