@@ -30,6 +30,13 @@ public interface FileIngestionRepository extends JpaRepository<FileIngestion, Lo
 
     boolean existsByTransactionIngestionId(Long transactionIngestionId);
 
+    Optional<FileIngestion> findOneByTransactionIngestionId(Long transactionIngestionId);
+
+    @Query(
+        "select count(fileIngestion) > 0 from FileIngestion fileIngestion where fileIngestion.checksum = :checksum and fileIngestion.transactionIngestion.account.id = :accountId"
+    )
+    boolean existsByChecksumAndTransactionIngestionAccountId(@Param("checksum") String checksum, @Param("accountId") Long accountId);
+
     @Modifying
     @Query("delete from FileIngestion fileIngestion where fileIngestion.transactionIngestion.id = :transactionIngestionId")
     void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);

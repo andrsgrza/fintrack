@@ -22,6 +22,7 @@
         "fileIngestion": "File Ingestion",
         "apiIngestion": "Api Ingestion",
         "ingestionRecord": "Ingestion Record",
+        "technical": "Technical",
         "apiAccessToken": "Api Access Token",
         "apiAccessTokenPermission": "Api Access Token Permission",
         "userDashboardPreference": "User Dashboard Preference"

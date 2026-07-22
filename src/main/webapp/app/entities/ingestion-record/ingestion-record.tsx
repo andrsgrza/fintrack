@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Table } from 'reactstrap';
+import { Alert, Button, Table } from 'reactstrap';
 import { JhiItemCount, JhiPagination, TextFormat, Translate, getPaginationState } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
@@ -98,13 +98,13 @@ export const IngestionRecord = () => {
             <FontAwesomeIcon icon="sync" spin={loading} />{' '}
             <Translate contentKey="fintrackApp.ingestionRecord.home.refreshListLabel">Refresh List</Translate>
           </Button>
-          <Link to="/ingestion-record/new" className="btn btn-primary jh-create-entity" id="jh-create-entity" data-cy="entityCreateButton">
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.ingestionRecord.home.createLabel">Create new Ingestion Record</Translate>
-          </Link>
         </div>
       </h2>
+      <Alert color="secondary" fade={false} data-cy="technicalViewBanner">
+        <Translate contentKey="fintrackApp.ingestionRecord.technicalView">
+          Technical view — ingestion rows are managed from the Transaction Ingestion workflow.
+        </Translate>
+      </Alert>
       <div className="table-responsive">
         {ingestionRecordList && ingestionRecordList.length > 0 ? (
           <Table responsive>
@@ -204,31 +204,6 @@ export const IngestionRecord = () => {
                         <FontAwesomeIcon icon="eye" />{' '}
                         <span className="d-none d-md-inline">
                           <Translate contentKey="entity.action.view">View</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        tag={Link}
-                        to={`/ingestion-record/${ingestionRecord.id}/edit?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`}
-                        color="primary"
-                        size="sm"
-                        data-cy="entityEditButton"
-                      >
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.edit">Edit</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        onClick={() =>
-                          (window.location.href = `/ingestion-record/${ingestionRecord.id}/delete?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`)
-                        }
-                        color="danger"
-                        size="sm"
-                        data-cy="entityDeleteButton"
-                      >
-                        <FontAwesomeIcon icon="trash" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.delete">Delete</Translate>
                         </span>
                       </Button>
                     </div>

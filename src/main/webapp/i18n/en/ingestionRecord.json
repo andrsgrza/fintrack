@@ -14,6 +14,8 @@
       "delete": {
         "question": "Are you sure you want to delete Ingestion Record {{ id }}?"
       },
+      "technicalView": "Technical view — ingestion rows are managed from the Transaction Ingestion workflow.",
+      "workflowLink": "Open workflow",
       "detail": {
         "title": "Ingestion Record"
       },

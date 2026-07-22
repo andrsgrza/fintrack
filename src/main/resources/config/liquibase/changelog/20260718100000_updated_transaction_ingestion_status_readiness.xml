@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20260718100000-1" author="codex">
+        <comment>
+            Align pre-import FILE preview/review TransactionIngestion statuses with readiness semantics.
+            CSV Confirm Import does not exist yet, so existing FILE COMPLETED/PARTIALLY_COMPLETED rows represent
+            preview/review readiness rather than actual import results.
+        </comment>
+        <sql>
+            UPDATE transaction_ingestion
+            SET status = 'READY'
+            WHERE ingestion_type = 'FILE'
+              AND status = 'COMPLETED'
+              AND EXISTS (
+                  SELECT 1
+                  FROM file_ingestion fi
+                  WHERE fi.transaction_ingestion_id = transaction_ingestion.id
+              );
+        </sql>
+        <sql>
+            UPDATE transaction_ingestion
+            SET status = 'PARTIALLY_READY'
+            WHERE ingestion_type = 'FILE'
+              AND status = 'PARTIALLY_COMPLETED'
+              AND EXISTS (
+                  SELECT 1
+                  FROM file_ingestion fi
+                  WHERE fi.transaction_ingestion_id = transaction_ingestion.id
+              );
+        </sql>
+    </changeSet>
+</databaseChangeLog>

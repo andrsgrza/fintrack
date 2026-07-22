@@ -537,11 +537,11 @@ Deferred for this workflow:
 - override confirmation UI;
 - atomic backend command endpoint.
 
-FinancialTransaction manual create owns the implemented Rule Engine preview UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+FinancialTransaction manual create owns the implemented Rule Engine workflow UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
 ## FinancialTransaction manual create — two-step Rule Engine UX
 
-Status: implemented for manual create only. Phase 3A provides the backend preview endpoint, and Phase 3B uses it from the FinancialTransaction create form.
+Status: implemented for manual create only. Phase 3A provides the backend workflow endpoint, and Phase 3B uses it from the FinancialTransaction create form.
 
 Phase 3B manual create composition:
 
@@ -580,3 +580,45 @@ Do not extend this as:
 - persisted evaluation results;
 - audit log;
 - `MANUAL`-only backend apply behavior.
+
+## CSV Ingestion v1 — upload/review workflow
+
+Status: implemented through I2C persisted upload/review/confirm workflow.
+
+CSV import upload/review is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
+
+Composition rules:
+
+- start from TransactionIngestion list/page with a contextual "New File Import" action;
+- select the target FinancialAccount and upload the canonical CSV;
+- call `POST /api/transaction-ingestions/file`;
+- redirect to the persisted TransactionIngestion review page;
+- show persisted workflow summary, read-only file metadata, rows, review actions, and Confirm Import when ready;
+- do not expose editable FileIngestion metadata fields as a product create flow;
+- do not embed full FileIngestion CRUD inside TransactionIngestion;
+- use contextual upload/review components;
+- review rows are high-volume, so use related-list/table style rather than inline editable child collection;
+- Confirm Import is shown only for `READY` reviews with at least one valid row;
+- completed reviews are read-only;
+- later FinancialAccount shortcut should reuse the same flow with account preselected.
+
+The canonical creation route is `/transaction-ingestion/new`. In create mode it is a parent-centered FILE ingestion workflow: it renders only Account, Ingestion Type, and a CSV file input for `FILE`; API ingestion shows a TBD placeholder and cannot be submitted. It hides lifecycle/system-owned fields such as status, source label, started/completed timestamps, counters, error message, and created timestamp. A successful FILE submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`, creates the parent `TransactionIngestion`, `FileIngestion` metadata, and `IngestionRecord` review rows in one backend workflow, then redirects to `/transaction-ingestion/{id}`.
+
+The standalone `/file-ingestion/new` route is also treated as a TransactionIngestion workflow command, not metadata CRUD. It renders only an eligible pending FILE `TransactionIngestion` selector and a CSV file input, posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`, derives all `FileIngestion` metadata server-side, creates `IngestionRecord` rows, updates the parent readiness/counters, and redirects to `/transaction-ingestion/{id}`. Future embedded usage from a parent page should hide the parent selector because the parent context is already known.
+
+The canonical workflow detail/review route is `/transaction-ingestion/{id}`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads workflow data through `GET /api/transaction-ingestions/{id}/workflow`, shows the parent summary, embeds read-only FileIngestion metadata for FILE ingestions, shows counts and rows, and supports row enable/disable plus normalized-row edit review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`. API ingestion detail remains TBD.
+
+The parent status shown on the review page uses readiness language before import: `READY` means ready to import, and `PARTIALLY_READY` means the workflow needs review or has no valid rows to import. `COMPLETED` means confirm import finished and the review is read-only. `PARTIALLY_COMPLETED` is reserved and should not normally appear in CSV v1. Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Edit controls render only for `VALID` and `REJECTED` rows while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows render Enable only and must be enabled before editing. Imported/skipped/failed rows do not render edit controls. Confirm Import calls the backend confirm endpoint, imports `VALID` rows, keeps `DISABLED` rows skipped, updates the review from the response, and does not invoke the Rule Engine.
+
+Generated ingestion CRUD routes remain available for direct inspection and debugging, but they are not the product workflow. `FileIngestion` and `IngestionRecord` stay in the Entities menu with a compact Technical badge. Their list/detail/create/edit pages show technical/debug context banners where applicable. Product mutation actions that would compete with the parent workflow are hidden: TransactionIngestion list/workflow detail do not show Edit; FileIngestion list/detail do not show Edit/Delete; IngestionRecord list/detail do not show Create/Edit/Delete. Routes remain available for deep links and debugging; no redirects are used.
+
+### Temporary generated ingestion write surfaces
+
+The following generated write surfaces are kept temporarily for generated/debug compatibility, but they are not canonical product workflow paths:
+
+- `/transaction-ingestion/:id/edit` with `PUT /api/transaction-ingestions/{id}` and `PATCH /api/transaction-ingestions/{id}`;
+- generated `POST /api/transaction-ingestions`;
+- generated FileIngestion write routes with `POST /api/file-ingestions`, `PUT /api/file-ingestions/{id}`, and `PATCH /api/file-ingestions/{id}`;
+- generated IngestionRecord write routes with `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`.
+
+Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and tests may remain while these generated technical routes remain. A later backend hardening slice may reject or remove these generated write paths after their technical routes are removed.

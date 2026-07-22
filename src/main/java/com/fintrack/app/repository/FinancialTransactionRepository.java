@@ -98,6 +98,8 @@ public interface FinancialTransactionRepository
     )
     void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
 
+    boolean existsByTransactionIngestionId(Long transactionIngestionId);
+
     @Query(
         "select min(financialTransaction.transactionDate) from FinancialTransaction financialTransaction where financialTransaction.account.id = :accountId"
     )

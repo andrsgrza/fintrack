@@ -57,25 +57,25 @@ Companion docs:
 
 ## Summary matrix
 
-| #   | Entity                   | DTO | Entity | DB  | Service | REST | Notes                                                                                                |
-| --- | ------------------------ | --- | ------ | --- | ------- | ---- | ---------------------------------------------------------------------------------------------------- |
-| 1   | FinancialAccount         | ✅  | ✅     | ✅  | ✅      | ✅   | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor         |
-| 2   | FinancialTransaction     | ✅  | ✅     | ✅  | ✅      | ✅   | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0 |
-| 3   | CreditAccountDetails     | ✅  | ✅     | ✅  | ✅      | ✅   | CREDIT_CARD + 1:1 + immutable account                                                                |
-| 4   | Category                 | ✅  | ✅     | ✅  | ✅      | ✅   | Sibling-unique `name` per owner+type+parent (trim, case-insensitive)                                 |
-| 5   | Tag                      | ✅  | ✅     | ✅  | ✅      | ✅   | Per-owner case-insensitive unique `name`; server-owned timestamps; CRUD UX hides raw relationships   |
-| 6   | TransactionRule          | ✅  | ✅     | ✅  | ✅      | ✅   | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                         |
-| 7   | TransactionRuleCondition | ✅  | ✅     | ✅  | ✅      | ✅   | Parent immutable; field/operator/value semantics                                                     |
-| 8   | FinancialSubscription    | ✅  | ✅     | ✅  | ✅      | ✅   | Links + PATCH JsonNode                                                                               |
-| 9   | Budget                   | ✅  | ✅     | ✅  | ✅      | ✅   | M2M owned; PATCH JsonNode link semantics                                                             |
-| 10  | InternalTransfer         | ✅  | ✅     | ✅  | ✅      | ✅   | `createdAt` server; pair validation                                                                  |
-| 11  | TransactionIngestion     | ✅  | ✅     | ✅  | ✅      | ✅   | Lifecycle + counter consistency; server fields optional in DTO                                       |
-| 12  | FileIngestion            | ✅  | ✅     | ✅  | ✅      | ✅   | Parent FILE + 1:1; `createdAt` server                                                                |
-| 13  | ApiIngestion             | ✅  | ✅     | ✅  | ✅      | ✅   | Token snapshots (11C) ✅; `requestId` unique                                                         |
-| 14  | IngestionRecord          | ✅  | ✅     | 🟡  | ✅      | ✅   | `recordIndex`/`externalRecordId` unique per ingestion in service                                     |
-| 15  | ApiAccessToken           | ✅  | ✅     | ✅  | ✅      | ✅   | Server-generated secrets; `rawToken` once; not in GET                                                |
-| 16  | ApiAccessTokenPermission | 🟡  | ✅     | ✅  | ✅      | ✅   | Duplicate (token, permission)                                                                        |
-| 17  | UserDashboardPreference  | 🟡  | ✅     | 🟡  | ✅      | ✅   | `configuration` required DB not DTO; 1:1 service guard                                               |
+| #   | Entity                   | DTO | Entity | DB  | Service | REST | Notes                                                                                                         |
+| --- | ------------------------ | --- | ------ | --- | ------- | ---- | ------------------------------------------------------------------------------------------------------------- |
+| 1   | FinancialAccount         | ✅  | ✅     | ✅  | ✅      | ✅   | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor                  |
+| 2   | FinancialTransaction     | ✅  | ✅     | ✅  | ✅      | ✅   | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0          |
+| 3   | CreditAccountDetails     | ✅  | ✅     | ✅  | ✅      | ✅   | CREDIT_CARD + 1:1 + immutable account                                                                         |
+| 4   | Category                 | ✅  | ✅     | ✅  | ✅      | ✅   | Sibling-unique `name` per owner+type+parent (trim, case-insensitive)                                          |
+| 5   | Tag                      | ✅  | ✅     | ✅  | ✅      | ✅   | Per-owner case-insensitive unique `name`; server-owned timestamps; CRUD UX hides raw relationships            |
+| 6   | TransactionRule          | ✅  | ✅     | ✅  | ✅      | ✅   | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                                  |
+| 7   | TransactionRuleCondition | ✅  | ✅     | ✅  | ✅      | ✅   | Parent immutable; field/operator/value semantics                                                              |
+| 8   | FinancialSubscription    | ✅  | ✅     | ✅  | ✅      | ✅   | Links + PATCH JsonNode                                                                                        |
+| 9   | Budget                   | ✅  | ✅     | ✅  | ✅      | ✅   | M2M owned; PATCH JsonNode link semantics                                                                      |
+| 10  | InternalTransfer         | ✅  | ✅     | ✅  | ✅      | ✅   | `createdAt` server; pair validation                                                                           |
+| 11  | TransactionIngestion     | ✅  | ✅     | ✅  | ✅      | ✅   | Lifecycle + counter consistency; server fields optional in DTO                                                |
+| 12  | FileIngestion            | ✅  | ✅     | ✅  | ✅      | ✅   | Parent FILE + 1:1; `createdAt` server; create UI uploads CSV for a pending parent instead of editing metadata |
+| 13  | ApiIngestion             | ✅  | ✅     | ✅  | ✅      | ✅   | Token snapshots (11C) ✅; `requestId` unique                                                                  |
+| 14  | IngestionRecord          | ✅  | ✅     | 🟡  | ✅      | ✅   | `recordIndex`/`externalRecordId` unique per ingestion in service                                              |
+| 15  | ApiAccessToken           | ✅  | ✅     | ✅  | ✅      | ✅   | Server-generated secrets; `rawToken` once; not in GET                                                         |
+| 16  | ApiAccessTokenPermission | 🟡  | ✅     | ✅  | ✅      | ✅   | Duplicate (token, permission)                                                                                 |
+| 17  | UserDashboardPreference  | 🟡  | ✅     | 🟡  | ✅      | ✅   | `configuration` required DB not DTO; 1:1 service guard                                                        |
 
 ---
 
@@ -194,13 +194,13 @@ Companion docs:
 
 ### 11. TransactionIngestion
 
-| Layer       | Rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **DTO**     | **`ingestionType` + `account` required**; `sourceLabel`/`errorMessage` max sizes; counters `>= 0`. **`status`, `startedAt`, `createdAt`, counters optional** in POST (server defaults).                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Entity**  | All counters/status/timestamps **`@NotNull`** on entity; **`account` required**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **DB**      | `account_id NOT NULL` FK.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Service** | Source of truth for ownership, normalization and merged-state rules. Create: resolve accessible account; server **`createdAt`/`startedAt = now()`**, **`status = PENDING`**, counters **0**. **Immutable:** `account`, `ingestionType`, `createdAt`, `startedAt`; client `completedAt` changes rejected. Status lifecycle enforced (`PENDING/PROCESSING` → final, final terminal); counts validated by status; `sourceLabel`/`errorMessage` trim + blank→`null`; final FILE/API requires matching child metadata; delete reverts ingestion with explicit FK-safe cleanup. |
-| **REST**    | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Layer       | Rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DTO**     | **`ingestionType` + `account` required**; `sourceLabel`/`errorMessage` max sizes; counters `>= 0`. **`status`, `startedAt`, `createdAt`, counters optional** in POST (server defaults).                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Entity**  | All counters/status/timestamps **`@NotNull`** on entity; **`account` required**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **DB**      | `account_id NOT NULL` FK.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Service** | Source of truth for ownership, normalization and merged-state rules. Create: resolve accessible account; server **`createdAt`/`startedAt = now()`**, **`status = PENDING`**, counters **0**. **Immutable:** `account`, `ingestionType`, `createdAt`, `startedAt`; client `completedAt` changes rejected. Status lifecycle enforced (`PENDING` → readiness/processing/final, readiness/`PROCESSING` → final, final terminal); counts validated by status; `sourceLabel`/`errorMessage` trim + blank→`null`; final FILE/API requires matching child metadata; delete reverts ingestion with explicit FK-safe cleanup. |
+| **REST**    | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ### 12. FileIngestion
 
@@ -231,6 +231,66 @@ Companion docs:
 | **DB**      | `transaction_ingestion_id NOT NULL`; `financial_transaction_id` nullable **UNIQUE**. **No** composite unique `(ingestion, recordIndex/externalRecordId)` in DB — enforced in service.                                                                                                                                                                                                            |
 | **Service** | **`existsByTransactionIngestionIdAndRecordIndex()`**; normalized `externalRecordId` uniqueness per parent; optional FT: accessible + same-owner + same parent + **`existsByFinancialTransactionId()`**. Immutable: parent, `recordIndex`, `externalRecordId`, `rawData`, `createdAt`; `createdAt = now()` on create. Status consistency and parent-final freeze enforced. Direct delete blocked. |
 | **REST**    | `@Valid` POST; PUT/PATCH **JsonNode**; `400 invalid`.                                                                                                                                                                                                                                                                                                                                            |
+
+### CSV Ingestion v1 workflow validation
+
+**Scope:** `POST /api/transaction-ingestions/file` canonical CSV create workflow and `GET /api/transaction-ingestions/{id}/workflow` canonical workflow detail/review route. This is not the generated `FileIngestion` or `IngestionRecord` CRUD contract.
+
+#### File/header
+
+| Rule                      | Decision                                                                                                                                           |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header                    | Exact header required: `transactionDate,postingDate,description,signedAmount,currency,externalReference,notes`.                                    |
+| Header order/case         | Ordered and case-sensitive. Missing, extra, reordered, or case-changed headers are rejected.                                                       |
+| Missing file              | Rejected; create nothing in I1.                                                                                                                    |
+| Empty file                | Rejected; create nothing in I1.                                                                                                                    |
+| Header-only file          | Rejected; create nothing in I1.                                                                                                                    |
+| Unreadable/malformed file | Rejected; create nothing in I1.                                                                                                                    |
+| Max file size             | 2 MB.                                                                                                                                              |
+| Max data rows             | 5,000 rows, excluding header.                                                                                                                      |
+| Invalid/rejected upload   | Creates no `TransactionIngestion`, `FileIngestion`, or `IngestionRecord` in I1. Persisted `FAILED` ingestion for rejected upload remains deferred. |
+
+#### Rows
+
+When the header is valid, invalid rows persist as `REJECTED` `IngestionRecord`s.
+
+| Field / rule        | Decision                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `transactionDate`   | Required ISO date `YYYY-MM-DD`.                                                                      |
+| `postingDate`       | Optional ISO date `YYYY-MM-DD`; blank normalizes to `null`.                                          |
+| `description`       | Required nonblank after trim; max 500 after trim.                                                    |
+| `signedAmount`      | Required decimal; nonzero; max scale 2.                                                              |
+| Positive amount     | `signedAmount > 0` normalizes to `flow = IN`.                                                        |
+| Negative amount     | `signedAmount < 0` normalizes to `flow = OUT`.                                                       |
+| Normalized amount   | `amount = abs(signedAmount)`.                                                                        |
+| Zero amount         | `signedAmount = 0` invalid, not skipped.                                                             |
+| `currency`          | Required and must match selected `FinancialAccount.currency`.                                        |
+| `externalReference` | Optional; trim; blank to `null`; max 150 after trim.                                                 |
+| `notes`             | Optional; trim; blank to `null`; max 1000 after trim.                                                |
+| Valid review status | `IngestionRecordStatus.VALID` means valid review row, not an already-created `FinancialTransaction`. |
+| FT link in I1       | `financialTransaction` must remain `null` for every I1 review row.                                   |
+
+`CREATED` is no longer a valid `IngestionRecordStatus`. `READY`/`PARTIALLY_READY` are `TransactionIngestion` pre-import review statuses. `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows. `PARTIALLY_READY` means blocking rows exist or there are zero `VALID` rows to import. `COMPLETED`/`PARTIALLY_COMPLETED` are import-result statuses; `PARTIALLY_COMPLETED` is reserved for future/exceptional partial import scenarios and should not be produced by CSV review or CSV Confirm Import v1. `IMPORTED` means a row generated a `FinancialTransaction` during confirm import and must link to that transaction. `DISABLED` means the row is kept for audit/review but excluded from confirm import. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but an ingestion with only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. `REJECTED`/`FAILED` rows make the batch `PARTIALLY_READY` unless fixed or disabled.
+
+Persisted review-row edit reuses the same canonical validation and normalization rules as upload/enable. Editable fields are `transactionDate`, `postingDate`, `description`, `signedAmount`, `currency`, `externalReference`, and `notes`. `amount` and `flow` are derived from `signedAmount`; clients cannot edit them directly and cannot set row `status`. Editing is allowed only for `VALID` and `REJECTED` rows. Valid results become `VALID`; invalid results become `REJECTED`. `DISABLED` rows are rejected by review edit and must be enabled before editing. `IMPORTED`, `SKIPPED_DUPLICATE`, and `FAILED` rows are rejected by review edit.
+
+#### UI
+
+The canonical UI creation page is the minimal `TransactionIngestion` workflow at `/transaction-ingestion/new`. In create mode it shows Account, Ingestion Type, and a CSV file input for `FILE`; API ingestion is displayed as TBD and cannot be submitted. The create form hides lifecycle/system-owned fields (`status`, `sourceLabel`, `startedAt`, `completedAt`, counters, `errorMessage`, `createdAt`). It requires selecting an account and a file before submit, but it does not duplicate canonical CSV validation in the browser. Backend validation remains the source of truth. The UI posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`, then redirects to `/transaction-ingestion/{id}`.
+
+The canonical detail/review page is `/transaction-ingestion/{id}`. It loads workflow data from `GET /api/transaction-ingestions/{id}/workflow`, shows the parent summary, embeds read-only FileIngestion metadata for FILE ingestions, and renders IngestionRecord review/result rows. API ingestion detail remains TBD. PENDING FILE ingestions without file metadata show an empty/unavailable state instead of crashing.
+
+The persisted review page loads workflow data by `TransactionIngestion` id, displays read-only `FileIngestion` metadata, renders statuses strictly from `IngestionRecord.status`, and supports enable/disable plus normalized-row edit review actions while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows do not block the batch. Enabling a disabled row revalidates the current normalized values. Disabled rows cannot be edited until they are enabled and return to `VALID` or `REJECTED`. Completed ingestions are read-only.
+
+Temporary generated ingestion write surfaces are still validated with their existing service/domain rules, but they are marked technical/deprecated and are not canonical product workflow contracts:
+
+- `POST /api/transaction-ingestions`, `PUT /api/transaction-ingestions/{id}`, and `PATCH /api/transaction-ingestions/{id}`;
+- `POST /api/file-ingestions`, `PUT /api/file-ingestions/{id}`, and `PATCH /api/file-ingestions/{id}`;
+- `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`.
+
+Canonical CSV product writes use TransactionIngestion workflow command endpoints. The generated write paths remain temporarily for generated/debug route compatibility and may be rejected or removed in a later backend hardening slice after the generated technical routes are removed.
+
+Confirm import is exposed as `POST /api/transaction-ingestions/{id}/confirm`. It recalculates readiness from persisted records before importing and only proceeds when the recalculated status is `READY`. `PARTIALLY_READY`, `PENDING`, `PROCESSING`, `FAILED`, and `PARTIALLY_COMPLETED` are rejected for new import work. Retrying a `COMPLETED` ingestion is idempotent and creates no duplicate transactions. CSV v1 confirm import is all-or-nothing: valid rows become `IMPORTED`, link to created `FinancialTransaction` rows, disabled rows stay disabled/skipped, the parent becomes `COMPLETED`, and `PARTIALLY_COMPLETED` is not produced. Imported transactions are built from `rawData.normalized` with `origin = FILE_IMPORT`, parent account, parent transaction ingestion, no category, no tags, and no financial subscription. CSV confirm import does not invoke the Rule Engine.
 
 ### 15. ApiAccessToken
 

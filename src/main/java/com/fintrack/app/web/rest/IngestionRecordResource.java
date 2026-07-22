@@ -57,6 +57,12 @@ public class IngestionRecordResource {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
+     */
     @PostMapping("")
     public ResponseEntity<IngestionRecordDTO> createIngestionRecord(@Valid @RequestBody IngestionRecordDTO ingestionRecordDTO)
         throws URISyntaxException {
@@ -74,6 +80,12 @@ public class IngestionRecordResource {
             .body(ingestionRecordDTO);
     }
 
+    /**
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
+     */
     @PutMapping("/{id}")
     public ResponseEntity<IngestionRecordDTO> updateIngestionRecord(
         @PathVariable(value = "id", required = false) final Long id,
@@ -107,6 +119,12 @@ public class IngestionRecordResource {
             .body(ingestionRecordDTO);
     }
 
+    /**
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
+     */
     @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
     public ResponseEntity<IngestionRecordDTO> partialUpdateIngestionRecord(
         @PathVariable(value = "id", required = false) final Long id,

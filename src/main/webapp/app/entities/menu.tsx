@@ -1,5 +1,6 @@
 import React from 'react';
 import { Translate } from 'react-jhipster';
+import { Badge } from 'reactstrap';
 
 import MenuItem from 'app/shared/layout/menus/menu-item';
 
@@ -41,13 +42,19 @@ const EntitiesMenu = () => {
         <Translate contentKey="global.menu.entities.transactionIngestion" />
       </MenuItem>
       <MenuItem icon="asterisk" to="/file-ingestion">
-        <Translate contentKey="global.menu.entities.fileIngestion" />
+        <Translate contentKey="global.menu.entities.fileIngestion" />{' '}
+        <Badge color="secondary" pill>
+          <Translate contentKey="global.menu.entities.technical">Technical</Translate>
+        </Badge>
       </MenuItem>
       <MenuItem icon="asterisk" to="/api-ingestion">
         <Translate contentKey="global.menu.entities.apiIngestion" />
       </MenuItem>
       <MenuItem icon="asterisk" to="/ingestion-record">
-        <Translate contentKey="global.menu.entities.ingestionRecord" />
+        <Translate contentKey="global.menu.entities.ingestionRecord" />{' '}
+        <Badge color="secondary" pill>
+          <Translate contentKey="global.menu.entities.technical">Technical</Translate>
+        </Badge>
       </MenuItem>
       <MenuItem icon="asterisk" to="/api-access-token">
         <Translate contentKey="global.menu.entities.apiAccessToken" />

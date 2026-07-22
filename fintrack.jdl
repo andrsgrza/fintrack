@@ -160,6 +160,8 @@ enum IngestionType {
 
 enum IngestionStatus {
   PENDING,
+  READY,
+  PARTIALLY_READY,
   PROCESSING,
   COMPLETED,
   PARTIALLY_COMPLETED,
@@ -176,9 +178,12 @@ enum ImportFileType {
 }
 
 enum IngestionRecordStatus {
-  CREATED,
+  VALID,
+  DISABLED,
+  IMPORTED,
   SKIPPED_DUPLICATE,
-  REJECTED
+  REJECTED,
+  FAILED
 }
 
 enum ApiTokenStatus {

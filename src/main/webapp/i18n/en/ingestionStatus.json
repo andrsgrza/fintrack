@@ -2,11 +2,13 @@
   "fintrackApp": {
     "IngestionStatus": {
       "null": "",
-      "PENDING": "PENDING",
-      "PROCESSING": "PROCESSING",
-      "COMPLETED": "COMPLETED",
-      "PARTIALLY_COMPLETED": "PARTIALLY_COMPLETED",
-      "FAILED": "FAILED"
+      "PENDING": "Pending",
+      "READY": "Ready to import",
+      "PARTIALLY_READY": "Needs review",
+      "PROCESSING": "Processing",
+      "COMPLETED": "Import completed",
+      "PARTIALLY_COMPLETED": "Import partially completed",
+      "FAILED": "Failed"
     }
   }
 }

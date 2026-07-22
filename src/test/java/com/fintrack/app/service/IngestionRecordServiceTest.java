@@ -95,7 +95,7 @@ class IngestionRecordServiceTest {
         ingestionRecord = new IngestionRecord();
         ingestionRecord.setId(100L);
         ingestionRecord.setRecordIndex(0);
-        ingestionRecord.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecord.setStatus(IngestionRecordStatus.IMPORTED);
         ingestionRecord.setCreatedAt(Instant.parse("2026-01-01T00:00:00Z"));
         ingestionRecord.setTransactionIngestion(transactionIngestion);
         ingestionRecord.setFinancialTransaction(financialTransaction);
@@ -141,7 +141,7 @@ class IngestionRecordServiceTest {
     void saveShouldRejectCrossOwnerFinancialTransactionEvenForAdmin() {
         IngestionRecord mappedEntity = new IngestionRecord();
         mappedEntity.setRecordIndex(1);
-        mappedEntity.setStatus(IngestionRecordStatus.CREATED);
+        mappedEntity.setStatus(IngestionRecordStatus.IMPORTED);
 
         FinancialTransaction otherTransaction = new FinancialTransaction();
         otherTransaction.setId(71L);
@@ -151,7 +151,7 @@ class IngestionRecordServiceTest {
         financialTransactionDTO.setId(71L);
         ingestionRecordDTO.setFinancialTransaction(financialTransactionDTO);
         ingestionRecordDTO.setRecordIndex(1);
-        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.IMPORTED);
 
         when(currentUserService.isAdmin()).thenReturn(true);
         when(ingestionRecordMapper.toEntity(ingestionRecordDTO)).thenReturn(mappedEntity);
@@ -166,13 +166,13 @@ class IngestionRecordServiceTest {
     void saveShouldRejectFinancialTransactionAlreadyLinked() {
         IngestionRecord mappedEntity = new IngestionRecord();
         mappedEntity.setRecordIndex(2);
-        mappedEntity.setStatus(IngestionRecordStatus.CREATED);
+        mappedEntity.setStatus(IngestionRecordStatus.IMPORTED);
 
         FinancialTransactionDTO financialTransactionDTO = new FinancialTransactionDTO();
         financialTransactionDTO.setId(70L);
         ingestionRecordDTO.setFinancialTransaction(financialTransactionDTO);
         ingestionRecordDTO.setRecordIndex(2);
-        ingestionRecordDTO.setStatus(IngestionRecordStatus.CREATED);
+        ingestionRecordDTO.setStatus(IngestionRecordStatus.IMPORTED);
 
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);

@@ -108,6 +108,11 @@ export const TransactionIngestion = () => {
             &nbsp;
             <Translate contentKey="fintrackApp.transactionIngestion.home.createLabel">Create new Transaction Ingestion</Translate>
           </Link>
+          <Link to="/transaction-ingestion/new" className="btn btn-primary jh-create-entity ms-2" data-cy="fileImportButton">
+            <FontAwesomeIcon icon="cloud" />
+            &nbsp;
+            <Translate contentKey="fintrackApp.transactionIngestion.home.newFileImportLabel">New File Import</Translate>
+          </Link>
         </div>
       </h2>
       <div className="table-responsive">
@@ -223,18 +228,6 @@ export const TransactionIngestion = () => {
                         <FontAwesomeIcon icon="eye" />{' '}
                         <span className="d-none d-md-inline">
                           <Translate contentKey="entity.action.view">View</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        tag={Link}
-                        to={`/transaction-ingestion/${transactionIngestion.id}/edit?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`}
-                        color="primary"
-                        size="sm"
-                        data-cy="entityEditButton"
-                      >
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.edit">Edit</Translate>
                         </span>
                       </Button>
                       <Button

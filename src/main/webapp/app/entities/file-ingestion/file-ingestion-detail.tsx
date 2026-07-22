@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
+import { Alert, Button, Col, Row } from 'reactstrap';
 import { TextFormat, Translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -25,6 +25,11 @@ export const FileIngestionDetail = () => {
         <h2 data-cy="fileIngestionDetailsHeading">
           <Translate contentKey="fintrackApp.fileIngestion.detail.title">FileIngestion</Translate>
         </h2>
+        <Alert color="secondary" fade={false} data-cy="technicalViewBanner">
+          <Translate contentKey="fintrackApp.fileIngestion.technicalView">
+            Technical view — File metadata is managed by the Transaction Ingestion workflow.
+          </Translate>
+        </Alert>
         <dl className="jh-entity-details">
           <dt>
             <span id="id">
@@ -121,13 +126,17 @@ export const FileIngestionDetail = () => {
             <Translate contentKey="entity.action.back">Back</Translate>
           </span>
         </Button>
-        &nbsp;
-        <Button tag={Link} to={`/file-ingestion/${fileIngestionEntity.id}/edit`} replace color="primary">
-          <FontAwesomeIcon icon="pencil-alt" />{' '}
-          <span className="d-none d-md-inline">
-            <Translate contentKey="entity.action.edit">Edit</Translate>
-          </span>
-        </Button>
+        {fileIngestionEntity.transactionIngestion ? (
+          <>
+            &nbsp;
+            <Button tag={Link} to={`/transaction-ingestion/${fileIngestionEntity.transactionIngestion.id}`} replace color="primary">
+              <FontAwesomeIcon icon="eye" />{' '}
+              <span className="d-none d-md-inline">
+                <Translate contentKey="fintrackApp.fileIngestion.workflowLink">Open workflow</Translate>
+              </span>
+            </Button>
+          </>
+        ) : null}
       </Col>
     </Row>
   );

@@ -2,6 +2,7 @@ package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
@@ -36,9 +37,13 @@ public interface IngestionRecordRepository extends JpaRepository<IngestionRecord
 
     boolean existsByFinancialTransactionId(Long financialTransactionId);
 
+    boolean existsByTransactionIngestionId(Long transactionIngestionId);
+
     boolean existsByTransactionIngestionIdAndRecordIndex(Long transactionIngestionId, Integer recordIndex);
 
     boolean existsByTransactionIngestionIdAndExternalRecordId(Long transactionIngestionId, String externalRecordId);
+
+    List<IngestionRecord> findAllByTransactionIngestionIdOrderByRecordIndexAsc(Long transactionIngestionId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(

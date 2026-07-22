@@ -2,9 +2,16 @@ package com.fintrack.app.web.rest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fintrack.app.service.CsvIngestionConfirmImportService;
+import com.fintrack.app.service.CsvIngestionRecordReviewService;
+import com.fintrack.app.service.CsvIngestionWorkflowService;
 import com.fintrack.app.service.TransactionIngestionQueryService;
 import com.fintrack.app.service.TransactionIngestionService;
 import com.fintrack.app.service.criteria.TransactionIngestionCriteria;
+import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
+import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionWorkflowResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
@@ -20,8 +27,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import tech.jhipster.web.util.HeaderUtil;
 import tech.jhipster.web.util.PaginationUtil;
@@ -45,20 +54,37 @@ public class TransactionIngestionResource {
 
     private final TransactionIngestionQueryService transactionIngestionQueryService;
 
+    private final CsvIngestionWorkflowService csvIngestionWorkflowService;
+
+    private final CsvIngestionRecordReviewService csvIngestionRecordReviewService;
+
+    private final CsvIngestionConfirmImportService csvIngestionConfirmImportService;
+
     private final ObjectMapper objectMapper;
 
     public TransactionIngestionResource(
         TransactionIngestionService transactionIngestionService,
         TransactionIngestionQueryService transactionIngestionQueryService,
+        CsvIngestionWorkflowService csvIngestionWorkflowService,
+        CsvIngestionRecordReviewService csvIngestionRecordReviewService,
+        CsvIngestionConfirmImportService csvIngestionConfirmImportService,
         ObjectMapper objectMapper
     ) {
         this.transactionIngestionService = transactionIngestionService;
         this.transactionIngestionQueryService = transactionIngestionQueryService;
+        this.csvIngestionWorkflowService = csvIngestionWorkflowService;
+        this.csvIngestionRecordReviewService = csvIngestionRecordReviewService;
+        this.csvIngestionConfirmImportService = csvIngestionConfirmImportService;
         this.objectMapper = objectMapper;
     }
 
     /**
      * {@code POST  /transaction-ingestions} : Create a new transactionIngestion.
+     *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
      *
      * @param transactionIngestionDTO the transactionIngestionDTO to create.
      * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new transactionIngestionDTO, or with status {@code 400 (Bad Request)} if the transactionIngestion has already an ID.
@@ -83,7 +109,120 @@ public class TransactionIngestionResource {
     }
 
     /**
+     * {@code POST /transaction-ingestions/file} : Canonical FILE TransactionIngestion create workflow.
+     *
+     * Creates the TransactionIngestion parent, derives FileIngestion metadata from the uploaded CSV, persists
+     * IngestionRecords, and returns the recoverable review DTO. It does not create FinancialTransactions and does not
+     * run the Rule Engine.
+     *
+     * @param accountId the target account id.
+     * @param file the canonical CSV upload.
+     * @return the persisted workflow response.
+     */
+    @PostMapping(value = "/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CsvIngestionWorkflowResponseDTO> createFileTransactionIngestion(
+        @RequestParam(value = "accountId", required = false) Long accountId,
+        @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        LOG.debug("REST request to create FILE TransactionIngestion workflow for account : {}", accountId);
+        try {
+            return ResponseEntity.ok(csvIngestionWorkflowService.createWorkflow(accountId, file));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    /**
+     * {@code POST /transaction-ingestions/:id/file-ingestion} : Upload a canonical CSV for an existing pending FILE
+     * TransactionIngestion.
+     *
+     * This workflow command derives FileIngestion metadata server-side, persists IngestionRecords and updates the parent
+     * readiness counters/status. It does not create FinancialTransactions and does not run the Rule Engine.
+     *
+     * @param id the existing pending FILE TransactionIngestion id.
+     * @param file the canonical CSV upload.
+     * @return the persisted workflow response.
+     */
+    @PostMapping(value = "/{id}/file-ingestion", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CsvIngestionWorkflowResponseDTO> uploadFileIngestion(
+        @PathVariable("id") Long id,
+        @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        LOG.debug("REST request to upload CSV FileIngestion for transaction ingestion : {}", id);
+        try {
+            return ResponseEntity.ok(csvIngestionWorkflowService.uploadFileToPendingTransactionIngestion(id, file));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @GetMapping("/{id}/workflow")
+    public ResponseEntity<CsvIngestionWorkflowResponseDTO> getWorkflow(@PathVariable("id") Long id) {
+        LOG.debug("REST request to get CSV TransactionIngestion workflow detail : {}", id);
+        try {
+            return ResponseEntity.ok(csvIngestionWorkflowService.getWorkflow(id));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @PostMapping("/{ingestionId}/records/{recordId}/disable")
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> disableWorkflowRecord(
+        @PathVariable("ingestionId") Long ingestionId,
+        @PathVariable("recordId") Long recordId
+    ) {
+        LOG.debug("REST request to disable CSV ingestion record : {}, {}", ingestionId, recordId);
+        try {
+            return ResponseEntity.ok(csvIngestionRecordReviewService.disable(ingestionId, recordId));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @PostMapping("/{ingestionId}/records/{recordId}/enable")
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> enableWorkflowRecord(
+        @PathVariable("ingestionId") Long ingestionId,
+        @PathVariable("recordId") Long recordId
+    ) {
+        LOG.debug("REST request to enable CSV ingestion record : {}, {}", ingestionId, recordId);
+        try {
+            return ResponseEntity.ok(csvIngestionRecordReviewService.enable(ingestionId, recordId));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @PatchMapping("/{ingestionId}/records/{recordId}")
+    public ResponseEntity<CsvIngestionRecordReviewResponseDTO> editWorkflowRecord(
+        @PathVariable("ingestionId") Long ingestionId,
+        @PathVariable("recordId") Long recordId,
+        @RequestBody(required = false) CsvIngestionRecordReviewRequestDTO request
+    ) {
+        LOG.debug("REST request to edit CSV ingestion record : {}, {}", ingestionId, recordId);
+        try {
+            return ResponseEntity.ok(csvIngestionRecordReviewService.edit(ingestionId, recordId, request));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    @PostMapping("/{id}/confirm")
+    public ResponseEntity<CsvIngestionConfirmImportResponseDTO> confirmWorkflowImport(@PathVariable("id") Long id) {
+        LOG.debug("REST request to confirm CSV FileIngestion import : {}", id);
+        try {
+            return ResponseEntity.ok(csvIngestionConfirmImportService.confirm(id));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    /**
      * {@code PUT  /transaction-ingestions/:id} : Updates an existing transactionIngestion.
+     *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
      *
      * @param id the id of the transactionIngestionDTO to save.
      * @param transactionIngestionDTO the transactionIngestionDTO to update.
@@ -121,6 +260,11 @@ public class TransactionIngestionResource {
 
     /**
      * {@code PATCH  /transaction-ingestions/:id} : Partial updates given fields of an existing transactionIngestion, field will ignore if it is null
+     *
+     * TODO INGESTION-HARDENING: This generated CRUD write path is technical/deprecated. Canonical product writes
+     * should use TransactionIngestion workflow command endpoints. This endpoint remains temporarily for
+     * generated/debug route compatibility. Future hardening should reject or remove this write path after generated
+     * technical routes are removed.
      *
      * @param id the id of the transactionIngestionDTO to save.
      * @param patchNode the fields to update.

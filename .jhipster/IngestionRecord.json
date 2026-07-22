@@ -22,7 +22,7 @@
       "fieldName": "status",
       "fieldType": "IngestionRecordStatus",
       "fieldValidateRules": ["required"],
-      "fieldValues": "CREATED,SKIPPED_DUPLICATE,REJECTED"
+      "fieldValues": "VALID,DISABLED,IMPORTED,SKIPPED_DUPLICATE,REJECTED,FAILED"
     },
     {
       "fieldName": "rawData",

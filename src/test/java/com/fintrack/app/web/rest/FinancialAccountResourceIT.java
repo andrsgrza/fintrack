@@ -347,7 +347,7 @@ class FinancialAccountResourceIT {
         IngestionRecord record = new IngestionRecord()
             .recordIndex(0)
             .externalRecordId("record-" + ingestion.getId())
-            .status(IngestionRecordStatus.CREATED)
+            .status(IngestionRecordStatus.IMPORTED)
             .rawData("{}")
             .createdAt(DEFAULT_CREATED_AT)
             .transactionIngestion(ingestion)

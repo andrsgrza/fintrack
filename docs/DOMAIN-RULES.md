@@ -912,8 +912,8 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 | Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                           | **Done**     |
 | Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                          | **Done**     |
 | Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                | **Done**     |
-| Rule preview endpoint                         | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                | **Done**     |
-| Rule execution engine                         | Phase 3B two-step manual create preview UI implemented; reevaluation/bulk remain deferred                              | **Done**     |
+| Rule workflow endpoint                        | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                | **Done**     |
+| Rule execution engine                         | Phase 3B two-step manual create workflow UI implemented; reevaluation/bulk remain deferred                             | **Done**     |
 | Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                     | **Done**     |
 | Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                      | **Deferred** |
 
@@ -921,7 +921,7 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, and the manual FinancialTransaction create two-step preview UI.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, and the manual FinancialTransaction create two-step workflow UI.
 
 Not implemented today: rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, override confirmation UI, and audit/explanation UI.
 
@@ -1075,23 +1075,23 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### UPDATE / PATCH
 
-| Rule                                   | Decision                                                                                           | Status              |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------- |
-| `account` / `ingestionType` immutable  |                                                                                                    | **Done**            |
-| Server timestamps / counters on create |                                                                                                    | **Done**            |
-| Status lifecycle                       | `PENDING -> PROCESSING/final`; `PROCESSING -> final`; final terminal                               | **Done**            |
-| Counts by status                       | in-progress `processed <= received`; final `processed == received`; status-specific rules          | **Done**            |
-| `completedAt`                          | server-owned; final sets now; non-final requires null                                              | **Done**            |
-| Child metadata consistency             | FILE cannot have API metadata; API cannot have file metadata; final status requires matching child | **Done**            |
-| `status` / counters mutable            |                                                                                                    | **Done** (baseline) |
+| Rule                                   | Decision                                                                                                                                           | Status              |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `account` / `ingestionType` immutable  |                                                                                                                                                    | **Done**            |
+| Server timestamps / counters on create |                                                                                                                                                    | **Done**            |
+| Status lifecycle                       | `PENDING -> READY/PARTIALLY_READY/PROCESSING/final`; `READY`/`PARTIALLY_READY` are pre-import review states; `PROCESSING -> final`; final terminal | **Done**            |
+| Counts by status                       | in-progress `processed <= received`; final `processed == received`; status-specific rules                                                          | **Done**            |
+| `completedAt`                          | server-owned; final sets now; non-final requires null                                                                                              | **Done**            |
+| Child metadata consistency             | FILE cannot have API metadata; API cannot have file metadata; final status requires matching child                                                 | **Done**            |
+| `status` / counters mutable            |                                                                                                                                                    | **Done** (baseline) |
 
 ### Product rules
 
-| Rule                                                   | Decision | Status       |
-| ------------------------------------------------------ | -------- | ------------ |
-| Status machine PENDING → PROCESSING → COMPLETED/FAILED |          | **Proposed** |
-| Counter consistency with records                       |          | **Proposed** |
-| Block delete while PROCESSING?                         |          | **Open**     |
+| Rule                                                                           | Decision | Status       |
+| ------------------------------------------------------------------------------ | -------- | ------------ |
+| Status machine PENDING → READY/PARTIALLY_READY → PROCESSING → COMPLETED/FAILED |          | **Proposed** |
+| Counter consistency with records                                               |          | **Proposed** |
+| Block delete while PROCESSING?                                                 |          | **Open**     |
 
 ---
 
@@ -1196,16 +1196,16 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### UPDATE / PATCH
 
-| Rule                                                                            | Decision                                                                                                                             | Status   |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| Parent / `recordIndex` / `externalRecordId` / `rawData` / `createdAt` immutable | `null`, missing id, or changed value → `400`; absent preserves                                                                       | **Done** |
-| `recordIndex` unique per ingestion                                              |                                                                                                                                      | **Done** |
-| `externalRecordId` unique per ingestion when non-null                           | trim + blank→`null`; same value allowed in different parent                                                                          | **Done** |
-| FT 1:1 guard                                                                    | Optional generally; required for `CREATED`; forbidden for `SKIPPED_DUPLICATE`/`REJECTED`; must belong to same `TransactionIngestion` | **Done** |
-| Parent final freeze                                                             | `COMPLETED`, `PARTIALLY_COMPLETED`, `FAILED` allow only no-op updates                                                                | **Done** |
-| Mutable outcome fields                                                          | While parent `PENDING`/`PROCESSING`: `status`, `financialTransaction` if not already set, `errorCode`, `errorMessage`                | **Done** |
-| Status consistency                                                              | `CREATED` requires FT and no errors; `SKIPPED_DUPLICATE` forbids FT; `REJECTED` forbids FT and requires errorMessage                 | **Done** |
-| Safe logs                                                                       | `toString()` does not print rawData contents                                                                                         | **Done** |
+| Rule                                                                            | Decision                                                                                                                                                          | Status   |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Parent / `recordIndex` / `externalRecordId` / `rawData` / `createdAt` immutable | `null`, missing id, or changed value → `400`; absent preserves                                                                                                    | **Done** |
+| `recordIndex` unique per ingestion                                              |                                                                                                                                                                   | **Done** |
+| `externalRecordId` unique per ingestion when non-null                           | trim + blank→`null`; same value allowed in different parent                                                                                                       | **Done** |
+| FT 1:1 guard                                                                    | Optional generally; required for `IMPORTED`; forbidden for `VALID`/`DISABLED`/`SKIPPED_DUPLICATE`/`REJECTED`/`FAILED`; must belong to same `TransactionIngestion` | **Done** |
+| Parent final freeze                                                             | `COMPLETED`, `PARTIALLY_COMPLETED`, `FAILED` allow only no-op updates                                                                                             | **Done** |
+| Mutable outcome fields                                                          | While parent `PENDING`/`PROCESSING`: `status`, `financialTransaction` if not already set, `errorCode`, `errorMessage`                                             | **Done** |
+| Status consistency                                                              | `VALID` forbids FT/errors; `IMPORTED` requires FT and no errors; `DISABLED`/`SKIPPED_DUPLICATE` forbid FT; `REJECTED`/`FAILED` forbid FT and require errorMessage | **Done** |
+| Safe logs                                                                       | `toString()` does not print rawData contents                                                                                                                      | **Done** |
 
 ### Product rules
 
@@ -1214,6 +1214,68 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | Record → FT creation on pipeline success |          | **Proposed** (Fase 6) |
 
 **Out of scope:** count reconciliation with parent `TransactionIngestion`; pipeline execution; full FT domain rules.
+
+---
+
+## CSV Ingestion v1 workflow
+
+**Scope:** canonical CSV import workflow using the existing ingestion entities. This is distinct from generated CRUD pages for `TransactionIngestion`, `FileIngestion`, and `IngestionRecord`.
+
+### I1 — persisted workflow
+
+| Rule                    | Decision                                                                                                                                                                                                                                                         | Status   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Parent batch            | `TransactionIngestion` is the parent import batch/process and owns the target `FinancialAccount`                                                                                                                                                                 | **Done** |
+| File metadata           | `FileIngestion` is metadata only and links 1:1 to `TransactionIngestion`; it does not have its own account field                                                                                                                                                 | **Done** |
+| Account derivation      | `FileIngestion` derives account through `TransactionIngestion.account`                                                                                                                                                                                           | **Done** |
+| Canonical create flow   | `/transaction-ingestion/new` is the canonical FILE ingestion create UI; it submits `accountId` + CSV `file` to `POST /api/transaction-ingestions/file` and creates parent + file metadata + review records together                                              | **Done** |
+| Parent-scoped upload    | `/file-ingestion/new` is not metadata CRUD; it selects an eligible pending FILE parent and uploads CSV through `POST /api/transaction-ingestions/{id}/file-ingestion`                                                                                            | **Done** |
+| Review records          | `IngestionRecord` represents one CSV data row                                                                                                                                                                                                                    | **Done** |
+| No transactions in I1   | CSV workflow creates no `FinancialTransaction` rows                                                                                                                                                                                                              | **Done** |
+| No Rule Engine in I1    | CSV workflow does not run Rule Engine                                                                                                                                                                                                                            | **Done** |
+| Review status semantics | `IngestionRecord.status = VALID` means valid review row, ready for future confirm import                                                                                                                                                                         | **Done** |
+| Parent readiness status | `TransactionIngestion.status = READY` means at least one `VALID` row and no `REJECTED`/`FAILED`; `PARTIALLY_READY` means blocking rows exist or zero `VALID` rows exist                                                                                          | **Done** |
+| Import-result statuses  | `COMPLETED`/`PARTIALLY_COMPLETED` are import-result statuses; CSV review and CSV Confirm Import v1 should not produce `PARTIALLY_COMPLETED`                                                                                                                      | **Done** |
+| Review record link      | `IngestionRecord.financialTransaction` must be `null` for review rows until confirm import; `IMPORTED` rows require a linked transaction from the same ingestion                                                                                                 | **Done** |
+| Imported status         | Confirm Import turns imported `VALID` rows into `IMPORTED` rows linked to their generated `FinancialTransaction`                                                                                                                                                 | **Done** |
+| Disabled status         | `DISABLED` keeps the row for audit/review and excludes it from future confirm import; top-level blocking errors are cleared, rawData remains traceable                                                                                                           | **Done** |
+| Disable review action   | `VALID`/`REJECTED` rows can become `DISABLED`; `IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` are not review-editable in I2B                                                                                                                                            | **Done** |
+| Enable review action    | `DISABLED` rows revalidate current normalized values; valid rows become `VALID`, invalid rows become `REJECTED`                                                                                                                                                  | **Done** |
+| Edit review action      | Only `VALID`/`REJECTED` rows can edit normalized values; edit revalidates and returns `VALID` or `REJECTED`; `DISABLED` rows must be enabled before editing; `IMPORTED`/`SKIPPED_DUPLICATE`/`FAILED` are immutable                                               | **Done** |
+| Edit derived fields     | Review edit never trusts client `amount`, `flow`, or `status`; `amount` and `flow` are derived from `signedAmount`                                                                                                                                               | **Done** |
+| Persisted review page   | `/transaction-ingestion/{id}` is the canonical workflow detail/review route; it loads parent summary, persisted rows, and read-only `FileIngestion` metadata through `GET /api/transaction-ingestions/{id}/workflow`; FileIngestion CRUD is not the product flow | **Done** |
+| Raw/normalized payload  | Store raw row, normalized values, errors, and warnings in `IngestionRecord.rawData` JSON; row edit keeps `rawData.raw` unchanged and replaces `rawData.normalized`                                                                                               | **Done** |
+| Rejected uploads        | Invalid header, missing/empty/header-only/unreadable/oversized file creates nothing in I1; persisted `FAILED` ingestion for rejected upload deferred                                                                                                             | **Done** |
+| Duplicate file checksum | Same checksum/account is warning-only in I1; it does not block upload/review                                                                                                                                                                                     | **Done** |
+
+**Readiness recalculation:** CSV review/confirm share the same readiness source of truth. The parent is `PARTIALLY_READY` when any row is `REJECTED`/`FAILED` or when there are zero `VALID` rows. Otherwise it is `READY`. `DISABLED` and `SKIPPED_DUPLICATE` rows do not block readiness by themselves, but a batch containing only disabled/skipped rows is `PARTIALLY_READY` because there is nothing importable. Confirm Import recalculates readiness from persisted records before importing and only proceeds when the recalculated status is `READY`.
+
+| Minimal workflow UI | TransactionIngestion “New File Import” workflow starts at `/transaction-ingestion/new`, selects account/type, uploads CSV for FILE, shows persisted workflow summary/warnings/rows, and shows Confirm Import only for ready reviews with valid rows | **Done** |
+| FileIngestion create cleanup | FileIngestion create shows only parent selector + CSV file input; metadata fields are derived server-side and hidden from create UI | **Done** |
+
+### Canonical CSV transaction rules
+
+| Rule                 | Decision                                                                                                                         | Status   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Contract             | Header must be exact, ordered, and case-sensitive                                                                                | **Done** |
+| Sign convention      | Positive `signedAmount` → `flow = IN`                                                                                            | **Done** |
+| Sign convention      | Negative `signedAmount` → `flow = OUT`                                                                                           | **Done** |
+| Amount normalization | Preview/review `amount = abs(signedAmount)`; confirm import uses the normalized amount when creating `FinancialTransaction` rows | **Done** |
+| Zero amount          | `signedAmount = 0` is invalid, not skipped                                                                                       | **Done** |
+| Currency             | Row `currency` must match selected account currency                                                                              | **Done** |
+| Account type         | CSV sign convention is canonical; do not infer flow from bank/account type/kind                                                  | **Done** |
+
+### I2 — confirm import
+
+| Rule                   | Decision                                                                                                                                                | Status   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Confirm import         | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` review records only after recalculating `READY` status | **Done** |
+| Source fields          | Imported transactions are built from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                                         | **Done** |
+| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                                                                        | **Done** |
+| Row transitions        | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                 | **Done** |
+| Parent transition      | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new         | **Done** |
+| Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine                                                                                                   | **Done** |
+| Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                     | **Done** |
 
 ---
 

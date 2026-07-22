@@ -17,7 +17,7 @@
       "fieldName": "status",
       "fieldType": "IngestionStatus",
       "fieldValidateRules": ["required"],
-      "fieldValues": "PENDING,PROCESSING,COMPLETED,PARTIALLY_COMPLETED,FAILED"
+      "fieldValues": "PENDING,READY,PARTIALLY_READY,PROCESSING,COMPLETED,PARTIALLY_COMPLETED,FAILED"
     },
     {
       "fieldName": "sourceLabel",

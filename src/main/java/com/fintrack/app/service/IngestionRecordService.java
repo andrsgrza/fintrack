@@ -391,12 +391,23 @@ public class IngestionRecordService {
     }
 
     private void validateStatusConsistency(IngestionRecord ingestionRecord) {
-        if (ingestionRecord.getStatus() == IngestionRecordStatus.CREATED) {
-            if (ingestionRecord.getFinancialTransaction() == null) {
-                throw new IllegalArgumentException("Financial transaction is required for CREATED records");
+        if (ingestionRecord.getStatus() == IngestionRecordStatus.VALID) {
+            if (ingestionRecord.getFinancialTransaction() != null) {
+                throw new IllegalArgumentException("Valid records cannot have a financial transaction");
             }
             if (ingestionRecord.getErrorCode() != null || ingestionRecord.getErrorMessage() != null) {
-                throw new IllegalArgumentException("CREATED records cannot have error details");
+                throw new IllegalArgumentException("Valid records cannot have error details");
+            }
+        } else if (ingestionRecord.getStatus() == IngestionRecordStatus.IMPORTED) {
+            if (ingestionRecord.getFinancialTransaction() == null) {
+                throw new IllegalArgumentException("Financial transaction is required for imported records");
+            }
+            if (ingestionRecord.getErrorCode() != null || ingestionRecord.getErrorMessage() != null) {
+                throw new IllegalArgumentException("Imported records cannot have error details");
+            }
+        } else if (ingestionRecord.getStatus() == IngestionRecordStatus.DISABLED) {
+            if (ingestionRecord.getFinancialTransaction() != null) {
+                throw new IllegalArgumentException("Disabled records cannot have a financial transaction");
             }
         } else if (ingestionRecord.getStatus() == IngestionRecordStatus.SKIPPED_DUPLICATE) {
             if (ingestionRecord.getFinancialTransaction() != null) {
@@ -408,6 +419,13 @@ public class IngestionRecordService {
             }
             if (ingestionRecord.getErrorMessage() == null) {
                 throw new IllegalArgumentException("Rejected records require an error message");
+            }
+        } else if (ingestionRecord.getStatus() == IngestionRecordStatus.FAILED) {
+            if (ingestionRecord.getFinancialTransaction() != null) {
+                throw new IllegalArgumentException("Failed records cannot have a financial transaction");
+            }
+            if (ingestionRecord.getErrorMessage() == null) {
+                throw new IllegalArgumentException("Failed records require an error message");
             }
         }
     }
