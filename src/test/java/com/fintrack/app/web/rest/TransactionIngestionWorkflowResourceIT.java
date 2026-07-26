@@ -11,16 +11,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
+import com.fintrack.app.domain.DescriptionNormalizationRule;
+import com.fintrack.app.domain.DescriptionNormalizationRuleCondition;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.DescriptionNormalizationRuleOperator;
 import com.fintrack.app.domain.enumeration.ImportFileType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.domain.enumeration.RuleConditionLogic;
+import com.fintrack.app.repository.DescriptionNormalizationRuleConditionRepository;
+import com.fintrack.app.repository.DescriptionNormalizationRuleRepository;
 import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
@@ -84,6 +90,12 @@ class TransactionIngestionWorkflowResourceIT {
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
 
+    @Autowired
+    private DescriptionNormalizationRuleRepository descriptionNormalizationRuleRepository;
+
+    @Autowired
+    private DescriptionNormalizationRuleConditionRepository descriptionNormalizationRuleConditionRepository;
+
     @Test
     @Transactional
     void validCsvUploadCreatesPersistedWorkflow() throws Exception {
@@ -143,6 +155,104 @@ class TransactionIngestionWorkflowResourceIT {
             "Uber, Trip"
         );
         assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void uploadCsvWithMatchingOriginalDescriptionAppliesDescriptionNormalizationRule() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        DescriptionNormalizationRule rule = persistDescriptionNormalizationRule("Normalize Uber", "Uber");
+        persistDescriptionNormalizationCondition(rule, "Uber");
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[2].description").value("Uber"));
+
+        TransactionIngestion ingestion = transactionIngestionRepository
+            .findAll()
+            .stream()
+            .max(Comparator.comparing(TransactionIngestion::getId))
+            .orElseThrow();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        JsonNode rawData = objectMapper.readTree(record.getRawData());
+
+        assertThat(rawData.path("raw").path("description").asText()).isEqualTo("Uber, Trip");
+        assertThat(rawData.path("normalized").path("description").asText()).isEqualTo("Uber");
+        assertThat(rawData.path("review").path("description").path("source").asText()).isEqualTo("DESCRIPTION_RULE");
+        assertThat(rawData.path("review").path("description").path("ruleId").asLong()).isEqualTo(rule.getId());
+        assertThat(rawData.path("review").path("description").path("ruleName").asText()).isEqualTo("Normalize Uber");
+        assertThat(rawData.path("review").path("description").path("resultingDescription").asText()).isEqualTo("Uber");
+        assertThat(rawData.path("review").path("description").has("originalDescription")).isFalse();
+        assertThat(rawData.has("suggestions")).isFalse();
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void uploadCsvWithoutMatchingDescriptionRuleKeepsParserNormalizedDescription() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        DescriptionNormalizationRule rule = persistDescriptionNormalizationRule("Normalize Lyft", "Lyft");
+        persistDescriptionNormalizationCondition(rule, "Lyft");
+
+        mockMvc
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[2].description").value("Uber, Trip"));
+
+        TransactionIngestion ingestion = transactionIngestionRepository
+            .findAll()
+            .stream()
+            .max(Comparator.comparing(TransactionIngestion::getId))
+            .orElseThrow();
+        JsonNode rawData = objectMapper.readTree(recordsFor(ingestion).get(2).getRawData());
+        assertThat(rawData.path("normalized").path("description").asText()).isEqualTo("Uber, Trip");
+        assertThat(rawData.path("review").path("description").isMissingNode()).isTrue();
+        assertThat(rawData.has("suggestions")).isFalse();
+    }
+
+    @Test
+    @Transactional
+    void rowEditSetsDescriptionReviewSourceUserEdit() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-20", null, "Manual description", "-274.00", "MXN", null, null)
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.description").value("Manual description"));
+
+        JsonNode rawData = objectMapper.readTree(ingestionRecordRepository.findById(record.getId()).orElseThrow().getRawData());
+        assertThat(rawData.path("review").path("description").path("source").asText()).isEqualTo("USER_EDIT");
+        assertThat(rawData.path("review").path("description").path("resultingDescription").asText()).isEqualTo("Manual description");
+        assertThat(rawData.path("review").path("description").path("editedBy").asText()).isEqualTo("user");
+    }
+
+    @Test
+    @Transactional
+    void secondaryAttachFileEndpointAppliesDescriptionNormalizationRule() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        DescriptionNormalizationRule rule = persistDescriptionNormalizationRule("Normalize Uber", "Uber");
+        persistDescriptionNormalizationCondition(rule, "Uber");
+        TransactionIngestion pending = createPendingFileTransactionIngestion(account);
+
+        mockMvc
+            .perform(multipart(PARENT_FILE_INGESTION_URL, pending.getId()).file(csvFile("canonical.csv", VALID_CSV)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[2].description").value("Uber"));
+
+        JsonNode rawData = objectMapper.readTree(recordsFor(pending).get(2).getRawData());
+        assertThat(rawData.path("normalized").path("description").asText()).isEqualTo("Uber");
+        assertThat(rawData.path("review").path("description").path("source").asText()).isEqualTo("DESCRIPTION_RULE");
     }
 
     @Test
@@ -1230,6 +1340,37 @@ class TransactionIngestionWorkflowResourceIT {
             .createdAt(java.time.Instant.now())
             .transactionIngestion(ingestion);
         return ingestionRecordRepository.saveAndFlush(record);
+    }
+
+    private DescriptionNormalizationRule persistDescriptionNormalizationRule(String name, String resultingDescription) {
+        DescriptionNormalizationRule rule = new DescriptionNormalizationRule()
+            .name(name)
+            .description(null)
+            .active(true)
+            .priority(0)
+            .conditionOperator(RuleConditionLogic.ANY)
+            .resultingDescription(resultingDescription)
+            .createdAt(java.time.Instant.now())
+            .updatedAt(java.time.Instant.now())
+            .user(currentMockUser());
+        return descriptionNormalizationRuleRepository.saveAndFlush(rule);
+    }
+
+    private DescriptionNormalizationRuleCondition persistDescriptionNormalizationCondition(
+        DescriptionNormalizationRule rule,
+        String value
+    ) {
+        DescriptionNormalizationRuleCondition condition = new DescriptionNormalizationRuleCondition()
+            .operator(DescriptionNormalizationRuleOperator.CONTAINS)
+            .value(value)
+            .caseSensitive(false)
+            .position(0)
+            .createdAt(java.time.Instant.now())
+            .updatedAt(java.time.Instant.now())
+            .descriptionNormalizationRule(rule);
+        DescriptionNormalizationRuleCondition persisted = descriptionNormalizationRuleConditionRepository.saveAndFlush(condition);
+        rule.getConditions().add(persisted);
+        return persisted;
     }
 
     private FinancialAccount createAccountForUser(User user) {

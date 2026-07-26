@@ -1367,3 +1367,28 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 ---
 
 _Last updated: 2026-07-13 — FinancialAccount backend-only balance read model marked complete; UI/dashboard display, persisted balances, statement cycles, and investment valuation remain deferred._
+
+## DescriptionNormalizationRule
+
+Description normalization rules are separate from `TransactionRule`.
+
+- `TransactionRule` remains category/tags only.
+- Description normalization evaluates only the imported original description.
+- It produces one output: `resultingDescription`.
+- First matching active rule wins by `priority ASC`, then `id ASC`.
+- `active=true` requires at least one condition.
+- New rules append last for the current user.
+- Rule priority is server-managed and user-scoped.
+- Rule names are unique per owner, case-insensitive and trim-insensitive.
+- `createdAt` and `updatedAt` are server-owned.
+
+`DescriptionNormalizationRuleCondition`:
+
+- has no field selector; every condition evaluates `rawData.raw.description`;
+- supports `EXACT`, `NOT_EQUALS`, `CONTAINS`, `NOT_CONTAINS`, `STARTS_WITH`, `ENDS_WITH`, and `REGEX`;
+- uses `caseSensitive` for all operators;
+- has server-managed `position`;
+- evaluates by `position ASC`, then `id ASC`;
+- null/blank actual original description does not match any operator, including negative operators.
+
+During FILE ingestion upload, matched description normalization rules update `rawData.normalized.description` before row review. They do not create transactions and do not invoke category/tag `TransactionRule` evaluation.

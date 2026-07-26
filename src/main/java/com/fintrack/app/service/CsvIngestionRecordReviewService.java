@@ -194,6 +194,14 @@ public class CsvIngestionRecordReviewService {
             review.put("edited", true);
             review.put("editedAt", Instant.now().toString());
             review.put("editedBy", currentUserService.getCurrentUserLogin());
+            ObjectNode descriptionReview = review.path("description").isObject()
+                ? (ObjectNode) review.path("description")
+                : objectMapper.createObjectNode();
+            descriptionReview.put("source", "USER_EDIT");
+            descriptionReview.put("resultingDescription", result == null ? null : result.getNormalized().getDescription());
+            descriptionReview.put("editedAt", Instant.now().toString());
+            descriptionReview.put("editedBy", currentUserService.getCurrentUserLogin());
+            review.set("description", descriptionReview);
             root.set("review", review);
         }
         try {

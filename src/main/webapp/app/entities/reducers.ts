@@ -5,6 +5,8 @@ import category from 'app/entities/category/category.reducer';
 import tag from 'app/entities/tag/tag.reducer';
 import transactionRule from 'app/entities/transaction-rule/transaction-rule.reducer';
 import transactionRuleCondition from 'app/entities/transaction-rule-condition/transaction-rule-condition.reducer';
+import descriptionNormalizationRule from 'app/entities/description-normalization-rule/description-normalization-rule.reducer';
+import descriptionNormalizationRuleCondition from 'app/entities/description-normalization-rule-condition/description-normalization-rule-condition.reducer';
 import financialSubscription from 'app/entities/financial-subscription/financial-subscription.reducer';
 import budget from 'app/entities/budget/budget.reducer';
 import internalTransfer from 'app/entities/internal-transfer/internal-transfer.reducer';
@@ -25,6 +27,8 @@ const entitiesReducers = {
   tag,
   transactionRule,
   transactionRuleCondition,
+  descriptionNormalizationRule,
+  descriptionNormalizationRuleCondition,
   financialSubscription,
   budget,
   internalTransfer,

@@ -2736,3 +2736,30 @@ Copy this block when hardening the next entity:
 | 2026-07-18 | CSV Ingestion I2C confirm import      | Backend IT covers ready confirm, normalized payload mapping, `FILE_IMPORT` origin, imported row links, disabled rows skipped, stale readiness recalculation, completed idempotent retry, corrupt link guards, completed review read-only, foreign rejection, and no Rule Engine/category/tag/subscription application. Frontend tests cover Confirm Import visibility, not-ready blocking, completed read-only review, imported/disabled row display, and confirm error rendering. |
 | 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                                                                                                                                                                     |
 | 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal.                                                                                                                                          |
+
+## Description normalization rule tests
+
+Current automated coverage includes:
+
+- `TextConditionMatcherTest`
+  - text operators;
+  - case sensitivity;
+  - null/blank actual value non-match semantics;
+  - invalid regex behavior;
+  - ALL/ANY group evaluation helper behavior.
+- `DescriptionNormalizationRuleEvaluationServiceTest`
+  - first matching rule wins;
+  - empty-condition rules do not match defensively;
+  - ALL/ANY matching behavior.
+
+Recommended focused commands:
+
+```bash
+JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvnw \
+  -Dtest=TextConditionMatcherTest,DescriptionNormalizationRuleEvaluationServiceTest \
+  test
+```
+
+```bash
+npm run webapp:build:dev -- --env stats=minimal
+```

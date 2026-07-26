@@ -600,3 +600,27 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - Whether condition-level details should be added later for explanation/debug UI.
 - Whether skipped outputs should later be hidden/filtered in normal UI while remaining available from the backend preview response.
 - Origin policy for future API/import/ingestion runtime: when those flows are implemented, decide whether they should use central create with rule application, bypass rule application, make rule application configurable, preview only, or apply only in specific modes. Current project decision: no premature origin-based restriction.
+
+## Description normalization is separate
+
+Description normalization is not part of the category/tag Transaction Rule Engine.
+
+- `TransactionRule` remains category/tags only.
+- `resultingDescription` is not reintroduced into `TransactionRule`.
+- `DescriptionNormalizationRule` is an ingestion-only rule type.
+- It evaluates only original imported descriptions.
+- It outputs only `resultingDescription`.
+- First matching description normalization rule wins.
+- It runs during FILE upload/record creation before row review.
+- It does not run on manual FinancialTransaction create/update/PATCH.
+- It does not run during Confirm Import.
+- It does not invoke category/tag TransactionRule evaluation.
+
+### Matcher helper boundary
+
+`DescriptionNormalizationRuleEvaluationService` uses the shared `TextConditionMatcher` and `ConditionGroupEvaluator` helpers.
+`TransactionRuleEvaluationService` intentionally keeps its existing matcher and ALL/ANY grouping logic for now to avoid accidental behavior changes in category/tag TransactionRules.
+
+`TextConditionMatcher` is not yet a drop-in replacement for `TransactionRuleEvaluationService` because it uses `DescriptionNormalizationRuleOperator` rather than `RuleOperator`, does not cover `IN` / `NOT_IN`, returns `false` for invalid regex where TransactionRule evaluation currently throws for invalid stored regex, and uses different case-insensitive regex flags.
+
+A future behavior-preserving refactor may introduce a shared lower-level text matcher or adapter once semantics are unified. `ConditionGroupEvaluator` may also be adopted later by `TransactionRuleEvaluationService`, but that is deferred because it is not needed for `DescriptionNormalizationRule` v1.
