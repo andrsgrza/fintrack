@@ -15,6 +15,7 @@
         "tag": "Tag",
         "transactionRule": "Transaction Rule",
         "transactionRuleCondition": "Transaction Rule Condition",
+        "descriptionNormalizationRule": "Regla de normalización de descripción",
         "financialSubscription": "Financial Subscription",
         "budget": "Budget",
         "internalTransfer": "Internal Transfer",

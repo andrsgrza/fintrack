@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.IngestionRecord;
@@ -23,10 +24,13 @@ import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvParseResult;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRawRow;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
+import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionFileMetadataDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowResponseDTO;
+import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationResult;
+import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationService;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -58,6 +62,7 @@ public class CsvIngestionWorkflowService {
     private final CanonicalCsvIngestionParser parser;
     private final ObjectMapper objectMapper;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
+    private final DescriptionNormalizationRuleEvaluationService descriptionNormalizationRuleEvaluationService;
 
     public CsvIngestionWorkflowService(
         FinancialAccountRepository financialAccountRepository,
@@ -68,7 +73,8 @@ public class CsvIngestionWorkflowService {
         CurrentUserService currentUserService,
         CanonicalCsvIngestionParser parser,
         ObjectMapper objectMapper,
-        CsvIngestionReadinessService csvIngestionReadinessService
+        CsvIngestionReadinessService csvIngestionReadinessService,
+        DescriptionNormalizationRuleEvaluationService descriptionNormalizationRuleEvaluationService
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
@@ -79,6 +85,7 @@ public class CsvIngestionWorkflowService {
         this.parser = parser;
         this.objectMapper = objectMapper;
         this.csvIngestionReadinessService = csvIngestionReadinessService;
+        this.descriptionNormalizationRuleEvaluationService = descriptionNormalizationRuleEvaluationService;
     }
 
     public CsvIngestionWorkflowResponseDTO createWorkflow(Long accountId, MultipartFile file) {
@@ -160,7 +167,7 @@ public class CsvIngestionWorkflowService {
 
         List<IngestionRecord> records = new ArrayList<>();
         for (CsvRowResult row : parseResult.getRows()) {
-            records.add(toIngestionRecord(row, transactionIngestion));
+            records.add(toIngestionRecord(row, transactionIngestion, currentUserService.getCurrentUserLogin()));
         }
         records = ingestionRecordRepository.saveAll(records);
 
@@ -260,13 +267,13 @@ public class CsvIngestionWorkflowService {
         return List.of();
     }
 
-    private IngestionRecord toIngestionRecord(CsvRowResult row, TransactionIngestion transactionIngestion) {
+    private IngestionRecord toIngestionRecord(CsvRowResult row, TransactionIngestion transactionIngestion, String ownerLogin) {
         CsvIngestionValidationMessage firstError = row.getErrors().isEmpty() ? null : row.getErrors().get(0);
         return new IngestionRecord()
             .recordIndex(row.getRecordIndex())
             .externalRecordId(row.getNormalized().getExternalReference())
             .status(row.isValid() ? IngestionRecordStatus.VALID : IngestionRecordStatus.REJECTED)
-            .rawData(rawData(row))
+            .rawData(rawData(row, ownerLogin))
             .errorCode(firstError == null ? null : firstError.getCode())
             .errorMessage(firstError == null ? null : firstError.getMessage())
             .createdAt(Instant.now())
@@ -291,8 +298,8 @@ public class CsvIngestionWorkflowService {
         response.setFileMetadata(fileMetadata(fileIngestion));
 
         List<CsvIngestionWorkflowRecordDTO> rows = new ArrayList<>();
-        for (int i = 0; i < parseResult.getRows().size(); i++) {
-            rows.add(toRowDto(records.get(i), parseResult.getRows().get(i)));
+        for (IngestionRecord record : records) {
+            rows.add(toRowDto(record));
         }
         response.setRows(rows);
         return response;
@@ -366,6 +373,7 @@ public class CsvIngestionWorkflowService {
         dto.setNotes(textOrNull(normalized, "notes"));
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
+        dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(root));
         dto.setWarnings(messages(root.path("warnings")));
         return dto;
     }
@@ -409,12 +417,36 @@ public class CsvIngestionWorkflowService {
         return text == null || text.isBlank() ? null : text;
     }
 
-    private String rawData(CsvRowResult row) {
+    private String rawData(CsvRowResult row, String ownerLogin) {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("raw", rawMap(row.getRaw()));
         root.put("normalized", normalizedMap(row.getNormalized()));
         root.put("errors", row.getErrors());
         root.put("warnings", row.getWarnings());
+        DescriptionNormalizationRuleEvaluationResult result = descriptionNormalizationRuleEvaluationService.evaluate(
+            ownerLogin,
+            row.getRaw().getDescription()
+        );
+        if (result.matched()) {
+            ObjectNode rootNode = objectMapper.valueToTree(root);
+            ObjectNode normalized = (ObjectNode) rootNode.path("normalized");
+            normalized.put("description", result.resultingDescription());
+            ObjectNode review = objectMapper.createObjectNode();
+            ObjectNode descriptionReview = objectMapper.createObjectNode();
+            descriptionReview.put("source", "DESCRIPTION_RULE");
+            descriptionReview.put("ruleId", result.ruleId());
+            descriptionReview.put("ruleName", result.ruleName());
+            descriptionReview.put("resultingDescription", result.resultingDescription());
+            descriptionReview.putNull("editedAt");
+            descriptionReview.putNull("editedBy");
+            review.set("description", descriptionReview);
+            rootNode.set("review", review);
+            try {
+                return objectMapper.writeValueAsString(rootNode);
+            } catch (JsonProcessingException e) {
+                throw new IllegalArgumentException("Could not serialize CSV workflow row", e);
+            }
+        }
         try {
             return objectMapper.writeValueAsString(root);
         } catch (JsonProcessingException e) {

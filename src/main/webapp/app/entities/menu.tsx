@@ -29,6 +29,9 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/transaction-rule-condition">
         <Translate contentKey="global.menu.entities.transactionRuleCondition" />
       </MenuItem>
+      <MenuItem icon="asterisk" to="/description-normalization-rule">
+        <Translate contentKey="global.menu.entities.descriptionNormalizationRule" />
+      </MenuItem>
       <MenuItem icon="asterisk" to="/financial-subscription">
         <Translate contentKey="global.menu.entities.financialSubscription" />
       </MenuItem>

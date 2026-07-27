@@ -1188,3 +1188,38 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-11 | Grupo 1 delete confirmation dialogs ✅: domain-aware UX copy for UDP, AATP, Tag, Category; CAD informational-only (no confirm). i18n en/es.                                                                                                                                                                                                                                                                                |
 | 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                                                                                                                                      |
 | 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6.                                                                                                                  |
+
+## Description normalization rules
+
+Description normalization is implemented as a separate ingestion-focused rule system:
+
+- entities:
+  - `DescriptionNormalizationRule`;
+  - `DescriptionNormalizationRuleCondition`.
+- services:
+  - `DescriptionNormalizationRuleService`;
+  - `DescriptionNormalizationRuleConditionService`;
+  - `DescriptionNormalizationRuleEvaluationService`.
+- shared helpers:
+  - `TextConditionMatcher`;
+  - `ConditionGroupEvaluator`.
+
+The evaluator loads active rules for the current owner by priority and returns the first matching `resultingDescription`. It does not save anything.
+
+Architecture boundary:
+
+- `DescriptionNormalizationRuleEvaluationService` uses `TextConditionMatcher` and `ConditionGroupEvaluator`.
+- `TransactionRuleEvaluationService` intentionally keeps its existing matcher and ALL/ANY grouping logic for now. This avoids accidental behavior changes in category/tag `TransactionRule` evaluation.
+- `TextConditionMatcher` is not yet a drop-in replacement for `TransactionRuleEvaluationService` because it uses `DescriptionNormalizationRuleOperator`, not `RuleOperator`; `TransactionRuleEvaluationService` supports `IN` / `NOT_IN`; invalid regex behavior differs; and case-insensitive regex flags differ.
+- A future behavior-preserving refactor may introduce a shared lower-level text matcher or adapter once semantics are unified. `ConditionGroupEvaluator` may also be adopted later by `TransactionRuleEvaluationService`, but this is deferred because it is not needed for `DescriptionNormalizationRule` v1.
+
+Integration points:
+
+- `POST /api/transaction-ingestions/file`
+- `POST /api/transaction-ingestions/{id}/file-ingestion`
+
+Both FILE upload paths pass through `CsvIngestionWorkflowService.persistWorkflow`. After parser normalization and before `IngestionRecord` persistence, the service evaluates description normalization against `rawData.raw.description`. When matched, it updates `rawData.normalized.description` and writes `rawData.review.description`.
+
+Workflow row DTOs expose `descriptionReview` as a read-only projection for the review UI. The projection reads the immutable original description from `rawData.raw.description`, the final importable description from `rawData.normalized.description`, and source/rule/edit metadata from `rawData.review.description`. It does not change persistence or the stored `rawData` shape.
+
+Category/tag `TransactionRule` evaluation is not invoked by this slice. Confirm Import remains unchanged and will consume `rawData.normalized.description` as usual. Pantalla 2 and UserPreference-driven behavior remain deferred.

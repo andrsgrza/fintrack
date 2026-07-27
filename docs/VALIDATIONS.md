@@ -348,3 +348,26 @@ When adding a validation rule:
 ---
 
 _Last updated: 2026-07-13 — validation catalog aligned with FinancialAccount backend-only balance read model, FinancialAccount delete orchestration, FinancialTransaction JsonNode semantics, ingestion lifecycle passes, and TransactionRule CRUD/domain baseline completion._
+
+## DescriptionNormalizationRule validations
+
+- `name` is trimmed and required after trim.
+- `name` max length is 100 after trim.
+- `name` is unique per owner, case-insensitive and trim-insensitive.
+- `description` is trimmed; blank becomes `null`; max length is 500.
+- `resultingDescription` is trimmed, required after trim, and max length is 500.
+- `conditionOperator` is required.
+- `active` is required.
+- `priority` is required, non-negative, and server-managed.
+- `createdAt` and `updatedAt` are server-owned.
+- `active=true` requires at least one condition.
+
+## DescriptionNormalizationRuleCondition validations
+
+- `operator` is required.
+- `value` is trimmed and required after trim.
+- `value` max length is 1000.
+- invalid `REGEX` patterns are rejected on save/update.
+- `caseSensitive` is required.
+- `position` is required, non-negative, and server-managed.
+- parent rule is required and cannot be changed after create.

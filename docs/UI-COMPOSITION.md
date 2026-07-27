@@ -622,3 +622,22 @@ The following generated write surfaces are kept temporarily for generated/debug 
 - generated IngestionRecord write routes with `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`.
 
 Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and tests may remain while these generated technical routes remain. A later backend hardening slice may reject or remove these generated write paths after their technical routes are removed.
+
+## DescriptionNormalizationRule UI composition
+
+Description normalization rules follow the same parent-centered composition pattern as TransactionRule:
+
+- list page owns reorder controls;
+- create page saves inactive draft;
+- create does not manage conditions inline;
+- detail page embeds the conditions collection editor;
+- edit page edits scalar parent fields and links back to detail for conditions;
+- condition forms have no field selector because every condition evaluates original imported description.
+
+The product route is:
+
+```text
+/description-normalization-rule
+```
+
+Standalone generated/debug condition screens are not the product flow for managing conditions.

@@ -18,6 +18,7 @@ import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.CsvIngestionReadinessService.CsvIngestionReadinessSnapshot;
 import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import java.math.BigDecimal;
@@ -191,7 +192,8 @@ public class CsvIngestionConfirmImportService {
     }
 
     private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record) {
-        JsonNode normalized = rawData(record).path("normalized");
+        JsonNode rawData = rawData(record);
+        JsonNode normalized = rawData.path("normalized");
         CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
@@ -208,6 +210,7 @@ public class CsvIngestionConfirmImportService {
         dto.setNotes(optionalText(normalized, "notes"));
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
+        dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(rawData));
         return dto;
     }
 

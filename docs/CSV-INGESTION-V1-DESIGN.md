@@ -661,3 +661,49 @@ Already decided and not open for I1:
 - I1 does not run Rule Engine.
 - I1 does not create `FinancialTransaction` rows.
 - I2C confirm import does not run the Rule Engine; import-time suggestions/review are deferred.
+
+## Description normalization during upload
+
+FILE ingestion upload now has an optional pre-review description normalization step.
+
+- The parser still creates `rawData.raw` and `rawData.normalized`.
+- Description normalization evaluates `rawData.raw.description` only.
+- If a rule matches, `rawData.normalized.description` is replaced with the rule's `resultingDescription`.
+- `rawData.raw` remains immutable.
+- `rawData.review.description` stores metadata about rule/user modifications.
+- `rawData.review.description` does not duplicate `originalDescription`; the original remains only in `rawData.raw.description`.
+- `rawData.suggestions` is not used.
+- UserPreference-based behavior is deferred.
+- Workflow row responses expose a read-only `descriptionReview` projection for UI display. It is derived from `rawData.raw.description`, `rawData.normalized.description`, and `rawData.review.description`; it does not change persisted `rawData`.
+
+Rule-applied metadata shape:
+
+```json
+{
+  "description": {
+    "source": "DESCRIPTION_RULE",
+    "ruleId": 42,
+    "ruleName": "Normalize Uber",
+    "resultingDescription": "Uber",
+    "editedAt": null,
+    "editedBy": null
+  }
+}
+```
+
+User-edit metadata shape:
+
+```json
+{
+  "description": {
+    "source": "USER_EDIT",
+    "ruleId": 42,
+    "ruleName": "Normalize Uber",
+    "resultingDescription": "Uber",
+    "editedAt": "...",
+    "editedBy": "..."
+  }
+}
+```
+
+No FinancialTransactions are created during upload/review. Category/tag classification for ingestion remains deferred to Pantalla 2. UserPreference-driven rule behavior is also deferred.

@@ -1,0 +1,49 @@
+{
+  "fintrackApp": {
+    "descriptionNormalizationRule": {
+      "home": {
+        "title": "Description Normalization Rules",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Create a new Description Normalization Rule",
+        "notFound": "No Description Normalization Rules found"
+      },
+      "created": "A new Description Normalization Rule is created with identifier {{ param }}",
+      "updated": "A Description Normalization Rule is updated with identifier {{ param }}",
+      "deleted": "A Description Normalization Rule is deleted with identifier {{ param }}",
+      "delete": {
+        "question": "This will delete Description Normalization Rule {{ id }} and its conditions. Imported raw descriptions and transactions will not be deleted."
+      },
+      "detail": {
+        "title": "Description Normalization Rule"
+      },
+      "createTitle": "Create Description Normalization Rule",
+      "editTitle": "Edit Description Normalization Rule",
+      "createInactiveHelp": "Rules are saved inactive first. Add conditions from the detail page, then activate the rule when ready.",
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "active": "Active",
+      "priority": "Priority",
+      "order": "Order",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "conditionOperator": "Condition Logic",
+      "resultingDescription": "Resulting Description",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "user": "User",
+      "conditions": "Conditions",
+      "manageConditions": "Manage conditions",
+      "addCondition": "Add condition",
+      "activeRequiresCondition": "Active rules require at least one condition.",
+      "activeDisabledNoConditions": "Add at least one condition before activating this rule."
+    },
+    "descriptionNormalizationRuleCondition": {
+      "operator": "Operator",
+      "value": "Value",
+      "caseSensitive": "Case sensitive",
+      "position": "Position",
+      "descriptionNormalizationRule": "Description Normalization Rule"
+    }
+  }
+}

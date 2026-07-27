@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Button, Col, Form, FormGroup, Input, Label, Row, Spinner, Table } from 'reactstrap';
+import { Alert, Badge, Button, Col, Form, FormGroup, Input, Label, Row, Spinner, Table } from 'reactstrap';
 import { TextFormat, Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -24,6 +24,17 @@ interface ICsvIngestionWorkflowCounts {
   invalidRows?: number;
 }
 
+interface ICsvIngestionDescriptionReview {
+  source?: string | null;
+  originalDescription?: string | null;
+  normalizedDescription?: string | null;
+  ruleId?: number | null;
+  ruleName?: string | null;
+  resultingDescription?: string | null;
+  editedAt?: string | null;
+  editedBy?: string | null;
+}
+
 interface ICsvIngestionWorkflowRow {
   ingestionRecordId?: number;
   recordIndex?: number;
@@ -40,6 +51,7 @@ interface ICsvIngestionWorkflowRow {
   notes?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  descriptionReview?: ICsvIngestionDescriptionReview | null;
   warnings?: ICsvIngestionWorkflowMessage[];
 }
 
@@ -131,6 +143,91 @@ const recordStatusLabel = (status?: string) => {
   return translate(`fintrackApp.IngestionRecordStatus.${status}`, status);
 };
 
+const descriptionReviewTestId = (row: ICsvIngestionWorkflowRow, suffix: string) =>
+  `descriptionReview-${suffix}-${row.ingestionRecordId ?? row.recordIndex}`;
+
+const renderDescriptionReviewDetail = (labelKey: string, fallbackLabel: string, value?: React.ReactNode) =>
+  value ? (
+    <div>
+      <strong>
+        <Translate contentKey={labelKey}>{fallbackLabel}</Translate>:
+      </strong>{' '}
+      {value}
+    </div>
+  ) : null;
+
+const DescriptionReviewDisplay = ({ row }: { row: ICsvIngestionWorkflowRow }) => {
+  const review = row.descriptionReview;
+  const source = review?.source;
+
+  if (source !== 'DESCRIPTION_RULE' && source !== 'USER_EDIT') {
+    return <>{row.description}</>;
+  }
+
+  const recordKey = row.ingestionRecordId ?? row.recordIndex;
+  const isRuleSource = source === 'DESCRIPTION_RULE';
+
+  return (
+    <div>
+      <div>{row.description}</div>
+      <div className="mt-1" data-testid={descriptionReviewTestId(row, 'metadata')}>
+        <Badge color={isRuleSource ? 'info' : 'secondary'} pill data-testid={descriptionReviewTestId(row, 'badge')}>
+          <Translate
+            contentKey={
+              isRuleSource
+                ? 'fintrackApp.transactionIngestion.workflow.descriptionReview.autoNormalized'
+                : 'fintrackApp.transactionIngestion.workflow.descriptionReview.editedManually'
+            }
+          >
+            {isRuleSource ? 'Auto-normalized' : 'Edited manually'}
+          </Translate>
+        </Badge>
+        {isRuleSource && review?.ruleName ? (
+          <small className="text-muted ms-2" data-testid={descriptionReviewTestId(row, 'ruleName')}>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.rule">Rule</Translate>: {review.ruleName}
+          </small>
+        ) : null}
+        {!isRuleSource && review?.ruleName ? (
+          <small className="text-muted d-block mt-1" data-testid={descriptionReviewTestId(row, 'manualNote')}>
+            {translate('fintrackApp.transactionIngestion.workflow.descriptionReview.originallyAutoNormalizedBy', {
+              ruleName: review.ruleName,
+            })}
+          </small>
+        ) : null}
+        <details className="small mt-1" data-testid={descriptionReviewTestId(row, 'details')}>
+          <summary>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.details">Details</Translate>
+          </summary>
+          {renderDescriptionReviewDetail(
+            'fintrackApp.transactionIngestion.workflow.descriptionReview.originalDescription',
+            'Original description',
+            review?.originalDescription,
+          )}
+          {renderDescriptionReviewDetail(
+            'fintrackApp.transactionIngestion.workflow.descriptionReview.normalizedDescription',
+            'Normalized description',
+            review?.normalizedDescription,
+          )}
+          {renderDescriptionReviewDetail('fintrackApp.transactionIngestion.workflow.descriptionReview.rule', 'Rule', review?.ruleName)}
+          {renderDescriptionReviewDetail(
+            'fintrackApp.transactionIngestion.workflow.descriptionReview.editedAt',
+            'Edited at',
+            review?.editedAt ? <TextFormat value={review.editedAt} type="date" format={APP_DATE_FORMAT} /> : null,
+          )}
+          {renderDescriptionReviewDetail(
+            'fintrackApp.transactionIngestion.workflow.descriptionReview.editedBy',
+            'Edited by',
+            review?.editedBy,
+          )}
+        </details>
+      </div>
+      <span className="visually-hidden" data-testid={`descriptionReview-source-${recordKey}`}>
+        {source}
+      </span>
+    </div>
+  );
+};
+
 const editableRowStatuses = ['VALID', 'REJECTED'];
 
 const rowToEditDraft = (row: ICsvIngestionWorkflowRow): ICsvIngestionWorkflowRowEditDraft => ({
@@ -170,6 +267,7 @@ const replaceReviewRow = (currentRow: ICsvIngestionWorkflowRow, updatedRow: ICsv
   notes: updatedRow.notes,
   errorCode: updatedRow.errorCode,
   errorMessage: updatedRow.errorMessage,
+  descriptionReview: updatedRow.descriptionReview,
   warnings: updatedRow.warnings ?? [],
 });
 
@@ -866,7 +964,7 @@ export const TransactionIngestionWorkflowDetail = () => {
                               onChange={event => updateEditDraft('description', event.target.value)}
                             />
                           ) : (
-                            row.description
+                            <DescriptionReviewDisplay row={row} />
                           )}
                         </td>
                         <td>

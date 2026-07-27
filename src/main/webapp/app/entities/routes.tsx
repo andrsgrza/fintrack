@@ -10,6 +10,7 @@ import Category from './category';
 import Tag from './tag';
 import TransactionRule from './transaction-rule';
 import TransactionRuleCondition from './transaction-rule-condition';
+import DescriptionNormalizationRule from './description-normalization-rule';
 import FinancialSubscription from './financial-subscription';
 import Budget from './budget';
 import InternalTransfer from './internal-transfer';
@@ -34,6 +35,7 @@ export default () => {
         <Route path="tag/*" element={<Tag />} />
         <Route path="transaction-rule/*" element={<TransactionRule />} />
         <Route path="transaction-rule-condition/*" element={<TransactionRuleCondition />} />
+        <Route path="description-normalization-rule/*" element={<DescriptionNormalizationRule />} />
         <Route path="financial-subscription/*" element={<FinancialSubscription />} />
         <Route path="budget/*" element={<Budget />} />
         <Route path="internal-transfer/*" element={<InternalTransfer />} />

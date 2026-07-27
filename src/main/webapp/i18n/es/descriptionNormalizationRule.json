@@ -1,0 +1,49 @@
+{
+  "fintrackApp": {
+    "descriptionNormalizationRule": {
+      "home": {
+        "title": "Reglas de normalización de descripción",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear regla de normalización",
+        "notFound": "No se encontraron reglas de normalización"
+      },
+      "created": "Se creó una regla de normalización con identificador {{ param }}",
+      "updated": "Se actualizó una regla de normalización con identificador {{ param }}",
+      "deleted": "Se eliminó una regla de normalización con identificador {{ param }}",
+      "delete": {
+        "question": "Esto eliminará la regla de normalización {{ id }} y sus condiciones. Las descripciones crudas importadas y las transacciones no se eliminarán."
+      },
+      "detail": {
+        "title": "Regla de normalización de descripción"
+      },
+      "createTitle": "Crear regla de normalización",
+      "editTitle": "Editar regla de normalización",
+      "createInactiveHelp": "Las reglas se guardan inactivas primero. Agrega condiciones desde el detalle y actívala cuando esté lista.",
+      "id": "ID",
+      "name": "Nombre",
+      "description": "Descripción",
+      "active": "Activa",
+      "priority": "Prioridad",
+      "order": "Orden",
+      "moveUp": "Subir",
+      "moveDown": "Bajar",
+      "conditionOperator": "Lógica de condiciones",
+      "resultingDescription": "Descripción resultante",
+      "createdAt": "Creada el",
+      "updatedAt": "Actualizada el",
+      "user": "Usuario",
+      "conditions": "Condiciones",
+      "manageConditions": "Administrar condiciones",
+      "addCondition": "Agregar condición",
+      "activeRequiresCondition": "Las reglas activas requieren al menos una condición.",
+      "activeDisabledNoConditions": "Agrega al menos una condición antes de activar esta regla."
+    },
+    "descriptionNormalizationRuleCondition": {
+      "operator": "Operador",
+      "value": "Valor",
+      "caseSensitive": "Sensible a mayúsculas",
+      "position": "Posición",
+      "descriptionNormalizationRule": "Regla de normalización"
+    }
+  }
+}

@@ -18,6 +18,7 @@ import com.fintrack.app.service.csv.CanonicalCsvIngestionParser;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRawRow;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
+import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
@@ -194,6 +195,14 @@ public class CsvIngestionRecordReviewService {
             review.put("edited", true);
             review.put("editedAt", Instant.now().toString());
             review.put("editedBy", currentUserService.getCurrentUserLogin());
+            ObjectNode descriptionReview = review.path("description").isObject()
+                ? (ObjectNode) review.path("description")
+                : objectMapper.createObjectNode();
+            descriptionReview.put("source", "USER_EDIT");
+            descriptionReview.put("resultingDescription", result == null ? null : result.getNormalized().getDescription());
+            descriptionReview.put("editedAt", Instant.now().toString());
+            descriptionReview.put("editedBy", currentUserService.getCurrentUserLogin());
+            review.set("description", descriptionReview);
             root.set("review", review);
         }
         try {
@@ -297,6 +306,7 @@ public class CsvIngestionRecordReviewService {
         dto.setNotes(textOrNull(normalized, "notes"));
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
+        dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(rawData));
         dto.setWarnings(messages(rawData.path("warnings")));
         return dto;
     }

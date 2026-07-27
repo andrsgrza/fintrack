@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20260726120000-1" author="codex">
+        <createTable tableName="description_normalization_rule">
+            <column name="id" type="bigint">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="varchar(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="varchar(500)"/>
+            <column name="active" type="boolean">
+                <constraints nullable="false"/>
+            </column>
+            <column name="priority" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="condition_operator" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="resulting_description" type="varchar(500)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="${datetimeType}">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="${datetimeType}">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="20260726120000-2" author="codex">
+        <createTable tableName="description_normalization_rule_condition">
+            <column name="id" type="bigint">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="operator" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="value" type="varchar(1000)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="case_sensitive" type="boolean">
+                <constraints nullable="false"/>
+            </column>
+            <column name="position" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="${datetimeType}">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="${datetimeType}">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description_normalization_rule_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="20260726120000-3" author="codex">
+        <addForeignKeyConstraint
+            baseColumnNames="user_id"
+            baseTableName="description_normalization_rule"
+            constraintName="fk_description_normalization_rule__user_id"
+            referencedColumnNames="id"
+            referencedTableName="jhi_user"/>
+        <addForeignKeyConstraint
+            baseColumnNames="description_normalization_rule_id"
+            baseTableName="description_normalization_rule_condition"
+            constraintName="fk_description_normalization_rule_condition__rule_id"
+            referencedColumnNames="id"
+            referencedTableName="description_normalization_rule"/>
+    </changeSet>
+
+    <changeSet id="20260726120000-4" author="codex">
+        <createIndex indexName="idx_description_normalization_rule__user_priority" tableName="description_normalization_rule">
+            <column name="user_id"/>
+            <column name="priority"/>
+            <column name="id"/>
+        </createIndex>
+        <createIndex indexName="idx_description_normalization_rule_condition__rule_position" tableName="description_normalization_rule_condition">
+            <column name="description_normalization_rule_id"/>
+            <column name="position"/>
+            <column name="id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>
