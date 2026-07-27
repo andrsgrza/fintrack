@@ -674,6 +674,7 @@ FILE ingestion upload now has an optional pre-review description normalization s
 - `rawData.review.description` does not duplicate `originalDescription`; the original remains only in `rawData.raw.description`.
 - `rawData.suggestions` is not used.
 - UserPreference-based behavior is deferred.
+- Workflow row responses expose a read-only `descriptionReview` projection for UI display. It is derived from `rawData.raw.description`, `rawData.normalized.description`, and `rawData.review.description`; it does not change persisted `rawData`.
 
 Rule-applied metadata shape:
 

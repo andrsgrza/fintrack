@@ -103,6 +103,17 @@
         "importCompleted": "Importación completada.",
         "importProcessing": "La importación está en proceso.",
         "importFailed": "La importación falló.",
+        "descriptionReview": {
+          "autoNormalized": "Normalizada automáticamente",
+          "editedManually": "Editada manualmente",
+          "details": "Detalles",
+          "originalDescription": "Descripción original",
+          "normalizedDescription": "Descripción normalizada",
+          "rule": "Regla",
+          "editedAt": "Editada el",
+          "editedBy": "Editada por",
+          "originallyAutoNormalizedBy": "Originalmente normalizada por {{ruleName}}, después editada manualmente"
+        },
         "ingestionStatus": {
           "READY": "Lista para importar",
           "PARTIALLY_READY": "Requiere revisión",

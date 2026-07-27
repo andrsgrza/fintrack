@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.DescriptionNormalizationRule;
 import com.fintrack.app.domain.DescriptionNormalizationRuleCondition;
@@ -168,7 +169,13 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc
             .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.rows[2].description").value("Uber"));
+            .andExpect(jsonPath("$.rows[2].description").value("Uber"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.source").value("DESCRIPTION_RULE"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.originalDescription").value("Uber, Trip"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.normalizedDescription").value("Uber"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.ruleId").value(rule.getId()))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.ruleName").value("Normalize Uber"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.resultingDescription").value("Uber"));
 
         TransactionIngestion ingestion = transactionIngestionRepository
             .findAll()
@@ -199,7 +206,10 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc
             .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.rows[2].description").value("Uber, Trip"));
+            .andExpect(jsonPath("$.rows[2].description").value("Uber, Trip"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.source").doesNotExist())
+            .andExpect(jsonPath("$.rows[2].descriptionReview.originalDescription").value("Uber, Trip"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.normalizedDescription").value("Uber, Trip"));
 
         TransactionIngestion ingestion = transactionIngestionRepository
             .findAll()
@@ -229,12 +239,45 @@ class TransactionIngestionWorkflowResourceIT {
                     )
             )
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.row.description").value("Manual description"));
+            .andExpect(jsonPath("$.row.description").value("Manual description"))
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("USER_EDIT"))
+            .andExpect(jsonPath("$.row.descriptionReview.originalDescription").value("NOMINA QUALTRICS"))
+            .andExpect(jsonPath("$.row.descriptionReview.normalizedDescription").value("Manual description"))
+            .andExpect(jsonPath("$.row.descriptionReview.resultingDescription").value("Manual description"))
+            .andExpect(jsonPath("$.row.descriptionReview.editedBy").value("user"));
 
         JsonNode rawData = objectMapper.readTree(ingestionRecordRepository.findById(record.getId()).orElseThrow().getRawData());
         assertThat(rawData.path("review").path("description").path("source").asText()).isEqualTo("USER_EDIT");
         assertThat(rawData.path("review").path("description").path("resultingDescription").asText()).isEqualTo("Manual description");
         assertThat(rawData.path("review").path("description").path("editedBy").asText()).isEqualTo("user");
+    }
+
+    @Test
+    @Transactional
+    void workflowRowDescriptionReviewIgnoresInvalidEditedAt() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        ObjectNode rawData = (ObjectNode) objectMapper.readTree(record.getRawData());
+        ObjectNode review = rawData.has("review") && rawData.get("review").isObject()
+            ? (ObjectNode) rawData.get("review")
+            : rawData.putObject("review");
+        ObjectNode descriptionReview = review.putObject("description");
+        descriptionReview.put("source", "DESCRIPTION_RULE");
+        descriptionReview.put("ruleName", "Normalize Uber");
+        descriptionReview.put("resultingDescription", "Uber");
+        descriptionReview.put("editedAt", "not-an-iso-instant");
+
+        record.setRawData(objectMapper.writeValueAsString(rawData));
+        ingestionRecordRepository.saveAndFlush(record);
+
+        mockMvc
+            .perform(get("/api/transaction-ingestions/" + ingestion.getId() + "/workflow"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[2].descriptionReview.source").value("DESCRIPTION_RULE"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.ruleName").value("Normalize Uber"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.originalDescription").value("Uber, Trip"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.normalizedDescription").value("Uber, Trip"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.editedAt").doesNotExist());
     }
 
     @Test
@@ -248,7 +291,11 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc
             .perform(multipart(PARENT_FILE_INGESTION_URL, pending.getId()).file(csvFile("canonical.csv", VALID_CSV)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.rows[2].description").value("Uber"));
+            .andExpect(jsonPath("$.rows[2].description").value("Uber"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.source").value("DESCRIPTION_RULE"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.originalDescription").value("Uber, Trip"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.normalizedDescription").value("Uber"))
+            .andExpect(jsonPath("$.rows[2].descriptionReview.ruleName").value("Normalize Uber"));
 
         JsonNode rawData = objectMapper.readTree(recordsFor(pending).get(2).getRawData());
         assertThat(rawData.path("normalized").path("description").asText()).isEqualTo("Uber");

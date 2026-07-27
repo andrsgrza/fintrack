@@ -24,6 +24,7 @@ import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvParseResult;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRawRow;
 import com.fintrack.app.service.csv.CanonicalCsvIngestionParser.CsvRowResult;
 import com.fintrack.app.service.csv.CsvIngestionValidationMessage;
+import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionFileMetadataDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
@@ -372,6 +373,7 @@ public class CsvIngestionWorkflowService {
         dto.setNotes(textOrNull(normalized, "notes"));
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
+        dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(root));
         dto.setWarnings(messages(root.path("warnings")));
         return dto;
     }

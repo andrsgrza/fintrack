@@ -458,6 +458,13 @@ describe('TransactionIngestion file workflow', () => {
           flow: 'IN',
           errorCode: null,
           errorMessage: null,
+          descriptionReview: {
+            source: 'USER_EDIT',
+            originalDescription: '',
+            normalizedDescription: 'Corrected row',
+            ruleName: 'Normalize Old Value',
+            editedBy: 'user',
+          },
         },
       },
     });
@@ -481,11 +488,15 @@ describe('TransactionIngestion file workflow', () => {
         notes: null,
       }),
     );
-    expect(await screen.findByText('Corrected row')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('descriptionReview-badge-301')).toBeTruthy());
     expect(screen.getAllByText('Ready to import').length).toBeGreaterThan(0);
     expectRowStatus(301, 'Valid');
     expect(screen.getAllByText('50.00')).toHaveLength(2);
     expect(screen.queryByText('signedAmount must be nonzero')).toBeNull();
+    expect(within(rowForRecord(301)).getByText('Edited manually')).toBeTruthy();
+    expect(screen.getByTestId('descriptionReview-manualNote-301').textContent).toContain(
+      'Originally auto-normalized by Normalize Old Value, then edited manually',
+    );
   });
 
   it('editing signedAmount sign refreshes derived amount and flow from response row', async () => {
@@ -634,6 +645,89 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
   });
 
+  it('renders description rule metadata compactly', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            description: 'Uber',
+            descriptionReview: {
+              source: 'DESCRIPTION_RULE',
+              originalDescription: 'Uber, Trip',
+              normalizedDescription: 'Uber',
+              ruleName: 'Normalize Uber',
+            },
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    await waitFor(() => expect(screen.getByTestId('descriptionReview-badge-300')).toBeTruthy());
+    expect(within(rowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
+    expect(screen.getByTestId('descriptionReview-ruleName-300').textContent).toContain('Normalize Uber');
+    expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Original description');
+    expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Uber, Trip');
+    expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Normalized description');
+  });
+
+  it('renders manual edit metadata and previous rule note', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            description: 'Manual Uber',
+            descriptionReview: {
+              source: 'USER_EDIT',
+              originalDescription: 'Uber, Trip',
+              normalizedDescription: 'Manual Uber',
+              ruleName: 'Normalize Uber',
+              editedAt: '2026-07-13T16:05:00Z',
+              editedBy: 'user',
+            },
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    await waitFor(() => expect(screen.getByTestId('descriptionReview-badge-300')).toBeTruthy());
+    expect(within(rowForRecord(300)).getByText('Edited manually')).toBeTruthy();
+    expect(screen.getByTestId('descriptionReview-manualNote-300').textContent).toContain(
+      'Originally auto-normalized by Normalize Uber, then edited manually',
+    );
+    expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Original description');
+    expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Uber, Trip');
+    expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Edited by');
+    expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('user');
+  });
+
+  it('does not render description metadata badge when no source is present', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            descriptionReview: {
+              originalDescription: 'Salary raw',
+              normalizedDescription: 'Salary',
+            },
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByText('Salary');
+    expect(within(rowForRecord(300)).queryByText('Auto-normalized')).toBeNull();
+    expect(within(rowForRecord(300)).queryByText('Edited manually')).toBeNull();
+  });
+
   it('shows Confirm Import when review is ready with valid rows', async () => {
     mockAxiosGet.mockResolvedValue({
       data: {
@@ -729,7 +823,18 @@ describe('TransactionIngestion file workflow', () => {
         status: 'COMPLETED',
         counts: { recordsReceived: 2, recordsCreated: 1, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
         rows: [
-          { ...persistedReviewResponse.data.rows[0], status: 'IMPORTED', financialTransactionId: 9001 },
+          {
+            ...persistedReviewResponse.data.rows[0],
+            status: 'IMPORTED',
+            financialTransactionId: 9001,
+            description: 'Uber',
+            descriptionReview: {
+              source: 'DESCRIPTION_RULE',
+              originalDescription: 'Uber, Trip',
+              normalizedDescription: 'Uber',
+              ruleName: 'Normalize Uber',
+            },
+          },
           { ...persistedReviewResponse.data.rows[2], status: 'DISABLED', transactionDate: '' },
         ],
       },
@@ -749,6 +854,8 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByRole('button', { name: /enable/i })).toBeNull();
     expect(rowForRecord(300).querySelector('input, select, textarea')).toBeNull();
     expect(rowForRecord(302).querySelector('input, select, textarea')).toBeNull();
+    expect(within(rowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
+    expect(screen.getByTestId('descriptionReview-ruleName-300').textContent).toContain('Normalize Uber');
   });
 
   it('confirm API error displays review error', async () => {

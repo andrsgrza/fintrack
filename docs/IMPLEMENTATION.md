@@ -1220,4 +1220,6 @@ Integration points:
 
 Both FILE upload paths pass through `CsvIngestionWorkflowService.persistWorkflow`. After parser normalization and before `IngestionRecord` persistence, the service evaluates description normalization against `rawData.raw.description`. When matched, it updates `rawData.normalized.description` and writes `rawData.review.description`.
 
+Workflow row DTOs expose `descriptionReview` as a read-only projection for the review UI. The projection reads the immutable original description from `rawData.raw.description`, the final importable description from `rawData.normalized.description`, and source/rule/edit metadata from `rawData.review.description`. It does not change persistence or the stored `rawData` shape.
+
 Category/tag `TransactionRule` evaluation is not invoked by this slice. Confirm Import remains unchanged and will consume `rawData.normalized.description` as usual. Pantalla 2 and UserPreference-driven behavior remain deferred.
