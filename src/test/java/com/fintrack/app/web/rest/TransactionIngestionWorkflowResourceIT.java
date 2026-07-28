@@ -12,27 +12,38 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
+import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.DescriptionNormalizationRule;
 import com.fintrack.app.domain.DescriptionNormalizationRuleCondition;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
+import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.TransactionRule;
+import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.DescriptionNormalizationRuleOperator;
 import com.fintrack.app.domain.enumeration.ImportFileType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
+import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionRuleField;
+import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.DescriptionNormalizationRuleConditionRepository;
 import com.fintrack.app.repository.DescriptionNormalizationRuleRepository;
 import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
+import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
+import com.fintrack.app.repository.TransactionRuleConditionRepository;
+import com.fintrack.app.repository.TransactionRuleRepository;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -49,6 +60,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 @IntegrationTest
@@ -90,6 +102,18 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    @Autowired
+    private TagRepository tagRepository;
+
+    @Autowired
+    private TransactionRuleRepository transactionRuleRepository;
+
+    @Autowired
+    private TransactionRuleConditionRepository transactionRuleConditionRepository;
 
     @Autowired
     private DescriptionNormalizationRuleRepository descriptionNormalizationRuleRepository;
@@ -1073,14 +1097,148 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void classificationPreviewReturnsSuggestionsForValidReadyRowsWithoutMutatingWorkflow() throws Exception {
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Ride share", currentMockUser());
+        TransactionRule rule = persistTransactionRule("Uber rule", category, List.of(tag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "Uber");
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        IngestionRecord disabledRecord = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(reviewUrl(ingestion, disabledRecord, "disable"))).andExpect(status().isOk());
+        List<String> rawDataBefore = recordsFor(ingestion).stream().map(IngestionRecord::getRawData).toList();
+        long transactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(post(classificationPreviewUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionIngestionId").value(ingestion.getId()))
+            .andExpect(jsonPath("$.rows.length()").value(2))
+            .andExpect(jsonPath("$.rows[1].recordId").value(recordsFor(ingestion).get(2).getId()))
+            .andExpect(jsonPath("$.rows[1].description").value("Uber, Trip"))
+            .andExpect(jsonPath("$.rows[1].suggestedCategory.id").value(category.getId()))
+            .andExpect(jsonPath("$.rows[1].suggestedCategory.name").value("Transport"))
+            .andExpect(jsonPath("$.rows[1].suggestedCategory.categoryType").value("EXPENSE"))
+            .andExpect(jsonPath("$.rows[1].suggestedTags[0].id").value(tag.getId()))
+            .andExpect(jsonPath("$.rows[1].suggestedTags[0].name").value("Ride share"))
+            .andExpect(jsonPath("$.rows[1].matchedRules[0].ruleName").value("Uber rule"));
+
+        assertThat(recordsFor(ingestion).stream().map(IngestionRecord::getRawData).toList()).isEqualTo(rawDataBefore);
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
+        assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void classificationPreviewUsesNormalizedDescriptionAndRejectsForeignOrNotReadyIngestions() throws Exception {
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        TransactionRule rule = persistTransactionRule("Normalized Uber rule", category, List.of());
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.EQUALS, "Uber");
+        DescriptionNormalizationRule descriptionRule = persistDescriptionNormalizationRule("Normalize Uber", "Uber");
+        persistDescriptionNormalizationCondition(descriptionRule, "Uber");
+        FinancialAccount account = createCurrentUserAccount();
+
+        mockMvc
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("canonical.csv", VALID_CSV)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk());
+        TransactionIngestion ingestion = transactionIngestionRepository
+            .findAll()
+            .stream()
+            .max(Comparator.comparing(TransactionIngestion::getId))
+            .orElseThrow();
+
+        mockMvc
+            .perform(post(classificationPreviewUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[2].description").value("Uber"))
+            .andExpect(jsonPath("$.rows[2].suggestedCategory.name").value("Transport"));
+
+        ingestion.setStatus(IngestionStatus.PARTIALLY_READY);
+        transactionIngestionRepository.saveAndFlush(ingestion);
+        mockMvc.perform(post(classificationPreviewUrl(ingestion))).andExpect(status().isBadRequest());
+
+        TransactionIngestion foreign = createPendingFileTransactionIngestion(createAccountForUser(createOtherUser()));
+        foreign.setStatus(IngestionStatus.READY);
+        transactionIngestionRepository.saveAndFlush(foreign);
+        mockMvc.perform(post(classificationPreviewUrl(foreign))).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void confirmAppliesSelectedCategoryAndTagsWithoutWritingSelectionToRawData() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Cash", currentMockUser());
+
+        confirmImport(ingestion, List.of(confirmSelection(record.getId(), category.getId(), List.of(tag.getId()))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(1));
+
+        FinancialTransaction transaction = financialTransactionRepository.findAll().get(0);
+        assertThat(transaction.getCategory().getId()).isEqualTo(category.getId());
+        assertThat(transaction.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        JsonNode rawData = objectMapper.readTree(recordsFor(ingestion).get(0).getRawData());
+        assertThat(rawData.path("normalized").has("categoryId")).isFalse();
+        assertThat(rawData.path("normalized").has("tagIds")).isFalse();
+        assertThat(rawData.path("review").has("categoryId")).isFalse();
+        assertThat(rawData.path("review").has("tagIds")).isFalse();
+    }
+
+    @Test
+    @Transactional
+    void confirmValidatesExplicitRecordCategoryAndTagPayload() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category incompatibleCategory = persistCategory("Income", CategoryType.INCOME, currentMockUser());
+        Category foreignCategory = persistCategory("Foreign", CategoryType.EXPENSE, createOtherUser());
+        Tag foreignTag = persistTag("Foreign tag", createOtherUser());
+
+        confirmImport(ingestion, List.of()).andExpect(status().isBadRequest());
+        confirmImport(ingestion, List.of(confirmSelection(record.getId() + 9999, null, List.of()))).andExpect(status().isBadRequest());
+        confirmImport(
+            ingestion,
+            List.of(confirmSelection(record.getId(), null, List.of()), confirmSelection(record.getId(), null, List.of()))
+        ).andExpect(status().isBadRequest());
+        confirmImport(ingestion, List.of(confirmSelection(record.getId(), foreignCategory.getId(), List.of()))).andExpect(
+            status().isBadRequest()
+        );
+        confirmImport(ingestion, List.of(confirmSelection(record.getId(), incompatibleCategory.getId(), List.of()))).andExpect(
+            status().isBadRequest()
+        );
+        confirmImport(ingestion, List.of(confirmSelection(record.getId(), null, List.of(foreignTag.getId())))).andExpect(
+            status().isBadRequest()
+        );
+        confirmImport(ingestion, List.of(confirmSelection(record.getId(), null, List.of(1L, 1L)))).andExpect(status().isBadRequest());
+
+        assertThat(financialTransactionRepository.count()).isZero();
+    }
+
+    @Test
+    @Transactional
+    void confirmRequiresPayloadForReadyIngestionButAcceptsNullCategoryAndEmptyTags() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+
+        mockMvc
+            .perform(post(confirmUrl(ingestion)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Confirm import requires category/tag selections for all valid records"));
+
+        confirmImport(ingestion).andExpect(status().isOk()).andExpect(jsonPath("$.createdNow").value(1));
+        FinancialTransaction transaction = financialTransactionRepository.findAll().get(0);
+        assertThat(transaction.getCategory()).isNull();
+        assertThat(transaction.getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
     void confirmReadyIngestionCreatesFinancialTransactionsFromNormalizedRows() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord disabledRecord = recordsFor(ingestion).get(0);
         JsonNode originalRaw = objectMapper.readTree(disabledRecord.getRawData()).path("raw");
         mockMvc.perform(post(reviewUrl(ingestion, disabledRecord, "disable"))).andExpect(status().isOk());
 
-        mockMvc
-            .perform(post(confirmUrl(ingestion)))
+        confirmImport(ingestion)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("COMPLETED"))
             .andExpect(jsonPath("$.createdNow").value(2))
@@ -1138,7 +1296,7 @@ class TransactionIngestionWorkflowResourceIT {
     void confirmCompletedIngestionIsIdempotent() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
 
-        mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.createdNow").value(1));
+        confirmImport(ingestion).andExpect(status().isOk()).andExpect(jsonPath("$.createdNow").value(1));
         long financialTransactionCountAfterFirstConfirm = financialTransactionRepository.count();
 
         mockMvc
@@ -1159,8 +1317,7 @@ class TransactionIngestionWorkflowResourceIT {
         transactionIngestionRepository.saveAndFlush(ingestion);
         long financialTransactionCountBefore = financialTransactionRepository.count();
 
-        mockMvc
-            .perform(post(confirmUrl(ingestion)))
+        confirmImport(ingestion)
             .andExpect(status().isBadRequest())
             .andExpect(
                 jsonPath("$.detail").value(
@@ -1181,8 +1338,7 @@ class TransactionIngestionWorkflowResourceIT {
         ingestion.setStatus(IngestionStatus.PARTIALLY_READY);
         transactionIngestionRepository.saveAndFlush(ingestion);
 
-        mockMvc
-            .perform(post(confirmUrl(ingestion)))
+        confirmImport(ingestion)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("COMPLETED"))
             .andExpect(jsonPath("$.createdNow").value(1));
@@ -1194,12 +1350,12 @@ class TransactionIngestionWorkflowResourceIT {
     @Transactional
     void confirmRejectsNotReadyAndDisallowedStatusesWithoutImporting() throws Exception {
         TransactionIngestion partiallyReady = createWorkflowWithInvalidRow();
-        mockMvc.perform(post(confirmUrl(partiallyReady))).andExpect(status().isBadRequest());
+        confirmImport(partiallyReady).andExpect(status().isBadRequest());
         assertThat(financialTransactionRepository.count()).isZero();
 
         TransactionIngestion noValidRows = createWorkflowWithSingleValidRow();
         mockMvc.perform(post(reviewUrl(noValidRows, recordsFor(noValidRows).get(0), "disable"))).andExpect(status().isOk());
-        mockMvc.perform(post(confirmUrl(noValidRows))).andExpect(status().isBadRequest());
+        confirmImport(noValidRows).andExpect(status().isBadRequest());
         assertThat(financialTransactionRepository.count()).isZero();
 
         for (IngestionStatus status : List.of(
@@ -1211,7 +1367,7 @@ class TransactionIngestionWorkflowResourceIT {
             TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
             ingestion.setStatus(status);
             transactionIngestionRepository.saveAndFlush(ingestion);
-            mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isBadRequest());
+            confirmImport(ingestion).andExpect(status().isBadRequest());
         }
 
         assertThat(financialTransactionRepository.count()).isZero();
@@ -1239,7 +1395,7 @@ class TransactionIngestionWorkflowResourceIT {
         validRecord.setFinancialTransaction(financialTransaction);
         ingestionRecordRepository.saveAndFlush(validRecord);
 
-        mockMvc.perform(post(confirmUrl(validWithTransaction))).andExpect(status().isBadRequest());
+        confirmImport(validWithTransaction).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -1247,7 +1403,7 @@ class TransactionIngestionWorkflowResourceIT {
     void completedIngestionRowsCannotBeReviewed() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);
-        mockMvc.perform(post(confirmUrl(ingestion))).andExpect(status().isOk());
+        confirmImport(ingestion).andExpect(status().isOk());
 
         mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isBadRequest());
         mockMvc.perform(post(reviewUrl(ingestion, record, "enable"))).andExpect(status().isBadRequest());
@@ -1339,6 +1495,37 @@ class TransactionIngestionWorkflowResourceIT {
         return "/api/transaction-ingestions/" + ingestion.getId() + "/confirm";
     }
 
+    private String classificationPreviewUrl(TransactionIngestion ingestion) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/classification-preview";
+    }
+
+    private ResultActions confirmImport(TransactionIngestion ingestion) throws Exception {
+        return confirmImport(
+            ingestion,
+            recordsFor(ingestion)
+                .stream()
+                .filter(record -> record.getStatus() == IngestionRecordStatus.VALID)
+                .map(record -> confirmSelection(record.getId(), null, List.of()))
+                .toList()
+        );
+    }
+
+    private ResultActions confirmImport(TransactionIngestion ingestion, List<Map<String, Object>> recordSelections) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("records", recordSelections);
+        return mockMvc.perform(
+            post(confirmUrl(ingestion)).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(payload))
+        );
+    }
+
+    private Map<String, Object> confirmSelection(Long recordId, Long categoryId, List<Long> tagIds) {
+        Map<String, Object> selection = new LinkedHashMap<>();
+        selection.put("recordId", recordId);
+        selection.put("categoryId", categoryId);
+        selection.put("tagIds", tagIds);
+        return selection;
+    }
+
     private Map<String, Object> reviewPayload(
         String transactionDate,
         String postingDate,
@@ -1387,6 +1574,61 @@ class TransactionIngestionWorkflowResourceIT {
             .createdAt(java.time.Instant.now())
             .transactionIngestion(ingestion);
         return ingestionRecordRepository.saveAndFlush(record);
+    }
+
+    private Category persistCategory(String name, CategoryType categoryType, User user) {
+        Category category = CategoryResourceIT.createEntity(em);
+        category.setName(name);
+        category.setCategoryType(categoryType);
+        category.setParentCategory(null);
+        category.setUser(user);
+        return categoryRepository.saveAndFlush(category);
+    }
+
+    private Tag persistTag(String name, User user) {
+        Tag tag = new Tag()
+            .name(name)
+            .description(null)
+            .color(null)
+            .active(true)
+            .createdAt(java.time.Instant.now())
+            .updatedAt(java.time.Instant.now())
+            .user(user);
+        return tagRepository.saveAndFlush(tag);
+    }
+
+    private TransactionRule persistTransactionRule(String name, Category resultingCategory, List<Tag> resultingTags) {
+        TransactionRule rule = new TransactionRule()
+            .name(name)
+            .description(null)
+            .priority(0)
+            .conditionLogic(RuleConditionLogic.ALL)
+            .active(true)
+            .createdAt(java.time.Instant.now())
+            .updatedAt(java.time.Instant.now())
+            .user(currentMockUser())
+            .resultingCategory(resultingCategory);
+        resultingTags.forEach(rule::addResultingTags);
+        return transactionRuleRepository.saveAndFlush(rule);
+    }
+
+    private TransactionRuleCondition persistTransactionRuleCondition(
+        TransactionRule rule,
+        TransactionRuleField field,
+        RuleOperator operator,
+        String value
+    ) {
+        TransactionRuleCondition condition = new TransactionRuleCondition()
+            .field(field)
+            .operator(operator)
+            .value(value)
+            .secondValue(null)
+            .caseSensitive(false)
+            .position(0)
+            .transactionRule(rule);
+        TransactionRuleCondition persisted = transactionRuleConditionRepository.saveAndFlush(condition);
+        rule.getConditions().add(persisted);
+        return persisted;
     }
 
     private DescriptionNormalizationRule persistDescriptionNormalizationRule(String name, String resultingDescription) {

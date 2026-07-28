@@ -934,18 +934,20 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 
 #### I2 — confirm import
 
-| Item             | Status                                                                                                                                                               |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Endpoint         | ✅ `POST /api/transaction-ingestions/{id}/confirm`.                                                                                                                  |
-| Shared readiness | ✅ Preview, review actions, and confirm use the same readiness calculation: `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows.               |
-| Creation         | ✅ Creates `FinancialTransaction` rows from `VALID` review records only.                                                                                             |
-| Source payload   | ✅ Uses `IngestionRecord.rawData.normalized` for transaction date, posting date, description, amount, flow, external reference, and notes.                           |
-| Origin           | ✅ Imported transactions use `origin = FILE_IMPORT`.                                                                                                                 |
-| Record link      | ✅ Each imported row becomes `IMPORTED` and links to its created `FinancialTransaction`.                                                                             |
-| Skipped rows     | ✅ `DISABLED` rows remain disabled/skipped and do not block readiness by themselves.                                                                                 |
-| Parent status    | ✅ Successful confirm is all-or-nothing and marks the parent `COMPLETED`; retrying a completed import is idempotent and creates no duplicate transactions.           |
-| Rule Engine      | ✅ CSV v1 confirm import does not invoke the Rule Engine; category, tags, and financial subscription remain empty unless a later slice explicitly designs import UX. |
-| Counters         | ✅ Import counters are recalculated after confirm.                                                                                                                   |
+| Item             | Status                                                                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint         | ✅ `POST /api/transaction-ingestions/{id}/confirm`.                                                                                                                   |
+| Shared readiness | ✅ Preview, review actions, and confirm use the same readiness calculation: `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows.                |
+| Creation         | ✅ Creates `FinancialTransaction` rows from `VALID` review records only.                                                                                              |
+| Source payload   | ✅ Uses `IngestionRecord.rawData.normalized` for transaction date, posting date, description, amount, flow, external reference, and notes.                            |
+| Origin           | ✅ Imported transactions use `origin = FILE_IMPORT`.                                                                                                                  |
+| Record link      | ✅ Each imported row becomes `IMPORTED` and links to its created `FinancialTransaction`.                                                                              |
+| Skipped rows     | ✅ `DISABLED` rows remain disabled/skipped and do not block readiness by themselves.                                                                                  |
+| Parent status    | ✅ Successful confirm is all-or-nothing and marks the parent `COMPLETED`; retrying a completed import is idempotent and creates no duplicate transactions.            |
+| Classification   | ✅ Slice 2A adds backend-only `POST /api/transaction-ingestions/{id}/classification-preview`; it evaluates `VALID` rows read-only through the category/tag evaluator. |
+| Selections       | ✅ Confirm import accepts explicit per-`VALID`-row `categoryId`/`tagIds` selections and applies them to created transactions after ownership/flow validation.         |
+| Rule Engine      | ✅ CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results or selections into `rawData`; Pantalla 2 UI remains deferred. |
+| Counters         | ✅ Import counters are recalculated after confirm.                                                                                                                    |
 
 ---
 

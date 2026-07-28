@@ -1267,15 +1267,17 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### I2 — confirm import
 
-| Rule                   | Decision                                                                                                                                                | Status   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Confirm import         | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` review records only after recalculating `READY` status | **Done** |
-| Source fields          | Imported transactions are built from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                                         | **Done** |
-| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                                                                        | **Done** |
-| Row transitions        | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                 | **Done** |
-| Parent transition      | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new         | **Done** |
-| Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine                                                                                                   | **Done** |
-| Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                     | **Done** |
+| Rule                   | Decision                                                                                                                                                 | Status   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Confirm import         | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` review records only after recalculating `READY` status  | **Done** |
+| Source fields          | Imported transactions are built from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                                          | **Done** |
+| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                                                                         | **Done** |
+| Row transitions        | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                  | **Done** |
+| Parent transition      | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new          | **Done** |
+| Classification preview | `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only and returns category/tag suggestions                     | **Done** |
+| Explicit selections    | Confirm import requires one selection payload per `VALID` row and applies selected category/tags to created transactions after ownership/flow validation | **Done** |
+| Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                           | **Done** |
+| Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                      | **Done** |
 
 ---
 

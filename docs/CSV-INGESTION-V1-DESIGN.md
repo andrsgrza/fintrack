@@ -428,13 +428,17 @@ I2C:
 - Confirm import creates `FinancialTransaction` rows from valid `IngestionRecord` rows.
 - Imported transactions should use `origin = FILE_IMPORT`.
 - Confirm import uses `rawData.normalized` as the source of transaction fields.
-- Confirm import does not run the Rule Engine in CSV v1.
-- Imported transactions have no category, no tags, and no financial subscription unless a later slice explicitly designs import-time suggestions/review.
-- No import UI rule suggestions in I2C.
+- Confirm import does not run the Rule Engine itself.
+- Slice 2A adds backend-only category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
+- Confirm import accepts explicit per-`VALID`-row category/tag selections and applies those selections to the created `FinancialTransaction`s.
+- Category/tag selections are validated for current-user ownership, category flow compatibility, complete `VALID` record coverage, duplicate record ids, and duplicate tag ids.
+- Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
+- `FinancialSubscription` remains empty in CSV v1 confirm import.
+- Pantalla 2 frontend review for category/tags remains deferred.
 
 Future:
 
-- Optional per-row category/tag suggestions.
+- Pantalla 2 UI for accepting/editing per-row category/tag suggestions.
 - Optional bulk review before import.
 - Bulk reevaluation remains deferred.
 
@@ -660,7 +664,7 @@ Already decided and not open for I1:
 - account comes through `TransactionIngestion`.
 - I1 does not run Rule Engine.
 - I1 does not create `FinancialTransaction` rows.
-- I2C confirm import does not run the Rule Engine; import-time suggestions/review are deferred.
+- I2C confirm import does not run the Rule Engine; Slice 2A adds a separate read-only classification-preview endpoint for import-time category/tag suggestions.
 
 ## Description normalization during upload
 
@@ -706,4 +710,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. Category/tag classification for ingestion remains deferred to Pantalla 2. UserPreference-driven rule behavior is also deferred.
+No FinancialTransactions are created during upload/review. Category/tag classification preview is backend-only in Slice 2A and remains UI-deferred to Pantalla 2. UserPreference-driven rule behavior is also deferred.
