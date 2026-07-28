@@ -429,16 +429,17 @@ I2C:
 - Imported transactions should use `origin = FILE_IMPORT`.
 - Confirm import uses `rawData.normalized` as the source of transaction fields.
 - Confirm import does not run the Rule Engine itself.
-- Slice 2A adds backend-only category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
+- Slice 2A adds backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
+- Slice 2B adds Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.
 - Confirm import accepts explicit per-`VALID`-row category/tag selections and applies those selections to the created `FinancialTransaction`s.
 - Category/tag selections are validated for current-user ownership, category flow compatibility, complete `VALID` record coverage, duplicate record ids, and duplicate tag ids.
 - Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
-- Pantalla 2 frontend review for category/tags remains deferred.
+- Pantalla 2 selections live only in frontend state until confirm; browser refresh loses category/tag adjustments in v1.
 
 Future:
 
-- Pantalla 2 UI for accepting/editing per-row category/tag suggestions.
+- Recoverable/persisted category/tag review choices.
 - Optional bulk review before import.
 - Bulk reevaluation remains deferred.
 
@@ -710,4 +711,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. Category/tag classification preview is backend-only in Slice 2A and remains UI-deferred to Pantalla 2. UserPreference-driven rule behavior is also deferred.
+No FinancialTransactions are created during upload/review. Category/tag classification preview is surfaced in Pantalla 2 and remains non-persistent until Confirm Import. UserPreference-driven rule behavior is deferred.

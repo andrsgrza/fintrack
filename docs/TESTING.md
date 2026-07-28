@@ -2641,6 +2641,8 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - confirm uses `rawData.normalized` transaction date, posting date, description, amount, flow, external reference, and notes.
 - imported transactions use the parent account and parent `TransactionIngestion`.
 - classification preview evaluates `VALID` rows read-only and returns category/tag suggestions without mutating records or creating transactions.
+- READY review UI shows "Continue to category/tags", calls classification-preview, and renders Pantalla 2 with suggested category/tags preselected.
+- Pantalla 2 edits are frontend-only until confirm; Back to row review preserves them in memory, but refresh persistence is not required.
 - confirm import accepts explicit category/tag selections for every `VALID` row and applies validated selections to created transactions.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
 - imported transactions do not get financial subscription from the Rule Engine.

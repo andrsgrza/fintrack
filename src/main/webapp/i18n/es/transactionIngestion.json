@@ -114,6 +114,20 @@
           "editedBy": "Editada por",
           "originallyAutoNormalizedBy": "Originalmente normalizada por {{ruleName}}, después editada manualmente"
         },
+        "classification": {
+          "title": "Revisar categorías y etiquetas",
+          "continue": "Continuar a categorías/etiquetas",
+          "unsavedNotice": "Las categorías/etiquetas no se guardan hasta confirmar la importación.",
+          "backToRows": "Volver a revisión de filas",
+          "category": "Categoría",
+          "tags": "Etiquetas",
+          "noCategory": "Sin categoría",
+          "suggested": "Sugerida",
+          "ruleDetails": "Detalles de reglas",
+          "matchedRules": "Reglas coincidentes",
+          "conflicts": "Conflictos",
+          "skippedOutputs": "Omitidos"
+        },
         "ingestionStatus": {
           "READY": "Lista para importar",
           "PARTIALLY_READY": "Requiere revisión",
@@ -129,6 +143,7 @@
           "createFailed": "No se pudo crear la vista previa. Revisa el archivo e inténtalo de nuevo.",
           "workflowLoadFailed": "No se pudo cargar la vista previa persistida.",
           "recordUpdateFailed": "No se pudo actualizar la fila de vista previa. Revisa la fila e inténtalo de nuevo.",
+          "classificationPreviewFailed": "No se pudieron cargar las sugerencias de categorías/etiquetas. Vuelve a la revisión de filas e inténtalo de nuevo.",
           "confirmFailed": "No se pudo confirmar la importación. Revisa el estado de la vista previa e inténtalo de nuevo."
         }
       }
