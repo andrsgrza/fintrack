@@ -414,7 +414,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Links owned por **dueño de la rule** | `resolveOptionalCategory/Tags` con `ownerLogin` — **sin bypass admin en outputs** |
 | PATCH links                          | `partialUpdate(dto, patchNode)` — `has("resultingCategory")` etc.                 |
 
-**Archivos:** `TransactionRuleRepository`, `TransactionRuleService`, `TransactionRuleQueryService`, `TransactionRuleResource` (PATCH con `JsonNode`), `TransactionRuleDTO`, `TransactionRuleMapper`, UI.
+**Archivos:** `TransactionRuleRepository`, `TransactionRuleService`, `TransactionRuleConfigurationService`, `TransactionRuleConditionValidator`, `TransactionRuleFlowCategoryCompatibilityValidator`, `TransactionRuleQueryService`, `TransactionRuleResource` (PATCH con `JsonNode` + configured endpoints), configured DTOs, `TransactionRuleDTO`, `TransactionRuleMapper`, UI.
 
 #### Domain rules ✅ (CRUD/domain baseline)
 
@@ -431,6 +431,9 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Server-owned timestamps                         | ✅     | create sets both; PUT/PATCH reject explicit null/changed `createdAt`/`updatedAt`; successful update sets `updatedAt=now`                                                                                   |
 | Server-managed priority/order                   | ✅     | per-user 0-based consecutive ordering; create appends; update/patch preserve; delete reindexes same owner only                                                                                             |
 | Active rule requiere conditions                 | ✅     | inactive draft → add conditions → activate                                                                                                                                                                 |
+| Configured command API                          | ✅     | `POST /api/transaction-rules/configured`, `GET /api/transaction-rules/{id}/configured`, `PUT /api/transaction-rules/{id}/configured` manage parent + ordered conditions through dedicated DTOs             |
+| Configured PUT full child replacement           | ✅     | Preserves parent `priority`/`createdAt`, updates `updatedAt`, replaces the full condition collection, and server-assigns positions                                                                         |
+| Resulting category ↔ FLOW compatibility        | ✅     | Active/configured EXPENSE rules require `ALL` + effective `FLOW=OUT`; INCOME requires `ALL` + effective `FLOW=IN`; BOTH/tag-only/no-category rules do not require FLOW                                     |
 | Rule requiere al menos un output                | ✅     | final merged state                                                                                                                                                                                         |
 | Delete cleanup                                  | ✅     | conditions + resultingTags join; no output entities deleted                                                                                                                                                |
 | PUT contract                                    | ✅     | Full DTO update; not presence-aware partial semantics. PATCH remains JsonNode                                                                                                                              |

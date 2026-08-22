@@ -418,7 +418,7 @@ We did not embed:
 
 The embedded editor reuses the condition form section, not the standalone CRUD page.
 
-We also did not implement a create-with-conditions command endpoint or client-side draft child collection on TransactionRule create. Those remain deferred until there is a deliberate atomic parent+children command design.
+Backend now has a configured command API for parent + conditions (`POST /api/transaction-rules/configured`, `GET /api/transaction-rules/{id}/configured`, `PUT /api/transaction-rules/{id}/configured`). The current product UI still does not use a client-side draft child collection on TransactionRule create; it keeps the parent-first flow and manages conditions from detail.
 
 ### Parent relationship behavior
 

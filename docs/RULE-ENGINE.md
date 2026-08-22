@@ -91,7 +91,22 @@ FINTRACK already implements the rule authoring model:
 - adding a condition does not auto-activate the rule.
 - deleting the last condition deactivates the rule.
 
-The pure evaluator is implemented. Automatic rule application/execution is **not implemented**.
+Configured backend rule creation/update is also available through:
+
+- `POST /api/transaction-rules/configured`
+- `GET /api/transaction-rules/{id}/configured`
+- `PUT /api/transaction-rules/{id}/configured`
+
+The configured API accepts/returns a parent `TransactionRule` plus its ordered conditions. It preserves server-managed parent fields, server-assigns condition positions, and replaces the full condition set on configured PUT. This is backend support; the current product UI may still use the parent-first detail-managed condition workflow.
+
+Rules with a resulting EXPENSE or INCOME category are guarded before activation/configured persistence:
+
+- EXPENSE categories require `conditionLogic = ALL` and an effective `FLOW` set of exactly `OUT`.
+- INCOME categories require `conditionLogic = ALL` and an effective `FLOW` set of exactly `IN`.
+- BOTH categories, tag-only rules, and rules without a resulting category do not require a FLOW condition.
+- Effective FLOW is derived from all FLOW conditions by intersecting `EQUALS`/`IN` values and removing `NOT_EQUALS`/`NOT_IN` values.
+
+The pure evaluator is implemented. FinancialTransaction create applies category/tag suggestions in `FILL_EMPTY_ONLY` mode. Existing transaction reevaluation and bulk execution remain deferred.
 
 ## Rule ordering
 

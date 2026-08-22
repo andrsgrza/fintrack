@@ -16,8 +16,10 @@ import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
@@ -25,6 +27,9 @@ import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.TransactionRuleService;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.TransactionRuleConfiguredConditionDTO;
+import com.fintrack.app.service.dto.TransactionRuleConfiguredRequestDTO;
+import com.fintrack.app.service.dto.TransactionRuleConfiguredResponseDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.TransactionRuleMapper;
@@ -85,6 +90,8 @@ class TransactionRuleResourceIT {
 
     private static final String ENTITY_API_URL = "/api/transaction-rules";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
+    private static final String ENTITY_CONFIGURED_API_URL = ENTITY_API_URL + "/configured";
+    private static final String ENTITY_CONFIGURED_API_URL_ID = ENTITY_API_URL + "/{id}/configured";
 
     private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
@@ -1567,7 +1574,7 @@ class TransactionRuleResourceIT {
     @Transactional
     void patchActiveTrueWithConditionSucceeds() throws Exception {
         insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
-        TransactionRuleCondition condition = createCondition(transactionRule);
+        TransactionRuleCondition condition = createFlowEntityCondition(transactionRule, 0, TransactionFlow.OUT);
 
         String patchJson = "{\"id\":" + transactionRule.getId() + ",\"active\":true}";
 
@@ -2475,6 +2482,416 @@ class TransactionRuleResourceIT {
                     .content(om.writeValueAsBytes(transactionRuleDTO))
             )
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredTransactionRuleWithNoConditionsFails() throws Exception {
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            null,
+            Set.of(createTagDTO(TagResourceIT.createEntity(em))),
+            List.of()
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredTransactionRuleWithNoOutputsFails() throws Exception {
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(null, Set.of(), List.of(descriptionCondition("Amazon")));
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredTagOnlyTransactionRuleWithConditionSucceeds() throws Exception {
+        Tag tag = TagResourceIT.createEntity(em);
+        em.persist(tag);
+        em.flush();
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            null,
+            Set.of(createTagDTO(tag)),
+            List.of(descriptionCondition("Amazon"))
+        );
+
+        TransactionRuleConfiguredResponseDTO response = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.conditions.[0].position").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleConfiguredResponseDTO.class
+        );
+
+        insertedTransactionRule = transactionRuleRepository.findById(response.getId()).orElseThrow();
+        assertThat(response.getPriority()).isZero();
+        assertThat(response.getConditions()).hasSize(1);
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredExpenseCategoryWithFlowOutSucceeds() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.EQUALS, "OUT"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.resultingCategory.categoryType").value(CategoryType.EXPENSE.toString()));
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredIncomeCategoryWithFlowInSucceeds() throws Exception {
+        Category category = createCategory(CategoryType.INCOME);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.EQUALS, "IN"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.resultingCategory.categoryType").value(CategoryType.INCOME.toString()));
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredBothCategoryWithoutFlowSucceeds() throws Exception {
+        Category category = createCategory(CategoryType.BOTH);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(descriptionCondition("Amazon"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.resultingCategory.categoryType").value(CategoryType.BOTH.toString()));
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredExpenseCategoryWithoutFlowFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(descriptionCondition("Amazon"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredExpenseCategoryWithFlowInFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.EQUALS, "IN"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredExpenseCategoryWithAnyFailsEvenWithFlowOut() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.EQUALS, "OUT"))
+        );
+        request.setConditionLogic(RuleConditionLogic.ANY);
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredExpenseCategoryWithFlowInOutFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.IN, "IN,OUT"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredExpenseCategoryWithFlowNotEqualsInSucceeds() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.NOT_EQUALS, "IN"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredExpenseCategoryWithFlowNotEqualsOutFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.NOT_EQUALS, "OUT"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredIncomeCategoryWithFlowNotInOutSucceeds() throws Exception {
+        Category category = createCategory(CategoryType.INCOME);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.NOT_IN, "OUT"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredWithMultipleFlowConditionsIntersects() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.IN, "IN,OUT"), flowCondition(RuleOperator.NOT_EQUALS, "IN"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    @Transactional
+    void createConfiguredWithEffectiveEmptyFlowSetFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.NOT_IN, "IN,OUT"))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void getConfiguredTransactionRuleReturnsOrderedConditionsAndCategoryType() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        transactionRule.setResultingCategory(category);
+        transactionRule.setActive(true);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        createCondition(transactionRule, 2, "Amazon");
+        createFlowEntityCondition(transactionRule, 1, TransactionFlow.OUT);
+
+        restTransactionRuleMockMvc
+            .perform(get(ENTITY_CONFIGURED_API_URL_ID, transactionRule.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.resultingCategory.categoryType").value(CategoryType.EXPENSE.toString()))
+            .andExpect(jsonPath("$.conditions.[0].position").value(1))
+            .andExpect(jsonPath("$.conditions.[0].field").value(TransactionRuleField.FLOW.toString()))
+            .andExpect(jsonPath("$.conditions.[1].position").value(2));
+    }
+
+    @Test
+    @Transactional
+    void updateConfiguredTransactionRuleReplacesConditionsAndPreservesPriorityAndCreatedAt() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        createCondition(transactionRule);
+        Instant createdAt = transactionRule.getCreatedAt();
+        Integer priority = transactionRule.getPriority();
+
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            createCategoryDTO(category),
+            Set.of(),
+            List.of(flowCondition(RuleOperator.EQUALS, "OUT"))
+        );
+        request.setName("Updated configured rule");
+
+        TransactionRuleConfiguredResponseDTO response = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(
+                    put(ENTITY_CONFIGURED_API_URL_ID, transactionRule.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsBytes(request))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conditions.length()").value(1))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleConfiguredResponseDTO.class
+        );
+
+        assertThat(response.getPriority()).isEqualTo(priority);
+        assertThat(response.getCreatedAt()).isEqualTo(createdAt);
+        assertThat(response.getUpdatedAt()).isAfterOrEqualTo(createdAt);
+    }
+
+    @Test
+    @Transactional
+    void oldEndpointActivationOfInvalidRuleFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        transactionRule.setResultingCategory(category);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        createCondition(transactionRule);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"active\":true}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void oldEndpointChangingActiveRuleConditionLogicToAnyFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        transactionRule.setResultingCategory(category);
+        transactionRule.setActive(true);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        createFlowEntityCondition(transactionRule, 0, TransactionFlow.OUT);
+
+        String patchJson = "{\"id\":" + transactionRule.getId() + ",\"conditionLogic\":\"ANY\"}";
+
+        restTransactionRuleMockMvc
+            .perform(patch(ENTITY_API_URL_ID, transactionRule.getId()).contentType("application/merge-patch+json").content(patchJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void oldChildConditionUpdateThatMakesActiveParentInvalidFails() throws Exception {
+        Category category = createCategory(CategoryType.EXPENSE);
+        transactionRule.setResultingCategory(category);
+        transactionRule.setActive(true);
+        insertedTransactionRule = transactionRuleRepository.saveAndFlush(transactionRule);
+        TransactionRuleCondition condition = createFlowEntityCondition(transactionRule, 0, TransactionFlow.OUT);
+
+        condition.setValue(TransactionFlow.IN.toString());
+
+        restTransactionRuleMockMvc
+            .perform(
+                put("/api/transaction-rule-conditions/{id}", condition.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(condition))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    private TransactionRuleConfiguredRequestDTO configuredRequest(
+        CategoryDTO category,
+        Set<TagDTO> tags,
+        List<TransactionRuleConfiguredConditionDTO> conditions
+    ) {
+        TransactionRuleConfiguredRequestDTO request = new TransactionRuleConfiguredRequestDTO();
+        request.setName("Configured rule " + longCount.incrementAndGet());
+        request.setDescription("Configured description");
+        request.setConditionLogic(RuleConditionLogic.ALL);
+        request.setActive(true);
+        request.setResultingCategory(category);
+        request.setResultingTags(tags);
+        request.setConditions(conditions);
+        return request;
+    }
+
+    private TransactionRuleConfiguredConditionDTO descriptionCondition(String value) {
+        TransactionRuleConfiguredConditionDTO condition = new TransactionRuleConfiguredConditionDTO();
+        condition.setField(TransactionRuleField.DESCRIPTION);
+        condition.setOperator(RuleOperator.CONTAINS);
+        condition.setValue(value);
+        condition.setCaseSensitive(false);
+        return condition;
+    }
+
+    private TransactionRuleConfiguredConditionDTO flowCondition(RuleOperator operator, String value) {
+        TransactionRuleConfiguredConditionDTO condition = new TransactionRuleConfiguredConditionDTO();
+        condition.setField(TransactionRuleField.FLOW);
+        condition.setOperator(operator);
+        condition.setValue(value);
+        condition.setCaseSensitive(false);
+        return condition;
+    }
+
+    private Category createCategory(CategoryType categoryType) {
+        Category category = CategoryResourceIT.createEntity(em);
+        category.setName("Category " + categoryType + " " + longCount.incrementAndGet());
+        category.setCategoryType(categoryType);
+        em.persist(category);
+        em.flush();
+        return category;
+    }
+
+    private CategoryDTO createCategoryDTO(Category category) {
+        CategoryDTO dto = new CategoryDTO();
+        dto.setId(category.getId());
+        return dto;
+    }
+
+    private TagDTO createTagDTO(Tag tag) {
+        TagDTO dto = new TagDTO();
+        dto.setId(tag.getId());
+        return dto;
+    }
+
+    private TransactionRuleCondition createFlowEntityCondition(TransactionRule rule, int position, TransactionFlow flow) {
+        TransactionRuleCondition condition = new TransactionRuleCondition()
+            .field(TransactionRuleField.FLOW)
+            .operator(RuleOperator.EQUALS)
+            .value(flow.toString())
+            .caseSensitive(false)
+            .position(position)
+            .transactionRule(rule);
+        em.persist(condition);
+        em.flush();
+        return condition;
     }
 
     protected long getRepositoryCount() {
