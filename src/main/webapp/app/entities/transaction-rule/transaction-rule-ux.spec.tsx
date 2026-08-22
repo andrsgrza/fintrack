@@ -384,13 +384,68 @@ describe('TransactionRule UX', () => {
     await waitFor(() => expect(screen.queryByText('Flow equals Expense')).toBeNull());
   });
 
-  it('prevents ANY condition logic for expense/income category outputs', async () => {
+  it('forces ALL and disables ANY when ANY is selected before choosing an EXPENSE category', async () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Condition Logic'), { target: { value: 'ANY' } });
+    expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ANY');
+
+    fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
+
+    await screen.findByText('Flow equals Expense');
+    await waitFor(() => expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL'));
+    expect((screen.getByRole('option', { name: 'Any condition' }) as HTMLOptionElement).disabled).toBe(true);
+  });
+
+  it('forces ALL and disables ANY when ANY is selected before choosing an INCOME category', async () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Condition Logic'), { target: { value: 'ANY' } });
+    expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ANY');
+
+    fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '4' } });
+
+    await screen.findByText('Flow equals Income');
+    await waitFor(() => expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL'));
+    expect((screen.getByRole('option', { name: 'Any condition' }) as HTMLOptionElement).disabled).toBe(true);
+  });
+
+  it('allows ANY again when an EXPENSE category changes to BOTH or is cleared', async () => {
     renderCreateForm();
 
     fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
 
     await screen.findByText('Flow equals Expense');
     expect((screen.getByRole('option', { name: 'Any condition' }) as HTMLOptionElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '6' } });
+
+    await waitFor(() => expect(screen.queryByText('Flow equals Expense')).toBeNull());
+    expect((screen.getByRole('option', { name: 'Any condition' }) as HTMLOptionElement).disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText('Condition Logic'), { target: { value: 'ANY' } });
+    expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ANY');
+
+    fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
+    await screen.findByText('Flow equals Expense');
+    await waitFor(() => expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL'));
+
+    fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '' } });
+
+    await waitFor(() => expect(screen.queryByText('Flow equals Expense')).toBeNull());
+    expect((screen.getByRole('option', { name: 'Any condition' }) as HTMLOptionElement).disabled).toBe(false);
+  });
+
+  it('allows ANY for tag-only rules', () => {
+    renderCreateForm();
+
+    const tagsSelect = screen.getByLabelText('Resulting Tags') as HTMLSelectElement;
+    const morningTag = within(tagsSelect).getByRole('option', { name: 'Morning' }) as HTMLOptionElement;
+    morningTag.selected = true;
+    fireEvent.change(tagsSelect);
+    fireEvent.change(screen.getByLabelText('Condition Logic'), { target: { value: 'ANY' } });
+
+    expect((screen.getByRole('option', { name: 'Any condition' }) as HTMLOptionElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ANY');
   });
 
   it('posts configured create payload instead of creating a draft rule', async () => {

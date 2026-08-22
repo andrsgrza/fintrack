@@ -151,6 +151,12 @@ export const TransactionRuleUpdate = () => {
     });
   }, [selectedCategory?.id, selectedCategory?.categoryType]);
 
+  useEffect(() => {
+    if (requiredFlow && conditionLogic === RuleConditionLogic.ANY) {
+      setConditionLogic(RuleConditionLogic.ALL);
+    }
+  }, [conditionLogic, requiredFlow]);
+
   const validationMessages = useMemo(() => {
     const messages: string[] = [];
     if (conditions.length === 0) {
