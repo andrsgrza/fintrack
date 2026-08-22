@@ -1397,8 +1397,9 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Product list         | List hides generated ID/created columns, requests `priority ASC, id ASC`, and shows Name/Status/Order/Conditions/Result/Updated/Actions                                                                     |
 | Compact detail       | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                                                                            |
-| Create flow          | Create hides timestamps/active/priority/embedded conditions, shows Save and add conditions, submits `active=false` without priority, and redirects create success to detail                                 |
-| Create/edit shell    | Create is parent-only; edit shows Active and Manage conditions link                                                                                                                                         |
+| Configured create    | Create hides timestamps/priority, renders active/output/conditionLogic plus inline local conditions, blocks zero conditions/outputs, and posts to `POST /api/transaction-rules/configured`                  |
+| Configured edit      | Edit loads `GET /api/transaction-rules/{id}/configured`, hydrates parent/output/active/conditions, and saves through `PUT /api/transaction-rules/{id}/configured` without priority                          |
+| Category/FLOW guard  | EXPENSE auto-adds/locks `FLOW EQUALS OUT`, BOTH/null removes frontend auto-FLOW, `ANY` is blocked for EXPENSE/INCOME, and incompatible user-authored FLOW blocks Save                                       |
 | Server-managed order | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                                                               |
 | Manual reorder       | List defensively renders `priority ASC, id ASC`, omits impossible first-up/last-down controls, sends full swapped ordered ids from the priority-ordered array, reloads on success, and shows inline failure |
 
@@ -1782,6 +1783,19 @@ Service tests cover parent immutability, merged-state validation, duplicate norm
 - `ACCOUNT EQUALS` submitting the selected account id as a string and hidden `caseSensitive=false`.
 
 `transaction-rule-ux.spec.tsx` also verifies the embedded TransactionRule detail table uses the normalized `Condition` summary, does not render raw `Value` / `Second Value` / `Case Sensitive` headers, keeps Edit/Delete, and does not render View.
+
+The same spec covers the configured TransactionRule product create/edit flow:
+
+- create/edit render the configured inline Conditions editor;
+- create does not call the old draft reducer path and posts to `POST /api/transaction-rules/configured`;
+- edit loads `GET /api/transaction-rules/{id}/configured`;
+- edit saves through `PUT /api/transaction-rules/{id}/configured`;
+- zero conditions and zero outputs block Save;
+- EXPENSE category auto-adds and locks `FLOW EQUALS OUT`;
+- removing/changing to BOTH/null removes only frontend auto-created FLOW;
+- `ANY` is blocked for EXPENSE/INCOME outputs;
+- user-authored incompatible FLOW blocks Save instead of being silently mutated;
+- configured payloads omit priority and removed/deferred outputs.
 
 ### E2E — `transaction-rule-condition.cy.ts`
 

@@ -21,6 +21,10 @@
       "editTitle": "Edit Transaction Rule",
       "saveAndAddConditions": "Save and add conditions",
       "createInactiveHelp": "Rules are saved inactive first. Add conditions from the rule detail page, then activate the rule when ready.",
+      "configuredCreateEditHelp": "Configure metadata, outputs, conditions, and active state before saving.",
+      "configuredConditionsHelp": "Define conditions before saving this rule.",
+      "configuredLoadFailed": "Transaction rule configuration could not be loaded.",
+      "configuredSaveFailed": "Transaction rule configuration could not be saved.",
       "id": "ID",
       "name": "Name",
       "description": "Description",
@@ -31,6 +35,7 @@
       "reorderFailed": "Could not reorder rules.",
       "evaluationOrder": "Evaluation order",
       "priorityServerManagedHelp": "Rule order is managed from the rules list. New rules are added last.",
+      "requiredFlowHelp": "The selected category requires a compatible Flow condition.",
       "conditionLogic": "Condition Logic",
       "active": "Active",
       "createdAt": "Created At",
@@ -90,7 +95,16 @@
       "conditionSaveFailed": "Condition could not be saved.",
       "conditionDeleteFailed": "Condition could not be deleted.",
       "activeRequiresCondition": "Active rules require at least one condition.",
-      "activeDisabledNoConditions": "Add at least one condition before activating this rule."
+      "activeDisabledNoConditions": "Add at least one condition before activating this rule.",
+      "validation": {
+        "conditionsRequired": "Transaction rule must have at least one condition.",
+        "outputRequired": "Select at least one output: category or tags.",
+        "expenseRequiresFlowOut": "Expense categories require Flow = OUT.",
+        "incomeRequiresFlowIn": "Income categories require Flow = IN.",
+        "expenseIncomeRequireAll": "Expense/income categories require condition logic ALL.",
+        "requiredFlowLocked": "This Flow condition is required by the selected category.",
+        "categoryIncompatibleWithExistingFlow": "The selected category is incompatible with an existing Flow condition."
+      }
     }
   }
 }
