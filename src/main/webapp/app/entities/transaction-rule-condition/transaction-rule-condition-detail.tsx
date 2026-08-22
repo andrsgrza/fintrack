@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
+import { Alert, Button, Col, Row } from 'reactstrap';
 import { Translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -24,6 +24,15 @@ export const TransactionRuleConditionDetail = () => {
         <h2 data-cy="transactionRuleConditionDetailsHeading">
           <Translate contentKey="fintrackApp.transactionRuleCondition.detail.title">TransactionRuleCondition</Translate>
         </h2>
+        <Alert color="secondary" fade={false} data-cy="technicalViewBanner">
+          <strong>
+            <Translate contentKey="fintrackApp.transactionRuleCondition.technicalDebugTitle">Technical/debug screen</Translate>
+          </strong>{' '}
+          <Translate contentKey="fintrackApp.transactionRuleCondition.technicalDebugDescription">
+            This generated screen is kept temporarily for debugging and direct maintenance. Product TransactionRule create/edit uses the
+            configured rule workflow.
+          </Translate>
+        </Alert>
         <dl className="jh-entity-details">
           <dt>
             <span id="id">

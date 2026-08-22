@@ -20,6 +20,8 @@
       },
       "createTitle": "Crear condición",
       "editTitle": "Editar condición",
+      "technicalDebugTitle": "Pantalla técnica/debug",
+      "technicalDebugDescription": "Esta pantalla generada se mantiene temporalmente para depuración y mantenimiento directo. La creación/edición de reglas usa el flujo configurado.",
       "id": "ID",
       "field": "Campo",
       "operator": "Operador",

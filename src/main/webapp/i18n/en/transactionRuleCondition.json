@@ -20,6 +20,8 @@
       },
       "createTitle": "Create Transaction Rule Condition",
       "editTitle": "Edit Transaction Rule Condition",
+      "technicalDebugTitle": "Technical/debug screen",
+      "technicalDebugDescription": "This generated screen is kept temporarily for debugging and direct maintenance. Product TransactionRule create/edit uses the configured rule workflow.",
       "id": "ID",
       "field": "Field",
       "operator": "Operator",

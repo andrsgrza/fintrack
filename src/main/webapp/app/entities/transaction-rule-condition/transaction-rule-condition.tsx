@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Table } from 'reactstrap';
+import { Alert, Button, Table } from 'reactstrap';
 import { Translate, getSortState } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
@@ -83,6 +83,15 @@ export const TransactionRuleCondition = () => {
           </Link>
         </div>
       </h2>
+      <Alert color="secondary" fade={false} data-cy="technicalViewBanner">
+        <strong>
+          <Translate contentKey="fintrackApp.transactionRuleCondition.technicalDebugTitle">Technical/debug screen</Translate>
+        </strong>{' '}
+        <Translate contentKey="fintrackApp.transactionRuleCondition.technicalDebugDescription">
+          This generated screen is kept temporarily for debugging and direct maintenance. Product TransactionRule create/edit uses the
+          configured rule workflow.
+        </Translate>
+      </Alert>
       <div className="table-responsive">
         {transactionRuleConditionList && transactionRuleConditionList.length > 0 ? (
           <Table responsive>

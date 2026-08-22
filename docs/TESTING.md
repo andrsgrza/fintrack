@@ -1328,16 +1328,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                           | Tests   | Custom vs generated                                                                                                                                               |
-| --------------- | ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`    | **143** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + configured rule API + categoryType/FLOW guard + JHipster CRUD/filters |
-| Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                      |
-| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                         |
-| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                         |
-| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                         |
-| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                         |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **25**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, create inactive flow, edit hydration, grouped edit form, detail embedded condition editor |
-| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                   |
+| Type            | File                           | Tests   | Custom vs generated                                                                                                                                                      |
+| --------------- | ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Integration IT  | `TransactionRuleResourceIT`    | **143** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + configured rule API + categoryType/FLOW guard + JHipster CRUD/filters        |
+| Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                             |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                                |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **29**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, configured create/edit flow, edit hydration, grouped edit form, detail embedded condition editor |
+| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                          |
 
 **Run:**
 
@@ -1652,7 +1652,7 @@ Future planned areas:
 | Unit — mapper  | `TransactionRuleConditionMapperTest`              | **1**  | Generated                                                                                                                                     |
 | Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                                                                                     |
 | Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers                                                                |
-| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **18** | Smart condition form behavior + previous parent/title visibility checks                                                                       |
+| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **17** | Smart condition form behavior + previous parent/title visibility checks + TR-3 technical/debug banners                                        |
 | E2E            | `transaction-rule-condition.cy.ts`                | **8**  | CRUD/navigation + delete dialog copy                                                                                                          |
 
 **Run:**
@@ -1787,6 +1787,8 @@ Service tests cover parent immutability, merged-state validation, duplicate norm
 The same spec covers the configured TransactionRule product create/edit flow:
 
 - create/edit render the configured inline Conditions editor;
+- list Create routes to `/transaction-rule/new`, the configured product create route;
+- detail labels the embedded persisted condition editor as technical/debug because it writes through child condition endpoints;
 - create does not call the old draft reducer path and posts to `POST /api/transaction-rules/configured`;
 - edit loads `GET /api/transaction-rules/{id}/configured`;
 - edit saves through `PUT /api/transaction-rules/{id}/configured`;
@@ -1796,6 +1798,13 @@ The same spec covers the configured TransactionRule product create/edit flow:
 - `ANY` is blocked for EXPENSE/INCOME outputs;
 - user-authored incompatible FLOW blocks Save instead of being silently mutated;
 - configured payloads omit priority and removed/deferred outputs.
+
+TR-3 technical/debug cleanup is covered by frontend specs:
+
+- TransactionRuleCondition list/detail/create/edit render the Technical/debug banner;
+- TransactionRuleCondition remains available for direct maintenance/debug deep links;
+- the TransactionRuleCondition menu entry is de-emphasized with the Technical badge;
+- product TransactionRule create/edit still use configured endpoints and do not return to the old empty-draft flow.
 
 ### E2E — `transaction-rule-condition.cy.ts`
 

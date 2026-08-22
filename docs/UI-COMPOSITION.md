@@ -364,7 +364,7 @@ Product save is blocked when the rule has:
 - zero outputs (`resultingCategory` or `resultingTags`);
 - an EXPENSE/INCOME resulting category without compatible FLOW semantics.
 
-TransactionRule detail/view may still show the embedded editable conditions collection editor for direct maintenance/debug compatibility, but product create/edit no longer depend on detail as the only condition-management surface.
+TransactionRule detail/view may still show the embedded editable conditions collection editor for direct maintenance/debug compatibility, but product create/edit no longer depend on detail as the only condition-management surface. TR-3 marks this embedded persisted editor as a technical/debug section so it is not confused with the product create/edit workflow.
 
 TransactionRule list/detail use product-oriented summaries instead of generated field dumps.
 
@@ -462,7 +462,18 @@ The TransactionRule detail collection editor supports:
 
 The embedded table does not show a View button because the condition is already visible in the parent context.
 
-Standalone detail routes remain available for direct maintenance/debug.
+Standalone TransactionRuleCondition list/detail/create/edit routes remain available for deep links, debugging, and direct maintenance. TR-3 marks those standalone generated screens with a Technical/debug banner and the Entities menu marks TransactionRuleCondition as Technical. They are not the product workflow for creating or editing TransactionRules.
+
+Generated TransactionRule and TransactionRuleCondition backend endpoints remain available temporarily:
+
+- `POST /api/transaction-rules`
+- `PUT /api/transaction-rules/{id}`
+- `PATCH /api/transaction-rules/{id}`
+- `POST /api/transaction-rule-conditions`
+- `PUT /api/transaction-rule-conditions/{id}`
+- `PATCH /api/transaction-rule-conditions/{id}`
+
+These generated endpoints are technical/direct-maintenance surfaces. Configured endpoints remain the product source of truth for TransactionRule create/edit, and backend strict validation still protects generated paths while they exist.
 
 ### Embedded table display
 
@@ -664,3 +675,15 @@ The product route is:
 ```
 
 Standalone generated/debug condition screens are not the product flow for managing conditions.
+
+## TransactionRule generated technical/debug surfaces
+
+TR-3 clarifies the TransactionRule UI split:
+
+- `/transaction-rule/new` is the product create route and uses `POST /api/transaction-rules/configured`.
+- `/transaction-rule/:id/edit` is the product edit route and uses `GET/PUT /api/transaction-rules/{id}/configured`.
+- Standalone TransactionRuleCondition routes remain available only for technical/debug/direct maintenance and show a Technical/debug banner.
+- TransactionRule detail may retain the persisted child condition editor, but it is labeled as a technical/debug editor because it writes directly to child condition endpoints.
+- No UI text should recommend the old “create empty parent, then add conditions later” product flow.
+- No ingestion category/tag review work was added as part of this TransactionRule branch.
+- UserPreference remains deferred.

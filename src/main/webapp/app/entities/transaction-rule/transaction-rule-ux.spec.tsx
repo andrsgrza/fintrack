@@ -227,6 +227,7 @@ describe('TransactionRule UX', () => {
     expect(screen.getByRole('columnheader', { name: /conditions/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /result/i })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /updated/i })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /create a new transaction rule/i }).getAttribute('href')).toBe('/transaction-rule/new');
     expect(screen.getByRole('link', { name: 'Coffee rule' }).getAttribute('href')).toBe('/transaction-rule/1');
     expect(screen.getByText('Inactive')).toBeTruthy();
     expect(screen.getByText('Active')).toBeTruthy();
@@ -626,6 +627,12 @@ describe('TransactionRule UX', () => {
     expect(screen.getByText('Morning')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'When' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Then' })).toBeNull();
+    expect(screen.getByText('Conditions technical editor')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'For product editing, use the configured edit flow. This section writes directly to condition endpoints and is kept temporarily for debugging.',
+      ),
+    ).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Conditions' })).toBeTruthy();
   });
 

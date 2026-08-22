@@ -87,7 +87,9 @@ FINTRACK already implements the rule authoring model:
 - TransactionRule product create/edit use the configured parent + conditions command API.
 - TransactionRule create/edit manage metadata, outputs, active state, condition logic, and local inline conditions together.
 - TransactionRule create does not create empty inactive drafts.
-- TransactionRule detail may still expose embedded condition management for direct maintenance/debug compatibility.
+- TransactionRule detail may still expose embedded condition management for direct maintenance/debug compatibility, but TR-3 labels that editor technical/debug because it writes directly to child condition endpoints.
+- Standalone TransactionRuleCondition generated screens remain available only for technical/debug/direct maintenance and are marked as such in the UI/menu.
+- Generated TransactionRule write endpoints and TransactionRuleCondition CRUD endpoints remain available temporarily, but configured endpoints are the product create/edit source of truth.
 - active/configured TransactionRule requires at least one condition and at least one output.
 - adding a condition does not auto-activate the rule.
 - deleting the last condition deactivates the rule.
@@ -99,6 +101,8 @@ Configured backend rule creation/update is also available through:
 - `PUT /api/transaction-rules/{id}/configured`
 
 The configured API accepts/returns a parent `TransactionRule` plus its ordered conditions. It preserves server-managed parent fields, server-assigns condition positions, and replaces the full condition set on configured PUT. The product create/edit UI uses this API and keeps condition edits in local frontend state until save.
+
+The old empty-draft product flow is not the recommended UI path. Technical/debug generated surfaces remain temporarily for direct maintenance, and backend validation remains the source of truth while those surfaces exist. This branch does not add ingestion category/tag review behavior and does not implement UserPreference.
 
 Rules with a resulting EXPENSE or INCOME category are guarded before activation/configured persistence:
 

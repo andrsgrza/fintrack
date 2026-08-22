@@ -8,10 +8,13 @@ import enTransactionRuleField from 'app/../i18n/en/transactionRuleField.json';
 import enRuleOperator from 'app/../i18n/en/ruleOperator.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enTransactionOrigin from 'app/../i18n/en/transactionOrigin.json';
+import { TransactionRuleCondition } from './transaction-rule-condition';
+import { TransactionRuleConditionDetail } from './transaction-rule-condition-detail';
 import { TransactionRuleConditionUpdate } from './transaction-rule-condition-update';
 
 const mockDispatch = jest.fn();
 const mockGetEntity = jest.fn(id => ({ type: 'transactionRuleCondition/getEntity', payload: id }));
+const mockGetEntities = jest.fn(params => ({ type: 'transactionRuleCondition/getEntities', payload: params }));
 const mockReset = jest.fn(() => ({ type: 'transactionRuleCondition/reset' }));
 const mockCreateEntity = jest.fn(entity => ({ type: 'transactionRuleCondition/createEntity', payload: entity }));
 const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'transactionRuleCondition/partialUpdateEntity', payload: entity }));
@@ -26,6 +29,7 @@ jest.mock('app/config/store', () => ({
 
 jest.mock('./transaction-rule-condition.reducer', () => ({
   getEntity: id => mockGetEntity(id),
+  getEntities: params => mockGetEntities(params),
   reset: () => mockReset(),
   createEntity: entity => mockCreateEntity(entity),
   partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
@@ -69,11 +73,28 @@ const baseState = {
         name: 'Coffee rule',
       },
     },
+    entities: [
+      {
+        id: 5,
+        field: 'DESCRIPTION',
+        operator: 'CONTAINS',
+        value: 'Coffee',
+        caseSensitive: false,
+        position: 0,
+        transactionRule: {
+          id: 1,
+          name: 'Coffee rule',
+        },
+      },
+    ],
     loading: false,
     updating: false,
     updateSuccess: false,
   },
 };
+
+const technicalBannerText =
+  'This generated screen is kept temporarily for debugging and direct maintenance. Product TransactionRule create/edit uses the configured rule workflow.';
 
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enTransactionRuleCondition);
@@ -102,6 +123,30 @@ const renderCreateForm = (initialEntry = '/transaction-rule-condition/new') => {
   );
 };
 
+const renderList = () => {
+  mockState = baseState;
+
+  return render(
+    <MemoryRouter initialEntries={['/transaction-rule-condition']}>
+      <Routes>
+        <Route path="/transaction-rule-condition" element={<TransactionRuleCondition />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+};
+
+const renderDetail = () => {
+  mockState = baseState;
+
+  return render(
+    <MemoryRouter initialEntries={['/transaction-rule-condition/5']}>
+      <Routes>
+        <Route path="/transaction-rule-condition/:id" element={<TransactionRuleConditionDetail />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+};
+
 const renderEditForm = () => {
   mockState = baseState;
 
@@ -120,10 +165,26 @@ describe('TransactionRuleCondition UX', () => {
     registerTranslations();
   });
 
+  it('marks standalone list as technical/debug', () => {
+    renderList();
+
+    expect(screen.getByText('Technical/debug screen')).toBeTruthy();
+    expect(screen.getByText(technicalBannerText)).toBeTruthy();
+  });
+
+  it('marks standalone detail as technical/debug', () => {
+    renderDetail();
+
+    expect(screen.getByText('Technical/debug screen')).toBeTruthy();
+    expect(screen.getByText(technicalBannerText)).toBeTruthy();
+  });
+
   it('renders dynamic create title and preselects parent from query param', () => {
     renderCreateForm('/transaction-rule-condition/new?transactionRuleId=1');
 
     expect(screen.getByRole('heading', { name: 'Create Transaction Rule Condition' })).toBeTruthy();
+    expect(screen.getByText('Technical/debug screen')).toBeTruthy();
+    expect(screen.getByText(technicalBannerText)).toBeTruthy();
     expect((screen.getByLabelText('Transaction Rule') as HTMLSelectElement).value).toBe('1');
     expect(screen.queryByLabelText('Position')).toBeNull();
   });
@@ -132,6 +193,8 @@ describe('TransactionRuleCondition UX', () => {
     renderEditForm();
 
     expect(screen.getByRole('heading', { name: 'Edit Transaction Rule Condition' })).toBeTruthy();
+    expect(screen.getByText('Technical/debug screen')).toBeTruthy();
+    expect(screen.getByText(technicalBannerText)).toBeTruthy();
     expect((screen.getByLabelText('Transaction Rule') as HTMLSelectElement).disabled).toBe(true);
     expect(screen.queryByLabelText('Position')).toBeNull();
   });
