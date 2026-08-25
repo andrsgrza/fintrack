@@ -35,12 +35,15 @@ const configuredCondition = (condition: LocalTransactionRuleCondition, index: nu
   position: index,
 });
 
-const asLocalConditions = (conditions: ITransactionRuleCondition[] = []): LocalTransactionRuleCondition[] =>
-  conditions.map((condition, index) => ({
+const asLocalConditions = (conditions: ITransactionRuleCondition[] = [], category?: ICategory | null): LocalTransactionRuleCondition[] => {
+  const requiredFlow = requiredFlowForCategory(category);
+  return conditions.map((condition, index) => ({
     ...condition,
     position: condition.position ?? index,
     clientId: condition.id ? `persisted-${condition.id}` : `loaded-${index}`,
+    autoRequiredFlow: requiredFlow ? isExactFlowEqualsCondition(condition, requiredFlow) : false,
   }));
+};
 
 const createRequiredFlowCondition = (flow: keyof typeof TransactionFlow, position: number): LocalTransactionRuleCondition => ({
   clientId: `auto-flow-${flow}-${Date.now()}`,
@@ -68,6 +71,8 @@ export const TransactionRuleUpdate = () => {
   const tags = useAppSelector(state => state.tag.entities);
 
   const [configuredRule, setConfiguredRule] = useState<ITransactionRuleConfigured | null>(null);
+  const [ruleName, setRuleName] = useState('');
+  const [ruleDescription, setRuleDescription] = useState('');
   const [conditions, setConditions] = useState<LocalTransactionRuleCondition[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -93,6 +98,8 @@ export const TransactionRuleUpdate = () => {
   useEffect(() => {
     if (isNew || !id) {
       setConfiguredRule(null);
+      setRuleName('');
+      setRuleDescription('');
       setConditions([]);
       setSelectedCategoryId('');
       setSelectedTagIds([]);
@@ -106,7 +113,9 @@ export const TransactionRuleUpdate = () => {
       .then(response => {
         const rule = response.data;
         setConfiguredRule(rule);
-        setConditions(asLocalConditions(rule.conditions));
+        setRuleName(rule.name ?? '');
+        setRuleDescription(rule.description ?? '');
+        setConditions(asLocalConditions(rule.conditions, rule.resultingCategory));
         setSelectedCategoryId(rule.resultingCategory?.id?.toString() ?? '');
         setSelectedTagIds(rule.resultingTags?.map(tag => tag.id?.toString()).filter(Boolean) ?? []);
         setConditionLogic(rule.conditionLogic ?? RuleConditionLogic.ALL);
@@ -190,16 +199,20 @@ export const TransactionRuleUpdate = () => {
       ? {
           active: true,
           conditionLogic: RuleConditionLogic.ALL,
+          name: ruleName,
+          description: ruleDescription,
         }
       : {
           ...configuredRule,
+          name: ruleName,
+          description: ruleDescription,
           conditionLogic,
           active,
           resultingCategory: selectedCategoryId,
           resultingTags: selectedTagIds,
         };
 
-  const saveEntity = values => {
+  const saveEntity = () => {
     setErrorMessage(null);
     if (validationMessages.length > 0) {
       return;
@@ -207,8 +220,8 @@ export const TransactionRuleUpdate = () => {
 
     const entity: ITransactionRuleConfigured = {
       id: configuredRule?.id,
-      name: values.name,
-      description: values.description,
+      name: ruleName,
+      description: ruleDescription,
       conditionLogic,
       active,
       resultingCategory: selectedCategoryId ? { id: Number(selectedCategoryId) } : null,
@@ -299,6 +312,8 @@ export const TransactionRuleUpdate = () => {
                 name="name"
                 data-cy="name"
                 type="text"
+                value={ruleName}
+                onChange={event => setRuleName(event.target.value)}
                 validate={{
                   required: { value: true, message: translate('entity.validation.required') },
                   minLength: { value: 1, message: translate('entity.validation.minlength', { min: 1 }) },
@@ -311,6 +326,8 @@ export const TransactionRuleUpdate = () => {
                 name="description"
                 data-cy="description"
                 type="text"
+                value={ruleDescription}
+                onChange={event => setRuleDescription(event.target.value)}
                 validate={{
                   maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
                 }}

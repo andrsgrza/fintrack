@@ -1336,8 +1336,8 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 | Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                |
 | Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                |
 | Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **29**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, configured create/edit flow, edit hydration, grouped edit form, detail embedded condition editor |
-| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                          |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **33**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, configured create/edit flow, edit hydration, grouped edit form, detail embedded condition editor |
+| E2E             | `transaction-rule.cy.ts`       | **7**   | Configured create/edit workflow + categoryType/FLOW guard + technical/debug surface smoke                                                                                |
 
 **Run:**
 
@@ -1503,17 +1503,17 @@ Ownership matrix + link rejection + `updateShouldResolveCategoryOwnedByRuleOwner
 
 ### E2E — `transaction-rule.cy.ts`
 
-#### Navigation & CRUD UI (7) — ✅
+Configured workflow coverage:
 
-Rehabilitated create/delete (sin selector User).
+- create EXPENSE rule through `/transaction-rule/new`, with required locked `FLOW EQUALS OUT`;
+- create INCOME rule through `/transaction-rule/new`, with required locked `FLOW EQUALS IN`;
+- regression for selecting `ANY` before selecting an EXPENSE category: UI forces `ALL`, disables `ANY`, and adds locked `FLOW OUT`;
+- BOTH category allows `ANY` and does not auto-create required Flow;
+- tag-only output allows `ANY` and does not auto-create required Flow;
+- edit existing configured rule, hydrate parent fields/conditions, change EXPENSE category to INCOME, and persist `FLOW IN`;
+- technical/debug smoke: TransactionRule detail labels the persisted condition editor, and standalone TransactionRuleCondition page shows the Technical/debug banner.
 
-#### Ownership smoke (3) — ✅ custom
-
-| Test                                                             | What it checks                    |
-| ---------------------------------------------------------------- | --------------------------------- |
-| `should not render user selector on create form`                 | `[data-cy="user"]` absent         |
-| `regular user should not see transaction rules created by admin` | API isolation                     |
-| `admin should see transaction rules created by another user`     | Admin `GET` includes other's rule |
+Test data is created through API per test: one EXPENSE category, one INCOME category, one BOTH category, and one tag. Rules are created through configured API only for seed/edit setup; product create cases use the UI.
 
 ### Gaps
 
@@ -1653,7 +1653,7 @@ Future planned areas:
 | Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                                                                                     |
 | Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers                                                                |
 | Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **17** | Smart condition form behavior + previous parent/title visibility checks + TR-3 technical/debug banners                                        |
-| E2E            | `transaction-rule-condition.cy.ts`                | **8**  | CRUD/navigation + delete dialog copy                                                                                                          |
+| E2E            | `transaction-rule-condition.cy.ts`                | **7**  | Technical/debug CRUD/navigation + server-managed position UI expectations + delete dialog copy                                                |
 
 **Run:**
 
@@ -1808,7 +1808,12 @@ TR-3 technical/debug cleanup is covered by frontend specs:
 
 ### E2E — `transaction-rule-condition.cy.ts`
 
-Update delete dialog copy (en/es). Create/delete rehabilitated via API rule seed.
+Technical/debug generated-surface smoke:
+
+- list/create/detail/edit pages show the Technical/debug banner;
+- create/edit do not show client-owned `position`;
+- parent TransactionRule is seeded through configured API;
+- create/delete remain available for direct maintenance/debug compatibility.
 
 ### Gaps
 

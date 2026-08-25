@@ -520,6 +520,31 @@ describe('TransactionRule UX', () => {
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules/1/configured'));
   });
 
+  it('hydrates persisted required Flow as locked and updates it when category changes from EXPENSE to INCOME', async () => {
+    renderEditForm(
+      configuredRuleResponse([
+        {
+          id: 12,
+          position: 0,
+          field: 'FLOW',
+          operator: 'EQUALS',
+          value: 'OUT',
+          caseSensitive: false,
+        },
+      ]),
+    );
+
+    expect(await screen.findByText('Flow equals Expense')).toBeTruthy();
+    expect(screen.getByText('This Flow condition is required by the selected category.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^delete condition$/i })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '4' } });
+
+    await waitFor(() => expect(screen.queryByText('Flow equals Expense')).toBeNull());
+    expect(screen.getByText('Flow equals Income')).toBeTruthy();
+    expect(screen.getByText('This Flow condition is required by the selected category.')).toBeTruthy();
+  });
+
   it('hydrates existing rule values on edit', async () => {
     renderEditForm(
       configuredRuleResponse([

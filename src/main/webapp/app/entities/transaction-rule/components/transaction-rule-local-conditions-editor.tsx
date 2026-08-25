@@ -102,7 +102,7 @@ export const TransactionRuleLocalConditionsEditor = ({ conditions, onChange, loc
       </p>
 
       {showAddForm ? (
-        <div className="border rounded p-3 mb-3" data-cy="embeddedConditionForm" onSubmit={event => event.stopPropagation()}>
+        <div className="border rounded p-3 mb-3" data-cy="embeddedConditionForm">
           <h4>
             <Translate contentKey="fintrackApp.transactionRule.addCondition">Add condition</Translate>
           </h4>
@@ -111,6 +111,7 @@ export const TransactionRuleLocalConditionsEditor = ({ conditions, onChange, loc
             showParentSelector={false}
             submitLabelKey="fintrackApp.transactionRule.saveCondition"
             submitLabel="Save condition"
+            useFormWrapper={false}
             onSubmit={handleCreate}
             onCancel={closeForm}
           />
@@ -118,7 +119,7 @@ export const TransactionRuleLocalConditionsEditor = ({ conditions, onChange, loc
       ) : null}
 
       {editingCondition ? (
-        <div className="border rounded p-3 mb-3" data-cy="embeddedConditionForm" onSubmit={event => event.stopPropagation()}>
+        <div className="border rounded p-3 mb-3" data-cy="embeddedConditionForm">
           <h4>
             <Translate contentKey="fintrackApp.transactionRule.editCondition">Edit condition</Translate>
           </h4>
@@ -128,6 +129,7 @@ export const TransactionRuleLocalConditionsEditor = ({ conditions, onChange, loc
             showParentSelector={false}
             submitLabelKey="fintrackApp.transactionRule.updateCondition"
             submitLabel="Update condition"
+            useFormWrapper={false}
             onSubmit={handleUpdate}
             onCancel={closeForm}
           />
@@ -156,9 +158,15 @@ export const TransactionRuleLocalConditionsEditor = ({ conditions, onChange, loc
             {sortedConditions.map(condition => {
               const locked = isLockedFlowCondition(condition, lockedFlow);
               return (
-                <tr key={condition.clientId ?? condition.id}>
+                <tr
+                  key={condition.clientId ?? condition.id}
+                  data-cy="conditionRow"
+                  data-condition-field={condition.field}
+                  data-condition-operator={condition.operator}
+                  data-condition-value={condition.value}
+                >
                   <td>
-                    {buildTransactionRuleConditionSummary(condition, translate)}
+                    <span data-cy="conditionSummary">{buildTransactionRuleConditionSummary(condition, translate)}</span>
                     {locked ? (
                       <FormText className="d-block" data-cy="lockedFlowConditionHelp">
                         <Translate contentKey="fintrackApp.transactionRule.validation.requiredFlowLocked">
