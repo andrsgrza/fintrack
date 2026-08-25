@@ -841,6 +841,45 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 
 **UI/API flow:** create inactive draft → add conditions through `TransactionRuleCondition` → activate rule.
 
+### Configured rule command API
+
+`TransactionRule` also has a backend command-style API for atomic rule configuration:
+
+- `POST /api/transaction-rules/configured`
+- `GET /api/transaction-rules/{id}/configured`
+- `PUT /api/transaction-rules/{id}/configured`
+
+This API accepts/returns the parent rule plus its ordered conditions in one configured DTO. It is backend support only in this slice; the existing generated/product UI flow can still create an inactive parent first and manage conditions from detail.
+
+Configured create/update rules:
+
+- `priority`, `createdAt`, `updatedAt`, and condition `position` remain server-managed.
+- `PUT /configured` preserves parent `priority` and `createdAt`, sets `updatedAt = now`, and replaces the full condition set.
+- Incoming configured condition ids are not used for reparenting; conditions are treated as the configured rule's child collection.
+- The final configured state must satisfy the same name/output/owner validations as the normal TransactionRule service.
+- The final configured state must have at least one condition.
+
+### Resulting category type vs FLOW compatibility
+
+Active/configured rules with `resultingCategory.categoryType = EXPENSE` or `INCOME` must include an unambiguous compatible `FLOW` constraint.
+
+| Resulting category type | Required condition logic | Effective FLOW requirement | Status   |
+| ----------------------- | ------------------------ | -------------------------- | -------- |
+| `EXPENSE`               | `ALL`                    | exactly `OUT`              | **Done** |
+| `INCOME`                | `ALL`                    | exactly `IN`               | **Done** |
+| `BOTH`                  | no additional guard      | no mandatory FLOW          | **Done** |
+| no resulting category   | no additional guard      | no mandatory FLOW          | **Done** |
+| tags-only output        | no additional guard      | no mandatory FLOW          | **Done** |
+
+`FLOW` compatibility is derived from all `FLOW` conditions:
+
+- `EQUALS` / `IN` intersect the allowed flow set;
+- `NOT_EQUALS` / `NOT_IN` remove values from the allowed flow set;
+- an empty effective set is invalid;
+- `ANY` is invalid for `EXPENSE` / `INCOME` category outputs because it cannot guarantee the category matches every transaction flow.
+
+The same guard is enforced by the configured command API, old TransactionRule activation/update paths, and child condition create/update paths when the parent rule is active.
+
 ### Parent-centered UX / API
 
 | Rule                                    | Decision                                                                                                           | Status       |
@@ -857,7 +896,7 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                     | **Done**     |
 | Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                    | **Done**     |
 | Add condition side effect               | Adding a condition does not auto-activate the parent rule                                                          | **Done**     |
-| Create-with-conditions command          | Atomic parent+conditions command endpoint                                                                          | **Deferred** |
+| Create-with-conditions command          | Backend configured command API creates/updates parent plus condition collection atomically                         | **Done**     |
 | Draft child collection on create        | Client-side draft conditions before parent id exists                                                               | **Deferred** |
 | Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                                   | **Deferred** |
 | Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`                | **Done**     |

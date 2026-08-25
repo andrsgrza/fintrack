@@ -1328,16 +1328,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                           | Tests   | Custom vs generated                                                                                                                                               |
-| --------------- | ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT  | `TransactionRuleResourceIT`    | **127** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + JHipster CRUD/filters                                                 |
-| Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                      |
-| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                         |
-| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                         |
-| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                         |
-| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                         |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **25**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, create inactive flow, edit hydration, grouped edit form, detail embedded condition editor |
-| E2E             | `transaction-rule.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                   |
+| Type            | File                           | Tests   | Custom vs generated                                                                                                                                                      |
+| --------------- | ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Integration IT  | `TransactionRuleResourceIT`    | **143** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + configured rule API + categoryType/FLOW guard + JHipster CRUD/filters        |
+| Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                             |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                                |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **33**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, configured create/edit flow, edit hydration, grouped edit form, detail embedded condition editor |
+| E2E             | `transaction-rule.cy.ts`       | **7**   | Configured create/edit workflow + categoryType/FLOW guard + technical/debug surface smoke                                                                                |
 
 **Run:**
 
@@ -1397,8 +1397,9 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Product list         | List hides generated ID/created columns, requests `priority ASC, id ASC`, and shows Name/Status/Order/Conditions/Result/Updated/Actions                                                                     |
 | Compact detail       | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                                                                            |
-| Create flow          | Create hides timestamps/active/priority/embedded conditions, shows Save and add conditions, submits `active=false` without priority, and redirects create success to detail                                 |
-| Create/edit shell    | Create is parent-only; edit shows Active and Manage conditions link                                                                                                                                         |
+| Configured create    | Create hides timestamps/priority, renders active/output/conditionLogic plus inline local conditions, blocks zero conditions/outputs, and posts to `POST /api/transaction-rules/configured`                  |
+| Configured edit      | Edit loads `GET /api/transaction-rules/{id}/configured`, hydrates parent/output/active/conditions, and saves through `PUT /api/transaction-rules/{id}/configured` without priority                          |
+| Category/FLOW guard  | EXPENSE auto-adds/locks `FLOW EQUALS OUT`, BOTH/null removes frontend auto-FLOW, `ANY` is blocked for EXPENSE/INCOME, and incompatible user-authored FLOW blocks Save                                       |
 | Server-managed order | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                                                               |
 | Manual reorder       | List defensively renders `priority ASC, id ASC`, omits impossible first-up/last-down controls, sends full swapped ordered ids from the priority-ordered array, reloads on success, and shows inline failure |
 
@@ -1450,7 +1451,7 @@ Manual verification checklist:
 | `patchChangingUpdatedAtFails`                                   | `PATCH`  | `updatedAt` explicit changed → `400`; explicit null covered by required-field null test |
 | `partialUpdateTransactionRuleWithPatch`                         | `PATCH`  | Omitting `updatedAt` succeeds and server sets `updatedAt=now`                           |
 | `patchActiveTrueWithZeroConditionsFails`                        | `PATCH`  | Reactivation without conditions rejected                                                |
-| `patchActiveTrueWithConditionSucceeds`                          | `PATCH`  | Reactivation allowed when condition exists                                              |
+| `patchActiveTrueWithConditionSucceeds`                          | `PATCH`  | Reactivation allowed when condition exists and categoryType/FLOW guard is satisfied     |
 | `patchClearingAllOutputsFails`                                  | `PATCH`  | Final merged state must retain at least one output                                      |
 | `patchTransactionRuleWithCategoryObjectMissingIdFails`          | `PATCH`  | Relationship object requires id                                                         |
 | `patchTransactionRuleWithTagObjectMissingIdFails`               | `PATCH`  | Tag objects require id                                                                  |
@@ -1467,6 +1468,31 @@ Manual verification checklist:
 | `reorderTransactionRulesWithEmptyIdsFailsWhenUserHasRules`      | `PUT`    | Empty list rejected when current user has rules                                         |
 | `reorderTransactionRulesDoesNotAffectAnotherUsersRules`         | `PUT`    | Reorder only changes current user's priorities                                          |
 
+#### Configured rule API + categoryType/FLOW guard — ✅ custom
+
+| Test                                                                                | HTTP              | What it checks                                                                            |
+| ----------------------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
+| `createConfiguredTransactionRuleWithNoConditionsFails`                              | `POST configured` | Configured rule requires at least one condition                                           |
+| `createConfiguredTransactionRuleWithNoOutputsFails`                                 | `POST configured` | Configured rule requires category or tags output                                          |
+| `createConfiguredTagOnlyTransactionRuleWithConditionSucceeds`                       | `POST configured` | Tag-only rule does not require FLOW                                                       |
+| `createConfiguredExpenseCategoryWithFlowOutSucceeds`                                | `POST configured` | EXPENSE category accepts effective `FLOW = OUT`                                           |
+| `createConfiguredIncomeCategoryWithFlowInSucceeds`                                  | `POST configured` | INCOME category accepts effective `FLOW = IN`                                             |
+| `createConfiguredBothCategoryWithoutFlowSucceeds`                                   | `POST configured` | BOTH category does not require FLOW                                                       |
+| `createConfiguredExpenseCategoryWithoutFlowFails`                                   | `POST configured` | EXPENSE without FLOW rejected                                                             |
+| `createConfiguredExpenseCategoryWithFlowInFails`                                    | `POST configured` | EXPENSE with effective IN rejected                                                        |
+| `createConfiguredExpenseCategoryWithAnyFailsEvenWithFlowOut`                        | `POST configured` | EXPENSE/INCOME category rules require `ALL`, not `ANY`                                    |
+| `createConfiguredExpenseCategoryWithFlowInOutFails`                                 | `POST configured` | Ambiguous effective `{IN, OUT}` rejected for EXPENSE                                      |
+| `createConfiguredExpenseCategoryWithFlowNotEqualsInSucceeds`                        | `POST configured` | Negative FLOW condition can derive exactly `OUT`                                          |
+| `createConfiguredExpenseCategoryWithFlowNotEqualsOutFails`                          | `POST configured` | Negative FLOW condition deriving exactly `IN` rejected for EXPENSE                        |
+| `createConfiguredIncomeCategoryWithFlowNotInOutSucceeds`                            | `POST configured` | Negative FLOW list can derive exactly `IN`                                                |
+| `createConfiguredWithMultipleFlowConditionsIntersects`                              | `POST configured` | Multiple FLOW conditions intersect to a compatible effective flow                         |
+| `createConfiguredWithEffectiveEmptyFlowSetFails`                                    | `POST configured` | Contradictory FLOW conditions rejected                                                    |
+| `getConfiguredTransactionRuleReturnsOrderedConditionsAndCategoryType`               | `GET configured`  | Configured response returns ordered conditions and `resultingCategory.categoryType`       |
+| `updateConfiguredTransactionRuleReplacesConditionsAndPreservesPriorityAndCreatedAt` | `PUT configured`  | Configured PUT full-replaces child conditions while preserving parent server-owned fields |
+| `oldEndpointActivationOfInvalidRuleFails`                                           | `PATCH`           | Old generated activation path also enforces categoryType/FLOW guard                       |
+| `oldEndpointChangingActiveRuleConditionLogicToAnyFails`                             | `PATCH`           | Old generated active update cannot make categoryType/FLOW semantics invalid               |
+| `oldChildConditionUpdateThatMakesActiveParentInvalidFails`                          | `PUT condition`   | Old child condition endpoint cannot make an active parent incompatible                    |
+
 #### CRUD & criteria — 🟡 JHipster generated (58)
 
 Happy-path CRUD, required-field checks, criteria per field.
@@ -1477,17 +1503,17 @@ Ownership matrix + link rejection + `updateShouldResolveCategoryOwnedByRuleOwner
 
 ### E2E — `transaction-rule.cy.ts`
 
-#### Navigation & CRUD UI (7) — ✅
+Configured workflow coverage:
 
-Rehabilitated create/delete (sin selector User).
+- create EXPENSE rule through `/transaction-rule/new`, with required locked `FLOW EQUALS OUT`;
+- create INCOME rule through `/transaction-rule/new`, with required locked `FLOW EQUALS IN`;
+- regression for selecting `ANY` before selecting an EXPENSE category: UI forces `ALL`, disables `ANY`, and adds locked `FLOW OUT`;
+- BOTH category allows `ANY` and does not auto-create required Flow;
+- tag-only output allows `ANY` and does not auto-create required Flow;
+- edit existing configured rule, hydrate parent fields/conditions, change EXPENSE category to INCOME, and persist `FLOW IN`;
+- technical/debug smoke: TransactionRule detail labels the persisted condition editor, and standalone TransactionRuleCondition page shows the Technical/debug banner.
 
-#### Ownership smoke (3) — ✅ custom
-
-| Test                                                             | What it checks                    |
-| ---------------------------------------------------------------- | --------------------------------- |
-| `should not render user selector on create form`                 | `[data-cy="user"]` absent         |
-| `regular user should not see transaction rules created by admin` | API isolation                     |
-| `admin should see transaction rules created by another user`     | Admin `GET` includes other's rule |
+Test data is created through API per test: one EXPENSE category, one INCOME category, one BOTH category, and one tag. Rules are created through configured API only for seed/edit setup; product create cases use the UI.
 
 ### Gaps
 
@@ -1618,16 +1644,16 @@ Future planned areas:
 
 ### Summary counts
 
-| Type           | File                                              | Tests  | Custom vs generated                                                                                   |
-| -------------- | ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------- |
-| Integration IT | `TransactionRuleConditionResourceIT`              | **62** | Custom ownership + parent immutable + server-managed position + domain rules + generated CRUD/filters |
-| Unit — service | `TransactionRuleConditionServiceTest`             | **17** | Custom ownership + validations + server-managed position + delete side-effect                         |
-| Unit — domain  | `TransactionRuleConditionTest`                    | **2**  | Generated                                                                                             |
-| Unit — mapper  | `TransactionRuleConditionMapperTest`              | **1**  | Generated                                                                                             |
-| Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                                             |
-| Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers                        |
-| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **18** | Smart condition form behavior + previous parent/title visibility checks                               |
-| E2E            | `transaction-rule-condition.cy.ts`                | **8**  | CRUD/navigation + delete dialog copy                                                                  |
+| Type           | File                                              | Tests  | Custom vs generated                                                                                                                           |
+| -------------- | ------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionRuleConditionResourceIT`              | **65** | Custom ownership + parent immutable + server-managed position + active parent categoryType/FLOW guard + domain rules + generated CRUD/filters |
+| Unit — service | `TransactionRuleConditionServiceTest`             | **17** | Custom ownership + validations + server-managed position + delete side-effect                                                                 |
+| Unit — domain  | `TransactionRuleConditionTest`                    | **2**  | Generated                                                                                                                                     |
+| Unit — mapper  | `TransactionRuleConditionMapperTest`              | **1**  | Generated                                                                                                                                     |
+| Unit — DTO     | `TransactionRuleConditionDTOTest`                 | **1**  | Generated                                                                                                                                     |
+| Frontend unit  | `transaction-rule-condition-form-helpers.spec.ts` | **6**  | Operator matrix, input-kind helpers, second value and case sensitivity helpers                                                                |
+| Frontend UX    | `transaction-rule-condition-ux.spec.tsx`          | **17** | Smart condition form behavior + previous parent/title visibility checks + TR-3 technical/debug banners                                        |
+| E2E            | `transaction-rule-condition.cy.ts`                | **7**  | Technical/debug CRUD/navigation + server-managed position UI expectations + delete dialog copy                                                |
 
 **Run:**
 
@@ -1668,6 +1694,14 @@ Future planned areas:
 | `patchTransactionRuleConditionWithDifferentTransactionRuleIdFails`        | `PATCH` | Different parent (same owner) → `400`      |
 | `createTransactionRuleConditionWithRuleOwnedByAnotherUserFails`           | `POST`  | Normal user foreign parent → `400` invalid |
 | `adminCanCreateTransactionRuleConditionUnderForeignRule`                  | `POST`  | Admin foreign parent → `201`               |
+
+#### Active parent categoryType/FLOW guard — ✅ custom
+
+| Test                                                            | HTTP   | What it checks                                                                |
+| --------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------- |
+| `createConditionThatLeavesActiveParentFlowCategoryInvalidFails` | `POST` | Cannot add a child condition that leaves active EXPENSE/INCOME parent invalid |
+| `createConditionThatKeepsActiveParentFlowCategoryValidSucceeds` | `POST` | FLOW OUT condition can satisfy an active EXPENSE parent                       |
+| `updateConditionThatMakesActiveParentFlowCategoryInvalidFails`  | `PUT`  | Existing active parent cannot be made incompatible by child condition update  |
 
 #### Position — server-managed — ✅
 
@@ -1750,9 +1784,36 @@ Service tests cover parent immutability, merged-state validation, duplicate norm
 
 `transaction-rule-ux.spec.tsx` also verifies the embedded TransactionRule detail table uses the normalized `Condition` summary, does not render raw `Value` / `Second Value` / `Case Sensitive` headers, keeps Edit/Delete, and does not render View.
 
+The same spec covers the configured TransactionRule product create/edit flow:
+
+- create/edit render the configured inline Conditions editor;
+- list Create routes to `/transaction-rule/new`, the configured product create route;
+- detail labels the embedded persisted condition editor as technical/debug because it writes through child condition endpoints;
+- create does not call the old draft reducer path and posts to `POST /api/transaction-rules/configured`;
+- edit loads `GET /api/transaction-rules/{id}/configured`;
+- edit saves through `PUT /api/transaction-rules/{id}/configured`;
+- zero conditions and zero outputs block Save;
+- EXPENSE category auto-adds and locks `FLOW EQUALS OUT`;
+- removing/changing to BOTH/null removes only frontend auto-created FLOW;
+- `ANY` is blocked for EXPENSE/INCOME outputs;
+- user-authored incompatible FLOW blocks Save instead of being silently mutated;
+- configured payloads omit priority and removed/deferred outputs.
+
+TR-3 technical/debug cleanup is covered by frontend specs:
+
+- TransactionRuleCondition list/detail/create/edit render the Technical/debug banner;
+- TransactionRuleCondition remains available for direct maintenance/debug deep links;
+- the TransactionRuleCondition menu entry is de-emphasized with the Technical badge;
+- product TransactionRule create/edit still use configured endpoints and do not return to the old empty-draft flow.
+
 ### E2E — `transaction-rule-condition.cy.ts`
 
-Update delete dialog copy (en/es). Create/delete rehabilitated via API rule seed.
+Technical/debug generated-surface smoke:
+
+- list/create/detail/edit pages show the Technical/debug banner;
+- create/edit do not show client-owned `position`;
+- parent TransactionRule is seeded through configured API;
+- create/delete remain available for direct maintenance/debug compatibility.
 
 ### Gaps
 

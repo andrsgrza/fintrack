@@ -30,7 +30,51 @@ interface TransactionRuleConditionFormSectionProps {
   submitting?: boolean;
   submitLabelKey?: string;
   submitLabel?: string;
+  useFormWrapper?: boolean;
 }
+
+interface TransactionRuleConditionFormActionsProps {
+  showParentSelector: boolean;
+  useFormWrapper: boolean;
+  submitting: boolean;
+  submitLabelKey: string;
+  submitLabel: string;
+  onCancel?: () => void;
+  onSaveWithoutForm: () => void;
+}
+
+const TransactionRuleConditionFormActions = ({
+  showParentSelector,
+  useFormWrapper,
+  submitting,
+  submitLabelKey,
+  submitLabel,
+  onCancel,
+  onSaveWithoutForm,
+}: TransactionRuleConditionFormActionsProps) => (
+  <>
+    {onCancel ? (
+      <>
+        <Button type="button" color="secondary" onClick={onCancel} data-cy="cancelConditionEditButton">
+          <Translate contentKey="fintrackApp.transactionRule.cancelConditionEdit">Cancel</Translate>
+        </Button>
+        &nbsp;
+      </>
+    ) : null}
+    <Button
+      color="primary"
+      id={showParentSelector ? 'save-entity' : 'save-condition'}
+      data-cy={showParentSelector ? 'entityCreateSaveButton' : 'conditionSaveButton'}
+      type={useFormWrapper ? 'submit' : 'button'}
+      onClick={useFormWrapper ? undefined : onSaveWithoutForm}
+      disabled={submitting}
+    >
+      <FontAwesomeIcon icon="save" />
+      &nbsp;
+      <Translate contentKey={submitLabelKey}>{submitLabel}</Translate>
+    </Button>
+  </>
+);
 
 export const TransactionRuleConditionFormSection = ({
   initialCondition,
@@ -44,6 +88,7 @@ export const TransactionRuleConditionFormSection = ({
   submitting = false,
   submitLabelKey = 'entity.action.save',
   submitLabel = 'Save',
+  useFormWrapper = true,
 }: TransactionRuleConditionFormSectionProps) => {
   const dispatch = useAppDispatch();
   const transactionRules = useAppSelector(state => state.transactionRule.entities);
@@ -155,8 +200,8 @@ export const TransactionRuleConditionFormSection = ({
     onSubmit(entity);
   };
 
-  return (
-    <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
+  const formContent = (
+    <>
       {!isNew ? (
         <ValidatedField
           name="id"
@@ -329,26 +374,24 @@ export const TransactionRuleConditionFormSection = ({
           </FormText>
         </>
       ) : null}
-      {onCancel ? (
-        <>
-          <Button type="button" color="secondary" onClick={onCancel} data-cy="cancelConditionEditButton">
-            <Translate contentKey="fintrackApp.transactionRule.cancelConditionEdit">Cancel</Translate>
-          </Button>
-          &nbsp;
-        </>
-      ) : null}
-      <Button
-        color="primary"
-        id={showParentSelector ? 'save-entity' : 'save-condition'}
-        data-cy={showParentSelector ? 'entityCreateSaveButton' : 'conditionSaveButton'}
-        type="submit"
-        disabled={submitting}
-      >
-        <FontAwesomeIcon icon="save" />
-        &nbsp;
-        <Translate contentKey={submitLabelKey}>{submitLabel}</Translate>
-      </Button>
+      <TransactionRuleConditionFormActions
+        showParentSelector={showParentSelector}
+        useFormWrapper={useFormWrapper}
+        submitting={submitting}
+        submitLabelKey={submitLabelKey}
+        submitLabel={submitLabel}
+        onCancel={onCancel}
+        onSaveWithoutForm={() => saveEntity(defaultValues())}
+      />
+    </>
+  );
+
+  return useFormWrapper ? (
+    <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
+      {formContent}
     </ValidatedForm>
+  ) : (
+    formContent
   );
 };
 

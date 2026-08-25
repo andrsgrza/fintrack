@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
+import { Alert, Button, Col, Row } from 'reactstrap';
 import { TextFormat, Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -101,6 +101,15 @@ export const TransactionRuleDetail = () => {
             )}
           </FieldRow>
         </section>
+        <Alert color="secondary" fade={false} data-cy="conditionsTechnicalEditorNote">
+          <strong>
+            <Translate contentKey="fintrackApp.transactionRule.conditionsTechnicalEditorTitle">Conditions technical editor</Translate>
+          </strong>{' '}
+          <Translate contentKey="fintrackApp.transactionRule.conditionsTechnicalEditorDescription">
+            For product editing, use the configured edit flow. This section writes directly to condition endpoints and is kept temporarily
+            for debugging.
+          </Translate>
+        </Alert>
         <TransactionRuleConditionsCollectionEditor
           transactionRuleId={transactionRuleEntity.id}
           onConditionMutation={() => dispatch(getEntity(id))}

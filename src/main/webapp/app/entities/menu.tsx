@@ -27,7 +27,10 @@ const EntitiesMenu = () => {
         <Translate contentKey="global.menu.entities.transactionRule" />
       </MenuItem>
       <MenuItem icon="asterisk" to="/transaction-rule-condition">
-        <Translate contentKey="global.menu.entities.transactionRuleCondition" />
+        <Translate contentKey="global.menu.entities.transactionRuleCondition" />{' '}
+        <Badge color="secondary" pill>
+          <Translate contentKey="global.menu.entities.technical">Technical</Translate>
+        </Badge>
       </MenuItem>
       <MenuItem icon="asterisk" to="/description-normalization-rule">
         <Translate contentKey="global.menu.entities.descriptionNormalizationRule" />
