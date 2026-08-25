@@ -18,18 +18,9 @@ describe('TransactionRuleCondition e2e test', () => {
 
   let transactionRuleCondition;
   let transactionRule;
+  let tag;
 
-  const buildTransactionRulePayload = (name: string) => {
-    const now = new Date().toISOString();
-    return {
-      name,
-      priority: 1,
-      conditionLogic: 'ALL',
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-  };
+  const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   beforeEach(() => {
     cy.login(username, password);
@@ -38,10 +29,39 @@ describe('TransactionRuleCondition e2e test', () => {
   beforeEach(() => {
     cy.authenticatedRequest({
       method: 'POST',
-      url: '/api/transaction-rules',
-      body: buildTransactionRulePayload(`rule-for-condition-${Date.now()}`),
+      url: '/api/tags',
+      body: {
+        name: uniqueName('trc-tag'),
+        description: 'TransactionRuleCondition E2E tag',
+        color: '#a1b2c3',
+        active: true,
+      },
     }).then(({ body }) => {
-      transactionRule = body;
+      tag = body;
+
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/transaction-rules/configured',
+        body: {
+          name: uniqueName('rule-for-condition'),
+          description: 'TransactionRuleCondition E2E parent rule',
+          conditionLogic: 'ALL',
+          active: true,
+          resultingCategory: null,
+          resultingTags: [{ id: tag.id }],
+          conditions: [
+            {
+              field: 'DESCRIPTION',
+              operator: 'CONTAINS',
+              value: 'seed',
+              secondValue: null,
+              caseSensitive: false,
+            },
+          ],
+        },
+      }).then(({ body: ruleBody }) => {
+        transactionRule = ruleBody;
+      });
     });
   });
 
@@ -52,9 +72,11 @@ describe('TransactionRuleCondition e2e test', () => {
   });
 
   beforeEach(() => {
-    cy.intercept('GET', '/api/transaction-rules', {
-      statusCode: 200,
-      body: [transactionRule],
+    cy.intercept('GET', '/api/transaction-rules', req => {
+      req.reply({
+        statusCode: 200,
+        body: transactionRule ? [transactionRule] : [],
+      });
     });
   });
 
@@ -80,6 +102,18 @@ describe('TransactionRuleCondition e2e test', () => {
     }
   });
 
+  afterEach(() => {
+    if (tag) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/tags/${tag.id}`,
+        failOnStatusCode: false,
+      }).then(() => {
+        tag = undefined;
+      });
+    }
+  });
+
   it('TransactionRuleConditions menu should load TransactionRuleConditions page', () => {
     cy.visit('/');
     cy.clickOnEntityMenuItem('transaction-rule-condition');
@@ -91,6 +125,7 @@ describe('TransactionRuleCondition e2e test', () => {
       }
     });
     cy.getEntityHeading('TransactionRuleCondition').should('exist');
+    cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
     cy.url().should('match', transactionRuleConditionPageUrlPattern);
   });
 
@@ -105,6 +140,7 @@ describe('TransactionRuleCondition e2e test', () => {
         cy.get(entityCreateButtonSelector).click();
         cy.url().should('match', new RegExp('/transaction-rule-condition/new$'));
         cy.getEntityCreateUpdateHeading('TransactionRuleCondition');
+        cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
@@ -124,7 +160,6 @@ describe('TransactionRuleCondition e2e test', () => {
             operator: 'EQUALS',
             value: 'cypress-value',
             caseSensitive: false,
-            position: 1,
             transactionRule: { id: transactionRule.id },
           },
         }).then(({ body }) => {
@@ -150,6 +185,7 @@ describe('TransactionRuleCondition e2e test', () => {
       it('detail button click should load details TransactionRuleCondition page', () => {
         cy.get(entityDetailsButtonSelector).first().click();
         cy.getEntityDetailsHeading('transactionRuleCondition');
+        cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
         cy.get(entityDetailsBackButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
@@ -160,6 +196,7 @@ describe('TransactionRuleCondition e2e test', () => {
       it('edit button click should load edit TransactionRuleCondition page and go back', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('TransactionRuleCondition');
+        cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
@@ -171,6 +208,7 @@ describe('TransactionRuleCondition e2e test', () => {
       it('edit button click should load edit TransactionRuleCondition page and save', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('TransactionRuleCondition');
+        cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
         cy.get(entityCreateSaveButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
@@ -209,8 +247,8 @@ describe('TransactionRuleCondition e2e test', () => {
       cy.get(`[data-cy="operator"]`).select('EQUALS');
       cy.get(`[data-cy="value"]`).type('cypress-create-value');
       cy.get(`[data-cy="caseSensitive"]`).should('not.be.checked');
-      cy.get(`[data-cy="position"]`).type('1');
-      cy.get(`[data-cy="transactionRule"]`).select(1);
+      cy.get(`[data-cy="position"]`).should('not.exist');
+      cy.get(`[data-cy="transactionRule"]`).select(transactionRule.name);
 
       cy.get(entityCreateSaveButtonSelector).click();
 

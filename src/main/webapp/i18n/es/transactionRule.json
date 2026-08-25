@@ -19,8 +19,10 @@
       },
       "createTitle": "Crear regla",
       "editTitle": "Editar regla",
-      "saveAndAddConditions": "Guardar y agregar condiciones",
-      "createInactiveHelp": "Las reglas se guardan inactivas primero. Agrega condiciones desde el detalle de la regla y actívala cuando esté lista.",
+      "configuredCreateEditHelp": "Configura metadatos, resultados, condiciones y estado antes de guardar.",
+      "configuredConditionsHelp": "Define condiciones antes de guardar esta regla.",
+      "configuredLoadFailed": "No se pudo cargar la configuración de la regla.",
+      "configuredSaveFailed": "No se pudo guardar la configuración de la regla.",
       "id": "ID",
       "name": "Nombre",
       "description": "Descripción",
@@ -31,6 +33,7 @@
       "reorderFailed": "No se pudo reordenar las reglas.",
       "evaluationOrder": "Orden de evaluación",
       "priorityServerManagedHelp": "El orden de las reglas se administra desde la lista de reglas. Las reglas nuevas se agregan al final.",
+      "requiredFlowHelp": "La categoría seleccionada requiere una condición de flujo compatible.",
       "conditionLogic": "Lógica de condiciones",
       "active": "Activa",
       "createdAt": "Creada el",
@@ -79,6 +82,8 @@
       "loadingConditions": "Cargando condiciones...",
       "noConditionsYet": "Todavía no hay condiciones.",
       "conditionsUnavailable": "Las condiciones no están disponibles.",
+      "conditionsTechnicalEditorTitle": "Editor técnico de condiciones",
+      "conditionsTechnicalEditorDescription": "Para edición de producto, usa el flujo configurado. Esta sección escribe directamente a los endpoints de condiciones y se mantiene temporalmente para depuración.",
       "manageConditions": "Administrar condiciones",
       "addCondition": "Agregar condición",
       "editCondition": "Editar condición",
@@ -90,7 +95,16 @@
       "conditionSaveFailed": "No se pudo guardar la condición.",
       "conditionDeleteFailed": "No se pudo eliminar la condición.",
       "activeRequiresCondition": "Las reglas activas requieren al menos una condición.",
-      "activeDisabledNoConditions": "Agrega al menos una condición antes de activar esta regla."
+      "activeDisabledNoConditions": "Agrega al menos una condición antes de activar esta regla.",
+      "validation": {
+        "conditionsRequired": "La regla debe tener al menos una condición.",
+        "outputRequired": "Selecciona al menos un resultado: categoría o etiquetas.",
+        "expenseRequiresFlowOut": "Las categorías de gasto requieren flujo = Gasto.",
+        "incomeRequiresFlowIn": "Las categorías de ingreso requieren flujo = Ingreso.",
+        "expenseIncomeRequireAll": "Las categorías de gasto/ingreso requieren lógica de condición ALL.",
+        "requiredFlowLocked": "Esta condición de flujo es requerida por la categoría seleccionada.",
+        "categoryIncompatibleWithExistingFlow": "La categoría seleccionada no es compatible con una condición de flujo existente."
+      }
     }
   }
 }

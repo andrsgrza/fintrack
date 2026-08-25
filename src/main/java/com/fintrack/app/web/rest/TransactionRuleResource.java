@@ -3,10 +3,13 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionRuleConditionService;
+import com.fintrack.app.service.TransactionRuleConfigurationService;
 import com.fintrack.app.service.TransactionRuleQueryService;
 import com.fintrack.app.service.TransactionRuleService;
 import com.fintrack.app.service.criteria.TransactionRuleCriteria;
 import com.fintrack.app.service.dto.TransactionRuleConditionDTO;
+import com.fintrack.app.service.dto.TransactionRuleConfiguredRequestDTO;
+import com.fintrack.app.service.dto.TransactionRuleConfiguredResponseDTO;
 import com.fintrack.app.service.dto.TransactionRuleDTO;
 import com.fintrack.app.service.dto.TransactionRuleReorderRequestDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -45,17 +48,21 @@ public class TransactionRuleResource {
 
     private final TransactionRuleConditionService transactionRuleConditionService;
 
+    private final TransactionRuleConfigurationService transactionRuleConfigurationService;
+
     private final ObjectMapper objectMapper;
 
     public TransactionRuleResource(
         TransactionRuleService transactionRuleService,
         TransactionRuleQueryService transactionRuleQueryService,
         TransactionRuleConditionService transactionRuleConditionService,
+        TransactionRuleConfigurationService transactionRuleConfigurationService,
         ObjectMapper objectMapper
     ) {
         this.transactionRuleService = transactionRuleService;
         this.transactionRuleQueryService = transactionRuleQueryService;
         this.transactionRuleConditionService = transactionRuleConditionService;
+        this.transactionRuleConfigurationService = transactionRuleConfigurationService;
         this.objectMapper = objectMapper;
     }
 
@@ -84,6 +91,29 @@ public class TransactionRuleResource {
     }
 
     /**
+     * {@code POST /transaction-rules/configured} : Create a TransactionRule with its full condition set atomically.
+     *
+     * @param request the configured rule payload.
+     * @return the created configured rule.
+     * @throws URISyntaxException if the Location URI syntax is incorrect.
+     */
+    @PostMapping("/configured")
+    public ResponseEntity<TransactionRuleConfiguredResponseDTO> createConfiguredTransactionRule(
+        @RequestBody(required = false) TransactionRuleConfiguredRequestDTO request
+    ) throws URISyntaxException {
+        LOG.debug("REST request to save configured TransactionRule : {}", request);
+        TransactionRuleConfiguredResponseDTO result;
+        try {
+            result = transactionRuleConfigurationService.create(request);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseEntity.created(new URI("/api/transaction-rules/" + result.getId() + "/configured"))
+            .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, result.getId().toString()))
+            .body(result);
+    }
+
+    /**
      * {@code PUT /transaction-rules/reorder} : Reorder the current user's transactionRules.
      *
      * @param request the full desired order of the current user's transactionRule ids.
@@ -100,6 +130,33 @@ public class TransactionRuleResource {
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
+    }
+
+    /**
+     * {@code PUT /transaction-rules/:id/configured} : Update a TransactionRule and replace its full condition set atomically.
+     *
+     * @param id the id of the configured rule.
+     * @param request the configured rule payload.
+     * @return the updated configured rule.
+     */
+    @PutMapping("/{id}/configured")
+    public ResponseEntity<TransactionRuleConfiguredResponseDTO> updateConfiguredTransactionRule(
+        @PathVariable(value = "id", required = false) final Long id,
+        @RequestBody(required = false) TransactionRuleConfiguredRequestDTO request
+    ) {
+        LOG.debug("REST request to update configured TransactionRule : {}, {}", id, request);
+        if (!transactionRuleService.isAccessible(id)) {
+            throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
+        }
+        TransactionRuleConfiguredResponseDTO result;
+        try {
+            result = transactionRuleConfigurationService.update(id, request);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseEntity.ok()
+            .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, result.getId().toString()))
+            .body(result);
     }
 
     /**
@@ -230,6 +287,18 @@ public class TransactionRuleResource {
         LOG.debug("REST request to get TransactionRule : {}", id);
         Optional<TransactionRuleDTO> transactionRuleDTO = transactionRuleService.findOne(id);
         return ResponseUtil.wrapOrNotFound(transactionRuleDTO);
+    }
+
+    /**
+     * {@code GET /transaction-rules/:id/configured} : get a TransactionRule with its ordered conditions.
+     *
+     * @param id the id of the parent transactionRule.
+     * @return the configured rule response.
+     */
+    @GetMapping("/{id}/configured")
+    public ResponseEntity<TransactionRuleConfiguredResponseDTO> getConfiguredTransactionRule(@PathVariable("id") Long id) {
+        LOG.debug("REST request to get configured TransactionRule : {}", id);
+        return ResponseUtil.wrapOrNotFound(transactionRuleConfigurationService.findOne(id));
     }
 
     /**

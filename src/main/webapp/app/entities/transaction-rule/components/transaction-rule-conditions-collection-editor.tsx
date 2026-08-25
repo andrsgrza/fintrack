@@ -242,12 +242,20 @@ export const TransactionRuleConditionsCollectionEditor = ({
           </thead>
           <tbody>
             {sortedConditions.map(condition => (
-              <tr key={condition.id}>
+              <tr
+                key={condition.id}
+                data-cy="conditionRow"
+                data-condition-field={condition.field}
+                data-condition-operator={condition.operator}
+                data-condition-value={condition.value}
+              >
                 <td>
-                  {buildTransactionRuleConditionSummary(condition, translate, {
-                    valueDisplay: value =>
-                      condition.field === TransactionRuleField.ACCOUNT ? (accountNameById.get(value) ?? value) : undefined,
-                  })}
+                  <span data-cy="conditionSummary">
+                    {buildTransactionRuleConditionSummary(condition, translate, {
+                      valueDisplay: value =>
+                        condition.field === TransactionRuleField.ACCOUNT ? (accountNameById.get(value) ?? value) : undefined,
+                    })}
+                  </span>
                 </td>
                 <td className="text-end">
                   <Button color="primary" size="sm" onClick={() => setEditingCondition(condition)} data-cy="editConditionButton">

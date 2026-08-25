@@ -224,6 +224,74 @@ class TransactionRuleConditionResourceIT {
 
     @Test
     @Transactional
+    void createConditionThatLeavesActiveParentFlowCategoryInvalidFails() throws Exception {
+        TransactionRule parentRule = transactionRuleCondition.getTransactionRule();
+        parentRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(parentRule);
+
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleConditionDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertSameRepositoryCount(0);
+    }
+
+    @Test
+    @Transactional
+    void createConditionThatKeepsActiveParentFlowCategoryValidSucceeds() throws Exception {
+        TransactionRule parentRule = transactionRuleCondition.getTransactionRule();
+        parentRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(parentRule);
+        transactionRuleCondition.field(TransactionRuleField.FLOW).operator(RuleOperator.EQUALS).value(TransactionFlow.OUT.toString());
+
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+
+        var returnedTransactionRuleConditionDTO = om.readValue(
+            restTransactionRuleConditionMockMvc
+                .perform(
+                    post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(transactionRuleConditionDTO))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleConditionDTO.class
+        );
+
+        insertedTransactionRuleCondition = transactionRuleConditionMapper.toEntity(returnedTransactionRuleConditionDTO);
+    }
+
+    @Test
+    @Transactional
+    void updateConditionThatMakesActiveParentFlowCategoryInvalidFails() throws Exception {
+        TransactionRule parentRule = transactionRuleCondition.getTransactionRule();
+        parentRule.setActive(true);
+        transactionRuleRepository.saveAndFlush(parentRule);
+        transactionRuleCondition.field(TransactionRuleField.FLOW).operator(RuleOperator.EQUALS).value(TransactionFlow.OUT.toString());
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(transactionRuleCondition);
+
+        TransactionRuleConditionDTO transactionRuleConditionDTO = transactionRuleConditionMapper.toDto(insertedTransactionRuleCondition);
+        transactionRuleConditionDTO.setValue(TransactionFlow.IN.toString());
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, insertedTransactionRuleCondition.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(transactionRuleConditionDTO))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(getPersistedTransactionRuleCondition(insertedTransactionRuleCondition).getValue()).isEqualTo(
+            TransactionFlow.OUT.toString()
+        );
+    }
+
+    @Test
+    @Transactional
     void checkFieldIsRequired() throws Exception {
         long databaseSizeBeforeTest = getRepositoryCount();
         // set the field null

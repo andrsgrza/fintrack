@@ -49,13 +49,16 @@ public class TransactionRuleService {
 
     private final TransactionRuleConditionRepository transactionRuleConditionRepository;
 
+    private final TransactionRuleFlowCategoryCompatibilityValidator transactionRuleFlowCategoryCompatibilityValidator;
+
     public TransactionRuleService(
         TransactionRuleRepository transactionRuleRepository,
         TransactionRuleMapper transactionRuleMapper,
         CurrentUserService currentUserService,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
-        TransactionRuleConditionRepository transactionRuleConditionRepository
+        TransactionRuleConditionRepository transactionRuleConditionRepository,
+        TransactionRuleFlowCategoryCompatibilityValidator transactionRuleFlowCategoryCompatibilityValidator
     ) {
         this.transactionRuleRepository = transactionRuleRepository;
         this.transactionRuleMapper = transactionRuleMapper;
@@ -63,6 +66,7 @@ public class TransactionRuleService {
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
         this.transactionRuleConditionRepository = transactionRuleConditionRepository;
+        this.transactionRuleFlowCategoryCompatibilityValidator = transactionRuleFlowCategoryCompatibilityValidator;
     }
 
     /**
@@ -418,6 +422,7 @@ public class TransactionRuleService {
         validateUniqueName(transactionRule, excludeId);
         validateHasOutput(transactionRule);
         validateActiveRuleHasConditions(transactionRule);
+        validateActiveRuleFlowCategoryCompatibility(transactionRule);
     }
 
     private void normalizeTextFields(TransactionRule transactionRule) {
@@ -484,6 +489,16 @@ public class TransactionRuleService {
         if (transactionRule.getId() == null || transactionRuleConditionRepository.countByTransactionRuleId(transactionRule.getId()) == 0) {
             throw new IllegalArgumentException("Active transaction rule must have at least one condition");
         }
+    }
+
+    private void validateActiveRuleFlowCategoryCompatibility(TransactionRule transactionRule) {
+        if (!Boolean.TRUE.equals(transactionRule.getActive()) || transactionRule.getId() == null) {
+            return;
+        }
+        transactionRuleFlowCategoryCompatibilityValidator.validate(
+            transactionRule,
+            transactionRuleConditionRepository.findByTransactionRuleIdOrderByPositionAscIdAsc(transactionRule.getId())
+        );
     }
 
     private record TransactionRuleSnapshot(

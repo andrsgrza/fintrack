@@ -179,7 +179,7 @@ Edit should mirror detail, replacing values with inputs.
 
 If a detail section exists, the equivalent editable fields should appear in the same relative place on edit, unless the fields are read-only, server-managed, or only make sense in detail.
 
-TransactionRule applies this pattern: detail and edit share Identity → Matching logic → Result → Status / Metadata ordering. Detail shows values and embedded conditions. Edit shows inputs plus a Manage conditions link.
+TransactionRule applies this pattern: detail and configured edit share Identity → Matching logic → Result → Status / Metadata ordering. Detail shows values and embedded conditions. Configured create/edit show inputs plus an inline local conditions editor.
 
 ## Edit form hydration
 
@@ -348,20 +348,23 @@ A condition belongs to one rule. In normal product usage, conditions are managed
 
 ### UI pattern used
 
-This uses the editable child collection pattern.
+This uses the configured parent + child collection command pattern for product create/edit.
 
-TransactionRule detail/view shows the embedded editable conditions collection editor.
+TransactionRule create/edit manage rule metadata, outputs, active state, condition logic, and conditions together through the configured API:
 
-TransactionRule edit is reserved for general TransactionRule fields and provides a "Manage conditions" link back to detail.
+- `POST /api/transaction-rules/configured`;
+- `GET /api/transaction-rules/{id}/configured`;
+- `PUT /api/transaction-rules/{id}/configured`.
 
-TransactionRule create saves only the parent rule. It does not embed a child collection editor because conditions require a persisted parent id.
+Product create no longer creates an empty inactive draft. It keeps unsaved conditions in local frontend state and saves the complete configured rule in one command.
 
-The create flow is:
+Product save is blocked when the rule has:
 
-1. create an inactive TransactionRule parent;
-2. redirect to TransactionRule detail for the saved rule;
-3. add conditions from the embedded detail collection editor;
-4. activate the rule from edit when at least one condition exists.
+- zero conditions;
+- zero outputs (`resultingCategory` or `resultingTags`);
+- an EXPENSE/INCOME resulting category without compatible FLOW semantics.
+
+TransactionRule detail/view may still show the embedded editable conditions collection editor for direct maintenance/debug compatibility, but product create/edit no longer depend on detail as the only condition-management surface. TR-3 marks this embedded persisted editor as a technical/debug section so it is not confused with the product create/edit workflow.
 
 TransactionRule list/detail use product-oriented summaries instead of generated field dumps.
 
@@ -396,15 +399,19 @@ Detail shows values in those groups.
 
 Edit shows inputs in those groups.
 
-TransactionRule detail additionally owns the embedded Conditions editor.
+TransactionRule create/edit additionally render the configured inline Conditions editor.
 
-TransactionRule edit does not render the embedded Conditions editor; it only provides a Manage conditions link back to detail.
+The configured inline editor:
 
-TransactionRule create also does not render the embedded Conditions editor, does not maintain client-side draft conditions, hides the Active toggle, and submits `active=false`.
+- uses local state;
+- does not call child `TransactionRuleCondition` endpoints directly;
+- preserves condition ids on edit for persisted conditions;
+- submits the full ordered conditions array through the configured parent command.
 
 ### Components used
 
 - `transaction-rule-conditions-collection-editor.tsx`
+- `transaction-rule-local-conditions-editor.tsx`
 - `transaction-rule-condition-form-section.tsx`
 
 ### What we did not do
@@ -416,29 +423,36 @@ We did not embed:
 - `transaction-rule-condition-update.tsx`
 - `transaction-rule-condition-detail.tsx`
 
-The embedded editor reuses the condition form section, not the standalone CRUD page.
-
-We also did not implement a create-with-conditions command endpoint or client-side draft child collection on TransactionRule create. Those remain deferred until there is a deliberate atomic parent+children command design.
+The embedded editors reuse the condition form section, not the standalone CRUD page.
 
 ### Parent relationship behavior
 
 The embedded TransactionRuleCondition form does not show or edit the `transactionRule` parent selector.
 
-The parent TransactionRule is fixed by the containing TransactionRule detail page.
+In configured create/edit, the parent is the containing configured TransactionRule form. Conditions are local drafts until the parent configured command is saved.
 
-Embedded create submits the current rule as the fixed parent.
-
-Embedded edit PATCHes only editable condition fields and does not reparent.
+In detail/debug maintenance, the parent TransactionRule is fixed by the containing TransactionRule detail page. Embedded create submits the current rule as the fixed parent. Embedded edit PATCHes only editable condition fields and does not reparent.
 
 ### Condition loading
 
-Both the detail editor and the edit-page Active safety check load conditions from:
+The product edit form loads parent + ordered conditions from:
+
+`GET /api/transaction-rules/{id}/configured`
+
+The detail/debug editor loads conditions from:
 
 `GET /api/transaction-rules/{id}/conditions`
 
 The frontend does not fetch all TransactionRuleConditions and filter client-side for this workflow.
 
 ### Inline actions
+
+The configured create/edit local conditions editor supports:
+
+- local inline add before a rule exists;
+- local inline edit;
+- local inline delete;
+- locked auto-required FLOW condition display for EXPENSE/INCOME categories.
 
 The TransactionRule detail collection editor supports:
 
@@ -448,7 +462,18 @@ The TransactionRule detail collection editor supports:
 
 The embedded table does not show a View button because the condition is already visible in the parent context.
 
-Standalone detail routes remain available for direct maintenance/debug.
+Standalone TransactionRuleCondition list/detail/create/edit routes remain available for deep links, debugging, and direct maintenance. TR-3 marks those standalone generated screens with a Technical/debug banner and the Entities menu marks TransactionRuleCondition as Technical. They are not the product workflow for creating or editing TransactionRules.
+
+Generated TransactionRule and TransactionRuleCondition backend endpoints remain available temporarily:
+
+- `POST /api/transaction-rules`
+- `PUT /api/transaction-rules/{id}`
+- `PATCH /api/transaction-rules/{id}`
+- `POST /api/transaction-rule-conditions`
+- `PUT /api/transaction-rule-conditions/{id}`
+- `PATCH /api/transaction-rule-conditions/{id}`
+
+These generated endpoints are technical/direct-maintenance surfaces. Configured endpoints remain the product source of truth for TransactionRule create/edit, and backend strict validation still protects generated paths while they exist.
 
 ### Embedded table display
 
@@ -512,7 +537,18 @@ It:
 - still submits the selected account id as the string `value` expected by the backend;
 - keeps `IN` / `NOT_IN` as comma-separated text in this slice.
 
-The embedded TransactionRule detail editor reuses the same smart condition form section/helper behavior.
+The configured TransactionRule create/edit editor and the embedded TransactionRule detail editor reuse the same smart condition form section/helper behavior.
+
+### Category/FLOW guard in product create/edit
+
+When a resulting category is selected:
+
+- EXPENSE auto-adds a required `FLOW EQUALS OUT` condition when no FLOW condition exists;
+- INCOME auto-adds a required `FLOW EQUALS IN` condition when no FLOW condition exists;
+- the auto-required FLOW condition is locked while that category remains selected;
+- BOTH/null category does not require FLOW and removes only the frontend auto-created FLOW condition;
+- user-authored incompatible FLOW conditions are not silently mutated; save is blocked with a validation message;
+- `ANY` condition logic is disabled/blocked for EXPENSE/INCOME outputs.
 
 ### Delete behavior
 
@@ -528,8 +564,6 @@ The TransactionRule detail page refreshes parent state after condition mutations
 
 Deferred for this workflow:
 
-- create-with-conditions command endpoint;
-- client-side draft child collection on parent create;
 - row-positioned inline edit;
 - TransactionRule drag-and-drop UI;
 - condition reorder UI/API;
@@ -641,3 +675,15 @@ The product route is:
 ```
 
 Standalone generated/debug condition screens are not the product flow for managing conditions.
+
+## TransactionRule generated technical/debug surfaces
+
+TR-3 clarifies the TransactionRule UI split:
+
+- `/transaction-rule/new` is the product create route and uses `POST /api/transaction-rules/configured`.
+- `/transaction-rule/:id/edit` is the product edit route and uses `GET/PUT /api/transaction-rules/{id}/configured`.
+- Standalone TransactionRuleCondition routes remain available only for technical/debug/direct maintenance and show a Technical/debug banner.
+- TransactionRule detail may retain the persisted child condition editor, but it is labeled as a technical/debug editor because it writes directly to child condition endpoints.
+- No UI text should recommend the old “create empty parent, then add conditions later” product flow.
+- No ingestion category/tag review work was added as part of this TransactionRule branch.
+- UserPreference remains deferred.
