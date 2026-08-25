@@ -1,288 +1,154 @@
 import {
-  entityConfirmDeleteButtonSelector,
   entityCreateButtonSelector,
   entityCreateCancelButtonSelector,
   entityCreateSaveButtonSelector,
-  entityDeleteButtonSelector,
   entityDetailsBackButtonSelector,
   entityDetailsButtonSelector,
   entityEditButtonSelector,
   entityTableSelector,
 } from '../../support/entity';
 
-describe('TransactionIngestion e2e test', () => {
+describe('TransactionIngestion workflow smoke e2e test', () => {
   const transactionIngestionPageUrl = '/transaction-ingestion';
   const transactionIngestionPageUrlPattern = new RegExp('/transaction-ingestion(\\?.*)?$');
-  const username = Cypress.env('E2E_USERNAME') ?? 'user';
-  const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const transactionIngestionSample = {"ingestionType":"API","status":"FAILED","startedAt":"2026-07-06T20:10:21.746Z","recordsReceived":22141,"recordsCreated":6190,"recordsSkipped":9783,"recordsRejected":28945,"createdAt":"2026-07-07T12:39:51.701Z"};
+  const username = Cypress.env('INGESTION_E2E_USERNAME') ?? 'cypress_ingestion';
+  const password = Cypress.env('INGESTION_E2E_PASSWORD') ?? 'cypress_ingestion';
 
-  let transactionIngestion;
-  // let financialAccount;
+  interface E2EEntity {
+    id: number;
+    name?: string;
+    [key: string]: unknown;
+  }
+
+  let account: E2EEntity | undefined;
+  let transactionIngestion: E2EEntity | undefined;
+
+  const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   beforeEach(() => {
     cy.login(username, password);
-  });
 
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // create an instance at the required relationship entity:
     cy.authenticatedRequest({
       method: 'POST',
       url: '/api/financial-accounts',
-      body: {"name":"hourly mmm rapidly","institutionName":"depot uh-huh","accountType":"CREDIT_CARD","currency":"EUR","initialBalance":28283.45,"initialBalanceDate":"2026-07-06","lastFourDigits":"3766","description":"regarding boohoo","color":"#bcBBe8","icon":"inasmuch","active":true,"createdAt":"2026-07-06T23:39:39.491Z","updatedAt":"2026-07-07T07:15:20.709Z"},
+      body: {
+        name: uniqueName('csv-smoke-account'),
+        institutionName: 'E2E Bank',
+        accountType: 'DEBIT',
+        currency: 'MXN',
+        initialBalance: 0,
+        initialBalanceDate: '2026-01-01',
+        active: true,
+      },
     }).then(({ body }) => {
-      financialAccount = body;
+      account = body;
+    });
+
+    cy.then(() => {
+      expect(account?.id).to.be.a('number');
+
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/transaction-ingestions',
+        body: {
+          ingestionType: 'API',
+          status: 'PENDING',
+          sourceLabel: uniqueName('workflow-smoke'),
+          startedAt: '2026-01-01T00:00:00Z',
+          recordsReceived: 0,
+          recordsCreated: 0,
+          recordsSkipped: 0,
+          recordsRejected: 0,
+          createdAt: '2026-01-01T00:00:00Z',
+          account: { id: account?.id },
+        },
+      }).then(({ body }) => {
+        transactionIngestion = body;
+      });
     });
   });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/transaction-ingestions+(?*|)').as('entitiesRequest');
-    cy.intercept('POST', '/api/transaction-ingestions').as('postEntityRequest');
-    cy.intercept('DELETE', '/api/transaction-ingestions/*').as('deleteEntityRequest');
+    cy.intercept('GET', '/api/transaction-ingestions/*').as('entityRequest');
   });
-
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/financial-accounts', {
-      statusCode: 200,
-      body: [financialAccount],
-    });
-
-    cy.intercept('GET', '/api/file-ingestions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/api-ingestions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/financial-transactions', {
-      statusCode: 200,
-      body: [],
-    });
-
-    cy.intercept('GET', '/api/ingestion-records', {
-      statusCode: 200,
-      body: [],
-    });
-
-  });
-   */
 
   afterEach(() => {
-    if (transactionIngestion) {
+    if (transactionIngestion?.id) {
       cy.authenticatedRequest({
         method: 'DELETE',
         url: `/api/transaction-ingestions/${transactionIngestion.id}`,
-      }).then(() => {
-        transactionIngestion = undefined;
+        failOnStatusCode: false,
       });
+      transactionIngestion = undefined;
     }
-  });
 
-  /* Disabled due to incompatibility
-  afterEach(() => {
-    if (financialAccount) {
+    if (account?.id) {
       cy.authenticatedRequest({
         method: 'DELETE',
-        url: `/api/financial-accounts/${financialAccount.id}`,
-      }).then(() => {
-        financialAccount = undefined;
+        url: `/api/financial-accounts/${account.id}`,
+        failOnStatusCode: false,
       });
+      account = undefined;
     }
   });
-   */
 
-  it('TransactionIngestions menu should load TransactionIngestions page', () => {
+  it('TransactionIngestions menu should load the workflow list page', () => {
     cy.visit('/');
     cy.clickOnEntityMenuItem('transaction-ingestion');
+
     cy.wait('@entitiesRequest').then(({ response }) => {
-      if (response?.body.length === 0) {
-        cy.get(entityTableSelector).should('not.exist');
-      } else {
-        cy.get(entityTableSelector).should('exist');
-      }
+      expect(response?.statusCode).to.equal(200);
+      expect(response?.body.length).to.be.greaterThan(0);
     });
+
     cy.getEntityHeading('TransactionIngestion').should('exist');
+    cy.get(entityTableSelector).should('exist');
     cy.url().should('match', transactionIngestionPageUrlPattern);
   });
 
-  describe('TransactionIngestion page', () => {
-    describe('create button click', () => {
-      beforeEach(() => {
-        cy.visit(transactionIngestionPageUrl);
-        cy.wait('@entitiesRequest');
-      });
+  it('create button should load the workflow create/upload page', () => {
+    cy.visit(transactionIngestionPageUrl);
+    cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
 
-      it('should load create TransactionIngestion page', () => {
-        cy.get(entityCreateButtonSelector).click();
-        cy.url().should('match', new RegExp('/transaction-ingestion/new$'));
-        cy.getEntityCreateUpdateHeading('TransactionIngestion');
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', transactionIngestionPageUrlPattern);
-      });
-    });
+    cy.get(entityCreateButtonSelector).click();
+    cy.url().should('match', new RegExp('/transaction-ingestion/new$'));
+    cy.getEntityCreateUpdateHeading('TransactionIngestion').should('exist');
+    cy.get(entityCreateSaveButtonSelector).should('exist');
+    cy.get('[data-cy="account"]').should('exist');
+    cy.get('[data-cy="ingestionType"]').should('exist');
+    cy.get('[data-cy="csvFile"]').should('exist');
 
-    describe('with existing value', () => {
-      /* Disabled due to incompatibility
-      beforeEach(() => {
-        cy.authenticatedRequest({
-          method: 'POST',
-          url: '/api/transaction-ingestions',
-          body: {
-            ...transactionIngestionSample,
-            account: financialAccount,
-          },
-        }).then(({ body }) => {
-          transactionIngestion = body;
-
-          cy.intercept(
-            {
-              method: 'GET',
-              url: '/api/transaction-ingestions+(?*|)',
-              times: 1,
-            },
-            {
-              statusCode: 200,
-              headers: {
-                link: '<http://localhost/api/transaction-ingestions?page=0&size=20>; rel="last",<http://localhost/api/transaction-ingestions?page=0&size=20>; rel="first"',
-              },
-              body: [transactionIngestion],
-            }
-          ).as('entitiesRequestInternal');
-        });
-
-        cy.visit(transactionIngestionPageUrl);
-
-        cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(transactionIngestionPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
-      });
-
-      it('detail button click should load details TransactionIngestion page', () => {
-        cy.get(entityDetailsButtonSelector).first().click();
-        cy.getEntityDetailsHeading('transactionIngestion');
-        cy.get(entityDetailsBackButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', transactionIngestionPageUrlPattern);
-      });
-
-      it('edit button click should load edit TransactionIngestion page and go back', () => {
-        cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('TransactionIngestion');
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', transactionIngestionPageUrlPattern);
-      });
-
-      it('edit button click should load edit TransactionIngestion page and save', () => {
-        cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('TransactionIngestion');
-        cy.get(entityCreateSaveButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', transactionIngestionPageUrlPattern);
-      });
-
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of TransactionIngestion', () => {
-        cy.intercept('GET', '/api/transaction-ingestions/*').as('dialogDeleteRequest');
-        cy.get(entityDeleteButtonSelector).last().click();
-        cy.wait('@dialogDeleteRequest');
-        cy.getEntityDeleteDialogHeading('transactionIngestion').should('exist');
-        cy.get(entityConfirmDeleteButtonSelector).click();
-        cy.wait('@deleteEntityRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(204);
-        });
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', transactionIngestionPageUrlPattern);
-
-        transactionIngestion = undefined;
-      });
-    });
+    cy.get(entityCreateCancelButtonSelector).click();
+    cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
+    cy.url().should('match', transactionIngestionPageUrlPattern);
   });
 
-  describe('new TransactionIngestion page', () => {
-    beforeEach(() => {
-      cy.visit(`${transactionIngestionPageUrl}`);
-      cy.get(entityCreateButtonSelector).click();
-      cy.getEntityCreateUpdateHeading('TransactionIngestion');
+  it('view button should load the workflow detail page for an existing ingestion', () => {
+    cy.visit(transactionIngestionPageUrl);
+    cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
+
+    cy.contains(entityTableSelector, transactionIngestion?.sourceLabel as string).within(() => {
+      cy.get(entityDetailsButtonSelector).click();
     });
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of TransactionIngestion', () => {
-      cy.get(`[data-cy="ingestionType"]`).select('API');
+    cy.wait('@entityRequest').its('response.statusCode').should('eq', 200);
+    cy.url().should('match', new RegExp(`/transaction-ingestion/${transactionIngestion?.id}$`));
+    cy.get('[data-cy="workflowReviewHeading"]').should('exist');
+    cy.get('[data-cy="transactionIngestionParentSummary"]').should('exist');
+    cy.get('[data-cy="apiIngestionTbd"]').should('exist');
+    cy.get(entityDetailsBackButtonSelector).click();
+    cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
+    cy.url().should('match', transactionIngestionPageUrlPattern);
+  });
 
-      cy.get(`[data-cy="status"]`).select('PARTIALLY_COMPLETED');
+  it('list should not expose old generated edit action as a product action', () => {
+    cy.visit(transactionIngestionPageUrl);
+    cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
 
-      cy.get(`[data-cy="sourceLabel"]`).type('reassuringly stool justly');
-      cy.get(`[data-cy="sourceLabel"]`).should('have.value', 'reassuringly stool justly');
-
-      cy.get(`[data-cy="startedAt"]`).type('2026-07-06T20:01');
-      cy.get(`[data-cy="startedAt"]`).blur();
-      cy.get(`[data-cy="startedAt"]`).should('have.value', '2026-07-06T20:01');
-
-      cy.get(`[data-cy="completedAt"]`).type('2026-07-06T18:54');
-      cy.get(`[data-cy="completedAt"]`).blur();
-      cy.get(`[data-cy="completedAt"]`).should('have.value', '2026-07-06T18:54');
-
-      cy.get(`[data-cy="recordsReceived"]`).type('2060');
-      cy.get(`[data-cy="recordsReceived"]`).should('have.value', '2060');
-
-      cy.get(`[data-cy="recordsCreated"]`).type('16551');
-      cy.get(`[data-cy="recordsCreated"]`).should('have.value', '16551');
-
-      cy.get(`[data-cy="recordsSkipped"]`).type('4193');
-      cy.get(`[data-cy="recordsSkipped"]`).should('have.value', '4193');
-
-      cy.get(`[data-cy="recordsRejected"]`).type('27629');
-      cy.get(`[data-cy="recordsRejected"]`).should('have.value', '27629');
-
-      cy.get(`[data-cy="errorMessage"]`).type('boo chops');
-      cy.get(`[data-cy="errorMessage"]`).should('have.value', 'boo chops');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T03:39');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T03:39');
-
-      cy.get(`[data-cy="account"]`).select(1);
-
-      cy.get(entityCreateSaveButtonSelector).click();
-
-      cy.wait('@postEntityRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(201);
-        transactionIngestion = response.body;
-      });
-      cy.wait('@entitiesRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-      });
-      cy.url().should('match', transactionIngestionPageUrlPattern);
+    cy.contains(entityTableSelector, transactionIngestion?.sourceLabel as string).within(() => {
+      cy.get(entityDetailsButtonSelector).should('exist');
+      cy.get(entityEditButtonSelector).should('not.exist');
     });
   });
 });

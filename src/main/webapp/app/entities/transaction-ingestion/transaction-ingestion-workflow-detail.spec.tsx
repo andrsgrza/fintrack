@@ -874,6 +874,113 @@ describe('TransactionIngestion file workflow', () => {
     );
   });
 
+  it('classification review leaves IN rows unselected when only OUT rows have expense suggestions', async () => {
+    const outRow = {
+      ...persistedReviewResponse.data.rows[0],
+      ingestionRecordId: 310,
+      recordIndex: 1,
+      description: 'Uber trip',
+      signedAmount: '-100.00',
+      amount: '100.00',
+      flow: 'OUT',
+    };
+    const inRow = {
+      ...persistedReviewResponse.data.rows[0],
+      ingestionRecordId: 311,
+      recordIndex: 2,
+      description: 'Uber refund',
+      signedAmount: '100.00',
+      amount: '100.00',
+      flow: 'IN',
+    };
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 2, invalidRows: 0 },
+        rows: [outRow, inRow],
+      },
+    });
+    mockAxiosPost.mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            recordId: 310,
+            recordIndex: 1,
+            transactionDate: '2026-07-13',
+            description: 'Uber trip',
+            signedAmount: '-100.00',
+            amount: '100.00',
+            flow: 'OUT',
+            suggestedCategory: { id: 7, name: 'Transport', categoryType: 'EXPENSE' },
+            suggestedTags: [{ id: 3, name: 'Ride share' }],
+            matchedRules: [{ ruleId: 20, ruleName: 'Uber gastos' }],
+            conflicts: [],
+            skippedOutputs: [],
+          },
+          {
+            recordId: 311,
+            recordIndex: 2,
+            transactionDate: '2026-07-14',
+            description: 'Uber refund',
+            signedAmount: '100.00',
+            amount: '100.00',
+            flow: 'IN',
+            suggestedCategory: null,
+            suggestedTags: [],
+            matchedRules: [],
+            conflicts: [],
+            skippedOutputs: [],
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
+
+    expect(await screen.findByText('Review categories and tags')).toBeTruthy();
+    expect(screen.getByTestId('classificationSuggestedCategory-310').textContent).toContain('Transport');
+    expect((screen.getByTestId('classificationCategory-310') as HTMLSelectElement).value).toBe('7');
+    expect(
+      Array.from((screen.getByTestId('classificationTags-310') as HTMLSelectElement).selectedOptions).map(option => option.value),
+    ).toEqual(['3']);
+    expect(screen.queryByTestId('classificationSuggestedCategory-311')).toBeNull();
+    expect(screen.queryByTestId('classificationMatchedRules-311')).toBeNull();
+    expect((screen.getByTestId('classificationCategory-311') as HTMLSelectElement).value).toBe('');
+    expect(
+      Array.from((screen.getByTestId('classificationCategory-311') as HTMLSelectElement).options).map(option => option.textContent),
+    ).toEqual(['No category', 'Salary']);
+
+    mockAxiosPost.mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        status: 'COMPLETED',
+        createdNow: 2,
+        alreadyImported: 0,
+        skipped: 0,
+        rejected: 0,
+        failed: 0,
+        counts: { recordsReceived: 2, recordsCreated: 2, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          { ...outRow, status: 'IMPORTED', financialTransactionId: 9001 },
+          { ...inRow, status: 'IMPORTED', financialTransactionId: 9002 },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm', {
+        records: [
+          { recordId: 310, categoryId: 7, tagIds: [3] },
+          { recordId: 311, categoryId: null, tagIds: [] },
+        ],
+      }),
+    );
+  });
+
   it('back to row review preserves current classification selections in memory', async () => {
     mockAxiosGet.mockResolvedValue({
       data: {

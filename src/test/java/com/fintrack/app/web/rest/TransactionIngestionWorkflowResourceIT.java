@@ -32,6 +32,7 @@ import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.DescriptionNormalizationRuleConditionRepository;
@@ -1102,6 +1103,7 @@ class TransactionIngestionWorkflowResourceIT {
         Tag tag = persistTag("Ride share", currentMockUser());
         TransactionRule rule = persistTransactionRule("Uber rule", category, List.of(tag));
         persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "Uber");
+        persistTransactionRuleCondition(rule, TransactionRuleField.FLOW, RuleOperator.EQUALS, "OUT");
         TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord disabledRecord = recordsFor(ingestion).get(0);
         mockMvc.perform(post(reviewUrl(ingestion, disabledRecord, "disable"))).andExpect(status().isOk());
@@ -1129,10 +1131,79 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void classificationPreviewOnlySuggestsExpenseCategoryForMatchingOutRows() throws Exception {
+        Category expenseCategory = persistCategory("Transporte", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Ride share", currentMockUser());
+        TransactionRule rule = persistTransactionRule("Uber gastos", expenseCategory, List.of(tag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "Uber");
+        persistTransactionRuleCondition(rule, TransactionRuleField.FLOW, RuleOperator.EQUALS, "OUT");
+        TransactionIngestion ingestion = createWorkflowWithUberOutAndInRows();
+        List<IngestionRecord> records = recordsFor(ingestion);
+
+        JsonNode preview = objectMapper.readTree(
+            mockMvc
+                .perform(post(classificationPreviewUrl(ingestion)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows.length()").value(2))
+                .andExpect(jsonPath("$.rows[0].recordId").value(records.get(0).getId()))
+                .andExpect(jsonPath("$.rows[0].description").value("Uber trip"))
+                .andExpect(jsonPath("$.rows[0].flow").value("OUT"))
+                .andExpect(jsonPath("$.rows[0].suggestedCategory.id").value(expenseCategory.getId()))
+                .andExpect(jsonPath("$.rows[0].suggestedCategory.name").value("Transporte"))
+                .andExpect(jsonPath("$.rows[0].suggestedTags[0].id").value(tag.getId()))
+                .andExpect(jsonPath("$.rows[1].recordId").value(records.get(1).getId()))
+                .andExpect(jsonPath("$.rows[1].description").value("Uber refund"))
+                .andExpect(jsonPath("$.rows[1].flow").value("IN"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString()
+        );
+        JsonNode inRowSuggestedCategory = preview.path("rows").get(1).path("suggestedCategory");
+        assertThat(inRowSuggestedCategory.isMissingNode() || inRowSuggestedCategory.isNull()).isTrue();
+        assertThat(preview.path("rows").get(1).path("suggestedTags").size()).isZero();
+        assertThat(preview.path("rows").get(1).path("matchedRules").size()).isZero();
+
+        confirmImport(
+            ingestion,
+            List.of(
+                confirmSelection(records.get(0).getId(), expenseCategory.getId(), List.of(tag.getId())),
+                confirmSelection(records.get(1).getId(), expenseCategory.getId(), List.of())
+            )
+        ).andExpect(status().isBadRequest());
+        assertThat(financialTransactionRepository.count()).isZero();
+
+        confirmImport(
+            ingestion,
+            List.of(
+                confirmSelection(records.get(0).getId(), expenseCategory.getId(), List.of(tag.getId())),
+                confirmSelection(records.get(1).getId(), null, List.of())
+            )
+        )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(2));
+
+        List<FinancialTransaction> transactions = financialTransactionRepository
+            .findAll()
+            .stream()
+            .sorted(Comparator.comparing(FinancialTransaction::getTransactionDate))
+            .toList();
+        assertThat(transactions).hasSize(2);
+        assertThat(transactions.get(0).getFlow()).isEqualTo(TransactionFlow.OUT);
+        assertThat(transactions.get(0).getCategory().getId()).isEqualTo(expenseCategory.getId());
+        assertThat(transactions.get(0).getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(transactions.get(1).getFlow()).isEqualTo(TransactionFlow.IN);
+        assertThat(transactions.get(1).getCategory()).isNull();
+        assertThat(transactions.get(1).getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
     void classificationPreviewUsesNormalizedDescriptionAndRejectsForeignOrNotReadyIngestions() throws Exception {
         Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
         TransactionRule rule = persistTransactionRule("Normalized Uber rule", category, List.of());
         persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.EQUALS, "Uber");
+        persistTransactionRuleCondition(rule, TransactionRuleField.FLOW, RuleOperator.EQUALS, "OUT");
         DescriptionNormalizationRule descriptionRule = persistDescriptionNormalizationRule("Normalize Uber", "Uber");
         persistDescriptionNormalizationCondition(descriptionRule, "Uber");
         FinancialAccount account = createCurrentUserAccount();
@@ -1472,6 +1543,21 @@ class TransactionIngestionWorkflowResourceIT {
         return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
     }
 
+    private TransactionIngestion createWorkflowWithUberOutAndInRows() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        String csv =
+            """
+            transactionDate,postingDate,description,signedAmount,currency,externalReference,notes
+            2026-01-16,,Uber trip,-100.00,MXN,,
+            2026-01-17,,Uber refund,100.00,MXN,,
+            """;
+        mockMvc
+            .perform(multipart(FILE_WORKFLOW_URL).file(csvFile("uber-out-in.csv", csv)).param("accountId", account.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("READY"));
+        return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
+    }
+
     private TransactionIngestion createWorkflowWithInvalidRow() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         String csv =
@@ -1624,7 +1710,7 @@ class TransactionIngestionWorkflowResourceIT {
             .value(value)
             .secondValue(null)
             .caseSensitive(false)
-            .position(0)
+            .position(rule.getConditions().size())
             .transactionRule(rule);
         TransactionRuleCondition persisted = transactionRuleConditionRepository.saveAndFlush(condition);
         rule.getConditions().add(persisted);

@@ -2702,8 +2702,13 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - confirm uses `rawData.normalized` transaction date, posting date, description, amount, flow, external reference, and notes.
 - imported transactions use the parent account and parent `TransactionIngestion`.
 - classification preview evaluates `VALID` rows read-only and returns category/tag suggestions without mutating records or creating transactions.
+- classification preview respects TransactionRule FLOW/category semantics; the regression case covers an Uber EXPENSE rule with `FLOW = OUT`, where an OUT row receives the category/tag suggestion and an IN refund row does not.
 - READY review UI shows "Continue to category/tags", calls classification-preview, and renders Pantalla 2 with suggested category/tags preselected.
+- Pantalla 2 preselects suggestions only for rows returned with suggestions, filters category options by row flow, and sends `null` category/empty tags for valid rows without selected suggestions.
 - Pantalla 2 edits are frontend-only until confirm; Back to row review preserves them in memory, but refresh persistence is not required.
+- Cypress coverage for this flow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
+  Run it with a dedicated clean user so existing manual TransactionRules cannot influence suggestions:
+  `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
 - confirm import accepts explicit category/tag selections for every `VALID` row and applies validated selections to created transactions.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
 - imported transactions do not get financial subscription from the Rule Engine.

@@ -433,6 +433,7 @@ I2C:
 - Slice 2B adds Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.
 - Confirm import accepts explicit per-`VALID`-row category/tag selections and applies those selections to the created `FinancialTransaction`s.
 - Category/tag selections are validated for current-user ownership, category flow compatibility, complete `VALID` record coverage, duplicate record ids, and duplicate tag ids.
+- Category/tag suggestions also follow the category/tag TransactionRule evaluator semantics. A rule that targets an EXPENSE category should include an effective `FLOW = OUT` condition, and a rule that targets an INCOME category should include an effective `FLOW = IN` condition through the configured TransactionRule guard. For example, an Uber expense rule should suggest the expense category for an OUT row and not for an IN/refund row.
 - Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
 - Pantalla 2 selections live only in frontend state until confirm; browser refresh loses category/tag adjustments in v1.
