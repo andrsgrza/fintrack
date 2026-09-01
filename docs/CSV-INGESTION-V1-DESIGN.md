@@ -428,13 +428,20 @@ I2C:
 - Confirm import creates `FinancialTransaction` rows from valid `IngestionRecord` rows.
 - Imported transactions should use `origin = FILE_IMPORT`.
 - Confirm import uses `rawData.normalized` as the source of transaction fields.
-- Confirm import does not run the Rule Engine in CSV v1.
-- Imported transactions have no category, no tags, and no financial subscription unless a later slice explicitly designs import-time suggestions/review.
-- No import UI rule suggestions in I2C.
+- Confirm import does not run the Rule Engine itself.
+- Slice 2A adds backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
+- Slice 2B adds Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.
+- Confirm import accepts explicit per-`VALID`-row category/tag selections and applies those selections to the created `FinancialTransaction`s.
+- Category/tag selections are validated for current-user ownership, category flow compatibility, complete `VALID` record coverage, duplicate record ids, and duplicate tag ids.
+- Category/tag suggestions also follow the category/tag TransactionRule evaluator semantics. A rule that targets an EXPENSE category should include an effective `FLOW = OUT` condition, and a rule that targets an INCOME category should include an effective `FLOW = IN` condition through the configured TransactionRule guard. For example, an Uber expense rule should suggest the expense category for an OUT row and not for an IN/refund row.
+- Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
+- `FinancialSubscription` remains empty in CSV v1 confirm import.
+- Pantalla 2 selections live only in frontend state until confirm; browser refresh loses category/tag adjustments in v1.
+- Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/debug smoke specs.
 
 Future:
 
-- Optional per-row category/tag suggestions.
+- Recoverable/persisted category/tag review choices.
 - Optional bulk review before import.
 - Bulk reevaluation remains deferred.
 
@@ -660,7 +667,7 @@ Already decided and not open for I1:
 - account comes through `TransactionIngestion`.
 - I1 does not run Rule Engine.
 - I1 does not create `FinancialTransaction` rows.
-- I2C confirm import does not run the Rule Engine; import-time suggestions/review are deferred.
+- I2C confirm import does not run the Rule Engine; Slice 2A adds a separate read-only classification-preview endpoint for import-time category/tag suggestions.
 
 ## Description normalization during upload
 
@@ -706,4 +713,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. Category/tag classification for ingestion remains deferred to Pantalla 2. UserPreference-driven rule behavior is also deferred.
+No FinancialTransactions are created during upload/review. Category/tag classification preview is surfaced in Pantalla 2 and remains non-persistent until Confirm Import. UserPreference-driven rule behavior is deferred.

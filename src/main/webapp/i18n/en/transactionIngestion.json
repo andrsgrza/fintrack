@@ -114,6 +114,20 @@
           "editedBy": "Edited by",
           "originallyAutoNormalizedBy": "Originally auto-normalized by {{ruleName}}, then edited manually"
         },
+        "classification": {
+          "title": "Review categories and tags",
+          "continue": "Continue to category/tags",
+          "unsavedNotice": "Category/tag selections are not saved until import is confirmed.",
+          "backToRows": "Back to row review",
+          "category": "Category",
+          "tags": "Tags",
+          "noCategory": "No category",
+          "suggested": "Suggested",
+          "ruleDetails": "Rule details",
+          "matchedRules": "Matched rules",
+          "conflicts": "Conflicts",
+          "skippedOutputs": "Skipped"
+        },
         "ingestionStatus": {
           "READY": "Ready to import",
           "PARTIALLY_READY": "Needs review",
@@ -129,6 +143,7 @@
           "createFailed": "Could not create file workflow. Check the file and try again.",
           "workflowLoadFailed": "Could not load the persisted workflow.",
           "recordUpdateFailed": "Could not update the workflow row. Check the row and try again.",
+          "classificationPreviewFailed": "Could not load category/tag suggestions. Return to row review and try again.",
           "confirmFailed": "Could not confirm import. Check the review status and try again."
         }
       }

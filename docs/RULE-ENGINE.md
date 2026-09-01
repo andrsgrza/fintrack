@@ -631,6 +631,19 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 ## Description normalization is separate
 
+## CSV ingestion category/tag review
+
+CSV ingestion uses the category/tag Transaction Rule evaluator only through a read-only review path.
+
+- `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` FILE ingestion rows and returns category/tag suggestions, matched rules, conflicts, and skipped outputs.
+- Pantalla 2 in the TransactionIngestion workflow UI prepopulates category/tag controls from that response.
+- User edits in Pantalla 2 live only in frontend state until Confirm Import.
+- Browser refresh loses category/tag edits in v1.
+- Confirm Import sends explicit per-row category/tag selections for every `VALID` row.
+- Confirm Import does not run the evaluator itself.
+- Confirm Import does not persist rule evaluation results or category/tag choices into `rawData`.
+- UserPreference and `AUTO_APPLY` behavior remain deferred.
+
 Description normalization is not part of the category/tag Transaction Rule Engine.
 
 - `TransactionRule` remains category/tags only.

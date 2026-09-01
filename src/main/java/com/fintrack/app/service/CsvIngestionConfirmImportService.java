@@ -3,20 +3,27 @@ package com.fintrack.app.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
+import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
+import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.CsvIngestionReadinessService.CsvIngestionReadinessSnapshot;
+import com.fintrack.app.service.dto.CsvIngestionConfirmImportRecordSelectionDTO;
+import com.fintrack.app.service.dto.CsvIngestionConfirmImportRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
@@ -24,7 +31,13 @@ import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +52,8 @@ public class CsvIngestionConfirmImportService {
     private final FileIngestionRepository fileIngestionRepository;
     private final IngestionRecordRepository ingestionRecordRepository;
     private final FinancialTransactionRepository financialTransactionRepository;
+    private final CategoryRepository categoryRepository;
+    private final TagRepository tagRepository;
     private final CurrentUserService currentUserService;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
     private final ObjectMapper objectMapper;
@@ -48,6 +63,8 @@ public class CsvIngestionConfirmImportService {
         FileIngestionRepository fileIngestionRepository,
         IngestionRecordRepository ingestionRecordRepository,
         FinancialTransactionRepository financialTransactionRepository,
+        CategoryRepository categoryRepository,
+        TagRepository tagRepository,
         CurrentUserService currentUserService,
         CsvIngestionReadinessService csvIngestionReadinessService,
         ObjectMapper objectMapper
@@ -56,13 +73,15 @@ public class CsvIngestionConfirmImportService {
         this.fileIngestionRepository = fileIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.financialTransactionRepository = financialTransactionRepository;
+        this.categoryRepository = categoryRepository;
+        this.tagRepository = tagRepository;
         this.currentUserService = currentUserService;
         this.csvIngestionReadinessService = csvIngestionReadinessService;
         this.objectMapper = objectMapper;
     }
 
     @Transactional(noRollbackFor = IngestionNotReadyException.class)
-    public CsvIngestionConfirmImportResponseDTO confirm(Long transactionIngestionId) {
+    public CsvIngestionConfirmImportResponseDTO confirm(Long transactionIngestionId, CsvIngestionConfirmImportRequestDTO request) {
         TransactionIngestion ingestion = resolveAccessibleFileIngestion(transactionIngestionId);
         List<IngestionRecord> records = records(ingestion);
         validateNoCorruptFinancialTransactionLinks(records);
@@ -80,12 +99,14 @@ public class CsvIngestionConfirmImportService {
             throw new IngestionNotReadyException(NOT_READY_MESSAGE);
         }
 
+        Map<Long, ResolvedRecordSelection> selections = validateAndResolveSelections(request, ingestion, records);
+
         int createdNow = 0;
         Instant now = Instant.now();
         for (IngestionRecord record : records) {
             if (record.getStatus() == IngestionRecordStatus.VALID) {
                 FinancialTransaction financialTransaction = financialTransactionRepository.save(
-                    toFinancialTransaction(ingestion, record, now)
+                    toFinancialTransaction(ingestion, record, now, selections.get(record.getId()))
                 );
                 record.setStatus(IngestionRecordStatus.IMPORTED);
                 record.setFinancialTransaction(financialTransaction);
@@ -103,6 +124,100 @@ public class CsvIngestionConfirmImportService {
         transactionIngestionRepository.save(ingestion);
 
         return response(ingestion, records, createdNow);
+    }
+
+    private Map<Long, ResolvedRecordSelection> validateAndResolveSelections(
+        CsvIngestionConfirmImportRequestDTO request,
+        TransactionIngestion ingestion,
+        List<IngestionRecord> records
+    ) {
+        if (request == null || request.getRecords() == null) {
+            throw new IllegalArgumentException("Confirm import requires category/tag selections for all valid records");
+        }
+
+        List<IngestionRecord> validRecords = records.stream().filter(record -> record.getStatus() == IngestionRecordStatus.VALID).toList();
+        Map<Long, IngestionRecord> validRecordById = new HashMap<>();
+        for (IngestionRecord record : validRecords) {
+            validRecordById.put(record.getId(), record);
+        }
+
+        if (request.getRecords().size() != validRecords.size()) {
+            throw new IllegalArgumentException("Confirm import must include exactly all valid ingestion records");
+        }
+
+        String userLogin = currentUserService.getCurrentUserLogin();
+        Map<Long, ResolvedRecordSelection> resolved = new HashMap<>();
+        Set<Long> seenRecordIds = new HashSet<>();
+
+        for (CsvIngestionConfirmImportRecordSelectionDTO selection : request.getRecords()) {
+            if (selection == null || selection.getRecordId() == null) {
+                throw new IllegalArgumentException("Confirm import record id is required");
+            }
+            if (!seenRecordIds.add(selection.getRecordId())) {
+                throw new IllegalArgumentException("Confirm import record ids must be unique");
+            }
+            IngestionRecord record = validRecordById.get(selection.getRecordId());
+            if (record == null) {
+                throw new IllegalArgumentException("Confirm import record does not belong to the valid record set");
+            }
+
+            TransactionFlow flow = requiredFlow(rawData(record).path("normalized"), "flow");
+            Category category = resolveCategory(selection.getCategoryId(), userLogin, flow);
+            Set<Tag> tags = resolveTags(selection.getTagIds(), userLogin);
+            resolved.put(record.getId(), new ResolvedRecordSelection(category, tags));
+        }
+
+        if (!resolved.keySet().equals(validRecordById.keySet())) {
+            throw new IllegalArgumentException("Confirm import must include exactly all valid ingestion records");
+        }
+
+        return resolved;
+    }
+
+    private Category resolveCategory(Long categoryId, String userLogin, TransactionFlow flow) {
+        if (categoryId == null) {
+            return null;
+        }
+        Category category = categoryRepository
+            .findOneWithToOneRelationshipsByIdAndUserLogin(categoryId, userLogin)
+            .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
+        validateCategoryCompatibility(category, flow);
+        return category;
+    }
+
+    private Set<Tag> resolveTags(List<Long> tagIds, String userLogin) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> seenTagIds = new HashSet<>();
+        Set<Tag> tags = new LinkedHashSet<>();
+        for (Long tagId : tagIds) {
+            if (tagId == null) {
+                throw new IllegalArgumentException("Tag id is required");
+            }
+            if (!seenTagIds.add(tagId)) {
+                throw new IllegalArgumentException("Confirm import tag ids must be unique per record");
+            }
+            tags.add(
+                tagRepository
+                    .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
+                    .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"))
+            );
+        }
+        return tags;
+    }
+
+    private void validateCategoryCompatibility(Category category, TransactionFlow flow) {
+        if (category == null || flow == null) {
+            return;
+        }
+        CategoryType categoryType = category.getCategoryType();
+        if (flow == TransactionFlow.OUT && categoryType != CategoryType.EXPENSE && categoryType != CategoryType.BOTH) {
+            throw new IllegalArgumentException("Category type is not compatible with transaction flow");
+        }
+        if (flow == TransactionFlow.IN && categoryType != CategoryType.INCOME && categoryType != CategoryType.BOTH) {
+            throw new IllegalArgumentException("Category type is not compatible with transaction flow");
+        }
     }
 
     private TransactionIngestion resolveAccessibleFileIngestion(Long transactionIngestionId) {
@@ -144,7 +259,12 @@ public class CsvIngestionConfirmImportService {
         }
     }
 
-    private FinancialTransaction toFinancialTransaction(TransactionIngestion ingestion, IngestionRecord record, Instant now) {
+    private FinancialTransaction toFinancialTransaction(
+        TransactionIngestion ingestion,
+        IngestionRecord record,
+        Instant now,
+        ResolvedRecordSelection selection
+    ) {
         JsonNode normalized = rawData(record).path("normalized");
         CurrencyCode rowCurrency = requiredCurrency(normalized, "currency");
         if (
@@ -155,7 +275,7 @@ public class CsvIngestionConfirmImportService {
             throw new IllegalArgumentException("CSV row currency must match the selected account currency");
         }
 
-        return new FinancialTransaction()
+        FinancialTransaction financialTransaction = new FinancialTransaction()
             .transactionDate(requiredLocalDate(normalized, "transactionDate"))
             .postingDate(optionalLocalDate(normalized, "postingDate"))
             .description(requiredText(normalized, "description"))
@@ -167,9 +287,15 @@ public class CsvIngestionConfirmImportService {
             .createdAt(now)
             .updatedAt(now)
             .account(ingestion.getAccount())
-            .category(null)
+            .category(selection == null ? null : selection.category())
             .financialSubscription(null)
             .transactionIngestion(ingestion);
+
+        if (selection != null) {
+            selection.tags().forEach(financialTransaction::addTags);
+        }
+
+        return financialTransaction;
     }
 
     private CsvIngestionConfirmImportResponseDTO response(TransactionIngestion ingestion, List<IngestionRecord> records, int createdNow) {
@@ -275,6 +401,12 @@ public class CsvIngestionConfirmImportService {
 
         private IngestionNotReadyException(String message) {
             super(message);
+        }
+    }
+
+    private record ResolvedRecordSelection(Category category, Set<Tag> tags) {
+        private ResolvedRecordSelection {
+            tags = tags == null ? Set.of() : Set.copyOf(tags);
         }
     }
 }

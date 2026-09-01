@@ -135,15 +135,17 @@ describe('TransactionIngestion create workflow form', () => {
     await waitFor(() => expect(screen.getByText('Review route')).not.toBeNull());
   });
 
-  it('shows backend errors and clears the file input after failed create', async () => {
-    mockAxiosPost.mockRejectedValue({ response: { data: { detail: 'CSV file is required' } } });
+  it('shows invalid upload errors, stays on create route, and clears the file input after failed create', async () => {
+    mockAxiosPost.mockRejectedValue({ response: { data: { detail: 'Invalid CSV header' } } });
     renderCreateForm();
 
     selectAccount();
     const input = uploadFile();
     fireEvent.click(screen.getByRole('button', { name: /Create workflow/ }));
 
-    await waitFor(() => expect(screen.getByText('CSV file is required')).not.toBeNull());
+    await waitFor(() => expect(screen.getByText('Invalid CSV header')).not.toBeNull());
+    expect(screen.queryByText('Review route')).toBeNull();
+    expect(screen.getByRole('button', { name: /Create workflow/ })).toBeTruthy();
     expect(input.value).toBe('');
   });
 });

@@ -2,12 +2,15 @@ package com.fintrack.app.web.rest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fintrack.app.service.CsvIngestionClassificationPreviewService;
 import com.fintrack.app.service.CsvIngestionConfirmImportService;
 import com.fintrack.app.service.CsvIngestionRecordReviewService;
 import com.fintrack.app.service.CsvIngestionWorkflowService;
 import com.fintrack.app.service.TransactionIngestionQueryService;
 import com.fintrack.app.service.TransactionIngestionService;
 import com.fintrack.app.service.criteria.TransactionIngestionCriteria;
+import com.fintrack.app.service.dto.CsvIngestionClassificationPreviewResponseDTO;
+import com.fintrack.app.service.dto.CsvIngestionConfirmImportRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionRecordReviewResponseDTO;
@@ -58,6 +61,8 @@ public class TransactionIngestionResource {
 
     private final CsvIngestionRecordReviewService csvIngestionRecordReviewService;
 
+    private final CsvIngestionClassificationPreviewService csvIngestionClassificationPreviewService;
+
     private final CsvIngestionConfirmImportService csvIngestionConfirmImportService;
 
     private final ObjectMapper objectMapper;
@@ -67,6 +72,7 @@ public class TransactionIngestionResource {
         TransactionIngestionQueryService transactionIngestionQueryService,
         CsvIngestionWorkflowService csvIngestionWorkflowService,
         CsvIngestionRecordReviewService csvIngestionRecordReviewService,
+        CsvIngestionClassificationPreviewService csvIngestionClassificationPreviewService,
         CsvIngestionConfirmImportService csvIngestionConfirmImportService,
         ObjectMapper objectMapper
     ) {
@@ -74,6 +80,7 @@ public class TransactionIngestionResource {
         this.transactionIngestionQueryService = transactionIngestionQueryService;
         this.csvIngestionWorkflowService = csvIngestionWorkflowService;
         this.csvIngestionRecordReviewService = csvIngestionRecordReviewService;
+        this.csvIngestionClassificationPreviewService = csvIngestionClassificationPreviewService;
         this.csvIngestionConfirmImportService = csvIngestionConfirmImportService;
         this.objectMapper = objectMapper;
     }
@@ -206,11 +213,24 @@ public class TransactionIngestionResource {
         }
     }
 
+    @PostMapping("/{id}/classification-preview")
+    public ResponseEntity<CsvIngestionClassificationPreviewResponseDTO> previewWorkflowClassification(@PathVariable("id") Long id) {
+        LOG.debug("REST request to preview CSV FileIngestion classification : {}", id);
+        try {
+            return ResponseEntity.ok(csvIngestionClassificationPreviewService.preview(id));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
     @PostMapping("/{id}/confirm")
-    public ResponseEntity<CsvIngestionConfirmImportResponseDTO> confirmWorkflowImport(@PathVariable("id") Long id) {
+    public ResponseEntity<CsvIngestionConfirmImportResponseDTO> confirmWorkflowImport(
+        @PathVariable("id") Long id,
+        @RequestBody(required = false) CsvIngestionConfirmImportRequestDTO request
+    ) {
         LOG.debug("REST request to confirm CSV FileIngestion import : {}", id);
         try {
-            return ResponseEntity.ok(csvIngestionConfirmImportService.confirm(id));
+            return ResponseEntity.ok(csvIngestionConfirmImportService.confirm(id, request));
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
