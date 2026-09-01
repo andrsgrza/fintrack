@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <changeSet id="20260728120000-1" author="codex">
+        <createTable tableName="transaction_candidate" remarks="A transaction in progress/review before it becomes posted ledger data. Candidates never affect balances.">
+            <column name="id" type="bigint">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="source" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="validation_status" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description_review_status" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="classification_review_status" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="transaction_date" type="date">
+                <constraints nullable="true"/>
+            </column>
+            <column name="posting_date" type="date">
+                <constraints nullable="true"/>
+            </column>
+            <column name="description" type="varchar(500)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="signed_amount" type="decimal(21,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="amount" type="decimal(21,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="flow" type="varchar(255)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="currency_snapshot" type="varchar(255)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="external_reference" type="varchar(150)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="notes" type="varchar(1000)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="failure_reason" type="varchar(1000)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="created_at" type="${datetimeType}">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="${datetimeType}">
+                <constraints nullable="false"/>
+            </column>
+            <column name="posted_at" type="${datetimeType}">
+                <constraints nullable="true"/>
+            </column>
+            <column name="cancelled_at" type="${datetimeType}">
+                <constraints nullable="true"/>
+            </column>
+            <column name="failed_at" type="${datetimeType}">
+                <constraints nullable="true"/>
+            </column>
+            <column name="user_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="account_id" type="bigint">
+                <constraints nullable="true"/>
+            </column>
+            <column name="category_id" type="bigint">
+                <constraints nullable="true"/>
+            </column>
+            <column name="transaction_ingestion_id" type="bigint">
+                <constraints nullable="true"/>
+            </column>
+            <column name="ingestion_record_id" type="bigint">
+                <constraints nullable="true" unique="true" uniqueConstraintName="ux_transaction_candidate__ingestion_record_id"/>
+            </column>
+            <column name="financial_transaction_id" type="bigint">
+                <constraints nullable="true" unique="true" uniqueConstraintName="ux_transaction_candidate__financial_transaction_id"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="20260728120000-1-relations" author="codex">
+        <createTable tableName="rel_transaction_candidate__tags">
+            <column name="tags_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="transaction_candidate_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addPrimaryKey columnNames="transaction_candidate_id, tags_id" tableName="rel_transaction_candidate__tags"/>
+    </changeSet>
+
+    <changeSet id="20260728120000-2" author="codex">
+        <addForeignKeyConstraint baseColumnNames="user_id"
+                                 baseTableName="transaction_candidate"
+                                 constraintName="fk_transaction_candidate__user_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="jhi_user"/>
+
+        <addForeignKeyConstraint baseColumnNames="account_id"
+                                 baseTableName="transaction_candidate"
+                                 constraintName="fk_transaction_candidate__account_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_account"/>
+
+        <addForeignKeyConstraint baseColumnNames="category_id"
+                                 baseTableName="transaction_candidate"
+                                 constraintName="fk_transaction_candidate__category_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="category"/>
+
+        <addForeignKeyConstraint baseColumnNames="transaction_ingestion_id"
+                                 baseTableName="transaction_candidate"
+                                 constraintName="fk_transaction_candidate__transaction_ingestion_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="transaction_ingestion"/>
+
+        <addForeignKeyConstraint baseColumnNames="ingestion_record_id"
+                                 baseTableName="transaction_candidate"
+                                 constraintName="fk_transaction_candidate__ingestion_record_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="ingestion_record"/>
+
+        <addForeignKeyConstraint baseColumnNames="financial_transaction_id"
+                                 baseTableName="transaction_candidate"
+                                 constraintName="fk_transaction_candidate__financial_transaction_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="financial_transaction"/>
+
+        <addForeignKeyConstraint baseColumnNames="transaction_candidate_id"
+                                 baseTableName="rel_transaction_candidate__tags"
+                                 constraintName="fk_rel_transaction_candidate__tags__candidate_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="transaction_candidate"/>
+
+        <addForeignKeyConstraint baseColumnNames="tags_id"
+                                 baseTableName="rel_transaction_candidate__tags"
+                                 constraintName="fk_rel_transaction_candidate__tags__tags_id"
+                                 referencedColumnNames="id"
+                                 referencedTableName="tag"/>
+    </changeSet>
+</databaseChangeLog>

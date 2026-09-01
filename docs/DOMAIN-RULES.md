@@ -90,6 +90,45 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ---
 
+## TransactionCandidate — central draft/review boundary
+
+**Status:** TC-1/TC-1A backend foundation implemented. Not yet wired into manual creation, CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, or UserPreference.
+
+Domain boundary:
+
+- `FinancialTransaction` means posted/final ledger transaction and affects balances, dashboards, budgets, and reports.
+- `TransactionCandidate` means transaction in progress/review and does **not** affect balances, dashboards, budgets, or reports.
+- `FinancialTransaction` must not be used as an incomplete draft.
+- `TransactionCandidate` is central, not ingestion-specific: it is intended to support manual drafts and file/API ingestion review. Bank sync is deferred and is not an active TC-1A source value.
+- `TransactionCandidateSource` means how the candidate entered the draft/review pipeline. `TransactionOrigin` means how a final posted `FinancialTransaction` is classified. They are not interchangeable and `TransactionCandidate` does not store `TransactionOrigin` in TC-1A.
+- Future source→origin mapping for a posting/conversion command: `MANUAL → MANUAL`, `FILE_IMPORT → FILE_IMPORT`, `API_IMPORT → API`. Bank sync remains unsupported until `TransactionOrigin` explicitly supports it.
+
+TC-1 rules:
+
+- Candidate owner is direct `user`.
+- Optional account/category/tags/transaction ingestion/ingestion record links must belong to the candidate owner.
+- Admin has no special cross-user product behavior for candidates.
+- `source` is immutable after create.
+- Service defaults `status=DRAFT`, `validationStatus=UNKNOWN`, `descriptionReviewStatus=NOT_EVALUATED`, and `classificationReviewStatus=NOT_EVALUATED`.
+- `validationStatus`, `descriptionReviewStatus`, `classificationReviewStatus`, timestamps, `amount`, `flow`, and `financialTransaction` are server-controlled in normal candidate CRUD.
+- `signedAmount`, when present, derives positive `amount` and `flow`; clients must not send `amount` or `flow` directly.
+- `READY_TO_POST` requires account, transaction date, nonblank description, amount > 0, flow, and account-matching currency.
+- EXPENSE category requires OUT flow; INCOME category requires IN flow.
+- `POSTED` requires a linked `FinancialTransaction`, but that link is reserved for a future server-side posting/conversion command and cannot be set through normal create/update/PATCH.
+- `POSTED` and `CANCELLED` are final for mutation purposes.
+- Deleting a candidate clears its tag join rows.
+
+Deferred:
+
+- Manual draft UI and autosave.
+- CSV ingestion candidate creation.
+- Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
+- Persisting Pantalla 2 category/tag selections on candidates.
+- Description/rule re-evaluation endpoints.
+- Candidate-to-`FinancialTransaction` posting command.
+
+---
+
 ## Architecture — cross-service delete (Grupo 3 only)
 
 | Service                         | Role                                                                               |

@@ -90,25 +90,26 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 ## Master tracker — 17 entidades
 
-| #   | Entity                       | Pattern                                                | Phase | Ownership | Domain rules | Validations | Tests                                                                                                |
-| --- | ---------------------------- | ------------------------------------------------------ | ----- | --------- | ------------ | ----------- | ---------------------------------------------------------------------------------------------------- |
-| 1   | **FinancialAccount**         | A — direct `user`                                      | 1     | ✅        | ✅           | ✅          | [TESTING.md § FA](TESTING.md#financialaccount) · [VALIDATIONS §1](VALIDATIONS.md#1-financialaccount) |
-| 2   | **FinancialTransaction**     | B — via `account`                                      | 2     | ✅        | ✅           | ✅          | [TESTING.md § FT](TESTING.md#financialtransaction)                                                   |
-| 3   | **CreditAccountDetails**     | B — via `account`                                      | 4     | ✅        | ✅           | ✅          | [TESTING.md § CAD](TESTING.md#creditaccountdetails)                                                  |
-| 4   | **Category**                 | A — direct `user`                                      | 3     | ✅        | ✅           | ✅          | [TESTING.md § Category](TESTING.md#category)                                                         |
-| 5   | **Tag**                      | A — direct `user`                                      | 3     | ✅        | ✅           | ✅          | [TESTING.md § Tag](TESTING.md#tag) · [VALIDATIONS §5](VALIDATIONS.md#5-tag)                          |
-| 6   | **TransactionRule**          | A — direct `user`                                      | 3 / 6 | ✅        | ✅           | ✅          | [TESTING.md § TransactionRule](TESTING.md#transactionrule)                                           |
-| 7   | **TransactionRuleCondition** | C — via `transactionRule`                              | 6     | ✅        | ✅           | ✅          | [TESTING.md § TRC](TESTING.md#transactionrulecondition)                                              |
-| 8   | **FinancialSubscription**    | A + links                                              | 3 / 4 | ✅        | ✅           | ✅          | [TESTING.md § FinancialSubscription](TESTING.md#financialsubscription)                               |
-| 9   | **Budget**                   | A + M2M                                                | 3 / 4 | ✅        | ✅           | ✅          | [TESTING.md § Budget](TESTING.md#budget)                                                             |
-| 10  | **InternalTransfer**         | D — via 2 transactions                                 | 4     | ✅        | ✅           | ✅          | [TESTING.md § IT](TESTING.md#internaltransfer)                                                       |
-| 11  | **TransactionIngestion**     | B — via `account`                                      | 6     | ✅        | ✅           | ✅          | [TESTING.md § TI](TESTING.md#transactioningestion)                                                   |
-| 12  | **FileIngestion**            | C — via `transactionIngestion`                         | 6     | ✅        | ✅           | ✅          | [TESTING.md § FI](TESTING.md#fileingestion)                                                          |
-| 13  | **ApiIngestion**             | C — via `transactionIngestion` + token snapshots (11C) | 6     | ✅        | ✅ (11C)     | ✅          | [TESTING.md § AI](TESTING.md#apiingestion)                                                           |
-| 14  | **IngestionRecord**          | C — via `transactionIngestion`                         | 6     | ✅        | ✅           | ✅          | [TESTING.md § IR](TESTING.md#ingestionrecord) · [VALIDATIONS §14](VALIDATIONS.md#14-ingestionrecord) |
-| 15  | **ApiAccessToken**           | A — direct `user`                                      | 3 / 6 | ✅        | ✅ (11C)     | ✅          | [TESTING.md § AAT](TESTING.md#apiaccesstoken)                                                        |
-| 16  | **ApiAccessTokenPermission** | C — via `apiAccessToken`                               | 6     | ✅        | ✅           | ✅          | [TESTING.md § AATP](TESTING.md#apiaccesstokenpermission)                                             |
-| 17  | **UserDashboardPreference**  | A — direct `user` (1:1 user)                           | 3     | ✅        | ✅           | ✅          | [TESTING.md § UDP](TESTING.md#userdashboardpreference)                                               |
+| #   | Entity                       | Pattern                                                | Phase | Ownership | Domain rules  | Validations | Tests                                                                                                |
+| --- | ---------------------------- | ------------------------------------------------------ | ----- | --------- | ------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | **FinancialAccount**         | A — direct `user`                                      | 1     | ✅        | ✅            | ✅          | [TESTING.md § FA](TESTING.md#financialaccount) · [VALIDATIONS §1](VALIDATIONS.md#1-financialaccount) |
+| 2   | **FinancialTransaction**     | B — via `account`                                      | 2     | ✅        | ✅            | ✅          | [TESTING.md § FT](TESTING.md#financialtransaction)                                                   |
+| —   | **TransactionCandidate**     | A + links — direct `user`, optional account/ingestion  | TC-1  | ✅        | ✅ foundation | ✅          | [TESTING.md § TC](TESTING.md#transactioncandidate)                                                   |
+| 3   | **CreditAccountDetails**     | B — via `account`                                      | 4     | ✅        | ✅            | ✅          | [TESTING.md § CAD](TESTING.md#creditaccountdetails)                                                  |
+| 4   | **Category**                 | A — direct `user`                                      | 3     | ✅        | ✅            | ✅          | [TESTING.md § Category](TESTING.md#category)                                                         |
+| 5   | **Tag**                      | A — direct `user`                                      | 3     | ✅        | ✅            | ✅          | [TESTING.md § Tag](TESTING.md#tag) · [VALIDATIONS §5](VALIDATIONS.md#5-tag)                          |
+| 6   | **TransactionRule**          | A — direct `user`                                      | 3 / 6 | ✅        | ✅            | ✅          | [TESTING.md § TransactionRule](TESTING.md#transactionrule)                                           |
+| 7   | **TransactionRuleCondition** | C — via `transactionRule`                              | 6     | ✅        | ✅            | ✅          | [TESTING.md § TRC](TESTING.md#transactionrulecondition)                                              |
+| 8   | **FinancialSubscription**    | A + links                                              | 3 / 4 | ✅        | ✅            | ✅          | [TESTING.md § FinancialSubscription](TESTING.md#financialsubscription)                               |
+| 9   | **Budget**                   | A + M2M                                                | 3 / 4 | ✅        | ✅            | ✅          | [TESTING.md § Budget](TESTING.md#budget)                                                             |
+| 10  | **InternalTransfer**         | D — via 2 transactions                                 | 4     | ✅        | ✅            | ✅          | [TESTING.md § IT](TESTING.md#internaltransfer)                                                       |
+| 11  | **TransactionIngestion**     | B — via `account`                                      | 6     | ✅        | ✅            | ✅          | [TESTING.md § TI](TESTING.md#transactioningestion)                                                   |
+| 12  | **FileIngestion**            | C — via `transactionIngestion`                         | 6     | ✅        | ✅            | ✅          | [TESTING.md § FI](TESTING.md#fileingestion)                                                          |
+| 13  | **ApiIngestion**             | C — via `transactionIngestion` + token snapshots (11C) | 6     | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AI](TESTING.md#apiingestion)                                                           |
+| 14  | **IngestionRecord**          | C — via `transactionIngestion`                         | 6     | ✅        | ✅            | ✅          | [TESTING.md § IR](TESTING.md#ingestionrecord) · [VALIDATIONS §14](VALIDATIONS.md#14-ingestionrecord) |
+| 15  | **ApiAccessToken**           | A — direct `user`                                      | 3 / 6 | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AAT](TESTING.md#apiaccesstoken)                                                        |
+| 16  | **ApiAccessTokenPermission** | C — via `apiAccessToken`                               | 6     | ✅        | ✅            | ✅          | [TESTING.md § AATP](TESTING.md#apiaccesstokenpermission)                                             |
+| 17  | **UserDashboardPreference**  | A — direct `user` (1:1 user)                           | 3     | ✅        | ✅            | ✅          | [TESTING.md § UDP](TESTING.md#userdashboardpreference)                                               |
 
 ### Delete confirmation dialogs — Grupo 1 UX ✅
 
@@ -136,6 +137,30 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | **D**   | Owned vía reglas compuestas        | InternalTransfer (2 tx, mismo user/moneda)                                                                               |
 
 **Admin:** en todas las entidades user-scoped, `ROLE_ADMIN` debe poder ver y modificar todo (mismo criterio que FinancialAccount).
+
+**TransactionCandidate exception:** TC-1/TC-1A treats candidates as product-owned draft/review state. Admin does not get special cross-user product behavior for candidate CRUD; candidate operations resolve the current authenticated owner and validate every linked account/category/tag/ingestion record against that owner. The eventual `financialTransaction` link is server-controlled and reserved for a future posting/conversion command.
+
+## TransactionCandidate — TC-1/TC-1A backend foundation
+
+`TransactionCandidate` is the central in-progress transaction model. It is intentionally separate from `FinancialTransaction`, which remains posted/final ledger data that affects balances, dashboards, budgets, and reports.
+
+TC-1 adds the backend foundation only:
+
+- JDL/.jhipster metadata, Liquibase table, backend entity/DTO/mapper/repository/service/resource.
+- Direct owner via `user`.
+- Optional links to `FinancialAccount`, `Category`, `Tag`, `TransactionIngestion`, and `IngestionRecord`; the optional `FinancialTransaction` link is readable but server-controlled/write-rejected in normal CRUD.
+- Lifecycle/status foundation for manual drafts and file/API ingestion review. Bank sync is deferred and is not an active TC-1A source value.
+- Server-owned timestamps, derived `amount`/`flow`, server-owned review statuses, and same-owner validations.
+- `TransactionCandidateSource` describes how a candidate entered draft/review. `TransactionOrigin` describes final posted `FinancialTransaction` classification. They are not interchangeable; TC-1A does not store `TransactionOrigin` on `TransactionCandidate`.
+- Future posting mapping: `MANUAL → MANUAL`, `FILE_IMPORT → FILE_IMPORT`, `API_IMPORT → API`. Bank sync remains unsupported until the final transaction origin model supports it.
+
+TC-1 does **not** change existing behavior:
+
+- Manual `POST /api/financial-transactions` still creates posted `FinancialTransaction` directly.
+- FinancialTransaction update/PATCH/rule-preview behavior is unchanged.
+- CSV ingestion still uses `IngestionRecord.rawData.normalized` for Pantalla 1 and frontend-only category/tag state for Pantalla 2.
+- Confirm Import still creates `FinancialTransaction` rows from `rawData.normalized` plus explicit Pantalla 2 selections.
+- No UserPreference, re-evaluation buttons, unified review screen, or frontend TransactionCandidate product UI exists yet.
 
 ---
 
@@ -687,14 +712,14 @@ Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. 
 
 #### Deuda / riesgos documentados
 
-| Tema                                              | Estado      | Notas                                                                                                              |
-| ------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
-| Balances                                          | ⏳          | DELETE y create no recalculan saldos                                                                               |
-| Create atómico out+in+transfer                    | ⏳          | Solo enlazar txs existentes en este PR                                                                             |
-| Posting dates                                     | ⏳          | Sin validación de alineación entre patas                                                                           |
-| FT delete cleanup                                 | ✅          | `FinancialTransactionService.delete()` elimina el vínculo InternalTransfer y preserva la contraparte               |
-| Origin unrestricted for existing transaction legs | ✅ baseline | `MANUAL` / `FILE_IMPORT` / `API` are allowed; ingestion-created transfer pairing remains a future product decision |
-| Admin candidates cross-user                       | ✅ diseño   | Admin ve candidatos ajenos; **create bloquea cross-owner** siempre                                                 |
+| Tema                                              | Estado      | Notas                                                                                                                                        |
+| ------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Balances                                          | ⏳          | DELETE y create no recalculan saldos                                                                                                         |
+| Create atómico out+in+transfer                    | ⏳          | Solo enlazar txs existentes en este PR                                                                                                       |
+| Posting dates                                     | ⏳          | Sin validación de alineación entre patas                                                                                                     |
+| FT delete cleanup                                 | ✅          | `FinancialTransactionService.delete()` elimina el vínculo InternalTransfer y preserva la contraparte                                         |
+| Origin unrestricted for existing transaction legs | ✅ baseline | `MANUAL` / `FILE_IMPORT` / `API` are allowed; ingestion-created transfer pairing remains a future product decision                           |
+| Admin transfer-leg lookup                         | ✅ diseño   | Admin lookup for existing transfer legs follows InternalTransfer rules; TransactionCandidate admin behavior has no cross-user product bypass |
 
 ---
 

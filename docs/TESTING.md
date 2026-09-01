@@ -596,6 +596,42 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
   -Dtest=FinancialTransactionResourceIT,FinancialTransactionServiceTest test
 ```
 
+## TransactionCandidate
+
+**Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TC-1 intentionally does not grant special admin cross-user product behavior.
+
+**Scope:** backend foundation only. Candidates are not wired into manual create, CSV upload/review, Pantalla 2, Confirm Import, Rule Engine application, DescriptionNormalizationRule re-evaluation, UserPreference, or product UI.
+
+### Summary counts
+
+| Type           | File                              | Tests | Notes                                                                                                                            |
+| -------------- | --------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionCandidateResourceIT`  | 6     | Create draft, status defaults, signedAmount derivation, READY validation, ownership/category-flow, delete join cleanup           |
+| Unit — service | `TransactionCandidateServiceTest` | 15    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior. May require Mockito inline attach support in local JVM. |
+
+**Run:**
+
+```bash
+JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvnw \
+  -Dskip.installnodenpm -Dskip.npm -Dskip.webpack \
+  -Dtest=TransactionCandidateResourceIT,TransactionCandidateServiceTest,FinancialAccountBalanceServiceTest test
+```
+
+Key TC-1/TC-1A assertions:
+
+- creating a DRAFT candidate succeeds with server/default lifecycle fields.
+- `signedAmount` derives positive `amount` and `flow`; direct client writes to `amount`/`flow` are rejected.
+- `READY_TO_POST` requires account, transaction date, nonblank description, derived amount > 0, derived flow, and account-matching currency.
+- account/category/tags/transaction ingestion/ingestion record must belong to the candidate owner.
+- direct client writes to `financialTransaction` are rejected because the link is server-controlled for a future posting command.
+- server-owned timestamps and review/lifecycle-derived fields are protected.
+- category type is compatible with flow, including INCOME/EXPENSE rejection and BOTH acceptance.
+- admin has no cross-user product bypass.
+- `FAILED` requires a failure reason and cannot transition directly to `POSTED`.
+- `POSTED`/`CANCELLED` candidates cannot be mutated as drafts.
+- deleting a candidate clears candidate tag join rows.
+- candidates do not affect `FinancialAccountBalanceService`, which reads only posted `FinancialTransaction` rows.
+
 ---
 
 ### 1. Integration tests — `FinancialTransactionResourceIT`
