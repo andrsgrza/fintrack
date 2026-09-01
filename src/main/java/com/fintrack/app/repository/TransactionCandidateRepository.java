@@ -1,6 +1,7 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.TransactionCandidate;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -117,6 +118,12 @@ public interface TransactionCandidateRepository
         "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
     )
     Optional<TransactionCandidate> findOneWithRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
+    )
+    Optional<TransactionCandidate> findOneByIdAndUserLoginForPosting(@Param("id") Long id, @Param("login") String login);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(

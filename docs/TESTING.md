@@ -598,16 +598,16 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 ## TransactionCandidate
 
-**Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TC-1 intentionally does not grant special admin cross-user product behavior.
+**Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** backend foundation only. Candidates are not wired into manual create, CSV upload/review, Pantalla 2, Confirm Import, Rule Engine application, DescriptionNormalizationRule re-evaluation, UserPreference, or product UI.
+**Scope:** TC-2A / TC-2A.1 backend manual draft commands are implemented. Candidates are not wired into the manual transaction UI, CSV upload/review, Pantalla 2, Confirm Import, Rule Engine candidate preview/apply, DescriptionNormalizationRule re-evaluation, UserPreference, or product UI.
 
 ### Summary counts
 
-| Type           | File                              | Tests | Notes                                                                                                                            |
-| -------------- | --------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT | `TransactionCandidateResourceIT`  | 6     | Create draft, status defaults, signedAmount derivation, READY validation, ownership/category-flow, delete join cleanup           |
-| Unit — service | `TransactionCandidateServiceTest` | 15    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior. May require Mockito inline attach support in local JVM. |
+| Type           | File                              | Tests | Notes                                                                                                                                                          |
+| -------------- | --------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionCandidateResourceIT`  | 22    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked/idempotent post, no rule-on-post, and final delete protection   |
+| Unit — service | `TransactionCandidateServiceTest` | 60    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM. |
 
 **Run:**
 
@@ -617,7 +617,7 @@ JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvn
   -Dtest=TransactionCandidateResourceIT,TransactionCandidateServiceTest,FinancialAccountBalanceServiceTest test
 ```
 
-Key TC-1/TC-1A assertions:
+Key TC-1/TC-2A assertions:
 
 - creating a DRAFT candidate succeeds with server/default lifecycle fields.
 - `signedAmount` derives positive `amount` and `flow`; direct client writes to `amount`/`flow` are rejected.
@@ -631,6 +631,12 @@ Key TC-1/TC-1A assertions:
 - `POSTED`/`CANCELLED` candidates cannot be mutated as drafts.
 - deleting a candidate clears candidate tag join rows.
 - candidates do not affect `FinancialAccountBalanceService`, which reads only posted `FinancialTransaction` rows.
+- `POST /api/transaction-candidates/manual` creates current-user MANUAL DRAFT candidates and rejects client-controlled status/server fields.
+- `PATCH /api/transaction-candidates/{id}/manual-draft` updates editable draft fields, derives amount/flow from signedAmount, and recalculates DRAFT vs READY_TO_POST.
+- `POST /api/transaction-candidates/{id}/cancel` marks non-final manual drafts CANCELLED and sets `cancelledAt`.
+- `POST /api/transaction-candidates/{id}/post` supports MANUAL only, uses a pessimistic write lock, recalculates current normalized/derived fields, rejects incomplete/cancelled/file/API candidates and stale description/classification review states, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies category/tags, links the candidate, and is idempotent on retry.
+- Generic `TransactionCandidate` writes are restricted: generic create cannot create file/API import candidates or set status; generic update/PATCH cannot change status; generic delete rejects `POSTED`/`CANCELLED`.
+- Candidate post does not invoke TransactionRule evaluation; direct `POST /api/financial-transactions` remains the rule-application path until candidate-specific preview/apply is implemented.
 
 ---
 

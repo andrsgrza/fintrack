@@ -3,13 +3,16 @@ package com.fintrack.app.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.User;
@@ -22,8 +25,10 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
+import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
+import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
@@ -65,6 +70,9 @@ class TransactionCandidateServiceTest {
     private FinancialAccountRepository financialAccountRepository;
 
     @Mock
+    private FinancialTransactionRepository financialTransactionRepository;
+
+    @Mock
     private CategoryRepository categoryRepository;
 
     @Mock
@@ -87,6 +95,7 @@ class TransactionCandidateServiceTest {
             transactionCandidateMapper,
             currentUserService,
             financialAccountRepository,
+            financialTransactionRepository,
             categoryRepository,
             tagRepository,
             transactionIngestionRepository,
@@ -158,6 +167,372 @@ class TransactionCandidateServiceTest {
 
         assertThat(result.getAmount()).isEqualByComparingTo("12.30");
         assertThat(result.getFlow()).isEqualTo(TransactionFlow.IN);
+    }
+
+    @Test
+    void createManualDraftSetsSourceAndDraftStatusForCurrentUser() {
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        TransactionCandidate entity = new TransactionCandidate()
+            .source(TransactionCandidateSource.MANUAL)
+            .status(TransactionCandidateStatus.DRAFT);
+
+        when(currentUserService.getCurrentUser()).thenReturn(user);
+        when(transactionCandidateMapper.toEntity(dto)).thenReturn(entity);
+        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
+            toDto((TransactionCandidate) invocation.getArgument(0))
+        );
+
+        TransactionCandidateDTO result = transactionCandidateService.createManualDraft(dto);
+
+        assertThat(result.getSource()).isEqualTo(TransactionCandidateSource.MANUAL);
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.DRAFT);
+    }
+
+    @Test
+    void createManualDraftRejectsExplicitStatus() {
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setStatus(TransactionCandidateStatus.READY_TO_POST);
+
+        assertThatThrownBy(() -> transactionCandidateService.createManualDraft(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Status is server-controlled for manual drafts");
+    }
+
+    @Test
+    void createManualDraftRejectsIngestionLinks() {
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setTransactionIngestion(refTransactionIngestion(1L));
+
+        assertThatThrownBy(() -> transactionCandidateService.createManualDraft(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Manual drafts cannot be linked to transaction ingestion");
+    }
+
+    @Test
+    void genericCreateRejectsFileImportCandidate() {
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
+
+        assertThatThrownBy(() -> transactionCandidateService.save(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Generic TransactionCandidate create only supports manual draft candidates");
+    }
+
+    @Test
+    void updateManualDraftUpdatesEditableFieldsAndRecalculatesReadyStatus() throws Exception {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT).account(account(user));
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(1L);
+        dto.setTransactionDate(LocalDate.of(2026, 1, 2));
+        dto.setDescription("  Updated draft  ");
+        dto.setSignedAmount(new BigDecimal("-20.00"));
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+        doAnswer(invocation -> {
+            TransactionCandidate target = invocation.getArgument(0);
+            TransactionCandidateDTO source = invocation.getArgument(1);
+            target.setTransactionDate(source.getTransactionDate());
+            target.setDescription(source.getDescription());
+            target.setSignedAmount(source.getSignedAmount());
+            return null;
+        })
+            .when(transactionCandidateMapper)
+            .partialUpdate(any(TransactionCandidate.class), any(TransactionCandidateDTO.class));
+        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
+            toDto((TransactionCandidate) invocation.getArgument(0))
+        );
+
+        TransactionCandidateDTO result = transactionCandidateService
+            .updateManualDraft(
+                1L,
+                dto,
+                new ObjectMapper()
+                    .readTree("{\"transactionDate\":\"2026-01-02\",\"description\":\"  Updated draft  \",\"signedAmount\":-20.00}")
+            )
+            .orElseThrow();
+
+        assertThat(result.getDescription()).isEqualTo("Updated draft");
+        assertThat(result.getAmount()).isEqualByComparingTo("20.00");
+        assertThat(result.getFlow()).isEqualTo(TransactionFlow.OUT);
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+        assertThat(result.getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.VALID);
+    }
+
+    @Test
+    void updateManualDraftRejectsStatusMutation() throws Exception {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(1L);
+        dto.setStatus(TransactionCandidateStatus.READY_TO_POST);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() ->
+            transactionCandidateService.updateManualDraft(1L, dto, new ObjectMapper().readTree("{\"status\":\"READY_TO_POST\"}"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Status is server-controlled for manual drafts");
+    }
+
+    @Test
+    void updateManualDraftRejectsFinancialTransactionLink() throws Exception {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(1L);
+        dto.setFinancialTransaction(refFinancialTransaction(1L));
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() ->
+            transactionCandidateService.updateManualDraft(1L, dto, new ObjectMapper().readTree("{\"financialTransaction\":{\"id\":1}}"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Financial transaction link is server-controlled");
+    }
+
+    @Test
+    void updateManualDraftRejectsSignChangeThatMakesCategoryIncompatibleWithDerivedFlow() throws Exception {
+        Category expenseCategory = category(CategoryType.EXPENSE, user);
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST)
+            .account(account(user))
+            .category(expenseCategory)
+            .transactionDate(LocalDate.of(2026, 1, 2))
+            .description("Expense")
+            .signedAmount(new BigDecimal("-20.00"))
+            .amount(new BigDecimal("20.00"))
+            .flow(TransactionFlow.OUT)
+            .currencySnapshot(CurrencyCode.MXN)
+            .validationStatus(TransactionCandidateValidationStatus.VALID);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(1L);
+        dto.setSignedAmount(new BigDecimal("20.00"));
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+        doAnswer(invocation -> {
+            TransactionCandidate target = invocation.getArgument(0);
+            TransactionCandidateDTO source = invocation.getArgument(1);
+            target.setSignedAmount(source.getSignedAmount());
+            return null;
+        })
+            .when(transactionCandidateMapper)
+            .partialUpdate(any(TransactionCandidate.class), any(TransactionCandidateDTO.class));
+
+        assertThatThrownBy(() ->
+            transactionCandidateService.updateManualDraft(1L, dto, new ObjectMapper().readTree("{\"signedAmount\":20.00}"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Expense categories require OUT flow");
+
+        verifyNoInteractions(financialTransactionRepository);
+    }
+
+    @Test
+    void cancelManualDraftSetsCancelledStatusAndTimestamp() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
+            toDto((TransactionCandidate) invocation.getArgument(0))
+        );
+
+        TransactionCandidateDTO result = transactionCandidateService.cancelManualDraft(1L).orElseThrow();
+
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.CANCELLED);
+        assertThat(result.getCancelledAt()).isNotNull();
+    }
+
+    @Test
+    void cancelledManualDraftCannotBePosted() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.CANCELLED);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Cancelled transaction candidates cannot be posted");
+    }
+
+    @Test
+    void fileImportCandidateCannotBePostedThroughManualEndpoint() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST);
+        existing.setSource(TransactionCandidateSource.FILE_IMPORT);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Manual post command only supports manual transaction candidates");
+    }
+
+    @Test
+    void incompleteManualDraftCannotBePosted() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Manual transaction candidate is not ready to post");
+    }
+
+    @Test
+    void validManualDraftPostsFinancialTransactionAndLinksCandidate() {
+        Category category = category(CategoryType.EXPENSE, user);
+        Tag tag = tag(user);
+        FinancialAccount account = account(user);
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST)
+            .account(account)
+            .transactionDate(LocalDate.of(2026, 1, 3))
+            .postingDate(LocalDate.of(2026, 1, 4))
+            .description("Coffee")
+            .signedAmount(new BigDecimal("-12.00"))
+            .amount(new BigDecimal("12.00"))
+            .flow(TransactionFlow.OUT)
+            .currencySnapshot(CurrencyCode.MXN)
+            .externalReference("ext-1")
+            .notes("note")
+            .category(category)
+            .tags(Set.of(tag));
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+        when(financialTransactionRepository.save(any())).thenAnswer(invocation -> {
+            FinancialTransaction financialTransaction = invocation.getArgument(0);
+            financialTransaction.setId(99L);
+            return financialTransaction;
+        });
+        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
+            toDto((TransactionCandidate) invocation.getArgument(0))
+        );
+
+        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
+
+        ArgumentCaptor<FinancialTransaction> captor = ArgumentCaptor.forClass(FinancialTransaction.class);
+        verify(financialTransactionRepository).save(captor.capture());
+        FinancialTransaction posted = captor.getValue();
+        assertThat(posted.getAccount()).isSameAs(account);
+        assertThat(posted.getTransactionDate()).isEqualTo(LocalDate.of(2026, 1, 3));
+        assertThat(posted.getPostingDate()).isEqualTo(LocalDate.of(2026, 1, 4));
+        assertThat(posted.getDescription()).isEqualTo("Coffee");
+        assertThat(posted.getAmount()).isEqualByComparingTo("12.00");
+        assertThat(posted.getFlow()).isEqualTo(TransactionFlow.OUT);
+        assertThat(posted.getOrigin()).isEqualTo(TransactionOrigin.MANUAL);
+        assertThat(posted.getExternalReference()).isEqualTo("ext-1");
+        assertThat(posted.getNotes()).isEqualTo("note");
+        assertThat(posted.getCategory()).isSameAs(category);
+        assertThat(posted.getTags()).containsExactly(tag);
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
+        assertThat(result.getPostedAt()).isNotNull();
+        assertThat(result.getFinancialTransaction().getId()).isEqualTo(99L);
+    }
+
+    @Test
+    void postingManualDraftTwiceReturnsExistingLinkWithoutCreatingDuplicateTransaction() {
+        FinancialTransaction financialTransaction = new FinancialTransaction().id(99L).account(account(user));
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.POSTED).financialTransaction(financialTransaction);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
+            toDto((TransactionCandidate) invocation.getArgument(0))
+        );
+
+        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
+
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
+        assertThat(result.getFinancialTransaction().getId()).isEqualTo(99L);
+        verify(transactionCandidateRepository).save(existing);
+        verifyNoInteractions(financialTransactionRepository);
+    }
+
+    @Test
+    void staleDescriptionReviewCannotBePosted() {
+        TransactionCandidate existing = completeReadyCandidate()
+            .id(1L)
+            .user(user)
+            .amount(new BigDecimal("10.00"))
+            .flow(TransactionFlow.OUT)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.STALE)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Stale description review must be refreshed before posting");
+
+        verifyNoInteractions(financialTransactionRepository);
+    }
+
+    @Test
+    void staleClassificationReviewCannotBePosted() {
+        TransactionCandidate existing = completeReadyCandidate()
+            .id(1L)
+            .user(user)
+            .amount(new BigDecimal("10.00"))
+            .flow(TransactionFlow.OUT)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.STALE);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Stale classification review must be refreshed before posting");
+
+        verifyNoInteractions(financialTransactionRepository);
+    }
+
+    @Test
+    void staleValidationStatusIsRecalculatedBeforePostingWhenCandidateIsComplete() {
+        TransactionCandidate existing = completeReadyCandidate()
+            .id(1L)
+            .user(user)
+            .signedAmount(new BigDecimal("-10.00"))
+            .validationStatus(TransactionCandidateValidationStatus.STALE)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+        when(financialTransactionRepository.save(any())).thenAnswer(invocation -> {
+            FinancialTransaction financialTransaction = invocation.getArgument(0);
+            financialTransaction.setId(99L);
+            return financialTransaction;
+        });
+        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
+            toDto((TransactionCandidate) invocation.getArgument(0))
+        );
+
+        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
+
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
+        assertThat(result.getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.VALID);
+    }
+
+    @Test
+    void invalidValidationStatusCannotBePostedWhenCandidateCannotRecalculateToValid() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST)
+            .account(account(user))
+            .transactionDate(LocalDate.of(2026, 1, 1))
+            .description("Invalid")
+            .signedAmount(BigDecimal.ZERO)
+            .amount(BigDecimal.ZERO)
+            .flow(null)
+            .currencySnapshot(CurrencyCode.MXN)
+            .validationStatus(TransactionCandidateValidationStatus.INVALID);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Manual transaction candidate is not ready to post");
+
+        verifyNoInteractions(financialTransactionRepository);
     }
 
     @Test
@@ -303,32 +678,20 @@ class TransactionCandidateServiceTest {
     void foreignTransactionIngestionRejected() {
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
         dto.setTransactionIngestion(refTransactionIngestion(1L));
-        TransactionCandidate entity = new TransactionCandidate().source(TransactionCandidateSource.FILE_IMPORT);
-
-        when(currentUserService.getCurrentUser()).thenReturn(user);
-        when(transactionCandidateMapper.toEntity(dto)).thenReturn(entity);
-        when(transactionIngestionRepository.findOneWithEagerRelationshipsByIdAndAccountUserLogin(1L, "user")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionCandidateService.save(dto))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Transaction ingestion is not accessible");
+            .hasMessageContaining("Generic TransactionCandidate create only supports manual draft candidates");
     }
 
     @Test
     void foreignIngestionRecordRejected() {
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
         dto.setIngestionRecord(refIngestionRecord(1L));
-        TransactionCandidate entity = new TransactionCandidate().source(TransactionCandidateSource.FILE_IMPORT);
-
-        when(currentUserService.getCurrentUser()).thenReturn(user);
-        when(transactionCandidateMapper.toEntity(dto)).thenReturn(entity);
-        when(ingestionRecordRepository.findOneWithRelationshipsByIdAndTransactionIngestionAccountUserLogin(1L, "user")).thenReturn(
-            Optional.empty()
-        );
 
         assertThatThrownBy(() -> transactionCandidateService.save(dto))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Ingestion record is not accessible");
+            .hasMessageContaining("Generic TransactionCandidate create only supports manual draft candidates");
     }
 
     @Test
@@ -459,7 +822,7 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void updateBeforeFinalStatusSucceeds() {
+    void updateBeforeFinalStatusSucceedsWhenStatusIsUnchanged() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
         dto.setId(1L);
@@ -468,7 +831,7 @@ class TransactionCandidateServiceTest {
         TransactionCandidate replacement = new TransactionCandidate()
             .id(1L)
             .source(TransactionCandidateSource.MANUAL)
-            .status(TransactionCandidateStatus.NEEDS_REVIEW)
+            .status(TransactionCandidateStatus.DRAFT)
             .description("  Updated  ");
 
         when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
@@ -480,8 +843,24 @@ class TransactionCandidateServiceTest {
 
         TransactionCandidateDTO result = transactionCandidateService.update(dto);
 
-        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.NEEDS_REVIEW);
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.DRAFT);
         assertThat(result.getDescription()).isEqualTo("Updated");
+    }
+
+    @Test
+    void genericUpdateRejectsStatusChange() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setId(1L);
+        dto.setCreatedAt(existing.getCreatedAt());
+        dto.setUpdatedAt(existing.getUpdatedAt());
+        dto.setStatus(TransactionCandidateStatus.CANCELLED);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.update(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Status is controlled by command endpoints");
     }
 
     @Test
@@ -500,6 +879,20 @@ class TransactionCandidateServiceTest {
         transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"description\":\"  Patched  \"}"));
 
         verify(transactionCandidateMapper).partialUpdate(existing, dto);
+    }
+
+    @Test
+    void genericPatchRejectsStatusChange() throws Exception {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(1L);
+        dto.setStatus(TransactionCandidateStatus.FAILED);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"status\":\"FAILED\"}")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Status is controlled by command endpoints");
     }
 
     @Test
@@ -590,6 +983,16 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
+    void genericCreateRejectsStatus() {
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setStatus(TransactionCandidateStatus.CANCELLED);
+
+        assertThatThrownBy(() -> transactionCandidateService.save(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Status is controlled by command endpoints");
+    }
+
+    @Test
     void postedCandidateCannotBeMutatedAsDraft() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.POSTED);
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
@@ -627,6 +1030,28 @@ class TransactionCandidateServiceTest {
         verify(transactionCandidateRepository).deleteById(1L);
     }
 
+    @Test
+    void deleteRejectsPostedCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.POSTED);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Posted or cancelled transaction candidates cannot be deleted");
+    }
+
+    @Test
+    void deleteRejectsCancelledCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.CANCELLED);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Posted or cancelled transaction candidates cannot be deleted");
+    }
+
     private TransactionCandidateDTO dto(TransactionCandidateSource source) {
         TransactionCandidateDTO dto = new TransactionCandidateDTO();
         dto.setSource(source);
@@ -646,6 +1071,12 @@ class TransactionCandidateServiceTest {
         dto.setFlow(entity.getFlow());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
+        dto.setPostedAt(entity.getPostedAt());
+        dto.setCancelledAt(entity.getCancelledAt());
+        dto.setFailedAt(entity.getFailedAt());
+        if (entity.getFinancialTransaction() != null) {
+            dto.setFinancialTransaction(refFinancialTransaction(entity.getFinancialTransaction().getId()));
+        }
         return dto;
     }
 
@@ -690,6 +1121,14 @@ class TransactionCandidateServiceTest {
         category.setCategoryType(categoryType);
         category.setUser(owner);
         return category;
+    }
+
+    private Tag tag(User owner) {
+        Tag tag = new Tag();
+        tag.setId(1L);
+        tag.setName("Tag");
+        tag.setUser(owner);
+        return tag;
     }
 
     private FinancialAccountDTO refAccount(Long id) {

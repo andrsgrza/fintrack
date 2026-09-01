@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-1/TC-1A backend foundation implemented. Not yet wired into manual creation, CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, or UserPreference.
+**Status:** TC-2A backend manual draft commands implemented. Not yet wired into the manual transaction UI. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -103,7 +103,7 @@ Domain boundary:
 - `TransactionCandidateSource` means how the candidate entered the draft/review pipeline. `TransactionOrigin` means how a final posted `FinancialTransaction` is classified. They are not interchangeable and `TransactionCandidate` does not store `TransactionOrigin` in TC-1A.
 - Future source→origin mapping for a posting/conversion command: `MANUAL → MANUAL`, `FILE_IMPORT → FILE_IMPORT`, `API_IMPORT → API`. Bank sync remains unsupported until `TransactionOrigin` explicitly supports it.
 
-TC-1 rules:
+TC-1/TC-1A foundation rules:
 
 - Candidate owner is direct `user`.
 - Optional account/category/tags/transaction ingestion/ingestion record links must belong to the candidate owner.
@@ -118,14 +118,29 @@ TC-1 rules:
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
 
+TC-2A / TC-2A.1 manual backend command rules:
+
+- `POST /api/transaction-candidates/manual` creates a recoverable manual draft with `source=MANUAL`, `status=DRAFT`, current-user owner, server timestamps, and no `FinancialTransaction`.
+- `PATCH /api/transaction-candidates/{id}/manual-draft` autosaves editable manual draft fields only: account, dates, description, signed amount, external reference, notes, category, and tags.
+- Manual draft autosave derives `amount`/`flow` from `signedAmount` and recalculates status: complete valid candidates become `READY_TO_POST`; incomplete candidates remain `DRAFT`.
+- Manual draft autosave rejects client-controlled lifecycle/status/review/timestamp fields, direct `amount`/`flow`, `source`, `financialTransaction`, and ingestion links.
+- `POST /api/transaction-candidates/{id}/cancel` cancels a non-final manual draft, sets `cancelledAt`, does not delete the candidate, and does not affect balances.
+- `POST /api/transaction-candidates/{id}/post` posts only `MANUAL` candidates. `FILE_IMPORT` and `API_IMPORT` candidate posting is deferred and rejected by this command.
+- Manual post uses a pessimistic write lock on the candidate, recalculates normalized fields plus derived `amount`/`flow` from current `signedAmount`, requires a complete valid candidate, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies account/date/description/amount/flow/external reference/notes/category/tags, links it to the candidate, sets `status=POSTED`, and sets `postedAt`.
+- Manual post is concurrency-safe/idempotent after `POSTED`: retry returns the existing linked transaction candidate and does not create duplicate `FinancialTransaction` rows.
+- `validationStatus=INVALID/STALE` is recalculated during manual post from the current candidate fields; if the candidate still cannot become complete/valid, post is rejected. `descriptionReviewStatus=STALE` and `classificationReviewStatus=STALE` block manual post until refreshed.
+- Candidate post does **not** invoke `TransactionRuleEvaluationService` in TC-2A. Existing direct `POST /api/financial-transactions` behavior remains unchanged and still applies TransactionRules on create.
+- Candidates never affect balances directly; only the posted `FinancialTransaction` created by the post command affects balances.
+- Generic `TransactionCandidate` CRUD writes are technical/restricted: generic create only supports safe MANUAL drafts, generic update/PATCH cannot change lifecycle status or controlled review/link fields, and generic delete preserves `POSTED`/`CANCELLED` candidates.
+
 Deferred:
 
-- Manual draft UI and autosave.
 - CSV ingestion candidate creation.
 - Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
 - Persisting Pantalla 2 category/tag selections on candidates.
 - Description/rule re-evaluation endpoints.
-- Candidate-to-`FinancialTransaction` posting command.
+- Manual draft UI and autosave wiring.
+- Candidate-specific rule preview/apply.
 
 ---
 

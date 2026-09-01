@@ -74,6 +74,31 @@ public class TransactionCandidateResource {
     }
 
     /**
+     * {@code POST  /transaction-candidates/manual} : Create a recoverable manual transaction draft.
+     *
+     * @param transactionCandidateDTO the editable manual draft fields.
+     * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new manual draft.
+     * @throws URISyntaxException if the Location URI syntax is incorrect.
+     */
+    @PostMapping("/manual")
+    public ResponseEntity<TransactionCandidateDTO> createManualTransactionCandidate(
+        @RequestBody TransactionCandidateDTO transactionCandidateDTO
+    ) throws URISyntaxException {
+        LOG.debug("REST request to create manual TransactionCandidate draft");
+        if (transactionCandidateDTO.getId() != null) {
+            throw new BadRequestAlertException("A new transactionCandidate cannot already have an ID", ENTITY_NAME, "idexists");
+        }
+        try {
+            transactionCandidateDTO = transactionCandidateService.createManualDraft(transactionCandidateDTO);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseEntity.created(new URI("/api/transaction-candidates/" + transactionCandidateDTO.getId()))
+            .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, transactionCandidateDTO.getId().toString()))
+            .body(transactionCandidateDTO);
+    }
+
+    /**
      * {@code PUT  /transaction-candidates/:id} : Updates an existing transactionCandidate.
      *
      * @param id the id of the transactionCandidateDTO to save.
@@ -151,6 +176,76 @@ public class TransactionCandidateResource {
             result,
             HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, transactionCandidateDTO.getId().toString())
         );
+    }
+
+    /**
+     * {@code PATCH  /transaction-candidates/:id/manual-draft} : Autosave editable fields on a manual draft.
+     *
+     * @param id the id of the manual draft to update.
+     * @param patchNode the raw patch payload.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated manual draft.
+     */
+    @PatchMapping(value = "/{id}/manual-draft", consumes = { "application/json", "application/merge-patch+json" })
+    public ResponseEntity<TransactionCandidateDTO> updateManualTransactionCandidateDraft(
+        @PathVariable("id") final Long id,
+        @NotNull @RequestBody JsonNode patchNode
+    ) {
+        LOG.debug("REST request to autosave manual TransactionCandidate draft : {}, {}", id, patchNode);
+        TransactionCandidateDTO transactionCandidateDTO;
+        try {
+            transactionCandidateDTO = objectMapper.treeToValue(patchNode, TransactionCandidateDTO.class);
+        } catch (Exception e) {
+            throw new BadRequestAlertException("Invalid patch payload", ENTITY_NAME, "invalid");
+        }
+        transactionCandidateDTO.setId(id);
+
+        Optional<TransactionCandidateDTO> result;
+        try {
+            result = transactionCandidateService.updateManualDraft(id, transactionCandidateDTO, patchNode);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+
+        return ResponseUtil.wrapOrNotFound(
+            result,
+            HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, transactionCandidateDTO.getId().toString())
+        );
+    }
+
+    /**
+     * {@code POST  /transaction-candidates/:id/cancel} : Cancel a manual draft.
+     *
+     * @param id the id of the manual draft to cancel.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the cancelled draft.
+     */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<TransactionCandidateDTO> cancelManualTransactionCandidate(@PathVariable("id") Long id) {
+        LOG.debug("REST request to cancel manual TransactionCandidate draft : {}", id);
+        Optional<TransactionCandidateDTO> result;
+        try {
+            result = transactionCandidateService.cancelManualDraft(id);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseUtil.wrapOrNotFound(result);
+    }
+
+    /**
+     * {@code POST  /transaction-candidates/:id/post} : Post a manual draft into a FinancialTransaction.
+     *
+     * @param id the id of the manual draft to post.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the posted draft.
+     */
+    @PostMapping("/{id}/post")
+    public ResponseEntity<TransactionCandidateDTO> postManualTransactionCandidate(@PathVariable("id") Long id) {
+        LOG.debug("REST request to post manual TransactionCandidate draft : {}", id);
+        Optional<TransactionCandidateDTO> result;
+        try {
+            result = transactionCandidateService.postManualDraft(id);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseUtil.wrapOrNotFound(result);
     }
 
     /**
