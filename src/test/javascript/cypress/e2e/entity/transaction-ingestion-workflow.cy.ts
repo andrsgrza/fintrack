@@ -18,7 +18,33 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
   let outDescription: string;
   let inDescription: string;
 
+  const header = 'transactionDate,postingDate,description,signedAmount,currency,externalReference,notes';
   const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const uploadCsvFromCreatePage = (csv: string, filename: string, expectedStatusCode = 200) => {
+    cy.intercept('GET', '/api/financial-accounts+(?*|)').as('accountsRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/file').as('createWorkflowRequest');
+    cy.intercept('GET', '/api/transaction-ingestions/*/workflow').as('workflowRequest');
+    cy.visit('/transaction-ingestion/new');
+    cy.wait('@accountsRequest').its('response.statusCode').should('eq', 200);
+
+    cy.get('[data-cy="account"]').select(account?.name as string);
+    cy.get('[data-cy="ingestionType"]').select('FILE');
+    cy.get('[data-cy="csvFile"]').selectFile({
+      contents: Cypress.Buffer.from(csv),
+      fileName: filename,
+      mimeType: 'text/csv',
+      lastModified: Date.now(),
+    });
+    cy.get('[data-cy="entityCreateSaveButton"]').click();
+    cy.wait('@createWorkflowRequest').then(({ response }) => {
+      expect(response?.statusCode).to.equal(expectedStatusCode);
+      if (expectedStatusCode === 200) {
+        transactionIngestionId = response?.body.transactionIngestionId;
+        expect(transactionIngestionId).to.be.a('number');
+      }
+    });
+  };
 
   beforeEach(() => {
     cy.login(username, password);
@@ -179,31 +205,12 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
 
     const csv = [
-      'transactionDate,postingDate,description,signedAmount,currency,externalReference,notes',
+      header,
       `2026-01-16,,${outDescription},-100.00,MXN,${scenarioToken}-trip,e2e out row`,
       `2026-01-17,,${inDescription},100.00,MXN,${scenarioToken}-refund,e2e in row`,
     ].join('\n');
 
-    cy.intercept('GET', '/api/financial-accounts+(?*|)').as('accountsRequest');
-    cy.intercept('POST', '/api/transaction-ingestions/file').as('createWorkflowRequest');
-    cy.intercept('GET', '/api/transaction-ingestions/*/workflow').as('workflowRequest');
-    cy.visit('/transaction-ingestion/new');
-    cy.wait('@accountsRequest').its('response.statusCode').should('eq', 200);
-
-    cy.get('[data-cy="account"]').select(account?.name as string);
-    cy.get('[data-cy="ingestionType"]').select('FILE');
-    cy.get('[data-cy="csvFile"]').selectFile({
-      contents: Cypress.Buffer.from(csv),
-      fileName: 'uber-flow-classification.csv',
-      mimeType: 'text/csv',
-      lastModified: Date.now(),
-    });
-    cy.get('[data-cy="entityCreateSaveButton"]').click();
-    cy.wait('@createWorkflowRequest').then(({ response }) => {
-      expect(response?.statusCode).to.equal(200);
-      transactionIngestionId = response?.body.transactionIngestionId;
-      expect(transactionIngestionId).to.be.a('number');
-    });
+    uploadCsvFromCreatePage(csv, 'uber-flow-classification.csv');
 
     cy.url().should('match', /\/transaction-ingestion\/\d+$/);
     cy.get('[data-cy="workflowReviewHeading"]').should('exist');
@@ -264,6 +271,15 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
 
     cy.get('[data-cy="workflowCompleted"]').should('exist');
+    cy.reload();
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="workflowCompleted"]').should('exist');
+    cy.get('[data-cy="workflowMetadata"]').should('exist');
+    cy.get('[data-cy="workflowRows"]').should('contain', outDescription).and('contain', inDescription);
+    cy.get('[data-cy="workflowConfirmImport"]').should('not.exist');
+    cy.get('[data-testid^="workflowRowEdit-"]').should('not.exist');
+    cy.get('[data-testid^="workflowRowDisable-"]').should('not.exist');
+    cy.get('[data-testid^="workflowRowEnable-"]').should('not.exist');
 
     cy.then(() => {
       cy.authenticatedRequest({
@@ -295,6 +311,111 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
           expect(rawData.review ?? {}).not.to.have.property('category');
           expect(rawData.review ?? {}).not.to.have.property('tags');
         });
+      });
+    });
+  });
+
+  it('shows an error and stays on create when the CSV header is invalid', () => {
+    const invalidHeaderCsv = [
+      'transactiondate,postingDate,description,signedAmount,currency,externalReference,notes',
+      `2026-01-16,,${outDescription},-100.00,MXN,,`,
+    ].join('\n');
+
+    uploadCsvFromCreatePage(invalidHeaderCsv, 'invalid-header.csv', 400);
+
+    cy.url().should('match', /\/transaction-ingestion\/new$/);
+    cy.contains('CSV header must match the canonical FINTRACK header').should('be.visible');
+    cy.get('[data-cy="workflowReviewHeading"]').should('not.exist');
+  });
+
+  it('shows rejected rows and blocks category/tag review for PARTIALLY_READY uploads', () => {
+    const invalidDescription = `${scenarioToken} invalid zero amount`;
+    const validDescription = `${scenarioToken} valid expense`;
+    const mixedCsv = [
+      header,
+      `2026-01-16,,${validDescription},-50.00,MXN,,valid row`,
+      `2026-01-17,,${invalidDescription},0,MXN,,invalid row`,
+    ].join('\n');
+
+    uploadCsvFromCreatePage(mixedCsv, 'partially-ready.csv');
+
+    cy.url().should('match', /\/transaction-ingestion\/\d+$/);
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="workflowRows"]').should('contain', validDescription).and('contain', invalidDescription);
+    cy.contains('[data-cy="workflowRows"] tr', invalidDescription).within(() => {
+      cy.get('[data-testid^="workflowRowStatus-"]').should('exist');
+      cy.contains(/signedAmount|nonzero|zero|cero/i).should('exist');
+    });
+    cy.get('[data-cy="workflowConfirmBlocked"]').should('exist');
+    cy.get('[data-cy="workflowContinueClassification"]').should('not.exist');
+    cy.get('[data-cy="workflowClassificationReview"]').should('not.exist');
+  });
+
+  it('imports only enabled valid rows when one row is disabled before confirm', () => {
+    const enabledDescription = `${scenarioToken} enabled import`;
+    const disabledDescription = `${scenarioToken} disabled import`;
+    const csv = [
+      header,
+      `2026-01-16,,${enabledDescription},-30.00,MXN,,enabled row`,
+      `2026-01-17,,${disabledDescription},-40.00,MXN,,disabled row`,
+    ].join('\n');
+
+    uploadCsvFromCreatePage(csv, 'disable-one-before-confirm.csv');
+
+    let currentIngestionId: number;
+    let disabledRecordId: number;
+    cy.wait('@workflowRequest').then(({ response }) => {
+      expect(response?.statusCode).to.equal(200);
+      currentIngestionId = response?.body.transactionIngestionId;
+      expect(currentIngestionId).to.be.a('number');
+      const disabledRow = response?.body.rows.find(row => row.description === disabledDescription);
+      disabledRecordId = disabledRow?.ingestionRecordId;
+      expect(disabledRecordId).to.be.a('number');
+    });
+    cy.intercept('POST', '**/api/transaction-ingestions/*/records/*/disable').as('disableRecordRequest');
+    cy.contains('[data-cy="workflowRows"] tr', disabledDescription).within(() => {
+      cy.then(() => {
+        expect(disabledRecordId).to.be.a('number');
+        cy.contains(disabledDescription).should('be.visible');
+        cy.contains('button', /Disable|Deshabilitar/i).click();
+      });
+    });
+    cy.wait('@disableRecordRequest').its('response.statusCode').should('eq', 200);
+    cy.contains('[data-cy="workflowRows"] tr', disabledDescription).within(() => {
+      cy.contains(/Disabled|Deshabilitada/i).should('be.visible');
+      cy.contains(/Enable|Habilitar/i).should('be.visible');
+    });
+
+    cy.intercept('POST', '/api/transaction-ingestions/*/classification-preview').as('classificationPreviewRequest');
+    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.get('[data-cy="workflowContinueClassification"]').click();
+    cy.wait('@classificationPreviewRequest').then(({ response }) => {
+      expect(response?.statusCode).to.equal(200);
+      const rows = response?.body.rows ?? [];
+      expect(rows).to.have.length(1);
+      expect(rows[0].description).to.equal(enabledDescription);
+    });
+    cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
+
+    cy.intercept('POST', '/api/transaction-ingestions/*/confirm').as('confirmImportRequest');
+    cy.get('[data-cy="workflowConfirmImport"]').click();
+    cy.wait('@confirmImportRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(response?.body.status).to.equal('COMPLETED');
+      expect(request.body.records).to.have.length(1);
+      expect(response?.body.createdNow).to.equal(1);
+      expect(response?.body.skipped).to.equal(1);
+    });
+
+    cy.then(() => {
+      cy.authenticatedRequest({
+        method: 'GET',
+        url: `/api/financial-transactions?transactionIngestionId.equals=${currentIngestionId}`,
+      }).then(({ body: transactions }) => {
+        expect(transactions).to.have.length(1);
+        expect(transactions[0].description).to.equal(enabledDescription);
       });
     });
   });

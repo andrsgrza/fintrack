@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -413,6 +414,30 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(status().isBadRequest());
 
         assertNothingCreated();
+    }
+
+    @Test
+    @Transactional
+    void canonicalFileWorkflowRejectsInvalidHeaderVariantsWithoutPersisting() throws Exception {
+        FinancialAccount account = createCurrentUserAccount();
+        List<String> invalidHeaderCsvs = List.of(
+            "transactionDate,postingDate,description,signedAmount,currency,externalReference\n",
+            "transactionDate,postingDate,description,signedAmount,currency,externalReference,notes,extra\n",
+            "postingDate,transactionDate,description,signedAmount,currency,externalReference,notes\n",
+            "transactiondate,postingDate,description,signedAmount,currency,externalReference,notes\n"
+        );
+
+        for (String invalidHeaderCsv : invalidHeaderCsvs) {
+            mockMvc
+                .perform(
+                    multipart(FILE_WORKFLOW_URL)
+                        .file(csvFile("invalid-header.csv", invalidHeaderCsv + "2026-01-16,,Coffee,-10.00,MXN,,"))
+                        .param("accountId", account.getId().toString())
+                )
+                .andExpect(status().isBadRequest());
+
+            assertNothingCreated();
+        }
     }
 
     @Test
@@ -1377,7 +1402,52 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(jsonPath("$.createdNow").value(0))
             .andExpect(jsonPath("$.alreadyImported").value(1));
 
+        IngestionRecord importedRecord = recordsFor(ingestion).get(0);
+        confirmImport(ingestion, List.of(confirmSelection(importedRecord.getId(), null, List.of())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(0))
+            .andExpect(jsonPath("$.alreadyImported").value(1));
+
         assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountAfterFirstConfirm);
+    }
+
+    @Test
+    @Transactional
+    void deleteCompletedImportedWorkflowCleansChildrenAndTransactionsButKeepsCategoryAndTags() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Long fileIngestionId = fileIngestionRepository.findAll().get(0).getId();
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Ride share", currentMockUser());
+
+        confirmImport(ingestion, List.of(confirmSelection(record.getId(), category.getId(), List.of(tag.getId()))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(1));
+
+        Long financialTransactionId = financialTransactionRepository.findAll().get(0).getId();
+        Number tagJoinRowsBeforeDelete = (Number) em
+            .createNativeQuery("select count(*) from rel_financial_transaction__tags where financial_transaction_id = :transactionId")
+            .setParameter("transactionId", financialTransactionId)
+            .getSingleResult();
+        assertThat(tagJoinRowsBeforeDelete.longValue()).isEqualTo(1L);
+
+        mockMvc
+            .perform(delete("/api/transaction-ingestions/{id}", ingestion.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        Number tagJoinRowsAfterDelete = (Number) em
+            .createNativeQuery("select count(*) from rel_financial_transaction__tags where financial_transaction_id = :transactionId")
+            .setParameter("transactionId", financialTransactionId)
+            .getSingleResult();
+        assertThat(tagJoinRowsAfterDelete.longValue()).isZero();
+        assertThat(fileIngestionRepository.findById(fileIngestionId)).isEmpty();
+        assertThat(ingestionRecordRepository.findById(record.getId())).isEmpty();
+        assertThat(financialTransactionRepository.findById(financialTransactionId)).isEmpty();
+        assertThat(transactionIngestionRepository.findById(ingestion.getId())).isEmpty();
+        assertThat(categoryRepository.findById(category.getId())).isPresent();
+        assertThat(tagRepository.findById(tag.getId())).isPresent();
     }
 
     @Test

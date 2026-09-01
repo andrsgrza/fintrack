@@ -437,6 +437,7 @@ I2C:
 - Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
 - Pantalla 2 selections live only in frontend state until confirm; browser refresh loses category/tag adjustments in v1.
+- Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/debug smoke specs.
 
 Future:
 

@@ -2706,9 +2706,18 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - READY review UI shows "Continue to category/tags", calls classification-preview, and renders Pantalla 2 with suggested category/tags preselected.
 - Pantalla 2 preselects suggestions only for rows returned with suggestions, filters category options by row flow, and sends `null` category/empty tags for valid rows without selected suggestions.
 - Pantalla 2 edits are frontend-only until confirm; Back to row review preserves them in memory, but refresh persistence is not required.
-- Cypress coverage for this flow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
+- Cypress coverage for the real workflow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
   Run it with a dedicated clean user so existing manual TransactionRules cannot influence suggestions:
   `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
+- Cypress workflow hardening coverage also includes:
+  - invalid CSV header stays on `/transaction-ingestion/new`, shows a backend error, and does not navigate to review;
+  - `PARTIALLY_READY` uploads render rejected row errors and do not expose Pantalla 2/category-tag review;
+  - completed workflows remain read-only after reload, hide Confirm Import, and hide row review actions;
+  - disabling one valid row before Pantalla 2 excludes it from classification preview and import while importing the remaining enabled valid row.
+- `src/test/javascript/cypress/e2e/entity/transaction-ingestion.cy.ts` is now a lightweight workflow smoke spec, not a generated CRUD spec. It checks list/menu load, `/transaction-ingestion/new`, workflow detail navigation, and absence of the old generated Edit product action.
+- `src/test/javascript/cypress/e2e/entity/file-ingestion.cy.ts` and `src/test/javascript/cypress/e2e/entity/ingestion-record.cy.ts` are technical/debug smoke specs. They verify the generated/debug pages remain reachable and marked technical without restoring old product CRUD expectations.
+- Run the current ingestion E2E pattern with:
+  `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
 - confirm import accepts explicit category/tag selections for every `VALID` row and applies validated selections to created transactions.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
 - imported transactions do not get financial subscription from the Rule Engine.

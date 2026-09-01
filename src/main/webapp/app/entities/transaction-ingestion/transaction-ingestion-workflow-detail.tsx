@@ -1251,7 +1251,11 @@ export const TransactionIngestionWorkflowDetail = () => {
                       const actionBusy = processing || reviewActionInProgress === row.ingestionRecordId;
                       const isEditing = editingRecordId === row.ingestionRecordId;
                       return (
-                        <tr key={row.ingestionRecordId ?? row.recordIndex} className={row.status === 'DISABLED' ? 'text-muted' : ''}>
+                        <tr
+                          key={row.ingestionRecordId ?? row.recordIndex}
+                          className={row.status === 'DISABLED' ? 'text-muted' : ''}
+                          data-testid={`workflowRow-${row.ingestionRecordId ?? row.recordIndex}`}
+                        >
                           <td>{row.recordIndex}</td>
                           <td>
                             <span data-testid={`workflowRowStatus-${row.ingestionRecordId ?? row.recordIndex}`}>
@@ -1349,26 +1353,56 @@ export const TransactionIngestionWorkflowDetail = () => {
                             <td className="text-end">
                               {isEditing ? (
                                 <>
-                                  <Button size="sm" color="primary" disabled={actionBusy} onClick={() => saveEditingRow(row)}>
+                                  <Button
+                                    size="sm"
+                                    color="primary"
+                                    disabled={actionBusy}
+                                    onClick={() => saveEditingRow(row)}
+                                    data-testid={`workflowRowSave-${row.ingestionRecordId ?? row.recordIndex}`}
+                                  >
                                     <Translate contentKey="fintrackApp.transactionIngestion.workflow.saveRow">Save row</Translate>
                                   </Button>{' '}
-                                  <Button size="sm" color="secondary" disabled={actionBusy} onClick={cancelEditingRow}>
+                                  <Button
+                                    size="sm"
+                                    color="secondary"
+                                    disabled={actionBusy}
+                                    onClick={cancelEditingRow}
+                                    data-testid={`workflowRowCancel-${row.ingestionRecordId ?? row.recordIndex}`}
+                                  >
                                     <Translate contentKey="fintrackApp.transactionIngestion.workflow.cancel">Cancel</Translate>
                                   </Button>
                                 </>
                               ) : null}
                               {!isEditing && canEdit(row) ? (
-                                <Button size="sm" color="primary" disabled={actionBusy} onClick={() => startEditingRow(row)}>
+                                <Button
+                                  size="sm"
+                                  color="primary"
+                                  disabled={actionBusy}
+                                  onClick={() => startEditingRow(row)}
+                                  data-testid={`workflowRowEdit-${row.ingestionRecordId ?? row.recordIndex}`}
+                                >
                                   <Translate contentKey="fintrackApp.transactionIngestion.workflow.edit">Edit</Translate>
                                 </Button>
                               ) : null}{' '}
                               {!isEditing && canDisable(row) ? (
-                                <Button size="sm" color="warning" disabled={actionBusy} onClick={() => performRowAction(row, 'disable')}>
+                                <Button
+                                  size="sm"
+                                  color="warning"
+                                  disabled={actionBusy}
+                                  onClick={() => performRowAction(row, 'disable')}
+                                  data-testid={`workflowRowDisable-${row.ingestionRecordId ?? row.recordIndex}`}
+                                >
                                   <Translate contentKey="fintrackApp.transactionIngestion.workflow.disable">Disable</Translate>
                                 </Button>
                               ) : null}
                               {!isEditing && canEnable(row) ? (
-                                <Button size="sm" color="success" disabled={actionBusy} onClick={() => performRowAction(row, 'enable')}>
+                                <Button
+                                  size="sm"
+                                  color="success"
+                                  disabled={actionBusy}
+                                  onClick={() => performRowAction(row, 'enable')}
+                                  data-testid={`workflowRowEnable-${row.ingestionRecordId ?? row.recordIndex}`}
+                                >
                                   <Translate contentKey="fintrackApp.transactionIngestion.workflow.enable">Enable</Translate>
                                 </Button>
                               ) : null}

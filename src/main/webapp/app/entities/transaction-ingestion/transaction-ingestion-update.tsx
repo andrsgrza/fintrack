@@ -170,7 +170,7 @@ export const TransactionIngestionUpdate = () => {
           ) : (
             <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
               {createError ? (
-                <Alert color="danger" fade={false}>
+                <Alert color="danger" fade={false} data-cy="workflowCreateError">
                   {createError}
                 </Alert>
               ) : null}
