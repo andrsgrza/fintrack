@@ -571,39 +571,31 @@ Deferred for this workflow:
 - override confirmation UI;
 - atomic backend command endpoint.
 
-FinancialTransaction manual create owns the implemented Rule Engine workflow UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+FinancialTransaction manual create now owns the TransactionCandidate autosave UI. Existing-transaction preview, candidate-specific rule preview/apply, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-## FinancialTransaction manual create — two-step Rule Engine UX
+## FinancialTransaction manual create — TransactionCandidate autosave UX
 
-Status: implemented for manual create only. Phase 3A provides the backend workflow endpoint, and Phase 3B uses it from the FinancialTransaction create form.
+Status: implemented in TC-2B.1 for manual create only.
 
-Phase 3B manual create composition:
+Manual create composition:
 
-1. Step 1 — Transaction details:
-   - account;
-   - description;
-   - amount;
-   - flow;
-   - transaction date;
-   - posting date;
-   - external reference;
-   - notes and other non-categorization fields as applicable.
-2. Between steps:
-   - call `POST /api/financial-transactions/rule-preview` with the unsaved draft;
-   - do not save or mutate anything;
-   - use the response as UI assistance only.
-3. Step 2 — Categorization:
-   - category;
-   - tags;
-   - prepopulate controls from suggested category/tags;
-   - show conflicts/skipped outputs/matched rules where useful;
-   - let the user accept, change, remove, or add category/tags before save.
+1. `/financial-transaction/new` renders a local unsaved manual draft form.
+2. Page load does not create a backend candidate.
+3. The first meaningful user change creates a `MANUAL` `TransactionCandidate` through `POST /api/transaction-candidates/manual`.
+4. Meaningful first changes are account, transaction date, nonblank description, signed amount/amount entry, category, or tags.
+5. Posting date, external reference, and notes alone do not create the first candidate.
+6. After creation, the UI replaces the URL with `/financial-transaction/drafts/{id}`.
+7. `/financial-transaction/drafts/{id}` accepts MANUAL candidates only. Non-MANUAL candidates and load failures show a safe error state with no editable form, autosave, Post, or manual Cancel action.
+8. Subsequent edits debounce autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`.
+9. The UI displays amount plus flow, but submits only `signedAmount`; backend derives `amount` and `flow`.
+10. Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted FinancialTransaction detail.
+11. Cancel before candidate creation navigates away; cancel after candidate creation calls the candidate cancel command.
 
-Step 2 should own category/tags. Step 1 should not duplicate those controls.
+There is intentionally no explicit Save Draft button. Recoverability comes from autosave plus the `/financial-transaction/drafts/{id}` route.
 
-Final Save still uses normal FinancialTransaction create. Backend Phase 2 `FILL_EMPTY_ONLY` remains a safety net: explicit category/tags sent by Step 2 are treated as user choices; if a direct API/UI create omits category/tags, backend create may still fill empty values.
+Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
 
-Edit mode remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
+TC-2B.1 does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. Candidate-specific rule preview/apply belongs to TC-2C.
 
 Do not extend this as:
 

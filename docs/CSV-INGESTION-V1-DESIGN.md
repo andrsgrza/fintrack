@@ -444,7 +444,7 @@ Future:
 - Recoverable/persisted category/tag review choices.
 - Optional bulk review before import.
 - Bulk reevaluation remains deferred.
-- TC-1/TC-2A/TC-2A.1 introduces `TransactionCandidate` as a backend foundation and adds hardened backend-only manual draft commands. CSV ingestion does not create or read candidates yet. Current CSV v1 behavior still uses `IngestionRecord.rawData.normalized` for row review and keeps Pantalla 2 category/tag selections in frontend state until Confirm Import.
+- TC-1 through TC-2B.1 introduce `TransactionCandidate` as the central draft/review model and wire manual transaction creation to candidate autosave. CSV ingestion does not create or read candidates yet. Current CSV v1 behavior still uses `IngestionRecord.rawData.normalized` for row review and keeps Pantalla 2 category/tag selections in frontend state until Confirm Import.
 - A future migration may create one `TransactionCandidate` per importable/reviewable row so Pantalla 1 edits candidate transaction fields, Pantalla 2 persists category/tag selections on candidates, and Confirm Import converts candidates into posted `FinancialTransaction` rows.
 
 ## 10. UI design

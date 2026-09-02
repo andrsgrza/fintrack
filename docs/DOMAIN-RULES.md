@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-2A backend manual draft commands implemented. Not yet wired into the manual transaction UI. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** TC-2B.1 manual TransactionCandidate autosave UI implemented. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, candidate-specific rule preview/apply, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -114,7 +114,7 @@ TC-1/TC-1A foundation rules:
 - `signedAmount`, when present, derives positive `amount` and `flow`; clients must not send `amount` or `flow` directly.
 - `READY_TO_POST` requires account, transaction date, nonblank description, amount > 0, flow, and account-matching currency.
 - EXPENSE category requires OUT flow; INCOME category requires IN flow.
-- `POSTED` requires a linked `FinancialTransaction`, but that link is reserved for a future server-side posting/conversion command and cannot be set through normal create/update/PATCH.
+- `POSTED` requires a linked `FinancialTransaction`; that link is set only by server-side posting/conversion commands and cannot be set through normal create/update/PATCH.
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
 
@@ -132,6 +132,18 @@ TC-2A / TC-2A.1 manual backend command rules:
 - Candidate post does **not** invoke `TransactionRuleEvaluationService` in TC-2A. Existing direct `POST /api/financial-transactions` behavior remains unchanged and still applies TransactionRules on create.
 - Candidates never affect balances directly; only the posted `FinancialTransaction` created by the post command affects balances.
 - Generic `TransactionCandidate` CRUD writes are technical/restricted: generic create only supports safe MANUAL drafts, generic update/PATCH cannot change lifecycle status or controlled review/link fields, and generic delete preserves `POSTED`/`CANCELLED` candidates.
+
+TC-2B.1 manual UI rules:
+
+- `/financial-transaction/new` is the product manual-create route and starts as an unsaved local form.
+- Loading the create page does not create an empty candidate.
+- First meaningful user change creates a recoverable `MANUAL` candidate with `POST /api/transaction-candidates/manual`.
+- Meaningful first changes are account, transaction date, nonblank description, signed amount/amount entry, category, or tags. Posting date, external reference, and notes alone do not create the first candidate.
+- After the first candidate is created, the UI replaces the URL with `/financial-transaction/drafts/{id}` for resumability.
+- Subsequent changes autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`; the UI has no explicit Save Draft button.
+- The UI may display amount plus flow, but sends only `signedAmount`; backend derives `amount` and `flow`.
+- Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail.
+- Candidate create/post does not invoke `TransactionRuleEvaluationService` in TC-2B.1. Candidate-specific rule preview/apply is deferred to TC-2C.
 
 Deferred:
 
@@ -997,24 +1009,24 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### Product rules
 
-| Rule                                          | Decision                                                                                                               | Status       |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application; no `MANUAL`-only restriction today | **Done**     |
-| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                                    | **Done**     |
-| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                                    | **Done**     |
-| Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                           | **Done**     |
-| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                          | **Done**     |
-| Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                | **Done**     |
-| Rule workflow endpoint                        | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                | **Done**     |
-| Rule execution engine                         | Phase 3B two-step manual create workflow UI implemented; reevaluation/bulk remain deferred                             | **Done**     |
-| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                     | **Done**     |
-| Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                      | **Deferred** |
+| Rule                                          | Decision                                                                                                                | Status       |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application; no `MANUAL`-only restriction today  | **Done**     |
+| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                                     | **Done**     |
+| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                                     | **Done**     |
+| Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                            | **Done**     |
+| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                           | **Done**     |
+| Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                 | **Done**     |
+| Rule workflow endpoint                        | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                 | **Done**     |
+| Rule execution engine                         | Direct `FinancialTransaction` create/apply and backend preview exist; candidate-specific preview/apply remains deferred | **Partial**  |
+| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                      | **Done**     |
+| Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                       | **Deferred** |
 
 ### Rule Engine design
 
 The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, and the manual FinancialTransaction create two-step workflow UI.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on direct `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, and manual `TransactionCandidate` autosave UI. TC-2B.1 candidate create/post does not call rule preview or apply TransactionRules yet.
 
 Not implemented today: rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, override confirmation UI, and audit/explanation UI.
 

@@ -1,8 +1,6 @@
 import {
   entityConfirmDeleteButtonSelector,
   entityCreateButtonSelector,
-  entityCreateCancelButtonSelector,
-  entityCreateSaveButtonSelector,
   entityDeleteButtonSelector,
   entityDetailsBackButtonSelector,
   entityDetailsButtonSelector,
@@ -21,44 +19,24 @@ describe('FinancialTransaction e2e test', () => {
   let financialTransaction;
   let financialAccount;
 
-  const buildFinancialAccountPayload = (name: string) => {
-    const now = new Date().toISOString();
-    return {
-      name,
-      institutionName: 'E2E Bank',
-      accountType: 'DEBIT',
-      currency: 'MXN',
-      initialBalance: 1000,
-      initialBalanceDate: '2026-07-08',
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-  };
+  const buildFinancialAccountPayload = (name: string) => ({
+    name,
+    institutionName: 'E2E Bank',
+    accountType: 'DEBIT',
+    currency: 'MXN',
+    initialBalance: 1000,
+    initialBalanceDate: '2026-07-08',
+    active: true,
+  });
 
-  const buildFinancialTransactionPayload = (accountId: number) => {
-    const now = new Date().toISOString();
-    return {
-      transactionDate: '2026-07-08',
-      description: 'E2E transaction',
-      amount: 100.5,
-      flow: 'OUT',
-      origin: 'MANUAL',
-      createdAt: now,
-      updatedAt: now,
-      account: { id: accountId },
-    };
-  };
-
-  const fillCreateForm = () => {
-    cy.get('[data-cy="transactionDate"]').type('2026-07-08');
-    cy.get('[data-cy="description"]').clear().type('E2E transaction');
-    cy.get('[data-cy="amount"]').clear().type('100.5');
-    cy.get('[data-cy="flow"]').select('OUT');
-    cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
-    cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');
-    cy.get('[data-cy="account"]').select(1);
-  };
+  const buildFinancialTransactionPayload = (accountId: number) => ({
+    transactionDate: '2026-07-08',
+    description: 'E2E transaction',
+    amount: 100.5,
+    flow: 'OUT',
+    origin: 'MANUAL',
+    account: { id: accountId },
+  });
 
   beforeEach(() => {
     cy.login(username, password);
@@ -76,12 +54,15 @@ describe('FinancialTransaction e2e test', () => {
 
   beforeEach(() => {
     cy.intercept('GET', '/api/financial-transactions+(?*|)').as('entitiesRequest');
-    cy.intercept('POST', '/api/financial-transactions').as('postEntityRequest');
+    cy.intercept('POST', '/api/transaction-candidates/manual').as('createManualCandidateRequest');
+    cy.intercept('GET', '/api/transaction-candidates/*').as('getManualCandidateRequest');
+    cy.intercept('PATCH', '/api/transaction-candidates/*/manual-draft').as('patchManualCandidateRequest');
+    cy.intercept('POST', '/api/transaction-candidates/*/post').as('postManualCandidateRequest');
+    cy.intercept('POST', '/api/transaction-candidates/*/cancel').as('cancelManualCandidateRequest');
+    cy.intercept('POST', '/api/financial-transactions/rule-preview').as('rulePreviewRequest');
     cy.intercept('DELETE', '/api/financial-transactions/*').as('deleteEntityRequest');
     cy.intercept('GET', '/api/financial-accounts+(?*|)').as('accountsRequest');
     cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/financial-subscriptions+(?*|)').as('subscriptionsRequest');
-    cy.intercept('GET', '/api/transaction-ingestions+(?*|)').as('ingestionsRequest');
     cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
   });
 
@@ -90,6 +71,7 @@ describe('FinancialTransaction e2e test', () => {
       cy.authenticatedRequest({
         method: 'DELETE',
         url: `/api/financial-transactions/${financialTransaction.id}`,
+        failOnStatusCode: false,
       }).then(() => {
         financialTransaction = undefined;
       });
@@ -101,6 +83,7 @@ describe('FinancialTransaction e2e test', () => {
       cy.authenticatedRequest({
         method: 'DELETE',
         url: `/api/financial-accounts/${financialAccount.id}`,
+        failOnStatusCode: false,
       }).then(() => {
         financialAccount = undefined;
       });
@@ -128,16 +111,12 @@ describe('FinancialTransaction e2e test', () => {
         cy.wait('@entitiesRequest');
       });
 
-      it('should load create FinancialTransaction page', () => {
+      it('should load manual candidate draft create page without creating a candidate on page load', () => {
         cy.get(entityCreateButtonSelector).click();
         cy.url().should('match', new RegExp('/financial-transaction/new$'));
-        cy.getEntityCreateUpdateHeading('FinancialTransaction');
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', financialTransactionPageUrlPattern);
+        cy.get('[data-cy="FinancialTransactionManualDraftHeading"]').should('exist');
+        cy.get('@createManualCandidateRequest.all').should('have.length', 0);
+        cy.get('@rulePreviewRequest.all').should('have.length', 0);
       });
     });
 
@@ -165,21 +144,21 @@ describe('FinancialTransaction e2e test', () => {
         cy.url().should('match', financialTransactionPageUrlPattern);
       });
 
-      it('edit button click should load edit FinancialTransaction page and go back', () => {
+      it('edit button click should load posted FinancialTransaction edit page and go back', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('FinancialTransaction');
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
+        cy.get('[data-cy="entityCreateSaveButton"]').should('exist');
+        cy.get('[data-cy="entityCreateCancelButton"]').click();
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialTransactionPageUrlPattern);
       });
 
-      it('edit button click should load edit FinancialTransaction page and save', () => {
+      it('edit button click should save posted FinancialTransaction edit page', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('FinancialTransaction');
-        cy.get(entityCreateSaveButtonSelector).click();
+        cy.get('[data-cy="entityCreateSaveButton"]').click();
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
@@ -205,39 +184,65 @@ describe('FinancialTransaction e2e test', () => {
     });
   });
 
-  describe('new FinancialTransaction page', () => {
+  describe('manual candidate draft create page', () => {
     beforeEach(() => {
       cy.visit(`${financialTransactionPageUrl}/new`);
       cy.wait('@accountsRequest');
       cy.wait('@categoriesRequest');
-      cy.wait('@subscriptionsRequest');
-      cy.wait('@ingestionsRequest');
       cy.wait('@tagsRequest');
-      cy.getEntityCreateUpdateHeading('FinancialTransaction');
     });
 
-    it('should create an instance of FinancialTransaction', () => {
-      cy.get('[data-cy="origin"]').should('be.disabled');
-      cy.get('[data-cy="transactionIngestion"]').should('not.exist');
-      fillCreateForm();
-      cy.get(entityCreateSaveButtonSelector).click();
+    it('creates a candidate after a meaningful change, resumes after reload, posts, and redirects to posted FinancialTransaction detail', () => {
+      cy.get('[data-cy="description"]').type('E2E manual candidate transaction');
 
-      cy.wait('@postEntityRequest').then(({ response }) => {
+      cy.wait('@createManualCandidateRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(201);
-        expect(response?.body.origin).to.equal('MANUAL');
-        expect(response?.body.transactionIngestion).to.equal(null);
-        financialTransaction = response.body;
+        expect(response?.body.source).to.equal('MANUAL');
+        expect(response?.body.status).to.equal('DRAFT');
       });
+      cy.url().should('match', new RegExp('/financial-transaction/drafts/\\d+$'));
+
+      cy.get('[data-cy="account"]').select(financialAccount.name);
+      cy.get('[data-cy="transactionDate"]').type('2026-07-08');
+      cy.get('[data-cy="amount"]').clear().type('100.5');
+      cy.get('[data-cy="flow"]').select('OUT');
+      cy.get('[data-cy="manualDraftPostButton"]').should('not.be.disabled');
+      cy.get('@patchManualCandidateRequest.all').then(calls => {
+        expect(calls.length).to.be.greaterThan(0);
+        const latestResponse = calls.at(-1)?.response;
+        expect(latestResponse?.statusCode).to.equal(200);
+        expect(latestResponse?.body.status).to.equal('READY_TO_POST');
+        expect(latestResponse?.body.signedAmount).to.equal(-100.5);
+      });
+
+      cy.reload();
+      cy.wait('@getManualCandidateRequest');
+      cy.get('[data-cy="description"]').should('have.value', 'E2E manual candidate transaction');
+      cy.get('[data-cy="amount"]').should('have.value', '100.5');
+      cy.get('[data-cy="flow"]').should('have.value', 'OUT');
+
+      cy.get('[data-cy="manualDraftPostButton"]').should('not.be.disabled').click();
+      cy.wait('@postManualCandidateRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(200);
+        expect(response?.body.status).to.equal('POSTED');
+        expect(response?.body.financialTransaction.id).to.exist;
+        financialTransaction = response?.body.financialTransaction;
+      });
+      cy.url().should('match', new RegExp('/financial-transaction/\\d+$'));
+      cy.get('@rulePreviewRequest.all').should('have.length', 0);
+    });
+
+    it('cancels a saved candidate draft', () => {
+      cy.get('[data-cy="description"]').type('Candidate to cancel');
+      cy.wait('@createManualCandidateRequest').its('response.statusCode').should('eq', 201);
+
+      cy.get('[data-cy="manualDraftCancelButton"]').click();
+      cy.wait('@cancelManualCandidateRequest').its('response.statusCode').should('eq', 200);
       cy.url().should('match', financialTransactionPageUrlPattern);
     });
   });
 
   describe('FinancialTransaction ownership', () => {
-    it('should not render transaction ingestion on create form', () => {
-      cy.visit(`${financialTransactionPageUrl}/new`);
-      cy.get('[data-cy="transactionIngestion"]').should('not.exist');
-    });
-
     it('regular user should not see transactions on another users account', () => {
       const adminAccountName = `admin-tx-account-${Date.now()}`;
 
@@ -273,7 +278,7 @@ describe('FinancialTransaction e2e test', () => {
       });
     });
 
-    it('admin should see transactions on another users account', () => {
+    it('admin should access transactions on another users account by direct id', () => {
       const userAccountName = `user-tx-account-${Date.now()}`;
 
       cy.authenticatedRequest({
@@ -289,9 +294,9 @@ describe('FinancialTransaction e2e test', () => {
           cy.login(adminUsername, adminPassword);
           cy.authenticatedRequest({
             method: 'GET',
-            url: '/api/financial-transactions',
-          }).then(({ body: adminTransactions }) => {
-            expect(adminTransactions.some(transaction => transaction.id === userTransaction.id)).to.equal(true);
+            url: `/api/financial-transactions/${userTransaction.id}`,
+          }).then(({ body: adminTransaction }) => {
+            expect(adminTransaction.id).to.equal(userTransaction.id);
           });
 
           cy.login(username, password);

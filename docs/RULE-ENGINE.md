@@ -4,7 +4,7 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 3B manual create two-step preview UI implemented**.
+Status: **Phase 3A backend preview endpoint implemented; TC-2B.1 manual create now uses TransactionCandidate autosave UI.**
 
 Not implemented yet:
 
@@ -46,12 +46,13 @@ Subscription and description assignment are deliberately not outputs in the curr
   - does not save or mutate a transaction;
   - does not apply `FILL_EMPTY_ONLY`;
   - has no admin cross-user preview behavior.
-- Manual FinancialTransaction create two-step preview UI:
-  - Step 1 collects transaction details;
-  - the frontend calls `POST /api/financial-transactions/rule-preview`;
-  - Step 2 shows category/tags prepopulated from the preview response;
-  - the user can accept, change, remove, or add category/tags before saving;
-  - final save still uses normal FinancialTransaction create.
+- Manual FinancialTransaction product create UI now uses `TransactionCandidate`:
+  - `/financial-transaction/new` creates no backend row on page load;
+  - the first meaningful user change creates a recoverable manual candidate through `POST /api/transaction-candidates/manual`;
+  - the route is replaced with `/financial-transaction/drafts/{id}`;
+  - subsequent edits autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`;
+  - posting uses `POST /api/transaction-candidates/{id}/post`;
+  - candidate post creates the final `FinancialTransaction` and does not call TransactionRule preview/apply yet.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
@@ -576,27 +577,26 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - does not persist the evaluation result;
 - does not expose a UI.
 
-### Phase 3B — manual create two-step preview UI ✅
+### TC-2B.1 — manual TransactionCandidate autosave UI ✅
 
-- frontend-only custom manual create flow;
-- Step 1 collects transaction details:
-  - account;
-  - description;
-  - amount;
-  - flow;
-  - transaction date;
-  - posting date;
-  - external reference;
-  - notes and other non-categorization fields as applicable;
-- between Step 1 and Step 2, call `POST /api/financial-transactions/rule-preview`;
-- Step 2 shows categorization fields:
-  - category;
-  - tags;
-- prepopulate category/tags from preview suggestions;
-- show conflicts and matched rules as helpful context when present;
-- user has final control and can accept, change, remove, or add category/tags before save;
-- final save still calls normal FinancialTransaction create;
-- Phase 2 `FILL_EMPTY_ONLY` remains as backend safety behavior.
+- `/financial-transaction/new` is the product manual-create route.
+- Page load does not create an empty draft.
+- The first meaningful user change creates a `MANUAL` `TransactionCandidate`.
+- Meaningful first changes are account, transaction date, nonblank description, signed amount/amount entry, category, or tags.
+- Posting date, external reference, and notes alone do not create the first candidate.
+- After candidate creation, the UI replaces the URL with `/financial-transaction/drafts/{id}` so the user can resume by URL.
+- Subsequent changes debounce autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`.
+- The UI displays amount and flow, but submits only `signedAmount`; backend derives final `amount` and `flow`.
+- There is no explicit Save Draft button.
+- Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail.
+- Cancel before candidate creation just navigates away; cancel after candidate creation calls the candidate cancel command.
+- Candidate create/post does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not apply TransactionRules in TC-2B.1.
+
+### Deferred after TC-2B.1
+
+- Candidate-specific TransactionRule preview/apply belongs to TC-2C.
+- Existing-transaction preview / reevaluation UI remains deferred.
+- Bulk reevaluation flow remains deferred.
 
 ### Phase 4 — reevaluate one transaction
 

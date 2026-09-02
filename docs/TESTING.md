@@ -600,7 +600,7 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** TC-2A / TC-2A.1 backend manual draft commands are implemented. Candidates are not wired into the manual transaction UI, CSV upload/review, Pantalla 2, Confirm Import, Rule Engine candidate preview/apply, DescriptionNormalizationRule re-evaluation, UserPreference, or product UI.
+**Scope:** TC-2B.1 manual TransactionCandidate autosave UI is implemented for product manual create. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, Rule Engine candidate preview/apply, DescriptionNormalizationRule re-evaluation, or UserPreference.
 
 ### Summary counts
 
@@ -637,6 +637,22 @@ Key TC-1/TC-2A assertions:
 - `POST /api/transaction-candidates/{id}/post` supports MANUAL only, uses a pessimistic write lock, recalculates current normalized/derived fields, rejects incomplete/cancelled/file/API candidates and stale description/classification review states, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies category/tags, links the candidate, and is idempotent on retry.
 - Generic `TransactionCandidate` writes are restricted: generic create cannot create file/API import candidates or set status; generic update/PATCH cannot change status; generic delete rejects `POSTED`/`CANCELLED`.
 - Candidate post does not invoke TransactionRule evaluation; direct `POST /api/financial-transactions` remains the rule-application path until candidate-specific preview/apply is implemented.
+
+Key TC-2B.1 frontend assertions:
+
+- `/financial-transaction/new` renders the manual candidate form without creating a candidate on page load.
+- Posting date alone does not create the first candidate.
+- A meaningful first change creates a `MANUAL` candidate and redirects/replaces to `/financial-transaction/drafts/{id}`.
+- Rapid edits do not create multiple candidates.
+- Debounced autosave sends the latest draft and submits signed amount instead of client-controlled amount/flow.
+- Failed create/save states are visible and failed save prevents posting.
+- Posting flushes pending autosave, posts the candidate, and redirects to the posted FinancialTransaction detail.
+- Incomplete drafts cannot post.
+- Cancel before candidate creation does not call the backend; cancel after candidate creation calls the cancel command.
+- Draft URL resume hydrates existing candidate state.
+- Draft URL rejects non-MANUAL candidates and load failures with a safe no-form route error.
+- Cancelled drafts are read-only; posted drafts redirect to the posted transaction.
+- Candidate create flow does not call `/api/financial-transactions/rule-preview`.
 
 ---
 
@@ -1639,27 +1655,26 @@ Implemented Phase 3A coverage:
 - no existing-transaction workflow endpoint is implemented at `/api/financial-transactions/{id}/rule-preview`;
 - response assertions cover DTO-shaped output rather than full entity graphs.
 
-### Rule Engine manual create workflow UI tests
+### Manual transaction creation UI tests
 
-Phase 3B frontend manual create behavior is covered in `financial-transaction-ux.spec.tsx`.
+TC-2B.1 frontend manual create behavior is covered in `financial-transaction-manual-draft.spec.tsx` and Cypress `financial-transaction.cy.ts`.
 
-Implemented Phase 3B coverage:
+Implemented TC-2B.1 coverage:
 
-- create mode starts on Step 1 with transaction details only;
-- Step 1 hides category/tags and Save;
-- Step 1 validates required preview fields before calling the workflow endpoint;
-- Next calls `POST /api/financial-transactions/rule-preview` with the unsaved draft and `origin=MANUAL`;
-- preview suggestions prepopulate Step 2 category/tags;
-- matched rule names are shown when returned;
-- user can change suggested category before save;
-- user can remove suggested tags before save;
-- explicit selected tags are preserved and new suggested tags are added without duplicates;
-- no suggestions shows empty manual categorization controls;
-- category conflicts show a non-blocking warning;
-- preview failure stays on Step 1 and does not create;
-- Back from Step 2 preserves Step 1 values;
-- Save from Step 2 calls normal create with final category/tags and `origin=MANUAL`;
-- edit mode remains one-step and does not call preview.
+- create page renders without creating a candidate on page load;
+- non-meaningful initial changes such as posting date alone do not create a candidate;
+- meaningful first changes create a `MANUAL` candidate and move the URL to `/financial-transaction/drafts/{id}`;
+- autosave debounces PATCH requests and sends derived `signedAmount`;
+- failed create/save states are visible;
+- pending autosave is flushed before post;
+- incomplete drafts cannot post;
+- ready drafts post through `POST /api/transaction-candidates/{id}/post` and redirect to the posted transaction detail;
+- cancel before/after candidate creation follows the command behavior;
+- resume by draft URL hydrates candidate state;
+- draft URL rejects non-MANUAL candidates and load failures with a safe no-form route error;
+- cancelled drafts are read-only and posted drafts redirect;
+- candidate create flow does not call `/api/financial-transactions/rule-preview`;
+- posted FinancialTransaction edit remains the existing one-step edit route.
 
 Future planned areas:
 

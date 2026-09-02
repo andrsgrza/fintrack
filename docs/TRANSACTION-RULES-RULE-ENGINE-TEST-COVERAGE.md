@@ -424,27 +424,30 @@ File:
 src/main/webapp/app/entities/financial-transaction/financial-transaction-ux.spec.tsx
 ```
 
-Covered behavior:
+Covered current manual-create behavior:
 
-- create mode starts on Step 1 with transaction details only;
-- Next validates required Step 1 fields and does not call preview;
-- Next calls rule-preview with draft and `MANUAL` origin;
-- preview suggestions prepopulate Step 2 category and tags;
-- user can change suggested category before save;
-- user can clear suggested category before save;
-- manual category selection is not overwritten when preview runs again;
-- user can remove suggested tag before save;
-- user can add a manual tag before save;
-- explicit selected tag is preserved;
-- suggested new tag is added without duplicates;
-- no suggestions shows empty manual categorization in Step 2;
-- preview conflict displays non-blocking message and user can still save;
-- preview failure stays on Step 1 and does not create;
-- Back from Step 2 preserves Step 1 values;
-- Save from Step 2 calls normal create with final fields and `MANUAL` origin;
-- edit form hides technical fields and keeps account immutable;
-- edit submit uses partial update without immutable/server-owned fields;
+- `/financial-transaction/new` renders a manual candidate form and does not create a candidate on page load;
+- non-meaningful initial changes do not create the first candidate;
+- a meaningful first change creates a `MANUAL` TransactionCandidate and navigates to `/financial-transaction/drafts/{id}`;
+- rapid edits do not create multiple candidates;
+- autosave debounces PATCH requests and sends `signedAmount` instead of client-controlled `amount`/`flow`;
+- save/create failures are visible;
+- pending autosave is flushed before post;
+- incomplete candidates cannot post;
+- ready candidates post through the candidate post command and redirect to FinancialTransaction detail;
+- cancel before/after candidate creation follows command behavior;
+- resume by draft URL hydrates candidate state;
+- cancelled drafts are read-only and posted drafts redirect;
+- candidate create/post does not call `/api/financial-transactions/rule-preview`;
+- posted FinancialTransaction edit hides technical fields and keeps account immutable;
+- posted edit submit uses partial update without immutable/server-owned fields;
 - detail shows clean fields with amount/currency and hides technical metadata.
+
+Deferred after TC-2B.1:
+
+- candidate-specific rule preview/apply;
+- category/tag suggestion confirmation for manual candidates;
+- existing-transaction reevaluation.
 
 ## Suggested focused test commands
 
