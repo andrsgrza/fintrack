@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionCandidateService;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
+import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
+import com.fintrack.app.service.dto.TransactionCandidateRulePreviewResponseDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -242,6 +244,42 @@ public class TransactionCandidateResource {
         Optional<TransactionCandidateDTO> result;
         try {
             result = transactionCandidateService.postManualDraft(id);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseUtil.wrapOrNotFound(result);
+    }
+
+    /**
+     * {@code POST  /transaction-candidates/:id/rule-preview} : Preview TransactionRule suggestions for a manual draft.
+     *
+     * @param id the id of the manual draft to preview.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the transient rule preview.
+     */
+    @PostMapping("/{id}/rule-preview")
+    public ResponseEntity<TransactionCandidateRulePreviewResponseDTO> previewManualTransactionCandidateRules(@PathVariable("id") Long id) {
+        LOG.debug("REST request to preview TransactionRule suggestions for TransactionCandidate : {}", id);
+        Optional<TransactionCandidateRulePreviewResponseDTO> result;
+        try {
+            result = transactionCandidateService.previewRules(id);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseUtil.wrapOrNotFound(result);
+    }
+
+    /**
+     * {@code POST  /transaction-candidates/:id/apply-rules} : Apply TransactionRule suggestions to a manual draft.
+     *
+     * @param id the id of the manual draft to update.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated candidate plus rule metadata.
+     */
+    @PostMapping("/{id}/apply-rules")
+    public ResponseEntity<TransactionCandidateRuleApplyResponseDTO> applyManualTransactionCandidateRules(@PathVariable("id") Long id) {
+        LOG.debug("REST request to apply TransactionRule suggestions to TransactionCandidate : {}", id);
+        Optional<TransactionCandidateRuleApplyResponseDTO> result;
+        try {
+            result = transactionCandidateService.applyRules(id);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }

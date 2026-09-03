@@ -25,19 +25,39 @@ import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.IngestionRecordDTO;
+import com.fintrack.app.service.dto.RuleMatchResultDTO;
+import com.fintrack.app.service.dto.RuleOutputConflictDTO;
+import com.fintrack.app.service.dto.SkippedRuleOutputDTO;
 import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.TagSuggestionDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
+import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
+import com.fintrack.app.service.dto.TransactionCandidateRulePreviewResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
+import com.fintrack.app.service.rules.CategorySuggestion;
+import com.fintrack.app.service.rules.RuleMatchResult;
+import com.fintrack.app.service.rules.RuleOutputConflict;
+import com.fintrack.app.service.rules.SkippedRuleOutput;
+import com.fintrack.app.service.rules.TagSuggestion;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -72,6 +92,8 @@ public class TransactionCandidateService {
 
     private final IngestionRecordRepository ingestionRecordRepository;
 
+    private final TransactionRuleEvaluationService transactionRuleEvaluationService;
+
     public TransactionCandidateService(
         TransactionCandidateRepository transactionCandidateRepository,
         TransactionCandidateMapper transactionCandidateMapper,
@@ -81,7 +103,8 @@ public class TransactionCandidateService {
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
         TransactionIngestionRepository transactionIngestionRepository,
-        IngestionRecordRepository ingestionRecordRepository
+        IngestionRecordRepository ingestionRecordRepository,
+        TransactionRuleEvaluationService transactionRuleEvaluationService
     ) {
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.transactionCandidateMapper = transactionCandidateMapper;
@@ -92,6 +115,7 @@ public class TransactionCandidateService {
         this.tagRepository = tagRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
+        this.transactionRuleEvaluationService = transactionRuleEvaluationService;
     }
 
     /**
@@ -126,11 +150,14 @@ public class TransactionCandidateService {
                 rejectManualCommandMutation(existing);
                 rejectManualCommandControlledFieldsOnUpdate(transactionCandidateDTO, patchNode);
 
+                TransactionCandidateClassificationReviewStatus previousClassificationReviewStatus =
+                    existing.getClassificationReviewStatus();
                 transactionCandidateMapper.partialUpdate(existing, transactionCandidateDTO);
                 applyRelationshipPatches(existing, transactionCandidateDTO, patchNode);
                 normalizeFields(existing);
                 deriveAmountAndFlow(existing);
                 recalculateManualDraftStatus(existing);
+                updateClassificationReviewStatusAfterManualPatch(existing, patchNode, previousClassificationReviewStatus);
                 validateCandidate(existing, existing);
                 existing.setUpdatedAt(Instant.now());
                 return existing;
@@ -208,6 +235,58 @@ public class TransactionCandidateService {
             })
             .map(transactionCandidateRepository::save)
             .map(transactionCandidateMapper::toDto);
+    }
+
+    /**
+     * Preview TransactionRule evaluation for an editable manual transaction candidate.
+     *
+     * @param id the candidate id.
+     * @return the transient rule evaluation preview.
+     */
+    @Transactional(readOnly = true)
+    public Optional<TransactionCandidateRulePreviewResponseDTO> previewRules(Long id) {
+        LOG.debug("Request to preview TransactionRule evaluation for TransactionCandidate : {}", id);
+        return findAccessibleEntity(id).map(candidate -> {
+            rejectManualRuleReviewCommand(candidate);
+            TransactionRuleEvaluationResult evaluation = evaluateRules(candidate);
+            return toRulePreviewResponse(candidate, evaluation);
+        });
+    }
+
+    /**
+     * Apply TransactionRule suggestions to an editable manual transaction candidate using FILL_EMPTY_ONLY semantics.
+     *
+     * @param id the candidate id.
+     * @return the updated candidate plus transient rule evaluation metadata.
+     */
+    public Optional<TransactionCandidateRuleApplyResponseDTO> applyRules(Long id) {
+        LOG.debug("Request to apply TransactionRule suggestions to TransactionCandidate : {}", id);
+        return findAccessibleEntity(id).map(candidate -> {
+            rejectManualRuleReviewCommand(candidate);
+            TransactionRuleEvaluationResult evaluation = evaluateRules(candidate);
+            boolean hadManualSelections = candidate.getCategory() != null || !candidate.getTags().isEmpty();
+            boolean categoryApplied = applySuggestedCategory(candidate, evaluation);
+            List<Long> tagIdsApplied = applySuggestedTags(candidate, evaluation);
+
+            if (hadManualSelections) {
+                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+            } else if (categoryApplied || !tagIdsApplied.isEmpty() || evaluation.hasSuggestions()) {
+                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+            } else {
+                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
+            }
+
+            candidate.setUpdatedAt(Instant.now());
+            validateCandidate(candidate, candidate);
+            TransactionCandidate saved = transactionCandidateRepository.save(candidate);
+
+            TransactionCandidateRuleApplyResponseDTO response = new TransactionCandidateRuleApplyResponseDTO();
+            response.setCandidate(transactionCandidateMapper.toDto(saved));
+            response.setEvaluation(toRulePreviewResponse(saved, evaluation));
+            response.setCategoryApplied(categoryApplied);
+            response.setTagIdsApplied(tagIdsApplied);
+            return response;
+        });
     }
 
     /**
@@ -533,6 +612,169 @@ public class TransactionCandidateService {
         candidate.setFlow(candidate.getSignedAmount().compareTo(BigDecimal.ZERO) > 0 ? TransactionFlow.IN : TransactionFlow.OUT);
     }
 
+    private TransactionRuleEvaluationResult evaluateRules(TransactionCandidate candidate) {
+        validateCandidateCanBeEvaluated(candidate);
+        return transactionRuleEvaluationService.evaluate(
+            new TransactionRuleEvaluationInput(
+                candidate.getUser().getLogin(),
+                candidate.getDescription(),
+                candidate.getAmount(),
+                candidate.getFlow(),
+                candidate.getExternalReference(),
+                TransactionOrigin.MANUAL,
+                candidate.getTransactionDate(),
+                candidate.getPostingDate(),
+                candidate.getAccount().getId(),
+                candidate.getCategory() == null ? null : candidate.getCategory().getId(),
+                candidate.getCategory() == null ? null : candidate.getCategory().getName(),
+                currentTagIds(candidate),
+                currentTagNames(candidate)
+            )
+        );
+    }
+
+    private void validateCandidateCanBeEvaluated(TransactionCandidate candidate) {
+        if (candidate.getAccount() == null) {
+            throw new IllegalArgumentException("Financial account is required for rule preview");
+        }
+        if (candidate.getDescription() == null || candidate.getDescription().isBlank()) {
+            throw new IllegalArgumentException("Description is required for rule preview");
+        }
+        if (candidate.getAmount() == null || candidate.getAmount().compareTo(BigDecimal.ZERO) <= 0 || candidate.getFlow() == null) {
+            throw new IllegalArgumentException("Signed amount is required for rule preview");
+        }
+    }
+
+    private boolean applySuggestedCategory(TransactionCandidate candidate, TransactionRuleEvaluationResult evaluation) {
+        if (
+            candidate.getCategory() == null &&
+            evaluation.suggestedCategory() != null &&
+            !evaluation.suggestedCategory().conflictsWithCurrentValue()
+        ) {
+            Category suggestedCategory = categoryRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(evaluation.suggestedCategory().categoryId(), candidate.getUser().getLogin())
+                .orElseThrow(() -> new IllegalArgumentException("Suggested category is not accessible"));
+            candidate.setCategory(suggestedCategory);
+            return true;
+        }
+        return false;
+    }
+
+    private List<Long> applySuggestedTags(TransactionCandidate candidate, TransactionRuleEvaluationResult evaluation) {
+        List<Long> tagIdsApplied = new ArrayList<>();
+        Set<Long> tagIds = currentTagIds(candidate);
+        for (TagSuggestion suggestedTag : evaluation.suggestedTags()) {
+            if (suggestedTag.alreadyPresent() || suggestedTag.duplicateOfEarlierSuggestion() || tagIds.contains(suggestedTag.tagId())) {
+                continue;
+            }
+            Tag tag = tagRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(suggestedTag.tagId(), candidate.getUser().getLogin())
+                .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"));
+            candidate.addTags(tag);
+            tagIds.add(tag.getId());
+            tagIdsApplied.add(tag.getId());
+        }
+        return tagIdsApplied;
+    }
+
+    private Set<Long> currentTagIds(TransactionCandidate candidate) {
+        if (candidate.getTags() == null || candidate.getTags().isEmpty()) {
+            return new HashSet<>();
+        }
+        return candidate.getTags().stream().map(Tag::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    private Map<Long, String> currentTagNames(TransactionCandidate candidate) {
+        if (candidate.getTags() == null || candidate.getTags().isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> tagNames = new HashMap<>();
+        for (Tag tag : candidate.getTags()) {
+            if (tag.getId() != null) {
+                tagNames.put(tag.getId(), tag.getName());
+            }
+        }
+        return tagNames;
+    }
+
+    private TransactionCandidateRulePreviewResponseDTO toRulePreviewResponse(
+        TransactionCandidate candidate,
+        TransactionRuleEvaluationResult evaluation
+    ) {
+        TransactionCandidateRulePreviewResponseDTO response = new TransactionCandidateRulePreviewResponseDTO();
+        response.setCandidateId(candidate.getId());
+        response.setCandidateUpdatedAt(candidate.getUpdatedAt());
+        response.setClassificationReviewStatus(candidate.getClassificationReviewStatus());
+        response.setSuggestedCategory(toCategorySuggestionDTO(evaluation.suggestedCategory()));
+        response.setSuggestedTags(evaluation.suggestedTags().stream().map(this::toTagSuggestionDTO).toList());
+        response.setConflicts(evaluation.conflicts().stream().map(this::toRuleOutputConflictDTO).toList());
+        response.setSkippedOutputs(evaluation.skippedOutputs().stream().map(this::toSkippedRuleOutputDTO).toList());
+        response.setMatchedRules(evaluation.matchedRules().stream().map(this::toRuleMatchResultDTO).toList());
+        response.setHasSuggestions(evaluation.hasSuggestions());
+        response.setHasConflicts(evaluation.hasConflicts());
+        return response;
+    }
+
+    private CategorySuggestionDTO toCategorySuggestionDTO(CategorySuggestion suggestion) {
+        if (suggestion == null) {
+            return null;
+        }
+        CategorySuggestionDTO dto = new CategorySuggestionDTO();
+        dto.setCategoryId(suggestion.categoryId());
+        dto.setCategoryName(suggestion.categoryName());
+        dto.setSourceRuleId(suggestion.sourceRuleId());
+        dto.setSourceRuleName(suggestion.sourceRuleName());
+        dto.setConflictsWithCurrentValue(suggestion.conflictsWithCurrentValue());
+        dto.setCurrentCategoryId(suggestion.currentCategoryId());
+        dto.setCurrentCategoryName(suggestion.currentCategoryName());
+        return dto;
+    }
+
+    private TagSuggestionDTO toTagSuggestionDTO(TagSuggestion suggestion) {
+        TagSuggestionDTO dto = new TagSuggestionDTO();
+        dto.setTagId(suggestion.tagId());
+        dto.setTagName(suggestion.tagName());
+        dto.setSourceRuleId(suggestion.sourceRuleId());
+        dto.setSourceRuleName(suggestion.sourceRuleName());
+        dto.setAlreadyPresent(suggestion.alreadyPresent());
+        dto.setDuplicateOfEarlierSuggestion(suggestion.duplicateOfEarlierSuggestion());
+        return dto;
+    }
+
+    private RuleOutputConflictDTO toRuleOutputConflictDTO(RuleOutputConflict conflict) {
+        RuleOutputConflictDTO dto = new RuleOutputConflictDTO();
+        dto.setField(conflict.field());
+        dto.setCurrentValueId(conflict.currentValueId());
+        dto.setCurrentValueLabel(conflict.currentValueLabel());
+        dto.setSuggestedValueId(conflict.suggestedValueId());
+        dto.setSuggestedValueLabel(conflict.suggestedValueLabel());
+        dto.setSourceRuleId(conflict.sourceRuleId());
+        dto.setSourceRuleName(conflict.sourceRuleName());
+        dto.setReason(conflict.reason());
+        return dto;
+    }
+
+    private SkippedRuleOutputDTO toSkippedRuleOutputDTO(SkippedRuleOutput skippedOutput) {
+        SkippedRuleOutputDTO dto = new SkippedRuleOutputDTO();
+        dto.setField(skippedOutput.field());
+        dto.setSourceRuleId(skippedOutput.sourceRuleId());
+        dto.setSourceRuleName(skippedOutput.sourceRuleName());
+        dto.setReason(skippedOutput.reason());
+        dto.setValueId(skippedOutput.valueId());
+        dto.setValueLabel(skippedOutput.valueLabel());
+        return dto;
+    }
+
+    private RuleMatchResultDTO toRuleMatchResultDTO(RuleMatchResult match) {
+        RuleMatchResultDTO dto = new RuleMatchResultDTO();
+        dto.setRuleId(match.ruleId());
+        dto.setRuleName(match.ruleName());
+        dto.setPriority(match.priority());
+        dto.setConditionLogic(match.conditionLogic());
+        dto.setProposedOutputs(match.proposedOutputs());
+        return dto;
+    }
+
     private void validateCandidate(TransactionCandidate candidate, TransactionCandidate existing) {
         if (candidate.getSource() == null) {
             throw new IllegalArgumentException("Source is required");
@@ -689,6 +931,19 @@ public class TransactionCandidateService {
             throw new IllegalArgumentException("Manual draft command only supports manual transaction candidates");
         }
         rejectFinalMutation(existing);
+    }
+
+    private void rejectManualRuleReviewCommand(TransactionCandidate existing) {
+        if (existing.getSource() != TransactionCandidateSource.MANUAL) {
+            throw new IllegalArgumentException("Rule preview only supports manual transaction candidates");
+        }
+        if (
+            existing.getStatus() == TransactionCandidateStatus.POSTED ||
+            existing.getStatus() == TransactionCandidateStatus.CANCELLED ||
+            existing.getStatus() == TransactionCandidateStatus.FAILED
+        ) {
+            throw new IllegalArgumentException("Final transaction candidates cannot use rule preview");
+        }
     }
 
     private void rejectManualPostMutation(TransactionCandidate existing) {
@@ -853,6 +1108,41 @@ public class TransactionCandidateService {
         if (fieldPresent(node, "failedAt")) {
             throw new IllegalArgumentException("Failed at is server-controlled");
         }
+    }
+
+    private void updateClassificationReviewStatusAfterManualPatch(
+        TransactionCandidate candidate,
+        JsonNode patchNode,
+        TransactionCandidateClassificationReviewStatus previousStatus
+    ) {
+        if (fieldPresent(patchNode, "category") || fieldPresent(patchNode, "tags")) {
+            candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+            return;
+        }
+        if (isFreshClassificationStatus(previousStatus) && containsRuleInputField(patchNode)) {
+            candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.STALE);
+        }
+    }
+
+    private boolean isFreshClassificationStatus(TransactionCandidateClassificationReviewStatus status) {
+        return (
+            status == TransactionCandidateClassificationReviewStatus.SUGGESTED ||
+            status == TransactionCandidateClassificationReviewStatus.USER_SELECTED ||
+            status == TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE
+        );
+    }
+
+    private boolean containsRuleInputField(JsonNode patchNode) {
+        return (
+            fieldPresent(patchNode, "account") ||
+            fieldPresent(patchNode, "description") ||
+            fieldPresent(patchNode, "signedAmount") ||
+            fieldPresent(patchNode, "amount") ||
+            fieldPresent(patchNode, "flow") ||
+            fieldPresent(patchNode, "transactionDate") ||
+            fieldPresent(patchNode, "postingDate") ||
+            fieldPresent(patchNode, "externalReference")
+        );
     }
 
     private void recalculateManualDraftStatus(TransactionCandidate candidate) {

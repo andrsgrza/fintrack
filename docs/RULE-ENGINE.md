@@ -4,7 +4,7 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 3A backend preview endpoint implemented; TC-2B.1 manual create now uses TransactionCandidate autosave UI.**
+Status: **Phase 3A FinancialTransaction preview endpoint implemented; TC-2C.1a backend TransactionCandidate preview/apply commands implemented.**
 
 Not implemented yet:
 
@@ -52,7 +52,13 @@ Subscription and description assignment are deliberately not outputs in the curr
   - the route is replaced with `/financial-transaction/drafts/{id}`;
   - subsequent edits autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`;
   - posting uses `POST /api/transaction-candidates/{id}/post`;
-  - candidate post creates the final `FinancialTransaction` and does not call TransactionRule preview/apply yet.
+  - candidate post creates the final `FinancialTransaction` and does not secretly re-run TransactionRules.
+- Backend-only candidate rule command endpoints:
+  - `POST /api/transaction-candidates/{id}/rule-preview`;
+  - `POST /api/transaction-candidates/{id}/apply-rules`;
+  - preview is transient and does not mutate;
+  - apply re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`;
+  - the frontend does not call these candidate rule commands yet.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
@@ -592,9 +598,22 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - Cancel before candidate creation just navigates away; cancel after candidate creation calls the candidate cancel command.
 - Candidate create/post does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not apply TransactionRules in TC-2B.1.
 
-### Deferred after TC-2B.1
+### TC-2C.1a — backend TransactionCandidate rule preview/apply foundation ✅
 
-- Candidate-specific TransactionRule preview/apply belongs to TC-2C.
+- `POST /api/transaction-candidates/{id}/rule-preview` evaluates active owner rules against the current persisted editable MANUAL candidate and returns transient suggestions, conflicts, skipped outputs, and matched rules. It does not mutate the candidate.
+- `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`.
+- Category fills only when the candidate has no category and the suggestion has no conflict.
+- Tags are additive; existing/manual tags are preserved and duplicates are not added.
+- Manual category/tags are not overwritten. If manual selections existed before apply, `classificationReviewStatus` remains `USER_SELECTED`.
+- If suggestions exist for an unclassified candidate, apply sets `classificationReviewStatus=SUGGESTED`; if no applicable suggestions exist, it sets `NOT_APPLICABLE`.
+- Manual category/tag PATCH sets `classificationReviewStatus=USER_SELECTED`.
+- Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not because TransactionRules do not use notes.
+- TC-2C.1a intentionally preserves existing post behavior: stale review statuses are rejected, but `NOT_EVALUATED` is not hard-blocked until the frontend refresh/apply path exists.
+- Candidate preview/apply does not call or reuse the public `POST /api/financial-transactions/rule-preview` endpoint.
+
+### Deferred after TC-2C.1a
+
+- Candidate-specific TransactionRule preview/apply UI belongs to TC-2C.1b.
 - Existing-transaction preview / reevaluation UI remains deferred.
 - Bulk reevaluation flow remains deferred.
 

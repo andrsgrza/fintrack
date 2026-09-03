@@ -571,7 +571,7 @@ Deferred for this workflow:
 - override confirmation UI;
 - atomic backend command endpoint.
 
-FinancialTransaction manual create now owns the TransactionCandidate autosave UI. Existing-transaction preview, candidate-specific rule preview/apply, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+FinancialTransaction manual create now owns the TransactionCandidate autosave UI. Backend candidate-specific rule preview/apply commands exist as of TC-2C.1a, but the candidate suggestion UI remains deferred. Existing-transaction preview UI, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
 ## FinancialTransaction manual create — TransactionCandidate autosave UX
 
@@ -595,7 +595,7 @@ There is intentionally no explicit Save Draft button. Recoverability comes from 
 
 Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
 
-TC-2B.1 does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. Candidate-specific rule preview/apply belongs to TC-2C.
+The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. TC-2C.1a backend candidate rule commands exist at `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`, but the UI for refreshing/applying suggestions belongs to TC-2C.1b.
 
 Do not extend this as:
 

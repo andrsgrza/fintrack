@@ -600,7 +600,7 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** TC-2B.1 manual TransactionCandidate autosave UI is implemented for product manual create. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, Rule Engine candidate preview/apply, DescriptionNormalizationRule re-evaluation, or UserPreference.
+**Scope:** TC-2C.1a backend candidate rule preview/apply commands are implemented for MANUAL candidates. The manual product UI still does not call them yet. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, or UserPreference.
 
 ### Summary counts
 
@@ -636,7 +636,20 @@ Key TC-1/TC-2A assertions:
 - `POST /api/transaction-candidates/{id}/cancel` marks non-final manual drafts CANCELLED and sets `cancelledAt`.
 - `POST /api/transaction-candidates/{id}/post` supports MANUAL only, uses a pessimistic write lock, recalculates current normalized/derived fields, rejects incomplete/cancelled/file/API candidates and stale description/classification review states, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies category/tags, links the candidate, and is idempotent on retry.
 - Generic `TransactionCandidate` writes are restricted: generic create cannot create file/API import candidates or set status; generic update/PATCH cannot change status; generic delete rejects `POSTED`/`CANCELLED`.
-- Candidate post does not invoke TransactionRule evaluation; direct `POST /api/financial-transactions` remains the rule-application path until candidate-specific preview/apply is implemented.
+- Candidate post does not invoke TransactionRule evaluation; candidate rule preview/apply exists only through explicit candidate command endpoints.
+
+Key TC-2C.1a backend assertions:
+
+- `POST /api/transaction-candidates/{id}/rule-preview` returns TransactionRule category/tag suggestions for editable MANUAL candidates without mutating the candidate.
+- Preview rejects non-MANUAL, foreign, and final candidates.
+- `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current DB state and applies `FILL_EMPTY_ONLY`.
+- Apply fills empty category, adds suggested tags, preserves manual category/tags, and never removes existing tags.
+- Apply sets `classificationReviewStatus=SUGGESTED` for suggestions on an unclassified candidate and `NOT_APPLICABLE` when nothing applies.
+- Manual category/tag PATCH sets `classificationReviewStatus=USER_SELECTED`.
+- Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not.
+- Inactive and foreign rules are ignored.
+- Candidate preview/apply do not use the public `/api/financial-transactions/rule-preview` endpoint.
+- TC-2C.1a does not hard-block `NOT_EVALUATED` manual post; stale review post guard remains as before until frontend refresh/apply exists.
 
 Key TC-2B.1 frontend assertions:
 

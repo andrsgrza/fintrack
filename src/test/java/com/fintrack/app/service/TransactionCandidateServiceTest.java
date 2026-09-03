@@ -41,6 +41,7 @@ import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
+import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -84,6 +85,9 @@ class TransactionCandidateServiceTest {
     @Mock
     private IngestionRecordRepository ingestionRecordRepository;
 
+    @Mock
+    private TransactionRuleEvaluationService transactionRuleEvaluationService;
+
     private TransactionCandidateService transactionCandidateService;
 
     private User user;
@@ -99,7 +103,8 @@ class TransactionCandidateServiceTest {
             categoryRepository,
             tagRepository,
             transactionIngestionRepository,
-            ingestionRecordRepository
+            ingestionRecordRepository,
+            transactionRuleEvaluationService
         );
         user = new User();
         user.setId(1L);

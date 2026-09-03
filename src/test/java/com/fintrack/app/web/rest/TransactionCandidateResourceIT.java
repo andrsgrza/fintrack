@@ -2,6 +2,7 @@ package com.fintrack.app.web.rest;
 
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -21,6 +22,7 @@ import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -331,6 +333,219 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
+    void previewRulesReturnsSuggestionsAndDoesNotMutateCandidate() throws Exception {
+        User owner = currentUser();
+        FinancialAccount account = createAccount(owner);
+        Category suggestedCategory = createCategory(CategoryType.EXPENSE, owner);
+        Tag suggestedTag = createTag(owner);
+        createMatchingRule(owner, suggestedCategory, suggestedTag, "Coffee");
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(owner, account, "Coffee shop", new BigDecimal("-20.00"));
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/rule-preview", candidate.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidateId").value(candidate.getId()))
+            .andExpect(jsonPath("$.classificationReviewStatus").value("NOT_EVALUATED"))
+            .andExpect(jsonPath("$.suggestedCategory.categoryId").value(suggestedCategory.getId()))
+            .andExpect(jsonPath("$.suggestedTags[0].tagId").value(suggestedTag.getId()))
+            .andExpect(jsonPath("$.matchedRules[0].ruleName").value("Candidate rule"))
+            .andExpect(jsonPath("$.hasSuggestions").value(true));
+
+        em.flush();
+        em.clear();
+
+        TransactionCandidate persisted = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(persisted.getCategory()).isNull();
+        assertThat(persisted.getTags()).isEmpty();
+        assertThat(persisted.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+    }
+
+    @Test
+    @Transactional
+    void applyRulesFillsEmptyCategoryAndAddsTags() throws Exception {
+        User owner = currentUser();
+        FinancialAccount account = createAccount(owner);
+        Category suggestedCategory = createCategory(CategoryType.EXPENSE, owner);
+        Tag suggestedTag = createTag(owner);
+        createMatchingRule(owner, suggestedCategory, suggestedTag, "Coffee");
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(owner, account, "Coffee shop", new BigDecimal("-20.00"));
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/apply-rules", candidate.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.categoryApplied").value(true))
+            .andExpect(jsonPath("$.tagIdsApplied[0]").value(suggestedTag.getId()))
+            .andExpect(jsonPath("$.candidate.category.id").value(suggestedCategory.getId()))
+            .andExpect(jsonPath("$.candidate.tags[0].id").value(suggestedTag.getId()))
+            .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("SUGGESTED"))
+            .andExpect(jsonPath("$.evaluation.suggestedCategory.categoryId").value(suggestedCategory.getId()));
+
+        em.flush();
+        em.clear();
+
+        TransactionCandidate persisted = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(persisted.getCategory().getId()).isEqualTo(suggestedCategory.getId());
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactly(suggestedTag.getId());
+        assertThat(persisted.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+    }
+
+    @Test
+    @Transactional
+    void applyRulesPreservesManualCategoryAndTags() throws Exception {
+        User owner = currentUser();
+        FinancialAccount account = createAccount(owner);
+        Category manualCategory = createCategory(CategoryType.EXPENSE, owner);
+        Category suggestedCategory = createCategory(CategoryType.EXPENSE, owner);
+        Tag manualTag = createTag(owner);
+        Tag suggestedTag = createTag(owner);
+        createMatchingRule(owner, suggestedCategory, suggestedTag, "Coffee");
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(owner, account, "Coffee shop", new BigDecimal("-20.00"));
+        candidate.setCategory(manualCategory);
+        candidate.setTags(new HashSet<>(Set.of(manualTag)));
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/apply-rules", candidate.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.categoryApplied").value(false))
+            .andExpect(jsonPath("$.tagIdsApplied[0]").value(suggestedTag.getId()))
+            .andExpect(jsonPath("$.candidate.category.id").value(manualCategory.getId()))
+            .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("USER_SELECTED"));
+
+        em.flush();
+        em.clear();
+
+        TransactionCandidate persisted = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(persisted.getCategory().getId()).isEqualTo(manualCategory.getId());
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(manualTag.getId(), suggestedTag.getId());
+        assertThat(persisted.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+    }
+
+    @Test
+    @Transactional
+    void applyRulesWithNoSuggestionsMarksNotApplicable() throws Exception {
+        User owner = currentUser();
+        FinancialAccount account = createAccount(owner);
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(owner, account, "No matching rules", new BigDecimal("-20.00"));
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/apply-rules", candidate.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.categoryApplied").value(false))
+            .andExpect(jsonPath("$.tagIdsApplied").isEmpty())
+            .andExpect(jsonPath("$.candidate.category").value(nullValue()))
+            .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("NOT_APPLICABLE"));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesRejectsNonManualCandidate() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        candidate.setSource(TransactionCandidateSource.FILE_IMPORT);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/rule-preview", candidate.getId()))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void previewRulesRejectsForeignCandidate() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(createOtherUser());
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/rule-preview", candidate.getId()))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void applyRulesRejectsFinalCandidate() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        candidate.setStatus(TransactionCandidateStatus.CANCELLED);
+        candidate.setCancelledAt(Instant.now());
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/apply-rules", candidate.getId()))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void manualCategoryPatchSetsClassificationUserSelected() throws Exception {
+        User owner = currentUser();
+        Category category = createCategory(CategoryType.EXPENSE, owner);
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(
+            owner,
+            createAccount(owner),
+            "Manual",
+            new BigDecimal("-20.00")
+        );
+
+        restTransactionCandidateMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID + "/manual-draft", candidate.getId())
+                    .contentType("application/merge-patch+json")
+                    .content("{\"category\":{\"id\":%d}}".formatted(category.getId()))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.category.id").value(category.getId()))
+            .andExpect(jsonPath("$.classificationReviewStatus").value("USER_SELECTED"));
+    }
+
+    @Test
+    @Transactional
+    void ruleInputPatchAfterFreshClassificationMarksStale() throws Exception {
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(
+            currentUser(),
+            createAccount(currentUser()),
+            "Manual",
+            new BigDecimal("-20.00")
+        );
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        restTransactionCandidateMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID + "/manual-draft", candidate.getId())
+                    .contentType("application/merge-patch+json")
+                    .content("{\"description\":\"Changed description\"}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.description").value("Changed description"))
+            .andExpect(jsonPath("$.classificationReviewStatus").value("STALE"));
+    }
+
+    @Test
+    @Transactional
+    void inactiveAndForeignRulesAreIgnoredForCandidatePreview() throws Exception {
+        User owner = currentUser();
+        User otherUser = createOtherUser();
+        FinancialAccount account = createAccount(owner);
+        Category inactiveCategory = createCategory(CategoryType.EXPENSE, owner);
+        Tag inactiveTag = createTag(owner);
+        Category foreignCategory = createCategory(CategoryType.EXPENSE, otherUser);
+        Tag foreignTag = createTag(otherUser);
+        createMatchingRule(owner, inactiveCategory, inactiveTag, "Coffee", false);
+        createMatchingRule(otherUser, foreignCategory, foreignTag, "Coffee", true);
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(owner, account, "Coffee shop", new BigDecimal("-20.00"));
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/rule-preview", candidate.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestedCategory").value(nullValue()))
+            .andExpect(jsonPath("$.suggestedTags").isEmpty())
+            .andExpect(jsonPath("$.matchedRules").isEmpty())
+            .andExpect(jsonPath("$.hasSuggestions").value(false));
+    }
+
+    @Test
+    @Transactional
     void readyToPostRequiresCompleteFields() throws Exception {
         TransactionCandidateDTO dto = new TransactionCandidateDTO();
         dto.setSource(TransactionCandidateSource.MANUAL);
@@ -509,11 +724,15 @@ class TransactionCandidateResourceIT {
     }
 
     private void createMatchingRule(User owner, Category resultingCategory, Tag resultingTag, String descriptionValue) {
+        createMatchingRule(owner, resultingCategory, resultingTag, descriptionValue, true);
+    }
+
+    private void createMatchingRule(User owner, Category resultingCategory, Tag resultingTag, String descriptionValue, boolean active) {
         TransactionRule rule = new TransactionRule()
             .name("Candidate rule")
             .priority(0)
             .conditionLogic(RuleConditionLogic.ALL)
-            .active(true)
+            .active(active)
             .createdAt(Instant.now())
             .updatedAt(Instant.now())
             .user(owner)
@@ -526,8 +745,8 @@ class TransactionCandidateResourceIT {
             .operator(RuleOperator.CONTAINS)
             .value(descriptionValue)
             .caseSensitive(false)
-            .position(0)
-            .transactionRule(rule);
+            .position(0);
+        rule.addConditions(condition);
         em.persist(condition);
         em.flush();
     }
