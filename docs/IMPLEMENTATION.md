@@ -161,7 +161,7 @@ TC-2A / TC-2A.1 adds manual command endpoints:
 - `POST /api/transaction-candidates/{id}/cancel` marks a non-final manual draft CANCELLED and sets `cancelledAt`.
 - `POST /api/transaction-candidates/{id}/post` loads the candidate with a pessimistic write lock, recalculates normalized/derived transaction fields from the current draft, converts a complete valid manual draft into exactly one posted `FinancialTransaction`, sets `origin=MANUAL`, links it back to the candidate, and is idempotent/concurrency-safe after POSTED.
 
-Candidate post intentionally persists the `FinancialTransaction` through an internal controlled path, not through `FinancialTransactionService.save()`, so it does not secretly re-run `TransactionRuleEvaluationService`.
+Candidate post intentionally persists the `FinancialTransaction` through an internal controlled path, not through `FinancialTransactionService.save()`, so it does not secretly re-run `TransactionRuleEvaluationService`. Backend post now requires candidate classification review to be complete: `classificationReviewStatus` must be `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`; `NOT_EVALUATED` and `STALE` are rejected.
 
 Generic `TransactionCandidate` CRUD write endpoints remain technical/restricted compatibility surfaces. They cannot create `FILE_IMPORT`/`API_IMPORT` candidates, cannot directly change lifecycle status, cannot set lifecycle/review/server-controlled fields, cannot set `financialTransaction`, cannot write derived `amount`/`flow`, preserve source immutability, and cannot delete `POSTED`/`CANCELLED` candidates. Manual lifecycle changes must go through the manual command endpoints.
 
@@ -180,6 +180,7 @@ TC-2C.1b adds the frontend rule suggestions slice for manual candidates:
 - Apply suggestions flushes pending autosave and calls `POST /api/transaction-candidates/{id}/apply-rules`; the form hydrates category/tags/status from the returned candidate.
 - The Post button is blocked in the UI while `classificationReviewStatus` is `NOT_EVALUATED` or `STALE`.
 - Post remains allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` when the candidate is otherwise `READY_TO_POST`.
+- TC-2C.1c adds the same guard to backend `postManualDraft`, so direct API calls cannot bypass classification review.
 - Candidate post still does not call preview/apply and does not secretly re-run `TransactionRuleEvaluationService`.
 - Candidate UI does not call the public `POST /api/financial-transactions/rule-preview` endpoint.
 
@@ -205,7 +206,7 @@ TC-2C.1a adds backend-only candidate rule commands:
 - Both commands reject non-MANUAL and final `POSTED`/`CANCELLED`/`FAILED` candidates and use the candidate owner/current user scope. They do not call `POST /api/financial-transactions/rule-preview`.
 - `PATCH /api/transaction-candidates/{id}/manual-draft` marks category/tag changes as `classificationReviewStatus=USER_SELECTED`; rule-input changes after a fresh classification mark `classificationReviewStatus=STALE`. Notes-only changes do not mark stale because TransactionRules do not evaluate notes.
 - `apply-rules` sets `classificationReviewStatus=SUGGESTED` when suggestions exist for an unclassified candidate, `NOT_APPLICABLE` when no applicable suggestions exist, and preserves `USER_SELECTED` when manual category/tags already existed.
-- TC-2C.1a deliberately does not hard-block manual post on `NOT_EVALUATED`; the existing stale-review post guard remains unchanged. Frontend candidate suggestions and stricter post gating belong to the next TC-2C slice.
+- TC-2C.1c hardens manual post: `NOT_EVALUATED` and `STALE` classification review states are rejected before a `FinancialTransaction` is created. Posting still does not run preview/apply secretly.
 
 ---
 
@@ -524,6 +525,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | TransactionCandidate manual autosave create UI  | ✅     | TC-2B.1 frontend create uses recoverable `MANUAL` candidates, creates on first meaningful change, autosaves to `/financial-transaction/drafts/{id}`, and posts through the candidate post command          |
 | Candidate backend rule preview/apply commands   | ✅     | TC-2C.1a exposes candidate-specific preview/apply commands on `/api/transaction-candidates/{id}`; preview is transient, apply is FILL_EMPTY_ONLY, post does not rerun rules                                |
 | Candidate-specific rule-preview/apply UI        | ✅     | TC-2C.1b manual candidate UI exposes Refresh/Apply suggestions, uses candidate-specific endpoints, and blocks Post while classification is `NOT_EVALUATED` or `STALE`                                      |
+| Candidate post classification backend guard     | ✅     | TC-2C.1c backend post rejects `NOT_EVALUATED` and `STALE`; only `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post when otherwise valid                                                           |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                                                     |
 
 #### Validations ✅

@@ -599,7 +599,7 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - There is no explicit Save Draft button.
 - Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail.
 - Cancel before candidate creation just navigates away; cancel after candidate creation calls the candidate cancel command.
-- Candidate create/post does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not apply TransactionRules in TC-2B.1.
+- Candidate create/post does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not apply TransactionRules in TC-2B.1/TC-2C.
 
 ### TC-2C.1a — backend TransactionCandidate rule preview/apply foundation ✅
 
@@ -611,7 +611,7 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - If suggestions exist for an unclassified candidate, apply sets `classificationReviewStatus=SUGGESTED`; if no applicable suggestions exist, it sets `NOT_APPLICABLE`.
 - Manual category/tag PATCH sets `classificationReviewStatus=USER_SELECTED`.
 - Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not because TransactionRules do not use notes.
-- TC-2C.1a intentionally preserved backend post behavior; TC-2C.1b adds frontend post gating so manual drafts cannot be posted from the UI while classification is `NOT_EVALUATED` or `STALE`.
+- TC-2C.1c adds backend post gating so manual drafts cannot be posted while classification is `NOT_EVALUATED` or `STALE`. Backend post allows only `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE` classification states when the candidate is otherwise ready.
 - Candidate preview/apply does not call or reuse the public `POST /api/financial-transactions/rule-preview` endpoint.
 
 ### TC-2C.1b — frontend TransactionCandidate rule suggestions UI ✅
@@ -621,6 +621,7 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - Apply suggestions flushes pending/in-flight autosave, calls `POST /api/transaction-candidates/{id}/apply-rules`, and replaces local form state from the returned candidate.
 - The UI displays classification review statuses: `NOT_EVALUATED`, `STALE`, `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE`.
 - Post is disabled with a visible message while status is `NOT_EVALUATED` or `STALE`; Post is allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` if the candidate is otherwise `READY_TO_POST`.
+- Backend `POST /api/transaction-candidates/{id}/post` enforces the same classification gate and rejects direct API attempts to post `NOT_EVALUATED` or `STALE` manual candidates.
 - Manual category/tag changes continue to autosave through the manual-draft PATCH endpoint and are represented as `USER_SELECTED` by the backend response.
 - Candidate post still does not secretly preview/apply rules.
 - Candidate flow still does not call the public `POST /api/financial-transactions/rule-preview` endpoint.

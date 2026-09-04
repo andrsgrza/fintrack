@@ -649,7 +649,7 @@ Key TC-2C.1a backend assertions:
 - Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not.
 - Inactive and foreign rules are ignored.
 - Candidate preview/apply do not use the public `/api/financial-transactions/rule-preview` endpoint.
-- TC-2C.1b frontend blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` are allowed UI classification states for posting.
+- TC-2C.1c backend post also blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` are allowed classification states for posting.
 
 Key TC-2B.1 frontend assertions:
 
@@ -671,6 +671,7 @@ Key TC-2B.1 frontend assertions:
 - Apply suggestions flushes pending autosave, calls the candidate-specific `apply-rules` endpoint, updates category/tags/status from the returned candidate, and keeps the status label synchronized.
 - Post is disabled and shows a blocking message for `NOT_EVALUATED` and `STALE`.
 - Post is allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` when the candidate is otherwise ready.
+- Backend post rejects direct API attempts to post `NOT_EVALUATED` or `STALE` manual candidates.
 - Manual category/tag changes returned by autosave as `USER_SELECTED` allow posting.
 - Candidate flow does not call candidate rule preview/apply from Post; preview/apply are explicit user actions only.
 

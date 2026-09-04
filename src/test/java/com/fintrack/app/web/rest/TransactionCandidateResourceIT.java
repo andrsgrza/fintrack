@@ -298,6 +298,40 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
+    void postRejectsNotEvaluatedClassificationReview() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        int transactionCountBefore = financialTransactionRepository.findAll().size();
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/post", candidate.getId()))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+
+        assertThat(financialTransactionRepository.findAll()).hasSize(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void postRejectsStaleClassificationReview() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.STALE);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        int transactionCountBefore = financialTransactionRepository.findAll().size();
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/post", candidate.getId()))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+
+        assertThat(financialTransactionRepository.findAll()).hasSize(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
     void postingManualDraftTwiceIsIdempotent() throws Exception {
         TransactionCandidate candidate = createReadyCandidate(currentUser());
 
@@ -318,6 +352,8 @@ class TransactionCandidateResourceIT {
         Tag suggestedTag = createTag(owner);
         createMatchingRule(owner, suggestedCategory, suggestedTag, "Coffee");
         TransactionCandidate candidate = createReadyCandidateWithoutOutputs(owner, account, "Coffee shop", new BigDecimal("-20.00"));
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
+        transactionCandidateRepository.saveAndFlush(candidate);
 
         restTransactionCandidateMockMvc.perform(post(ENTITY_API_URL_ID + "/post", candidate.getId())).andExpect(status().isOk());
 
@@ -678,7 +714,7 @@ class TransactionCandidateResourceIT {
             .status(TransactionCandidateStatus.READY_TO_POST)
             .validationStatus(TransactionCandidateValidationStatus.VALID)
             .descriptionReviewStatus(com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
-            .classificationReviewStatus(com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus.USER_SELECTED)
             .transactionDate(LocalDate.of(2026, 1, 15))
             .postingDate(LocalDate.of(2026, 1, 16))
             .description("Manual ready candidate")

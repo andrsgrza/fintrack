@@ -971,6 +971,9 @@ public class TransactionCandidateService {
         if (existing.getDescriptionReviewStatus() == TransactionCandidateDescriptionReviewStatus.STALE) {
             throw new IllegalArgumentException("Stale description review must be refreshed before posting");
         }
+        if (existing.getClassificationReviewStatus() == TransactionCandidateClassificationReviewStatus.NOT_EVALUATED) {
+            throw new IllegalArgumentException("Transaction classification must be reviewed before posting");
+        }
         if (existing.getClassificationReviewStatus() == TransactionCandidateClassificationReviewStatus.STALE) {
             throw new IllegalArgumentException("Stale classification review must be refreshed before posting");
         }

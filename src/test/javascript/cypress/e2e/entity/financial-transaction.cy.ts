@@ -14,7 +14,7 @@ interface CypressRequestCall {
     body?: {
       status?: string;
       description?: string;
-      signedAmount?: number;
+      signedAmount?: number | string;
     };
   };
 }
@@ -60,7 +60,7 @@ describe('FinancialTransaction e2e test', () => {
       const response = (call as unknown as CypressRequestCall).response;
       expect(response?.statusCode).to.equal(200);
 
-      if (response?.body?.description !== description || response?.body?.signedAmount !== -100.5) {
+      if (response?.body?.description !== description || Number(response?.body?.signedAmount) !== -100.5) {
         expect(attemptsRemaining, 'manual candidate save attempts remaining').to.be.greaterThan(0);
         return waitForSavedManualCandidateDraft(description, attemptsRemaining - 1);
       }

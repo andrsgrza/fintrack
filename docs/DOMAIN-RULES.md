@@ -128,7 +128,7 @@ TC-2A / TC-2A.1 manual backend command rules:
 - `POST /api/transaction-candidates/{id}/post` posts only `MANUAL` candidates. `FILE_IMPORT` and `API_IMPORT` candidate posting is deferred and rejected by this command.
 - Manual post uses a pessimistic write lock on the candidate, recalculates normalized fields plus derived `amount`/`flow` from current `signedAmount`, requires a complete valid candidate, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies account/date/description/amount/flow/external reference/notes/category/tags, links it to the candidate, sets `status=POSTED`, and sets `postedAt`.
 - Manual post is concurrency-safe/idempotent after `POSTED`: retry returns the existing linked transaction candidate and does not create duplicate `FinancialTransaction` rows.
-- `validationStatus=INVALID/STALE` is recalculated during manual post from the current candidate fields; if the candidate still cannot become complete/valid, post is rejected. `descriptionReviewStatus=STALE` and `classificationReviewStatus=STALE` block manual post until refreshed.
+- `validationStatus=INVALID/STALE` is recalculated during manual post from the current candidate fields; if the candidate still cannot become complete/valid, post is rejected. `descriptionReviewStatus=STALE` blocks manual post until refreshed. `classificationReviewStatus=NOT_EVALUATED` and `classificationReviewStatus=STALE` block manual post until the user refreshes/applies suggestions or manually selects category/tags.
 - Candidate post does **not** invoke `TransactionRuleEvaluationService` in TC-2A. Existing direct `POST /api/financial-transactions` behavior remains unchanged and still applies TransactionRules on create.
 - Candidates never affect balances directly; only the posted `FinancialTransaction` created by the post command affects balances.
 - Generic `TransactionCandidate` CRUD writes are technical/restricted: generic create only supports safe MANUAL drafts, generic update/PATCH cannot change lifecycle status or controlled review/link fields, and generic delete preserves `POSTED`/`CANCELLED` candidates.
@@ -147,7 +147,7 @@ TC-2B.1 manual UI rules:
 - `POST /api/transaction-candidates/{id}/rule-preview` evaluates active owner TransactionRules for an editable MANUAL candidate and returns transient suggestions/matches/conflicts/skips without mutating the candidate.
 - `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`: category fills only when empty/no conflict; tags are additive; manual category/tags are preserved.
 - Manual category/tag PATCH marks `classificationReviewStatus=USER_SELECTED`. Rule-input PATCH after fresh classification marks `classificationReviewStatus=STALE`; notes-only changes do not because rules do not evaluate notes.
-- TC-2C.1b frontend blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post if the candidate is otherwise ready.
+- TC-2C.1c backend hardens manual post with the same classification gate as the UI: `NOT_EVALUATED` and `STALE` are rejected; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post if the candidate is otherwise ready.
 
 Deferred:
 
@@ -1030,7 +1030,7 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on direct `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, manual `TransactionCandidate` autosave UI, backend candidate rule preview/apply commands, and frontend manual candidate suggestions UI. Candidate create/post still does not call rule preview or apply TransactionRules automatically.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on direct `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, manual `TransactionCandidate` autosave UI, backend candidate rule preview/apply commands, frontend manual candidate suggestions UI, and backend manual post classification gating. Candidate create/post still does not call rule preview or apply TransactionRules automatically.
 
 Not implemented today: rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, override confirmation UI, and audit/explanation UI.
 

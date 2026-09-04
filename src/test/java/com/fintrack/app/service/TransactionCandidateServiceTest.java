@@ -373,7 +373,9 @@ class TransactionCandidateServiceTest {
 
     @Test
     void incompleteManualDraftCannotBePosted() {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT).classificationReviewStatus(
+            TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE
+        );
 
         when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
 
@@ -399,7 +401,8 @@ class TransactionCandidateServiceTest {
             .externalReference("ext-1")
             .notes("note")
             .category(category)
-            .tags(Set.of(tag));
+            .tags(Set.of(tag))
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
 
         when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
         when(financialTransactionRepository.save(any())).thenAnswer(invocation -> {
@@ -431,6 +434,7 @@ class TransactionCandidateServiceTest {
         assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
         assertThat(result.getPostedAt()).isNotNull();
         assertThat(result.getFinancialTransaction().getId()).isEqualTo(99L);
+        verifyNoInteractions(transactionRuleEvaluationService);
     }
 
     @Test
@@ -493,6 +497,43 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
+    void notEvaluatedClassificationReviewCannotBePosted() {
+        TransactionCandidate existing = completeReadyCandidate()
+            .id(1L)
+            .user(user)
+            .signedAmount(new BigDecimal("-10.00"))
+            .amount(new BigDecimal("10.00"))
+            .flow(TransactionFlow.OUT)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Transaction classification must be reviewed before posting");
+
+        verifyNoInteractions(financialTransactionRepository);
+        verifyNoInteractions(transactionRuleEvaluationService);
+    }
+
+    @Test
+    void suggestedClassificationReviewCanBePosted() {
+        assertPostSucceedsWithClassificationStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+    }
+
+    @Test
+    void userSelectedClassificationReviewCanBePosted() {
+        assertPostSucceedsWithClassificationStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+    }
+
+    @Test
+    void notApplicableClassificationReviewCanBePosted() {
+        assertPostSucceedsWithClassificationStatus(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
+    }
+
+    @Test
     void staleValidationStatusIsRecalculatedBeforePostingWhenCandidateIsComplete() {
         TransactionCandidate existing = completeReadyCandidate()
             .id(1L)
@@ -500,7 +541,7 @@ class TransactionCandidateServiceTest {
             .signedAmount(new BigDecimal("-10.00"))
             .validationStatus(TransactionCandidateValidationStatus.STALE)
             .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
-            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
 
         when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
         when(financialTransactionRepository.save(any())).thenAnswer(invocation -> {
@@ -517,6 +558,7 @@ class TransactionCandidateServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
         assertThat(result.getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.VALID);
+        verifyNoInteractions(transactionRuleEvaluationService);
     }
 
     @Test
@@ -529,7 +571,8 @@ class TransactionCandidateServiceTest {
             .amount(BigDecimal.ZERO)
             .flow(null)
             .currencySnapshot(CurrencyCode.MXN)
-            .validationStatus(TransactionCandidateValidationStatus.INVALID);
+            .validationStatus(TransactionCandidateValidationStatus.INVALID)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
 
         when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
 
@@ -1061,6 +1104,36 @@ class TransactionCandidateServiceTest {
         TransactionCandidateDTO dto = new TransactionCandidateDTO();
         dto.setSource(source);
         return dto;
+    }
+
+    private void assertPostSucceedsWithClassificationStatus(TransactionCandidateClassificationReviewStatus classificationReviewStatus) {
+        TransactionCandidate existing = completeReadyCandidate()
+            .id(1L)
+            .user(user)
+            .signedAmount(new BigDecimal("-10.00"))
+            .amount(new BigDecimal("10.00"))
+            .flow(TransactionFlow.OUT)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(classificationReviewStatus);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+        when(financialTransactionRepository.save(any())).thenAnswer(invocation -> {
+            FinancialTransaction financialTransaction = invocation.getArgument(0);
+            financialTransaction.setId(99L);
+            return financialTransaction;
+        });
+        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
+            toDto((TransactionCandidate) invocation.getArgument(0))
+        );
+
+        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
+
+        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
+        assertThat(result.getClassificationReviewStatus()).isEqualTo(classificationReviewStatus);
+        assertThat(result.getFinancialTransaction().getId()).isEqualTo(99L);
+        verifyNoInteractions(transactionRuleEvaluationService);
     }
 
     private TransactionCandidateDTO toDto(TransactionCandidate entity) {
