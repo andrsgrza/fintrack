@@ -594,6 +594,12 @@ Manual create composition:
 
 There is intentionally no explicit Save Draft button. Recoverability comes from autosave plus the `/financial-transaction/drafts/{id}` route.
 
+TC-2D.1 adds backend support for a future draft recovery page:
+
+- `GET /api/transaction-candidates/manual-drafts` returns current-user recoverable `MANUAL` draft summaries.
+- It includes only `DRAFT` and `READY_TO_POST` and excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, `API_IMPORT`, and currently-unused `NEEDS_REVIEW`.
+- The frontend recovery page/list is pending TC-2D.2; generic `TransactionCandidate` CRUD routes are not product UI.
+
 Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
 
 The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. It only calls candidate-specific preview/apply commands through `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`; preview is automatic/read-only after saved rule-input changes, while apply/confirm remains explicit.

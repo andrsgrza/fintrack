@@ -3,6 +3,7 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionCandidateService;
+import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRulePreviewResponseDTO;
@@ -298,6 +299,25 @@ public class TransactionCandidateResource {
     ) {
         LOG.debug("REST request to get a page of TransactionCandidates");
         var page = transactionCandidateService.findAll(pageable);
+        var headers = PaginationUtil.generatePaginationHttpHeaders(ServletUriComponentsBuilder.fromCurrentRequest(), page);
+        return ResponseEntity.ok().headers(headers).body(page.getContent());
+    }
+
+    /**
+     * {@code GET  /transaction-candidates/manual-drafts} : get recoverable manual transaction draft summaries for the current owner.
+     *
+     * This product-safe query only returns MANUAL candidates that can still be resumed in the manual transaction flow.
+     * Generic TransactionCandidate CRUD remains technical/debug only.
+     *
+     * @param pageable the pagination information.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the page of draft summaries in body.
+     */
+    @GetMapping("/manual-drafts")
+    public ResponseEntity<List<ManualTransactionDraftSummaryDTO>> getManualTransactionDrafts(
+        @org.springdoc.core.annotations.ParameterObject Pageable pageable
+    ) {
+        LOG.debug("REST request to get recoverable manual TransactionCandidate drafts");
+        var page = transactionCandidateService.findRecoverableManualDrafts(pageable);
         var headers = PaginationUtil.generatePaginationHttpHeaders(ServletUriComponentsBuilder.fromCurrentRequest(), page);
         return ResponseEntity.ok().headers(headers).body(page.getContent());
     }

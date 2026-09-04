@@ -4,6 +4,7 @@ import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -37,6 +38,7 @@ import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import jakarta.persistence.EntityManager;
@@ -51,6 +53,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -64,6 +67,7 @@ class TransactionCandidateResourceIT {
     private static final String ENTITY_API_URL = "/api/transaction-candidates";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
     private static final String ENTITY_MANUAL_API_URL = ENTITY_API_URL + "/manual";
+    private static final String ENTITY_MANUAL_DRAFTS_API_URL = ENTITY_API_URL + "/manual-drafts";
     private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
     @Autowired
@@ -365,6 +369,100 @@ class TransactionCandidateResourceIT {
         assertThat(postedTransaction).isNotNull();
         assertThat(postedTransaction.getCategory()).isNull();
         assertThat(postedTransaction.getTags()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void getManualDraftsReturnsOnlyCurrentUserRecoverableManualDrafts() throws Exception {
+        User owner = currentUser();
+        User otherUser = createOtherUser();
+        Instant baseTime = Instant.parse("2026-01-15T10:00:00Z");
+
+        TransactionCandidate olderDraft = createSummaryCandidate(
+            owner,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.DRAFT,
+            baseTime
+        );
+        TransactionCandidate newerReadyDraft = createSummaryCandidate(
+            owner,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.READY_TO_POST,
+            baseTime.plusSeconds(60)
+        );
+        createSummaryCandidate(owner, TransactionCandidateSource.FILE_IMPORT, TransactionCandidateStatus.DRAFT, baseTime.plusSeconds(120));
+        createSummaryCandidate(owner, TransactionCandidateSource.API_IMPORT, TransactionCandidateStatus.DRAFT, baseTime.plusSeconds(180));
+        createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.POSTED, baseTime.plusSeconds(240));
+        createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.CANCELLED, baseTime.plusSeconds(300));
+        createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.FAILED, baseTime.plusSeconds(360));
+        createSummaryCandidate(
+            owner,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.NEEDS_REVIEW,
+            baseTime.plusSeconds(420)
+        );
+        createSummaryCandidate(
+            otherUser,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.READY_TO_POST,
+            baseTime.plusSeconds(480)
+        );
+
+        MvcResult result = restTransactionCandidateMockMvc
+            .perform(get(ENTITY_MANUAL_DRAFTS_API_URL))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value(newerReadyDraft.getId()))
+            .andExpect(jsonPath("$[0].status").value("READY_TO_POST"))
+            .andExpect(jsonPath("$[0].classificationReviewStatus").value("USER_SELECTED"))
+            .andExpect(jsonPath("$[0].accountId").value(newerReadyDraft.getAccount().getId()))
+            .andExpect(jsonPath("$[0].accountName").value(newerReadyDraft.getAccount().getName()))
+            .andExpect(jsonPath("$[0].transactionDate").value("2026-01-15"))
+            .andExpect(jsonPath("$[0].description").value("Summary candidate"))
+            .andExpect(jsonPath("$[0].amount").value(sameNumber(new BigDecimal("42.00"))))
+            .andExpect(jsonPath("$[0].flow").value("OUT"))
+            .andExpect(jsonPath("$[0].currencySnapshot").value("MXN"))
+            .andExpect(jsonPath("$[0].createdAt").exists())
+            .andExpect(jsonPath("$[0].updatedAt").exists())
+            .andExpect(jsonPath("$[0].categoryName").value(newerReadyDraft.getCategory().getName()))
+            .andExpect(jsonPath("$[0].tagNames[0]").value(newerReadyDraft.getTags().iterator().next().getName()))
+            .andExpect(jsonPath("$[0].source").doesNotExist())
+            .andExpect(jsonPath("$[0].validationStatus").doesNotExist())
+            .andExpect(jsonPath("$[0].financialTransaction").doesNotExist())
+            .andExpect(jsonPath("$[1].id").value(olderDraft.getId()))
+            .andExpect(jsonPath("$[1].status").value("DRAFT"))
+            .andReturn();
+
+        ManualTransactionDraftSummaryDTO[] summaries = om.readValue(
+            result.getResponse().getContentAsByteArray(),
+            ManualTransactionDraftSummaryDTO[].class
+        );
+
+        assertThat(summaries).hasSize(2);
+        assertThat(summaries)
+            .extracting(ManualTransactionDraftSummaryDTO::getId)
+            .containsExactly(newerReadyDraft.getId(), olderDraft.getId());
+    }
+
+    @Test
+    @Transactional
+    void getManualDraftsMapsIncompleteDraftFieldsNullSafely() throws Exception {
+        TransactionCandidate incompleteDraft = createDraftCandidate(currentUser());
+
+        restTransactionCandidateMockMvc
+            .perform(get(ENTITY_MANUAL_DRAFTS_API_URL))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value(incompleteDraft.getId()))
+            .andExpect(jsonPath("$[0].status").value("DRAFT"))
+            .andExpect(jsonPath("$[0].accountId").value(nullValue()))
+            .andExpect(jsonPath("$[0].accountName").value(nullValue()))
+            .andExpect(jsonPath("$[0].transactionDate").value(nullValue()))
+            .andExpect(jsonPath("$[0].description").value(nullValue()))
+            .andExpect(jsonPath("$[0].amount").value(nullValue()))
+            .andExpect(jsonPath("$[0].flow").value(nullValue()))
+            .andExpect(jsonPath("$[0].currencySnapshot").value(nullValue()))
+            .andExpect(jsonPath("$[0].categoryName").value(nullValue()))
+            .andExpect(jsonPath("$[0].tagNames").isArray())
+            .andExpect(jsonPath("$[0].tagNames").isEmpty());
     }
 
     @Test
@@ -756,6 +854,40 @@ class TransactionCandidateResourceIT {
             .updatedAt(Instant.now())
             .user(owner)
             .tags(new HashSet<>());
+        return transactionCandidateRepository.saveAndFlush(candidate);
+    }
+
+    private TransactionCandidate createSummaryCandidate(
+        User owner,
+        TransactionCandidateSource source,
+        TransactionCandidateStatus status,
+        Instant updatedAt
+    ) {
+        FinancialAccount account = createAccount(owner);
+        Category category = createCategory(CategoryType.EXPENSE, owner);
+        Tag tag = createTag(owner);
+        TransactionCandidate candidate = new TransactionCandidate()
+            .source(source)
+            .status(status)
+            .validationStatus(
+                status == TransactionCandidateStatus.READY_TO_POST
+                    ? TransactionCandidateValidationStatus.VALID
+                    : TransactionCandidateValidationStatus.UNKNOWN
+            )
+            .descriptionReviewStatus(com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED)
+            .transactionDate(LocalDate.of(2026, 1, 15))
+            .description("Summary candidate")
+            .signedAmount(new BigDecimal("-42.00"))
+            .amount(new BigDecimal("42.00"))
+            .flow(TransactionFlow.OUT)
+            .currencySnapshot(account.getCurrency())
+            .account(account)
+            .category(category)
+            .createdAt(updatedAt.minusSeconds(600))
+            .updatedAt(updatedAt)
+            .user(owner)
+            .tags(new HashSet<>(Set.of(tag)));
         return transactionCandidateRepository.saveAndFlush(candidate);
     }
 

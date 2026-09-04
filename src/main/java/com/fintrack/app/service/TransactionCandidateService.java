@@ -28,6 +28,7 @@ import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.IngestionRecordDTO;
+import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.RuleMatchResultDTO;
 import com.fintrack.app.service.dto.RuleOutputConflictDTO;
 import com.fintrack.app.service.dto.SkippedRuleOutputDTO;
@@ -61,7 +62,9 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,6 +76,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class TransactionCandidateService {
 
     private static final Logger LOG = LoggerFactory.getLogger(TransactionCandidateService.class);
+    private static final List<TransactionCandidateStatus> RECOVERABLE_MANUAL_DRAFT_STATUSES = List.of(
+        TransactionCandidateStatus.DRAFT,
+        TransactionCandidateStatus.READY_TO_POST
+    );
 
     private final TransactionCandidateRepository transactionCandidateRepository;
 
@@ -401,6 +408,28 @@ public class TransactionCandidateService {
     }
 
     /**
+     * Get recoverable manual transaction draft summaries for the current owner.
+     *
+     * TC-2D.1 intentionally includes only DRAFT and READY_TO_POST. NEEDS_REVIEW is not produced by the
+     * current manual draft flow and remains excluded until it has explicit product semantics.
+     *
+     * @param pageable the pagination information.
+     * @return the page of lightweight manual draft summaries.
+     */
+    @Transactional(readOnly = true)
+    public Page<ManualTransactionDraftSummaryDTO> findRecoverableManualDrafts(Pageable pageable) {
+        Pageable effectivePageable = manualDraftPageable(pageable);
+        return transactionCandidateRepository
+            .findRecoverableManualDraftsByUserLogin(
+                currentUserService.getCurrentUserLogin(),
+                TransactionCandidateSource.MANUAL,
+                RECOVERABLE_MANUAL_DRAFT_STATUSES,
+                effectivePageable
+            )
+            .map(this::toManualDraftSummary);
+    }
+
+    /**
      * Get one transactionCandidate by id.
      *
      * @param id the id of the entity.
@@ -457,6 +486,39 @@ public class TransactionCandidateService {
 
     private Optional<TransactionCandidate> findAccessibleEntityForPosting(Long id) {
         return transactionCandidateRepository.findOneByIdAndUserLoginForPosting(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private Pageable manualDraftPageable(Pageable pageable) {
+        Sort sort = Sort.by(Sort.Order.desc("updatedAt"), Sort.Order.desc("id"));
+        if (pageable == null || pageable.isUnpaged()) {
+            return PageRequest.of(0, Integer.MAX_VALUE, sort);
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+    }
+
+    private ManualTransactionDraftSummaryDTO toManualDraftSummary(TransactionCandidate candidate) {
+        ManualTransactionDraftSummaryDTO summary = new ManualTransactionDraftSummaryDTO();
+        summary.setId(candidate.getId());
+        summary.setStatus(candidate.getStatus());
+        summary.setClassificationReviewStatus(candidate.getClassificationReviewStatus());
+        if (candidate.getAccount() != null) {
+            summary.setAccountId(candidate.getAccount().getId());
+            summary.setAccountName(candidate.getAccount().getName());
+        }
+        summary.setTransactionDate(candidate.getTransactionDate());
+        summary.setDescription(candidate.getDescription());
+        summary.setAmount(candidate.getAmount());
+        summary.setFlow(candidate.getFlow());
+        summary.setCurrencySnapshot(candidate.getCurrencySnapshot());
+        summary.setCreatedAt(candidate.getCreatedAt());
+        summary.setUpdatedAt(candidate.getUpdatedAt());
+        if (candidate.getCategory() != null) {
+            summary.setCategoryName(candidate.getCategory().getName());
+        }
+        summary.setTagNames(
+            candidate.getTags().stream().filter(Objects::nonNull).map(Tag::getName).filter(Objects::nonNull).sorted().toList()
+        );
+        return summary;
     }
 
     private void applyDefaults(TransactionCandidate candidate) {

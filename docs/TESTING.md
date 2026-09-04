@@ -600,14 +600,14 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** TC-2C.1b backend candidate rule preview/apply commands and manual candidate suggestions UI are implemented for MANUAL candidates. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, or UserPreference.
+**Scope:** TC-2D.1 backend manual draft recovery query, backend candidate rule preview/apply commands, and manual candidate suggestions UI are implemented for MANUAL candidates. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, or UserPreference.
 
 ### Summary counts
 
-| Type           | File                              | Tests | Notes                                                                                                                                                          |
-| -------------- | --------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT | `TransactionCandidateResourceIT`  | 22    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked/idempotent post, no rule-on-post, and final delete protection   |
-| Unit — service | `TransactionCandidateServiceTest` | 60    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM. |
+| Type           | File                              | Tests | Notes                                                                                                                                                                                     |
+| -------------- | --------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionCandidateResourceIT`  | 36    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked/idempotent post, no rule-on-post, manual draft recovery query, and final delete protection |
+| Unit — service | `TransactionCandidateServiceTest` | 64    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM.                            |
 
 **Run:**
 
@@ -650,6 +650,17 @@ Key TC-2C.1a backend assertions:
 - Inactive and foreign rules are ignored.
 - Candidate preview/apply do not use the public `/api/financial-transactions/rule-preview` endpoint.
 - TC-2C.1c backend post also blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` are allowed classification states for posting.
+
+Key TC-2D.1 backend recovery query assertions:
+
+- `GET /api/transaction-candidates/manual-drafts` returns only current-user `MANUAL` candidates.
+- `DRAFT` and `READY_TO_POST` candidates are included.
+- `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT` candidates are excluded.
+- `NEEDS_REVIEW` is excluded because the current manual flow does not produce it.
+- foreign user's manual drafts are not returned.
+- results are sorted by `updatedAt DESC, id DESC`.
+- the response uses the lightweight manual draft summary shape and does not expose full `TransactionCandidateDTO` fields such as `source`, `validationStatus`, or `financialTransaction`.
+- incomplete/null draft fields map safely for future UI fallback copy.
 
 Key TC-2B.1 frontend assertions:
 

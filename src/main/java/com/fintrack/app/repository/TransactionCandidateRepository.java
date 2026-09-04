@@ -1,7 +1,10 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.TransactionCandidate;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -92,6 +95,30 @@ public interface TransactionCandidateRepository
         "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.user.login = :login"
     )
     List<TransactionCandidate> findAllWithRelationshipsByUserLogin(@Param("login") String login);
+
+    @EntityGraph(attributePaths = { "account", "category" })
+    @Query(
+        value = """
+        select distinct transactionCandidate
+        from TransactionCandidate transactionCandidate
+        where transactionCandidate.user.login = :login
+          and transactionCandidate.source = :source
+          and transactionCandidate.status in :statuses
+        """,
+        countQuery = """
+        select count(distinct transactionCandidate)
+        from TransactionCandidate transactionCandidate
+        where transactionCandidate.user.login = :login
+          and transactionCandidate.source = :source
+          and transactionCandidate.status in :statuses
+        """
+    )
+    Page<TransactionCandidate> findRecoverableManualDraftsByUserLogin(
+        @Param("login") String login,
+        @Param("source") TransactionCandidateSource source,
+        @Param("statuses") Collection<TransactionCandidateStatus> statuses,
+        Pageable pageable
+    );
 
     @EntityGraph(
         attributePaths = {

@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-2C.1d manual TransactionCandidate rule suggestions UI implemented. Manual TransactionCandidate autosave UI exists, and frontend candidate suggestions auto-refresh after saved rule-input changes and are applied/confirmed through candidate-specific endpoints. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** TC-2D.1 backend manual draft recovery query implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and a backend product-safe query lists recoverable manual drafts for a future recovery page. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -148,6 +148,10 @@ TC-2B.1 manual UI rules:
 - `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`: category fills only when empty/no conflict; tags are additive; manual category/tags are preserved.
 - Manual category/tag PATCH marks `classificationReviewStatus=USER_SELECTED`. Rule-input PATCH after fresh classification marks `classificationReviewStatus=STALE`; notes-only changes do not because rules do not evaluate notes.
 - TC-2C.1c backend hardens manual post with the same classification gate as the UI: `NOT_EVALUATED` and `STALE` are rejected; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post if the candidate is otherwise ready.
+- TC-2D.1 adds `GET /api/transaction-candidates/manual-drafts` as a backend-owned recovery query for future UI. It returns lightweight summaries for the current user's recoverable `MANUAL` candidates only.
+- TC-2D.1 recoverable manual draft statuses are `DRAFT` and `READY_TO_POST`. The query excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT` candidates.
+- `NEEDS_REVIEW` is currently excluded from manual draft recovery because the manual candidate flow does not produce it; it remains deferred until it has explicit product semantics.
+- `FinancialTransaction` list/detail/edit remain posted-ledger surfaces only. The manual draft recovery frontend page is pending TC-2D.2 and must not expose generic `TransactionCandidate` CRUD as product UI.
 
 Deferred:
 
@@ -155,8 +159,7 @@ Deferred:
 - Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
 - Persisting Pantalla 2 category/tag selections on candidates.
 - Description/rule re-evaluation endpoints.
-- Manual draft UI and autosave wiring.
-- Candidate-specific rule preview/apply.
+- Manual draft recovery UI.
 
 ---
 

@@ -140,7 +140,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **TransactionCandidate exception:** TC-1/TC-2A treats candidates as product-owned draft/review state. Admin does not get special cross-user product behavior for candidate CRUD or manual commands; candidate operations resolve the current authenticated owner and validate every linked account/category/tag/ingestion record against that owner. The eventual `financialTransaction` link is server-controlled and is set only by explicit posting/conversion commands.
 
-## TransactionCandidate — TC-1/TC-2C.1b manual draft foundation + rule suggestions UI
+## TransactionCandidate — TC-1/TC-2D.1 manual draft foundation, rule suggestions, and recovery query
 
 `TransactionCandidate` is the central in-progress transaction model. It is intentionally separate from `FinancialTransaction`, which remains posted/final ledger data that affects balances, dashboards, budgets, and reports.
 
@@ -165,7 +165,16 @@ Candidate post intentionally persists the `FinancialTransaction` through an inte
 
 Generic `TransactionCandidate` CRUD write endpoints remain technical/restricted compatibility surfaces. They cannot create `FILE_IMPORT`/`API_IMPORT` candidates, cannot directly change lifecycle status, cannot set lifecycle/review/server-controlled fields, cannot set `financialTransaction`, cannot write derived `amount`/`flow`, preserve source immutability, and cannot delete `POSTED`/`CANCELLED` candidates. Manual lifecycle changes must go through the manual command endpoints.
 
-Still unchanged by TC-2C.1b:
+TC-2D.1 adds a backend-only manual draft recovery query:
+
+- `GET /api/transaction-candidates/manual-drafts` returns lightweight summaries for the current user's recoverable `MANUAL` candidates.
+- Included statuses are `DRAFT` and `READY_TO_POST`.
+- Excluded statuses/sources are `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT`.
+- `NEEDS_REVIEW` is excluded because the current manual flow does not produce it; it remains deferred until explicit product semantics are added.
+- Results are sorted by `updatedAt DESC, id DESC`.
+- The endpoint does not expose generic `TransactionCandidate` CRUD as product UI. The frontend recovery page is pending TC-2D.2.
+
+Still unchanged by TC-2D.1:
 
 - Manual `POST /api/financial-transactions` still creates posted `FinancialTransaction` directly.
 - FinancialTransaction update/PATCH/rule-preview behavior is unchanged.
@@ -528,6 +537,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Candidate backend rule preview/apply commands   | ✅     | TC-2C.1a exposes candidate-specific preview/apply commands on `/api/transaction-candidates/{id}`; preview is transient, apply is FILL_EMPTY_ONLY, post does not rerun rules                                    |
 | Candidate-specific rule-preview/apply UI        | ✅     | TC-2C.1d manual candidate UI auto-previews after saved rule-input changes, keeps apply/confirm explicit, uses candidate-specific endpoints, and blocks Post while classification is `NOT_EVALUATED` or `STALE` |
 | Candidate post classification backend guard     | ✅     | TC-2C.1c backend post rejects `NOT_EVALUATED` and `STALE`; only `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post when otherwise valid                                                               |
+| Candidate manual draft recovery query           | ✅     | TC-2D.1 exposes backend-only `GET /api/transaction-candidates/manual-drafts` for current-user `MANUAL` `DRAFT`/`READY_TO_POST` summaries; frontend recovery page deferred                                      |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                                                         |
 
 #### Validations ✅
@@ -560,8 +570,9 @@ See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
 4. ✅ TC-2B.1 manual TransactionCandidate autosave UI: create on first meaningful change, resume via `/financial-transaction/drafts/{id}`, autosave with no Save Draft button, and post through the candidate command.
 5. ✅ TC-2C.1a backend candidate-specific rule preview/apply commands.
 6. ✅ TC-2C.1b candidate-specific rule preview/apply UI and stricter post gating.
-7. Reevaluate one transaction.
-8. Bulk reevaluation.
+7. ✅ TC-2D.1 backend manual draft recovery query.
+8. Reevaluate one transaction.
+9. Bulk reevaluation.
 
 **Origin policy note:** no `MANUAL`-only rule-application restriction exists today. Future API/import/ingestion runtime must explicitly decide whether to use central create with rule application, bypass it, make it configurable, preview only, or apply only in specific modes.
 
@@ -1281,6 +1292,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-18 | CSV Ingestion I2C confirm import ✅: `POST /api/transaction-ingestions/{id}/confirm` recalculates readiness, imports `VALID` rows from `rawData.normalized` into `FinancialTransaction` with `origin = FILE_IMPORT`, marks rows `IMPORTED`, keeps disabled rows skipped, marks parent `COMPLETED`, supports completed retry idempotently, and does not run Rule Engine.                                                                                            |
 | 2026-07-28 | TransactionCandidate TC-2A/TC-2A.1 backend manual commands ✅: `POST /api/transaction-candidates/manual`, `PATCH /api/transaction-candidates/{id}/manual-draft`, `POST /api/transaction-candidates/{id}/cancel`, and `POST /api/transaction-candidates/{id}/post`; manual post uses a pessimistic candidate lock, creates exactly one `FinancialTransaction` with `origin=MANUAL`, is idempotent/concurrency-safe, and does not invoke TransactionRule evaluation. |
 | 2026-07-28 | TransactionCandidate TC-2B.1 manual autosave UI ✅: `/financial-transaction/new` creates no empty draft on load, creates a `MANUAL` candidate on first meaningful change, replaces the URL with `/financial-transaction/drafts/{id}`, debounces autosave, posts through the candidate post command, and keeps candidate-specific rule preview/apply deferred.                                                                                                      |
+| 2026-07-28 | TransactionCandidate TC-2D.1 backend manual draft recovery query ✅: `GET /api/transaction-candidates/manual-drafts` lists current-user recoverable `MANUAL` `DRAFT`/`READY_TO_POST` summaries, excludes posted/cancelled/failed/file/API candidates, and keeps the frontend recovery page deferred.                                                                                                                                                               |
 | 2026-07-11 | Grupo 1 delete confirmation dialogs ✅: domain-aware UX copy for UDP, AATP, Tag, Category; CAD informational-only (no confirm). i18n en/es.                                                                                                                                                                                                                                                                                                                        |
 | 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                                                                                                                                                                              |
 | 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6.                                                                                                                                                          |
