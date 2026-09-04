@@ -600,7 +600,7 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** TC-2C.1a backend candidate rule preview/apply commands are implemented for MANUAL candidates. The manual product UI still does not call them yet. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, or UserPreference.
+**Scope:** TC-2C.1b backend candidate rule preview/apply commands and manual candidate suggestions UI are implemented for MANUAL candidates. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, or UserPreference.
 
 ### Summary counts
 
@@ -649,7 +649,7 @@ Key TC-2C.1a backend assertions:
 - Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not.
 - Inactive and foreign rules are ignored.
 - Candidate preview/apply do not use the public `/api/financial-transactions/rule-preview` endpoint.
-- TC-2C.1a does not hard-block `NOT_EVALUATED` manual post; stale review post guard remains as before until frontend refresh/apply exists.
+- TC-2C.1b frontend blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` are allowed UI classification states for posting.
 
 Key TC-2B.1 frontend assertions:
 
@@ -666,6 +666,13 @@ Key TC-2B.1 frontend assertions:
 - Draft URL rejects non-MANUAL candidates and load failures with a safe no-form route error.
 - Cancelled drafts are read-only; posted drafts redirect to the posted transaction.
 - Candidate create flow does not call `/api/financial-transactions/rule-preview`.
+- Rule suggestions section renders for editable manual drafts.
+- Refresh suggestions flushes pending autosave, calls the candidate-specific `rule-preview` endpoint, renders suggested category/tags, conflicts, and matched rules, and does not mutate category/tags.
+- Apply suggestions flushes pending autosave, calls the candidate-specific `apply-rules` endpoint, updates category/tags/status from the returned candidate, and keeps the status label synchronized.
+- Post is disabled and shows a blocking message for `NOT_EVALUATED` and `STALE`.
+- Post is allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` when the candidate is otherwise ready.
+- Manual category/tag changes returned by autosave as `USER_SELECTED` allow posting.
+- Candidate flow does not call candidate rule preview/apply from Post; preview/apply are explicit user actions only.
 
 ---
 

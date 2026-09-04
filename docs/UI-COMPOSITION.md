@@ -571,7 +571,7 @@ Deferred for this workflow:
 - override confirmation UI;
 - atomic backend command endpoint.
 
-FinancialTransaction manual create now owns the TransactionCandidate autosave UI. Backend candidate-specific rule preview/apply commands exist as of TC-2C.1a, but the candidate suggestion UI remains deferred. Existing-transaction preview UI, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+FinancialTransaction manual create now owns the TransactionCandidate autosave UI and candidate-specific rule suggestion actions. Existing-transaction preview UI, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
 ## FinancialTransaction manual create — TransactionCandidate autosave UX
 
@@ -588,14 +588,15 @@ Manual create composition:
 7. `/financial-transaction/drafts/{id}` accepts MANUAL candidates only. Non-MANUAL candidates and load failures show a safe error state with no editable form, autosave, Post, or manual Cancel action.
 8. Subsequent edits debounce autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`.
 9. The UI displays amount plus flow, but submits only `signedAmount`; backend derives `amount` and `flow`.
-10. Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted FinancialTransaction detail.
-11. Cancel before candidate creation navigates away; cancel after candidate creation calls the candidate cancel command.
+10. The Rule suggestions section is available after a candidate exists. Refresh flushes autosave and calls `POST /api/transaction-candidates/{id}/rule-preview` without mutating category/tags. Apply flushes autosave and calls `POST /api/transaction-candidates/{id}/apply-rules`, then hydrates category/tags/status from the returned candidate.
+11. Post flushes pending autosave, requires `classificationReviewStatus` to be `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted FinancialTransaction detail.
+12. Cancel before candidate creation navigates away; cancel after candidate creation calls the candidate cancel command.
 
 There is intentionally no explicit Save Draft button. Recoverability comes from autosave plus the `/financial-transaction/drafts/{id}` route.
 
 Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
 
-The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. TC-2C.1a backend candidate rule commands exist at `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`, but the UI for refreshing/applying suggestions belongs to TC-2C.1b.
+The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. It only calls candidate-specific refresh/apply commands through `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`.
 
 Do not extend this as:
 

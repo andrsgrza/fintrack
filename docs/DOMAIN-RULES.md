@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-2C.1a backend candidate rule preview/apply foundation implemented. Manual TransactionCandidate autosave UI exists, but frontend candidate suggestions are still pending. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** TC-2C.1b manual TransactionCandidate rule suggestions UI implemented. Manual TransactionCandidate autosave UI exists, and frontend candidate suggestions can be refreshed/applied through candidate-specific endpoints. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -143,11 +143,11 @@ TC-2B.1 manual UI rules:
 - Subsequent changes autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`; the UI has no explicit Save Draft button.
 - The UI may display amount plus flow, but sends only `signedAmount`; backend derives `amount` and `flow`.
 - Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail.
-- Candidate create/post does not invoke `TransactionRuleEvaluationService` in TC-2B.1/TC-2C.1a. Candidate-specific rule preview/apply exists only through explicit backend commands.
+- Candidate create/post does not invoke `TransactionRuleEvaluationService` in TC-2B.1/TC-2C. Candidate-specific rule preview/apply exists only through explicit user actions in the manual candidate UI.
 - `POST /api/transaction-candidates/{id}/rule-preview` evaluates active owner TransactionRules for an editable MANUAL candidate and returns transient suggestions/matches/conflicts/skips without mutating the candidate.
 - `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`: category fills only when empty/no conflict; tags are additive; manual category/tags are preserved.
 - Manual category/tag PATCH marks `classificationReviewStatus=USER_SELECTED`. Rule-input PATCH after fresh classification marks `classificationReviewStatus=STALE`; notes-only changes do not because rules do not evaluate notes.
-- TC-2C.1a preserves existing post behavior: stale review statuses are rejected, but `NOT_EVALUATED` is not hard-blocked until frontend candidate refresh/apply exists.
+- TC-2C.1b frontend blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post if the candidate is otherwise ready.
 
 Deferred:
 
@@ -1013,24 +1013,24 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 
 ### Product rules
 
-| Rule                                          | Decision                                                                                                                                                   | Status       |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application; no `MANUAL`-only restriction today                                     | **Done**     |
-| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                                                                        | **Done**     |
-| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                                                                        | **Done**     |
-| Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                                                               | **Done**     |
-| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                                                              | **Done**     |
-| Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                                                    | **Done**     |
-| Rule workflow endpoint                        | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                                                    | **Done**     |
-| Rule execution engine                         | Direct `FinancialTransaction` create/apply, backend FinancialTransaction preview, and backend candidate preview/apply exist; candidate UI remains deferred | **Partial**  |
-| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                                                         | **Done**     |
-| Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                                                          | **Deferred** |
+| Rule                                          | Decision                                                                                                                                                                                                                 | Status       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| Evaluate on FT **create** only                | Apply matching rules on create with `FILL_EMPTY_ONLY`; no update/PATCH application; no `MANUAL`-only restriction today                                                                                                   | **Done**     |
+| Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                                                                                                                                      | **Done**     |
+| Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                                                                                                                                      | **Done**     |
+| Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                                                                                                                             | **Done**     |
+| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                                                                                                                            | **Done**     |
+| Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                                                                                                                  | **Done**     |
+| Rule workflow endpoint                        | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                                                                                                                  | **Done**     |
+| Rule execution engine                         | Direct `FinancialTransaction` create/apply, backend FinancialTransaction preview, backend candidate preview/apply, and manual candidate suggestions UI exist; existing-transaction reevaluation and bulk remain deferred | **Partial**  |
+| Rule evaluation ownership                     | Evaluate only the transaction/account owner's rules; admin has no special rule-evaluation override                                                                                                                       | **Done**     |
+| Batch reclassification                        | Not part of CRUD domain-rule pass                                                                                                                                                                                        | **Deferred** |
 
 ### Rule Engine design
 
 The Transaction Rule Engine is documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on direct `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, manual `TransactionCandidate` autosave UI, and backend candidate rule preview/apply commands. Candidate create/post still does not call rule preview or apply TransactionRules automatically.
+Implemented today: rule authoring, validation, ordering, active/condition guards, condition management, a backend-only pure evaluator, `FILL_EMPTY_ONLY` application on direct `FinancialTransaction` create, backend-only draft preview via `POST /api/financial-transactions/rule-preview`, manual `TransactionCandidate` autosave UI, backend candidate rule preview/apply commands, and frontend manual candidate suggestions UI. Candidate create/post still does not call rule preview or apply TransactionRules automatically.
 
 Not implemented today: rule application on update/PATCH, existing-transaction reevaluation, bulk reclassification, persisted evaluation result, override confirmation UI, and audit/explanation UI.
 

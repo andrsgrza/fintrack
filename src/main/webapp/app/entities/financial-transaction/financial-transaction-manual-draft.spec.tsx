@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
@@ -7,10 +7,12 @@ import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import FinancialTransactionManualDraft from './financial-transaction-manual-draft';
 import {
+  applyManualDraftRules,
   cancelManualDraft,
   createManualDraft,
   getManualDraft,
   postManualDraft,
+  previewManualDraftRules,
   updateManualDraft,
 } from './services/manual-transaction-candidate.service';
 import { FinancialTransactionUpdate } from './financial-transaction-update';
@@ -48,6 +50,8 @@ const mockGetManualDraft = getManualDraft as jest.Mock;
 const mockUpdateManualDraft = updateManualDraft as jest.Mock;
 const mockCancelManualDraft = cancelManualDraft as jest.Mock;
 const mockPostManualDraft = postManualDraft as jest.Mock;
+const mockPreviewManualDraftRules = previewManualDraftRules as jest.Mock;
+const mockApplyManualDraftRules = applyManualDraftRules as jest.Mock;
 
 const accounts = [{ id: 1, name: 'Checking', currency: 'MXN' }];
 const categories = [{ id: 10, name: 'Transport', categoryType: 'EXPENSE' }];
@@ -90,12 +94,51 @@ const readyCandidate = {
   ...candidate,
   status: 'READY_TO_POST',
   validationStatus: 'VALID',
+  classificationReviewStatus: 'USER_SELECTED',
   account: accounts[0],
   transactionDate: '2026-07-13',
   description: 'Coffee',
   signedAmount: -12,
   amount: 12,
   flow: 'OUT',
+};
+
+const notEvaluatedReadyCandidate = {
+  ...readyCandidate,
+  classificationReviewStatus: 'NOT_EVALUATED',
+};
+
+const staleReadyCandidate = {
+  ...readyCandidate,
+  classificationReviewStatus: 'STALE',
+};
+
+const suggestedReadyCandidate = {
+  ...readyCandidate,
+  category: categories[0],
+  tags,
+  classificationReviewStatus: 'SUGGESTED',
+};
+
+const noSuggestionsPreview = {
+  candidateId: 77,
+  candidateUpdatedAt: '2026-07-13T00:00:00Z',
+  classificationReviewStatus: 'NOT_EVALUATED',
+  suggestedCategory: null,
+  suggestedTags: [],
+  conflicts: [],
+  skippedOutputs: [],
+  matchedRules: [],
+  hasSuggestions: false,
+  hasConflicts: false,
+};
+
+const suggestionsPreview = {
+  ...noSuggestionsPreview,
+  suggestedCategory: { categoryId: 10, categoryName: 'Transport', sourceRuleId: 1, sourceRuleName: 'Uber rule' },
+  suggestedTags: [{ tagId: 20, tagName: 'Business', sourceRuleId: 1, sourceRuleName: 'Uber rule' }],
+  matchedRules: [{ ruleId: 1, ruleName: 'Uber rule', priority: 0, conditionLogic: 'ALL', proposedOutputs: ['CATEGORY', 'TAGS'] }],
+  hasSuggestions: true,
 };
 
 const LocationDisplay = () => {
@@ -152,11 +195,22 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     mockUpdateManualDraft.mockReset();
     mockCancelManualDraft.mockReset();
     mockPostManualDraft.mockReset();
+    mockPreviewManualDraftRules.mockReset();
+    mockApplyManualDraftRules.mockReset();
     mockCreateManualDraft.mockResolvedValue({ data: candidate });
     mockGetManualDraft.mockResolvedValue({ data: candidate });
     mockUpdateManualDraft.mockResolvedValue({ data: readyCandidate });
     mockCancelManualDraft.mockResolvedValue({ data: { ...candidate, status: 'CANCELLED' } });
     mockPostManualDraft.mockResolvedValue({ data: { ...readyCandidate, status: 'POSTED', financialTransaction: { id: 9001 } } });
+    mockPreviewManualDraftRules.mockResolvedValue({ data: suggestionsPreview });
+    mockApplyManualDraftRules.mockResolvedValue({
+      data: {
+        candidate: suggestedReadyCandidate,
+        evaluation: suggestionsPreview,
+        categoryApplied: true,
+        tagIdsApplied: [20],
+      },
+    });
   });
 
   afterEach(() => {
@@ -262,6 +316,32 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
       77,
       expect.objectContaining({
         signedAmount: -100,
+      }),
+    );
+    expect(mockUpdateManualDraft.mock.calls.at(-1)?.[1]).not.toHaveProperty('category');
+    expect(mockUpdateManualDraft.mock.calls.at(-1)?.[1]).not.toHaveProperty('tags');
+  });
+
+  it('sends category and tags only when classification fields are edited', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: '10' } });
+    const tagsSelect = screen.getByLabelText('Tags') as HTMLSelectElement;
+    const tagOption = within(tagsSelect).getByRole('option', { name: 'Business' }) as HTMLOptionElement;
+    tagOption.selected = true;
+    fireEvent.change(tagsSelect);
+    act(() => {
+      jest.advanceTimersByTime(700);
+    });
+
+    await waitFor(() => expect(mockUpdateManualDraft).toHaveBeenCalled());
+    expect(mockUpdateManualDraft).toHaveBeenLastCalledWith(
+      77,
+      expect.objectContaining({
+        category: { id: 10 },
+        tags: [{ id: 20 }],
       }),
     );
   });
@@ -379,6 +459,137 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await waitFor(() => expect(mockUpdateManualDraft).toHaveBeenCalled());
     await waitFor(() => expect(mockPostManualDraft).toHaveBeenCalledWith(77));
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/financial-transaction/9001'));
+  });
+
+  it('renders rule suggestions section for editable drafts', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    expect(await screen.findByText('Rule suggestions')).toBeTruthy();
+    expect(screen.getByText('Manually selected')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /refresh suggestions/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /apply suggestions/i })).toBeTruthy();
+  });
+
+  it('refresh suggestions flushes pending autosave before preview and does not mutate form selections', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Uber trip' } });
+    fireEvent.click(screen.getByRole('button', { name: /refresh suggestions/i }));
+
+    await waitFor(() => expect(mockUpdateManualDraft).toHaveBeenCalledWith(77, expect.objectContaining({ description: 'Uber trip' })));
+    await waitFor(() => expect(mockPreviewManualDraftRules).toHaveBeenCalledWith(77));
+    expect(screen.getByLabelText('Category').value).toBe('');
+    expect(screen.getByText('Suggested category')).toBeTruthy();
+    expect(screen.getAllByText('Transport').length).toBeGreaterThan(1);
+    expect(screen.getByText('Suggested tags')).toBeTruthy();
+    expect(screen.getAllByText('Business').length).toBeGreaterThan(1);
+    expect(screen.getByText('Uber rule')).toBeTruthy();
+  });
+
+  it('preview renders no-suggestions state', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    mockPreviewManualDraftRules.mockResolvedValue({ data: noSuggestionsPreview });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh suggestions/i }));
+
+    expect(await screen.findByText('No rule suggestions found.')).toBeTruthy();
+  });
+
+  it('preview renders conflict warning', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    mockPreviewManualDraftRules.mockResolvedValue({
+      data: {
+        ...suggestionsPreview,
+        hasConflicts: true,
+        conflicts: [
+          { field: 'CATEGORY', currentValueId: 11, currentValueLabel: 'Food', suggestedValueId: 10, suggestedValueLabel: 'Transport' },
+        ],
+      },
+    });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh suggestions/i }));
+
+    expect(await screen.findByText('Some suggestions conflict with existing selections.')).toBeTruthy();
+  });
+
+  it('apply suggestions flushes pending autosave before apply and updates local category, tags and status', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Uber trip' } });
+    fireEvent.click(screen.getByRole('button', { name: /apply suggestions/i }));
+
+    await waitFor(() => expect(mockUpdateManualDraft).toHaveBeenCalledWith(77, expect.objectContaining({ description: 'Uber trip' })));
+    await waitFor(() => expect(mockApplyManualDraftRules).toHaveBeenCalledWith(77));
+    await waitFor(() => expect(screen.getByLabelText('Category').value).toBe('10'));
+    expect(screen.getByLabelText('Tags').selectedOptions[0].value).toBe('20');
+    await waitFor(() => expect(screen.getByTestId('manual-draft-classification-status').textContent).toContain('Suggestions applied'));
+  });
+
+  it('post is blocked when classificationReviewStatus is NOT_EVALUATED', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: notEvaluatedReadyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    expect(screen.getByText('Refresh or apply rule suggestions before posting.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(true);
+  });
+
+  it('post is blocked when classificationReviewStatus is STALE', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: staleReadyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    expect(screen.getByText('Transaction details changed. Refresh or apply rule suggestions before posting.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(true);
+  });
+
+  it('post is allowed when classificationReviewStatus is SUGGESTED', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: suggestedReadyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(false);
+  });
+
+  it('post is allowed when classificationReviewStatus is USER_SELECTED', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(false);
+  });
+
+  it('post is allowed when classificationReviewStatus is NOT_APPLICABLE', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: { ...readyCandidate, classificationReviewStatus: 'NOT_APPLICABLE' } });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(false);
+  });
+
+  it('manual category change returned as USER_SELECTED allows post', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: notEvaluatedReadyCandidate });
+    mockUpdateManualDraft.mockResolvedValue({ data: readyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: '10' } });
+    act(() => {
+      jest.advanceTimersByTime(700);
+    });
+
+    await waitFor(() => expect(mockUpdateManualDraft).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('manual-draft-classification-status').textContent).toContain('Manually selected'));
+    expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(false);
   });
 
   it('already-posted idempotent post response redirects safely without retry', async () => {
@@ -503,6 +714,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(mockGetManualDraft).not.toHaveBeenCalled();
     expect(mockUpdateManualDraft).not.toHaveBeenCalled();
     expect(mockPostManualDraft).not.toHaveBeenCalled();
+    expect(mockPreviewManualDraftRules).not.toHaveBeenCalled();
+    expect(mockApplyManualDraftRules).not.toHaveBeenCalled();
   });
 
   it('posted FinancialTransaction edit route does not use TransactionCandidate endpoints', () => {
@@ -514,5 +727,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(mockUpdateManualDraft).not.toHaveBeenCalled();
     expect(mockCancelManualDraft).not.toHaveBeenCalled();
     expect(mockPostManualDraft).not.toHaveBeenCalled();
+    expect(mockPreviewManualDraftRules).not.toHaveBeenCalled();
+    expect(mockApplyManualDraftRules).not.toHaveBeenCalled();
   });
 });

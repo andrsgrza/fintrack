@@ -56,7 +56,30 @@
         "cancel": "Cancelar borrador",
         "cancelFailed": "No se pudo cancelar el borrador.",
         "cancelled": "Cancelada.",
-        "cancelledReadOnly": "Este borrador fue cancelado y no se puede editar."
+        "cancelledReadOnly": "Este borrador fue cancelado y no se puede editar.",
+        "ruleSuggestions": {
+          "title": "Sugerencias de reglas",
+          "statusLabel": "Estado",
+          "status": {
+            "notEvaluated": "No evaluadas",
+            "stale": "Las sugerencias están desactualizadas",
+            "suggested": "Sugerencias aplicadas",
+            "userSelected": "Seleccionado manualmente",
+            "notApplicable": "Sin sugerencias aplicables"
+          },
+          "refresh": "Actualizar sugerencias",
+          "apply": "Aplicar sugerencias",
+          "previewFailed": "No se pudieron actualizar las sugerencias de reglas.",
+          "applyFailed": "No se pudieron aplicar las sugerencias de reglas.",
+          "actionRequiresDraft": "Crea el borrador antes de revisar sugerencias de reglas.",
+          "suggestedCategory": "Categoría sugerida",
+          "suggestedTags": "Etiquetas sugeridas",
+          "noSuggestions": "No se encontraron sugerencias de reglas.",
+          "conflicts": "Algunas sugerencias entran en conflicto con selecciones existentes.",
+          "matchedRules": "Reglas coincidentes",
+          "notEvaluatedPostBlock": "Actualiza o aplica las sugerencias de reglas antes de publicar.",
+          "stalePostBlock": "Los detalles de la transacción cambiaron. Actualiza o aplica las sugerencias de reglas antes de publicar."
+        }
       },
       "rulePreview": {
         "step1": "Paso 1: Detalles de la transacción",

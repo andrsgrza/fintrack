@@ -4,7 +4,7 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 3A FinancialTransaction preview endpoint implemented; TC-2C.1a backend TransactionCandidate preview/apply commands implemented.**
+Status: **Phase 3A FinancialTransaction preview endpoint implemented; TC-2C.1b manual TransactionCandidate suggestions UI implemented.**
 
 Not implemented yet:
 
@@ -57,8 +57,11 @@ Subscription and description assignment are deliberately not outputs in the curr
   - `POST /api/transaction-candidates/{id}/rule-preview`;
   - `POST /api/transaction-candidates/{id}/apply-rules`;
   - preview is transient and does not mutate;
-  - apply re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`;
-  - the frontend does not call these candidate rule commands yet.
+  - apply re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`.
+- Manual candidate create UI now exposes a candidate-specific suggestions section:
+  - Refresh suggestions flushes autosave, calls candidate `rule-preview`, and does not mutate category/tags;
+  - Apply suggestions flushes autosave, calls candidate `apply-rules`, and hydrates the returned category/tags/status;
+  - Post is blocked in the UI until classification is `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
@@ -608,12 +611,22 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - If suggestions exist for an unclassified candidate, apply sets `classificationReviewStatus=SUGGESTED`; if no applicable suggestions exist, it sets `NOT_APPLICABLE`.
 - Manual category/tag PATCH sets `classificationReviewStatus=USER_SELECTED`.
 - Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not because TransactionRules do not use notes.
-- TC-2C.1a intentionally preserves existing post behavior: stale review statuses are rejected, but `NOT_EVALUATED` is not hard-blocked until the frontend refresh/apply path exists.
+- TC-2C.1a intentionally preserved backend post behavior; TC-2C.1b adds frontend post gating so manual drafts cannot be posted from the UI while classification is `NOT_EVALUATED` or `STALE`.
 - Candidate preview/apply does not call or reuse the public `POST /api/financial-transactions/rule-preview` endpoint.
 
-### Deferred after TC-2C.1a
+### TC-2C.1b — frontend TransactionCandidate rule suggestions UI ✅
 
-- Candidate-specific TransactionRule preview/apply UI belongs to TC-2C.1b.
+- Manual candidate drafts show a compact Rule suggestions section after the candidate exists.
+- Refresh suggestions flushes pending/in-flight autosave, calls `POST /api/transaction-candidates/{id}/rule-preview`, renders suggested category/tags, matched rules, conflicts, and skipped outputs, and does not mutate the candidate form.
+- Apply suggestions flushes pending/in-flight autosave, calls `POST /api/transaction-candidates/{id}/apply-rules`, and replaces local form state from the returned candidate.
+- The UI displays classification review statuses: `NOT_EVALUATED`, `STALE`, `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE`.
+- Post is disabled with a visible message while status is `NOT_EVALUATED` or `STALE`; Post is allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` if the candidate is otherwise `READY_TO_POST`.
+- Manual category/tag changes continue to autosave through the manual-draft PATCH endpoint and are represented as `USER_SELECTED` by the backend response.
+- Candidate post still does not secretly preview/apply rules.
+- Candidate flow still does not call the public `POST /api/financial-transactions/rule-preview` endpoint.
+
+### Deferred after TC-2C.1b
+
 - Existing-transaction preview / reevaluation UI remains deferred.
 - Bulk reevaluation flow remains deferred.
 

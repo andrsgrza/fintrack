@@ -9,18 +9,23 @@ import { getEntities as getFinancialAccounts } from 'app/entities/financial-acco
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
 import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
+import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import {
+  applyManualDraftRules,
   cancelManualDraft,
   createManualDraft,
   getManualDraft,
+  ITransactionCandidateRulePreviewResponse,
   postManualDraft,
+  previewManualDraftRules,
   updateManualDraft,
 } from './services/manual-transaction-candidate.service';
 
 const AUTOSAVE_DELAY_MS = 700;
 
 type SaveState = 'UNSAVED' | 'CREATING' | 'SAVING' | 'SAVED' | 'FAILED' | 'POSTING' | 'POSTED' | 'CANCELLED';
+type RuleActionState = 'IDLE' | 'PREVIEWING' | 'APPLYING' | 'FAILED';
 
 interface ManualDraftFormState {
   account: string;
@@ -96,17 +101,24 @@ const draftFromCandidate = (candidate: ITransactionCandidate): ManualDraftFormSt
   };
 };
 
-const payloadFromDraft = (draft: ManualDraftFormState): ITransactionCandidate => ({
-  account: draft.account ? { id: Number(draft.account) } : null,
-  transactionDate: draft.transactionDate || null,
-  postingDate: draft.postingDate || null,
-  description: draft.description,
-  signedAmount: signedAmountFromDraft(draft),
-  externalReference: draft.externalReference || null,
-  notes: draft.notes || null,
-  category: draft.category ? { id: Number(draft.category) } : null,
-  tags: draft.tags.map(tagId => ({ id: Number(tagId) })),
-});
+const payloadFromDraft = (draft: ManualDraftFormState, includeClassification = false): ITransactionCandidate => {
+  const payload: ITransactionCandidate = {
+    account: draft.account ? { id: Number(draft.account) } : null,
+    transactionDate: draft.transactionDate || null,
+    postingDate: draft.postingDate || null,
+    description: draft.description,
+    signedAmount: signedAmountFromDraft(draft),
+    externalReference: draft.externalReference || null,
+    notes: draft.notes || null,
+  };
+
+  if (includeClassification) {
+    payload.category = draft.category ? { id: Number(draft.category) } : null;
+    payload.tags = draft.tags.map(tagId => ({ id: Number(tagId) }));
+  }
+
+  return payload;
+};
 
 const statusLabelKey = (saveState: SaveState, candidate?: ITransactionCandidate | null) => {
   if (saveState === 'CREATING') {
@@ -136,6 +148,166 @@ const statusLabelKey = (saveState: SaveState, candidate?: ITransactionCandidate 
   return 'fintrackApp.financialTransaction.manualDraft.unsaved';
 };
 
+const classificationStatusKey = (status?: keyof typeof TransactionCandidateClassificationReviewStatus | null) => {
+  switch (status) {
+    case 'STALE':
+      return 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.status.stale';
+    case 'SUGGESTED':
+      return 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.status.suggested';
+    case 'USER_SELECTED':
+      return 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.status.userSelected';
+    case 'NOT_APPLICABLE':
+      return 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.status.notApplicable';
+    case 'NOT_EVALUATED':
+    default:
+      return 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.status.notEvaluated';
+  }
+};
+
+const isClassificationReadyToPost = (status?: keyof typeof TransactionCandidateClassificationReviewStatus | null) =>
+  status === 'SUGGESTED' || status === 'USER_SELECTED' || status === 'NOT_APPLICABLE';
+
+const postClassificationBlockKey = (status?: keyof typeof TransactionCandidateClassificationReviewStatus | null) => {
+  if (status === 'STALE') {
+    return 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.stalePostBlock';
+  }
+  if (!isClassificationReadyToPost(status)) {
+    return 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.notEvaluatedPostBlock';
+  }
+  return '';
+};
+
+const RulePreviewDetails = ({ rulePreview }: { rulePreview: ITransactionCandidateRulePreviewResponse }) => (
+  <div data-testid="manual-draft-rule-preview">
+    {rulePreview.suggestedCategory ? (
+      <p className="mb-1">
+        <strong>
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.suggestedCategory">
+            Suggested category
+          </Translate>
+          :
+        </strong>{' '}
+        {rulePreview.suggestedCategory.categoryName}
+      </p>
+    ) : null}
+    {rulePreview.suggestedTags?.length ? (
+      <p className="mb-1">
+        <strong>
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.suggestedTags">Suggested tags</Translate>:
+        </strong>{' '}
+        {rulePreview.suggestedTags.map(tag => tag.tagName).join(', ')}
+      </p>
+    ) : null}
+    {!rulePreview.hasSuggestions ? (
+      <p className="mb-1">
+        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.noSuggestions">
+          No rule suggestions found.
+        </Translate>
+      </p>
+    ) : null}
+    {rulePreview.hasConflicts || rulePreview.conflicts?.length ? (
+      <Alert color="warning" fade={false} className="mt-2 mb-2" data-testid="manual-draft-rule-conflicts">
+        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.conflicts">
+          Some suggestions conflict with existing selections.
+        </Translate>
+      </Alert>
+    ) : null}
+    {rulePreview.matchedRules?.length ? (
+      <p className="mb-0">
+        <strong>
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.matchedRules">Matched rules</Translate>:
+        </strong>{' '}
+        {rulePreview.matchedRules.map(rule => rule.ruleName).join(', ')}
+      </p>
+    ) : null}
+  </div>
+);
+
+interface RuleSuggestionsSectionProps {
+  candidate: ITransactionCandidate | null;
+  readOnly: boolean;
+  saveState: SaveState;
+  ruleActionState: RuleActionState;
+  ruleErrorMessage: string;
+  rulePreview: ITransactionCandidateRulePreviewResponse | null;
+  effectiveClassificationReviewStatus?: keyof typeof TransactionCandidateClassificationReviewStatus | null;
+  onPreviewRules: () => void;
+  onApplyRules: () => void;
+}
+
+const isRuleActionDisabled = (ruleActionState: RuleActionState, saveState: SaveState) =>
+  ruleActionState === 'PREVIEWING' || ruleActionState === 'APPLYING' || saveState === 'CREATING' || saveState === 'SAVING';
+
+const RuleSuggestionsSection = ({
+  candidate,
+  readOnly,
+  saveState,
+  ruleActionState,
+  ruleErrorMessage,
+  rulePreview,
+  effectiveClassificationReviewStatus,
+  onPreviewRules,
+  onApplyRules,
+}: RuleSuggestionsSectionProps) => {
+  if (!candidate || readOnly) {
+    return null;
+  }
+
+  const ruleActionDisabled = isRuleActionDisabled(ruleActionState, saveState);
+
+  return (
+    <section className="border rounded p-3 mb-3" data-testid="manual-draft-rule-suggestions">
+      <h4>
+        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.title">Rule suggestions</Translate>
+      </h4>
+      <p className="mb-2" data-testid="manual-draft-classification-status">
+        <strong>
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.statusLabel">Status</Translate>:
+        </strong>{' '}
+        <Translate
+          key={effectiveClassificationReviewStatus ?? 'NOT_EVALUATED'}
+          contentKey={classificationStatusKey(effectiveClassificationReviewStatus)}
+        >
+          Not evaluated
+        </Translate>
+      </p>
+      <div className="mb-2">
+        <Button
+          color="info"
+          size="sm"
+          type="button"
+          data-cy="manualDraftRefreshRulesButton"
+          onClick={onPreviewRules}
+          disabled={ruleActionDisabled}
+        >
+          {ruleActionState === 'PREVIEWING' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}
+          &nbsp;
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.refresh">Refresh suggestions</Translate>
+        </Button>
+        &nbsp;
+        <Button
+          color="primary"
+          size="sm"
+          type="button"
+          data-cy="manualDraftApplyRulesButton"
+          onClick={onApplyRules}
+          disabled={ruleActionDisabled}
+        >
+          {ruleActionState === 'APPLYING' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="save" />}
+          &nbsp;
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.apply">Apply suggestions</Translate>
+        </Button>
+      </div>
+      {ruleErrorMessage ? (
+        <Alert color="danger" fade={false} data-testid="manual-draft-rule-error">
+          {ruleErrorMessage}
+        </Alert>
+      ) : null}
+      {rulePreview ? <RulePreviewDetails rulePreview={rulePreview} /> : null}
+    </section>
+  );
+};
+
 export const FinancialTransactionManualDraft = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -147,20 +319,30 @@ export const FinancialTransactionManualDraft = () => {
 
   const [draft, setDraft] = useState<ManualDraftFormState>(emptyDraft);
   const [candidate, setCandidate] = useState<ITransactionCandidate | null>(null);
+  const [classificationReviewStatus, setClassificationReviewStatus] = useState<
+    keyof typeof TransactionCandidateClassificationReviewStatus | null
+  >(null);
   const [saveState, setSaveState] = useState<SaveState>('UNSAVED');
   const [errorMessage, setErrorMessage] = useState('');
   const [routeErrorKey, setRouteErrorKey] = useState('');
+  const [rulePreview, setRulePreview] = useState<ITransactionCandidateRulePreviewResponse | null>(null);
+  const [ruleActionState, setRuleActionState] = useState<RuleActionState>('IDLE');
+  const [ruleErrorMessage, setRuleErrorMessage] = useState('');
   const [loadingCandidate, setLoadingCandidate] = useState(!!draftId);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creatingRef = useRef(false);
   const savingRef = useRef<Promise<ITransactionCandidate | null> | null>(null);
   const dirtyRef = useRef(false);
+  const classificationDirtyRef = useRef(false);
   const latestDraftRef = useRef<ManualDraftFormState>(emptyDraft);
   const candidateIdRef = useRef<number | null>(draftId ? Number(draftId) : null);
   const candidateRef = useRef<ITransactionCandidate | null>(null);
 
   const readOnly =
     candidate?.status === 'POSTED' || candidate?.status === 'CANCELLED' || saveState === 'POSTED' || saveState === 'CANCELLED';
+  const effectiveClassificationReviewStatus = classificationReviewStatus ?? candidate?.classificationReviewStatus;
+  const classificationBlockKey =
+    candidate?.status === 'READY_TO_POST' ? postClassificationBlockKey(effectiveClassificationReviewStatus) : '';
   const postDisabled =
     readOnly ||
     saveState === 'CREATING' ||
@@ -169,7 +351,8 @@ export const FinancialTransactionManualDraft = () => {
     saveState === 'FAILED' ||
     !candidate?.id ||
     !isObviouslyComplete(draft) ||
-    candidate.status !== 'READY_TO_POST';
+    candidate.status !== 'READY_TO_POST' ||
+    !isClassificationReadyToPost(effectiveClassificationReviewStatus);
 
   const selectedAccount = useMemo(
     () => financialAccounts.find(account => account.id?.toString() === draft.account),
@@ -209,13 +392,14 @@ export const FinancialTransactionManualDraft = () => {
         if (response.data.source !== 'MANUAL') {
           clearSaveTimer();
           setCandidate(null);
+          setClassificationReviewStatus(null);
           candidateRef.current = null;
           candidateIdRef.current = null;
           setRouteErrorKey('fintrackApp.financialTransaction.manualDraft.notManual');
           setSaveState('FAILED');
           return;
         }
-        setCandidate(response.data);
+        applyServerCandidate(response.data);
         setDraft(draftFromCandidate(response.data));
         setSaveState(response.data.status === 'CANCELLED' ? 'CANCELLED' : response.data.status === 'POSTED' ? 'POSTED' : 'SAVED');
         if (response.data.status === 'POSTED' && response.data.financialTransaction?.id) {
@@ -226,6 +410,7 @@ export const FinancialTransactionManualDraft = () => {
         candidateIdRef.current = null;
         candidateRef.current = null;
         setCandidate(null);
+        setClassificationReviewStatus(null);
         setRouteErrorKey('fintrackApp.financialTransaction.manualDraft.loadFailed');
         setSaveState('FAILED');
       })
@@ -243,9 +428,20 @@ export const FinancialTransactionManualDraft = () => {
     if (!nextCandidate) {
       return;
     }
-    setCandidate(nextCandidate);
-    candidateRef.current = nextCandidate;
-    candidateIdRef.current = nextCandidate.id ?? null;
+    const candidateCopy = { ...nextCandidate };
+    setCandidate(candidateCopy);
+    setClassificationReviewStatus(candidateCopy.classificationReviewStatus ?? null);
+    candidateRef.current = candidateCopy;
+    candidateIdRef.current = candidateCopy.id ?? null;
+  };
+
+  const applyServerCandidateToForm = (nextCandidate: ITransactionCandidate | null) => {
+    if (nextCandidate) {
+      const nextDraft = draftFromCandidate(nextCandidate);
+      applyServerCandidate(nextCandidate);
+      setDraft(nextDraft);
+      latestDraftRef.current = nextDraft;
+    }
   };
 
   const patchLatestDraft = async () => {
@@ -261,13 +457,18 @@ export const FinancialTransactionManualDraft = () => {
     setSaveState('SAVING');
     setErrorMessage('');
     dirtyRef.current = false;
-    const savePromise = updateManualDraft(currentId, payloadFromDraft(latestDraftRef.current))
+    const includeClassification = classificationDirtyRef.current;
+    classificationDirtyRef.current = false;
+    const savePromise = updateManualDraft(currentId, payloadFromDraft(latestDraftRef.current, includeClassification))
       .then(response => {
         applyServerCandidate(response.data);
         setSaveState('SAVED');
         return response.data;
       })
       .catch(error => {
+        if (includeClassification) {
+          classificationDirtyRef.current = true;
+        }
         setSaveState('FAILED');
         setErrorMessage(error?.response?.data?.detail ?? translate('fintrackApp.financialTransaction.manualDraft.saveFailed'));
         return null;
@@ -283,7 +484,7 @@ export const FinancialTransactionManualDraft = () => {
     return savePromise;
   };
 
-  const createFirstDraft = async (nextDraft: ManualDraftFormState) => {
+  const createFirstDraft = async (nextDraft: ManualDraftFormState, includeClassification = false) => {
     if (creatingRef.current || candidateIdRef.current || !isMeaningfulDraft(nextDraft)) {
       return;
     }
@@ -291,7 +492,7 @@ export const FinancialTransactionManualDraft = () => {
     setSaveState('CREATING');
     setErrorMessage('');
     try {
-      const response = await createManualDraft(payloadFromDraft(nextDraft));
+      const response = await createManualDraft(payloadFromDraft(nextDraft, includeClassification));
       applyServerCandidate(response.data);
       setSaveState('SAVED');
       navigate(`/financial-transaction/drafts/${response.data.id}`, { replace: true });
@@ -307,12 +508,15 @@ export const FinancialTransactionManualDraft = () => {
     }
   };
 
-  const scheduleAutosave = (nextDraft: ManualDraftFormState) => {
+  const scheduleAutosave = (nextDraft: ManualDraftFormState, includeClassification = false) => {
     if (readOnly) {
       return;
     }
+    if (includeClassification) {
+      classificationDirtyRef.current = true;
+    }
     if (!candidateIdRef.current) {
-      void createFirstDraft(nextDraft);
+      void createFirstDraft(nextDraft, includeClassification);
       return;
     }
     dirtyRef.current = true;
@@ -328,7 +532,7 @@ export const FinancialTransactionManualDraft = () => {
     setDraft(current => {
       const nextDraft = { ...current, [field]: value };
       latestDraftRef.current = nextDraft;
-      scheduleAutosave(nextDraft);
+      scheduleAutosave(nextDraft, field === 'category');
       return nextDraft;
     });
   };
@@ -338,7 +542,7 @@ export const FinancialTransactionManualDraft = () => {
     setDraft(current => {
       const nextDraft = { ...current, tags: value };
       latestDraftRef.current = nextDraft;
-      scheduleAutosave(nextDraft);
+      scheduleAutosave(nextDraft, true);
       return nextDraft;
     });
   };
@@ -346,7 +550,7 @@ export const FinancialTransactionManualDraft = () => {
   const flushPendingSave = async () => {
     clearSaveTimer();
     if (!candidateIdRef.current && isMeaningfulDraft(latestDraftRef.current)) {
-      await createFirstDraft(latestDraftRef.current);
+      await createFirstDraft(latestDraftRef.current, classificationDirtyRef.current);
     }
     if (savingRef.current) {
       await savingRef.current;
@@ -366,6 +570,12 @@ export const FinancialTransactionManualDraft = () => {
       setErrorMessage(translate('fintrackApp.financialTransaction.manualDraft.cannotPost'));
       return;
     }
+    const classificationMessageKey = postClassificationBlockKey(classificationReviewStatus ?? currentCandidate.classificationReviewStatus);
+    if (classificationMessageKey) {
+      setSaveState('SAVED');
+      setErrorMessage(translate(classificationMessageKey));
+      return;
+    }
     try {
       const response = await postManualDraft(candidateIdRef.current);
       setCandidate(response.data);
@@ -378,6 +588,52 @@ export const FinancialTransactionManualDraft = () => {
     } catch (error) {
       setSaveState('FAILED');
       setErrorMessage(error?.response?.data?.detail ?? translate('fintrackApp.financialTransaction.manualDraft.postFailed'));
+    }
+  };
+
+  const handlePreviewRules = async () => {
+    setRuleErrorMessage('');
+    setRuleActionState('PREVIEWING');
+    const currentCandidate = await flushPendingSave();
+    if (!candidateIdRef.current || !currentCandidate) {
+      setRuleActionState('FAILED');
+      setRuleErrorMessage(translate('fintrackApp.financialTransaction.manualDraft.ruleSuggestions.actionRequiresDraft'));
+      return;
+    }
+    try {
+      const response = await previewManualDraftRules(candidateIdRef.current);
+      setRulePreview(response.data);
+      setRuleActionState('IDLE');
+    } catch (error) {
+      setRuleActionState('FAILED');
+      setRuleErrorMessage(
+        error?.response?.data?.detail ?? translate('fintrackApp.financialTransaction.manualDraft.ruleSuggestions.previewFailed'),
+      );
+    }
+  };
+
+  const handleApplyRules = async () => {
+    setRuleErrorMessage('');
+    setRuleActionState('APPLYING');
+    const currentCandidate = await flushPendingSave();
+    if (!candidateIdRef.current || !currentCandidate) {
+      setRuleActionState('FAILED');
+      setRuleErrorMessage(translate('fintrackApp.financialTransaction.manualDraft.ruleSuggestions.actionRequiresDraft'));
+      return;
+    }
+    try {
+      const response = await applyManualDraftRules(candidateIdRef.current);
+      if (response.data.candidate) {
+        applyServerCandidateToForm(response.data.candidate);
+        setClassificationReviewStatus(response.data.candidate.classificationReviewStatus ?? null);
+      }
+      setRulePreview(response.data.evaluation ?? null);
+      setRuleActionState('IDLE');
+    } catch (error) {
+      setRuleActionState('FAILED');
+      setRuleErrorMessage(
+        error?.response?.data?.detail ?? translate('fintrackApp.financialTransaction.manualDraft.ruleSuggestions.applyFailed'),
+      );
     }
   };
 
@@ -442,6 +698,11 @@ export const FinancialTransactionManualDraft = () => {
             <Translate contentKey="fintrackApp.financialTransaction.manualDraft.cancelledReadOnly">
               This draft was cancelled and cannot be edited.
             </Translate>
+          </Alert>
+        ) : null}
+        {classificationBlockKey ? (
+          <Alert color="warning" fade={false} data-testid="manual-draft-classification-block">
+            <Translate contentKey={classificationBlockKey}>Refresh or apply rule suggestions before posting.</Translate>
           </Alert>
         ) : null}
         <Form>
@@ -613,6 +874,17 @@ export const FinancialTransactionManualDraft = () => {
               ))}
             </Input>
           </FormGroup>
+          <RuleSuggestionsSection
+            candidate={candidate}
+            readOnly={readOnly}
+            saveState={saveState}
+            ruleActionState={ruleActionState}
+            ruleErrorMessage={ruleErrorMessage}
+            rulePreview={rulePreview}
+            effectiveClassificationReviewStatus={effectiveClassificationReviewStatus}
+            onPreviewRules={handlePreviewRules}
+            onApplyRules={handleApplyRules}
+          />
           <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/financial-transaction" replace color="info">
             <FontAwesomeIcon icon="arrow-left" />
             &nbsp;

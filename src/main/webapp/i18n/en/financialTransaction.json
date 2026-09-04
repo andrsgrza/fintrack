@@ -56,7 +56,30 @@
         "cancel": "Cancel draft",
         "cancelFailed": "Could not cancel the draft.",
         "cancelled": "Cancelled.",
-        "cancelledReadOnly": "This draft was cancelled and cannot be edited."
+        "cancelledReadOnly": "This draft was cancelled and cannot be edited.",
+        "ruleSuggestions": {
+          "title": "Rule suggestions",
+          "statusLabel": "Status",
+          "status": {
+            "notEvaluated": "Not evaluated",
+            "stale": "Suggestions are stale",
+            "suggested": "Suggestions applied",
+            "userSelected": "Manually selected",
+            "notApplicable": "No applicable suggestions"
+          },
+          "refresh": "Refresh suggestions",
+          "apply": "Apply suggestions",
+          "previewFailed": "Could not refresh rule suggestions.",
+          "applyFailed": "Could not apply rule suggestions.",
+          "actionRequiresDraft": "Create the draft before reviewing rule suggestions.",
+          "suggestedCategory": "Suggested category",
+          "suggestedTags": "Suggested tags",
+          "noSuggestions": "No rule suggestions found.",
+          "conflicts": "Some suggestions conflict with existing selections.",
+          "matchedRules": "Matched rules",
+          "notEvaluatedPostBlock": "Refresh or apply rule suggestions before posting.",
+          "stalePostBlock": "Transaction details changed. Refresh or apply rule suggestions before posting."
+        }
       },
       "rulePreview": {
         "step1": "Step 1: Transaction details",
