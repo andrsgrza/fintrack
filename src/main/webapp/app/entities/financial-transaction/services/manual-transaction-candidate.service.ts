@@ -1,11 +1,8 @@
 import axios from 'axios';
 
 import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
-import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
-import { TransactionCandidateStatus } from 'app/shared/model/enumerations/transaction-candidate-status.model';
-import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 
 const apiUrl = 'api/transaction-candidates';
 
@@ -24,15 +21,15 @@ export const postManualDraft = (id: string | number) => axios.post<ITransactionC
 
 export interface IManualTransactionDraftSummary {
   id?: number;
-  status?: keyof typeof TransactionCandidateStatus | string;
-  classificationReviewStatus?: keyof typeof TransactionCandidateClassificationReviewStatus | string;
+  status?: string;
+  classificationReviewStatus?: string;
   accountId?: number | null;
   accountName?: string | null;
   transactionDate?: string | null;
   description?: string | null;
   amount?: number | null;
-  flow?: keyof typeof TransactionFlow | string | null;
-  currencySnapshot?: keyof typeof CurrencyCode | string | null;
+  flow?: string | null;
+  currencySnapshot?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   categoryName?: string | null;

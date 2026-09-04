@@ -6,10 +6,12 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 
 import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
+import { FinancialTransaction } from './financial-transaction';
 import { FinancialTransactionDetail } from './financial-transaction-detail';
 import { FinancialTransactionUpdate } from './financial-transaction-update';
 
 const mockDispatch = jest.fn();
+const mockGetEntities = jest.fn(params => ({ type: 'financialTransaction/getEntities', payload: params }));
 const mockPartialUpdateEntity = jest.fn(entity => ({
   type: 'financialTransaction/partialUpdateEntity',
   payload: { data: entity },
@@ -31,6 +33,7 @@ jest.mock('app/config/store', () => ({
 
 jest.mock('./financial-transaction.reducer', () => ({
   createEntity: entity => ({ type: 'financialTransaction/createEntity', payload: { data: entity } }),
+  getEntities: params => mockGetEntities(params),
   partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
   getEntity: id => mockGetEntity(id),
   reset: () => mockReset(),
@@ -82,7 +85,9 @@ const baseState = {
   },
   financialTransaction: {
     entity: existingTransaction,
+    entities: [existingTransaction],
     loading: false,
+    totalItems: 1,
     updating: false,
     updateSuccess: false,
   },
@@ -118,11 +123,24 @@ const renderDetail = () => {
   );
 };
 
+const renderList = () => {
+  mockState = baseState;
+
+  return render(
+    <MemoryRouter initialEntries={['/financial-transaction']}>
+      <Routes>
+        <Route path="/financial-transaction" element={<FinancialTransaction />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+};
+
 describe('FinancialTransaction posted transaction UX', () => {
   beforeAll(registerTranslations);
 
   beforeEach(() => {
     mockDispatch.mockClear();
+    mockGetEntities.mockClear();
     mockPartialUpdateEntity.mockClear();
     mockGetEntity.mockClear();
     mockReset.mockClear();
@@ -130,6 +148,18 @@ describe('FinancialTransaction posted transaction UX', () => {
     mockGetCategories.mockClear();
     mockGetTags.mockClear();
     mockAxiosPost.mockReset();
+  });
+
+  it('posted transaction list links to recoverable manual drafts without mixing drafts into the table', () => {
+    renderList();
+
+    const draftsLink = screen.getByRole('link', { name: /view drafts/i });
+    expect(draftsLink.getAttribute('href')).toBe('/financial-transaction/drafts');
+    expect(screen.getByRole('link', { name: /create a new financial transaction/i }).getAttribute('href')).toBe(
+      '/financial-transaction/new',
+    );
+    expect(screen.getByText('Bus fare')).toBeTruthy();
+    expect(screen.queryByText('Untitled draft')).toBeNull();
   });
 
   it('edit form hides technical fields, keeps account immutable, and does not call rule-preview', () => {

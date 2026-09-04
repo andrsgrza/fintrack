@@ -5,6 +5,7 @@
         "title": "Financial Transactions",
         "refreshListLabel": "Refresh list",
         "createLabel": "Create a new Financial Transaction",
+        "viewDraftsLabel": "View drafts",
         "createOrEditLabel": "Create or edit a Financial Transaction",
         "notFound": "No Financial Transactions found"
       },
@@ -96,6 +97,38 @@
           "matchedRules": "Matched rules",
           "notEvaluatedPostBlock": "Review classification before posting.",
           "stalePostBlock": "Details changed. Wait for suggestions to update and review classification before posting."
+        }
+      },
+      "manualDraftList": {
+        "title": "Manual transaction drafts",
+        "loading": "Loading manual drafts…",
+        "loadFailed": "Could not load manual drafts.",
+        "empty": "No manual drafts.",
+        "createManualTransaction": "Create manual transaction",
+        "untitledDraft": "Untitled draft",
+        "noAccount": "No account",
+        "noDate": "No date",
+        "noAmount": "No amount",
+        "draftStatus": "Draft status",
+        "classificationStatus": "Classification",
+        "lastUpdated": "Last updated",
+        "noCategory": "No category",
+        "noTags": "No tags",
+        "unknown": "Unknown",
+        "resume": "Resume",
+        "cancelDraft": "Cancel draft",
+        "cancelConfirm": "Cancel this draft?",
+        "cancelFailed": "Could not cancel the draft.",
+        "status": {
+          "draft": "Draft",
+          "readyToPost": "Ready to post"
+        },
+        "classification": {
+          "notEvaluated": "Not evaluated",
+          "stale": "Suggestions are stale",
+          "suggested": "Suggestions applied",
+          "userSelected": "Manually selected",
+          "notApplicable": "No applicable suggestions"
         }
       },
       "rulePreview": {

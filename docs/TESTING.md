@@ -600,7 +600,7 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** TC-2D.1 backend manual draft recovery query, backend candidate rule preview/apply commands, and manual candidate suggestions UI are implemented for MANUAL candidates. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, or UserPreference.
+**Scope:** TC-2D.2 manual draft recovery query/UI, backend candidate rule preview/apply commands, and manual candidate suggestions UI are implemented for MANUAL candidates. Candidates are not wired into CSV upload/review, Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, or UserPreference.
 
 ### Summary counts
 
@@ -651,7 +651,7 @@ Key TC-2C.1a backend assertions:
 - Candidate preview/apply do not use the public `/api/financial-transactions/rule-preview` endpoint.
 - TC-2C.1c backend post also blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` are allowed classification states for posting.
 
-Key TC-2D.1 backend recovery query assertions:
+Key TC-2D backend/UI recovery assertions:
 
 - `GET /api/transaction-candidates/manual-drafts` returns only current-user `MANUAL` candidates.
 - `DRAFT` and `READY_TO_POST` candidates are included.
@@ -661,6 +661,12 @@ Key TC-2D.1 backend recovery query assertions:
 - results are sorted by `updatedAt DESC, id DESC`.
 - the response uses the lightweight manual draft summary shape and does not expose full `TransactionCandidateDTO` fields such as `source`, `validationStatus`, or `financialTransaction`.
 - incomplete/null draft fields map safely for future UI fallback copy.
+- `/financial-transaction/drafts` loads the manual draft summary endpoint.
+- The posted FinancialTransaction list links to `/financial-transaction/drafts` with a "View drafts" action, but does not mix draft rows into the posted transaction table.
+- The recovery page renders compact summary fields and fallback copy for missing description/account/date/amount/category/tags.
+- Resume links to `/financial-transaction/drafts/{id}`.
+- Cancel draft calls `POST /api/transaction-candidates/{id}/cancel` and removes/reloads the row; the list does not delete or post candidates.
+- The recovery page does not expose generic TransactionCandidate CRUD UI.
 
 Key TC-2B.1 frontend assertions:
 

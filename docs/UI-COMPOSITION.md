@@ -575,7 +575,7 @@ FinancialTransaction manual create now owns the TransactionCandidate autosave UI
 
 ## FinancialTransaction manual create — TransactionCandidate autosave UX
 
-Status: implemented in TC-2B.1 for manual create only.
+Status: implemented through TC-2D.2 for manual create, draft resume, and draft recovery.
 
 Manual create composition:
 
@@ -594,11 +594,17 @@ Manual create composition:
 
 There is intentionally no explicit Save Draft button. Recoverability comes from autosave plus the `/financial-transaction/drafts/{id}` route.
 
-TC-2D.1 adds backend support for a future draft recovery page:
+TC-2D.2 adds the manual draft recovery page:
 
-- `GET /api/transaction-candidates/manual-drafts` returns current-user recoverable `MANUAL` draft summaries.
+- `/financial-transaction/drafts` loads `GET /api/transaction-candidates/manual-drafts`.
+- It shows current-user recoverable `MANUAL` draft summaries only.
 - It includes only `DRAFT` and `READY_TO_POST` and excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, `API_IMPORT`, and currently-unused `NEEDS_REVIEW`.
-- The frontend recovery page/list is pending TC-2D.2; generic `TransactionCandidate` CRUD routes are not product UI.
+- It displays compact description/account/date/amount/status/classification/category/tags/updated-at metadata with fallback copy for incomplete drafts.
+- Resume links to `/financial-transaction/drafts/{id}`.
+- Cancel draft calls `POST /api/transaction-candidates/{id}/cancel`, then removes/reloads the row.
+- It does not post candidates from the list.
+- The FinancialTransaction list links to this page through a secondary "View drafts" action; draft rows are not mixed into the posted FinancialTransaction table.
+- Generic `TransactionCandidate` CRUD routes are not product UI.
 
 Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
 

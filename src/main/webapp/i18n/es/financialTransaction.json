@@ -5,6 +5,7 @@
         "title": "Financial Transactions",
         "refreshListLabel": "Refrescar lista",
         "createLabel": "Crear nuevo Financial Transaction",
+        "viewDraftsLabel": "Ver borradores",
         "createOrEditLabel": "Crear o editar Financial Transaction",
         "notFound": "Ningún Financial Transactions encontrado"
       },
@@ -96,6 +97,38 @@
           "matchedRules": "Reglas coincidentes",
           "notEvaluatedPostBlock": "Revisa la clasificación antes de publicar.",
           "stalePostBlock": "Los datos cambiaron. Espera a que se actualicen las sugerencias y revisa la clasificación antes de publicar."
+        }
+      },
+      "manualDraftList": {
+        "title": "Borradores de transacciones manuales",
+        "loading": "Cargando borradores manuales…",
+        "loadFailed": "No se pudieron cargar los borradores manuales.",
+        "empty": "No hay borradores manuales.",
+        "createManualTransaction": "Crear transacción manual",
+        "untitledDraft": "Borrador sin descripción",
+        "noAccount": "Sin cuenta",
+        "noDate": "Sin fecha",
+        "noAmount": "Sin monto",
+        "draftStatus": "Estado del borrador",
+        "classificationStatus": "Clasificación",
+        "lastUpdated": "Última actualización",
+        "noCategory": "Sin categoría",
+        "noTags": "Sin etiquetas",
+        "unknown": "Desconocido",
+        "resume": "Continuar",
+        "cancelDraft": "Cancelar borrador",
+        "cancelConfirm": "¿Cancelar este borrador?",
+        "cancelFailed": "No se pudo cancelar el borrador.",
+        "status": {
+          "draft": "Borrador",
+          "readyToPost": "Lista para publicar"
+        },
+        "classification": {
+          "notEvaluated": "No evaluada",
+          "stale": "Sugerencias desactualizadas",
+          "suggested": "Sugerencias aplicadas",
+          "userSelected": "Seleccionada manualmente",
+          "notApplicable": "Sin sugerencias aplicables"
         }
       },
       "rulePreview": {

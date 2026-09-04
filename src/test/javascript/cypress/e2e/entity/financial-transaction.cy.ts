@@ -8,17 +8,6 @@ import {
   entityTableSelector,
 } from '../../support/entity';
 
-interface CypressRequestCall {
-  response?: {
-    statusCode?: number;
-    body?: {
-      status?: string;
-      description?: string;
-      signedAmount?: number | string;
-    };
-  };
-}
-
 describe('FinancialTransaction e2e test', () => {
   const financialTransactionPageUrl = '/financial-transaction';
   const financialTransactionPageUrlPattern = new RegExp('/financial-transaction(\\?.*)?$');
@@ -55,18 +44,35 @@ describe('FinancialTransaction e2e test', () => {
     account: { id: accountId },
   });
 
-  const waitForSavedManualCandidateDraft = (description: string, attemptsRemaining = 30) =>
-    cy.wait('@patchManualCandidateRequest', { timeout: 10000 }).then(call => {
-      const response = (call as unknown as CypressRequestCall).response;
-      expect(response?.statusCode).to.equal(200);
+  const waitForManualCandidate = (
+    predicate: (candidate: { description?: string; signedAmount?: number | string }) => boolean,
+    attemptsRemaining = 25,
+  ) =>
+    cy.location('pathname').then(pathname => {
+      const candidateId = pathname.match(/\/financial-transaction\/drafts\/(\d+)$/)?.[1];
+      expect(candidateId, 'manual draft id in URL').to.exist;
 
-      if (response?.body?.description !== description || Number(response?.body?.signedAmount) !== -100.5) {
-        expect(attemptsRemaining, 'manual candidate save attempts remaining').to.be.greaterThan(0);
-        return waitForSavedManualCandidateDraft(description, attemptsRemaining - 1);
-      }
+      return cy
+        .authenticatedRequest({
+          method: 'GET',
+          url: `/api/transaction-candidates/${candidateId}`,
+        })
+        .then(({ body }) => {
+          if (!predicate(body)) {
+            expect(attemptsRemaining, 'manual candidate save attempts remaining').to.be.greaterThan(0);
+            cy.wait(250); // eslint-disable-line cypress/no-unnecessary-waiting
+            return waitForManualCandidate(predicate, attemptsRemaining - 1);
+          }
 
-      return response.body;
+          return body;
+        });
     });
+
+  const waitForSavedManualCandidateDraft = (description: string) =>
+    waitForManualCandidate(candidate => candidate.description === description && Number(candidate.signedAmount) === -100.5);
+
+  const waitForSavedManualCandidateDescription = (description: string) =>
+    waitForManualCandidate(candidate => candidate.description === description);
 
   const createCategory = () =>
     cy
@@ -162,6 +168,7 @@ describe('FinancialTransaction e2e test', () => {
   beforeEach(() => {
     cy.intercept('GET', '/api/financial-transactions+(?*|)').as('entitiesRequest');
     cy.intercept('POST', '/api/transaction-candidates/manual').as('createManualCandidateRequest');
+    cy.intercept('GET', '/api/transaction-candidates/manual-drafts').as('manualDraftsRequest');
     cy.intercept('GET', '/api/transaction-candidates/*').as('getManualCandidateRequest');
     cy.intercept('PATCH', '/api/transaction-candidates/*/manual-draft').as('patchManualCandidateRequest');
     cy.intercept('POST', '/api/transaction-candidates/*/post').as('postManualCandidateRequest');
@@ -403,6 +410,41 @@ describe('FinancialTransaction e2e test', () => {
       cy.get('[data-cy="manualDraftCancelButton"]').click();
       cy.wait('@cancelManualCandidateRequest').its('response.statusCode').should('eq', 200);
       cy.url().should('match', financialTransactionPageUrlPattern);
+    });
+
+    it('lists, resumes, and cancels a recoverable manual draft from the draft recovery page', () => {
+      const draftDescription = uniqueName('Recoverable manual draft');
+
+      cy.get('[data-cy="description"]').type(draftDescription);
+      cy.wait('@createManualCandidateRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(201);
+        expect(response?.body.id).to.exist;
+      });
+      waitForSavedManualCandidateDescription(draftDescription);
+
+      cy.visit(financialTransactionPageUrl);
+      cy.wait('@entitiesRequest');
+      cy.get('[data-cy="manualDraftsButton"]').click();
+      cy.wait('@manualDraftsRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(200);
+        expect(response?.body.map(draft => draft.description)).to.include(draftDescription);
+      });
+      cy.url().should('match', new RegExp('/financial-transaction/drafts$'));
+      cy.contains('[data-cy="manualDraftRow"]', draftDescription).as('draftRow');
+      cy.get('@draftRow').find('[data-cy="manualDraftResumeButton"]').click();
+      cy.url().should('match', new RegExp('/financial-transaction/drafts/\\d+$'));
+      cy.get('[data-cy="description"]').should('have.value', draftDescription);
+
+      cy.visit(`${financialTransactionPageUrl}/drafts`);
+      cy.wait('@manualDraftsRequest');
+      cy.on('window:confirm', () => true);
+      cy.contains('[data-cy="manualDraftRow"]', draftDescription).find('[data-cy="manualDraftCancelListButton"]').click();
+      cy.wait('@cancelManualCandidateRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(200);
+        expect(response?.body.status).to.equal('CANCELLED');
+      });
+      cy.contains('[data-cy="manualDraftRow"]', draftDescription).should('not.exist');
+      cy.get('@rulePreviewRequest.all').should('have.length', 0);
     });
   });
 
