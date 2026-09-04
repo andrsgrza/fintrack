@@ -356,7 +356,6 @@ describe('FinancialTransaction e2e test', () => {
       cy.get('[data-cy="amount"]').should('have.value', '100.5');
       cy.get('[data-cy="flow"]').should('have.value', 'OUT');
 
-      cy.get('[data-cy="manualDraftRefreshRulesButton"]').click();
       let suggestedCategoryId;
       cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(200);
@@ -365,6 +364,7 @@ describe('FinancialTransaction e2e test', () => {
         suggestedCategoryId = response?.body.suggestedCategory.categoryId;
         expect(response?.body.suggestedTags.map(suggestedTag => suggestedTag.tagId)).to.include(tag.id);
       });
+      cy.get('[data-cy="manualDraftPostButton"]').should('be.disabled');
       cy.get('[data-cy="manualDraftApplyRulesButton"]').click();
       cy.wait('@candidateApplyRulesRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(200);

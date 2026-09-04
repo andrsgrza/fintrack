@@ -667,8 +667,10 @@ Key TC-2B.1 frontend assertions:
 - Cancelled drafts are read-only; posted drafts redirect to the posted transaction.
 - Candidate create flow does not call `/api/financial-transactions/rule-preview`.
 - Rule suggestions section renders for editable manual drafts.
-- Refresh suggestions flushes pending autosave, calls the candidate-specific `rule-preview` endpoint, renders suggested category/tags, conflicts, and matched rules, and does not mutate category/tags.
-- Apply suggestions flushes pending autosave, calls the candidate-specific `apply-rules` endpoint, updates category/tags/status from the returned candidate, and keeps the status label synchronized.
+- Automatic preview runs after successful autosave of rule-input fields, calls the candidate-specific `rule-preview` endpoint, renders suggested category/tags, conflicts, and matched rules, and does not mutate category/tags.
+- Notes-only and category/tag-only edits autosave but do not auto-preview.
+- Stale preview responses are ignored so older suggestions cannot overwrite newer preview state.
+- Apply suggestions / Confirm no suggestions flushes pending autosave, calls the candidate-specific `apply-rules` endpoint, updates category/tags/status from the returned candidate, and keeps the status label synchronized.
 - Post is disabled and shows a blocking message for `NOT_EVALUATED` and `STALE`.
 - Post is allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` when the candidate is otherwise ready.
 - Backend post rejects direct API attempts to post `NOT_EVALUATED` or `STALE` manual candidates.

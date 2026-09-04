@@ -38,11 +38,11 @@
       "ingestionRecord": "Ingestion Record",
       "manualDraft": {
         "title": "Create manual transaction",
-        "unsaved": "Unsaved — start typing to create a recoverable draft.",
+        "unsaved": "Start entering details to create a recoverable draft.",
         "creating": "Creating draft…",
-        "saving": "Saving…",
-        "saved": "Saved.",
-        "saveFailed": "Save failed. Changes may not be saved.",
+        "saving": "Saving changes…",
+        "saved": "Draft saved automatically.",
+        "saveFailed": "Could not save changes.",
         "createFailed": "Could not create the draft.",
         "loadFailed": "Could not load the draft.",
         "notManual": "This draft cannot be edited in the manual transaction flow.",
@@ -68,17 +68,34 @@
             "notApplicable": "No applicable suggestions"
           },
           "refresh": "Refresh suggestions",
+          "retry": "Retry suggestions",
           "apply": "Apply suggestions",
+          "confirmNoSuggestions": "Confirm no suggestions",
           "previewFailed": "Could not refresh rule suggestions.",
           "applyFailed": "Could not apply rule suggestions.",
           "actionRequiresDraft": "Create the draft before reviewing rule suggestions.",
+          "previewState": {
+            "unavailable": "Complete account, date, description, and amount to see suggestions.",
+            "stale": "Displayed suggestions may be out of date.",
+            "updating": "Updating suggestions…",
+            "updated": "Suggestions updated.",
+            "noSuggestions": "No rule suggestions found.",
+            "failed": "Could not update suggestions."
+          },
+          "review": {
+            "pending": "Review pending: apply suggestions or manually select a category/tag before posting.",
+            "confirmNoSuggestions": "Confirm that there are no applicable suggestions before posting.",
+            "suggested": "Classification reviewed with suggestions applied.",
+            "userSelected": "Classification selected manually.",
+            "notApplicable": "Classification reviewed with no applicable suggestions."
+          },
           "suggestedCategory": "Suggested category",
           "suggestedTags": "Suggested tags",
           "noSuggestions": "No rule suggestions found.",
           "conflicts": "Some suggestions conflict with existing selections.",
           "matchedRules": "Matched rules",
-          "notEvaluatedPostBlock": "Refresh or apply rule suggestions before posting.",
-          "stalePostBlock": "Transaction details changed. Refresh or apply rule suggestions before posting."
+          "notEvaluatedPostBlock": "Review classification before posting.",
+          "stalePostBlock": "Details changed. Wait for suggestions to update and review classification before posting."
         }
       },
       "rulePreview": {

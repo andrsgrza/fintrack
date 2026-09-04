@@ -588,7 +588,7 @@ Manual create composition:
 7. `/financial-transaction/drafts/{id}` accepts MANUAL candidates only. Non-MANUAL candidates and load failures show a safe error state with no editable form, autosave, Post, or manual Cancel action.
 8. Subsequent edits debounce autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`.
 9. The UI displays amount plus flow, but submits only `signedAmount`; backend derives `amount` and `flow`.
-10. The Rule suggestions section is available after a candidate exists. Refresh flushes autosave and calls `POST /api/transaction-candidates/{id}/rule-preview` without mutating category/tags. Apply flushes autosave and calls `POST /api/transaction-candidates/{id}/apply-rules`, then hydrates category/tags/status from the returned candidate.
+10. The Rule suggestions section is available after a candidate exists. After successful autosave of rule-input fields, the UI automatically calls `POST /api/transaction-candidates/{id}/rule-preview` without mutating category/tags. Apply suggestions / Confirm no suggestions flushes autosave and calls `POST /api/transaction-candidates/{id}/apply-rules`, then hydrates category/tags/status from the returned candidate.
 11. Post flushes pending autosave, requires `classificationReviewStatus` to be `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted FinancialTransaction detail.
 12. Cancel before candidate creation navigates away; cancel after candidate creation calls the candidate cancel command.
 
@@ -596,7 +596,7 @@ There is intentionally no explicit Save Draft button. Recoverability comes from 
 
 Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
 
-The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. It only calls candidate-specific refresh/apply commands through `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`.
+The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. It only calls candidate-specific preview/apply commands through `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`; preview is automatic/read-only after saved rule-input changes, while apply/confirm remains explicit.
 
 Do not extend this as:
 

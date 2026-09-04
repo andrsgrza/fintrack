@@ -38,11 +38,11 @@
       "ingestionRecord": "Ingestion Record",
       "manualDraft": {
         "title": "Crear transacción manual",
-        "unsaved": "Sin guardar — empieza a capturar para crear un borrador recuperable.",
+        "unsaved": "Empieza a capturar para crear un borrador recuperable.",
         "creating": "Creando borrador…",
-        "saving": "Guardando…",
-        "saved": "Guardado.",
-        "saveFailed": "No se pudo guardar. Es posible que los cambios no se hayan guardado.",
+        "saving": "Guardando cambios…",
+        "saved": "Borrador guardado automáticamente.",
+        "saveFailed": "No se pudieron guardar los cambios.",
         "createFailed": "No se pudo crear el borrador.",
         "loadFailed": "No se pudo cargar el borrador.",
         "notManual": "Este borrador no se puede editar en el flujo de transacción manual.",
@@ -68,17 +68,34 @@
             "notApplicable": "Sin sugerencias aplicables"
           },
           "refresh": "Actualizar sugerencias",
+          "retry": "Reintentar sugerencias",
           "apply": "Aplicar sugerencias",
+          "confirmNoSuggestions": "Confirmar sin sugerencias",
           "previewFailed": "No se pudieron actualizar las sugerencias de reglas.",
           "applyFailed": "No se pudieron aplicar las sugerencias de reglas.",
           "actionRequiresDraft": "Crea el borrador antes de revisar sugerencias de reglas.",
+          "previewState": {
+            "unavailable": "Completa cuenta, fecha, descripción y monto para ver sugerencias.",
+            "stale": "Las sugerencias mostradas pueden estar desactualizadas.",
+            "updating": "Actualizando sugerencias…",
+            "updated": "Sugerencias actualizadas.",
+            "noSuggestions": "No se encontraron sugerencias de reglas.",
+            "failed": "No se pudieron actualizar las sugerencias."
+          },
+          "review": {
+            "pending": "Revisión pendiente: aplica las sugerencias o selecciona una categoría/etiqueta manualmente para poder publicar.",
+            "confirmNoSuggestions": "Confirma que no hay sugerencias aplicables para poder publicar.",
+            "suggested": "Clasificación revisada con sugerencias aplicadas.",
+            "userSelected": "Clasificación seleccionada manualmente.",
+            "notApplicable": "Clasificación revisada sin sugerencias aplicables."
+          },
           "suggestedCategory": "Categoría sugerida",
           "suggestedTags": "Etiquetas sugeridas",
           "noSuggestions": "No se encontraron sugerencias de reglas.",
           "conflicts": "Algunas sugerencias entran en conflicto con selecciones existentes.",
           "matchedRules": "Reglas coincidentes",
-          "notEvaluatedPostBlock": "Actualiza o aplica las sugerencias de reglas antes de publicar.",
-          "stalePostBlock": "Los detalles de la transacción cambiaron. Actualiza o aplica las sugerencias de reglas antes de publicar."
+          "notEvaluatedPostBlock": "Revisa la clasificación antes de publicar.",
+          "stalePostBlock": "Los datos cambiaron. Espera a que se actualicen las sugerencias y revisa la clasificación antes de publicar."
         }
       },
       "rulePreview": {

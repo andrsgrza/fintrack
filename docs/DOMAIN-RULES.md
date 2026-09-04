@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-2C.1b manual TransactionCandidate rule suggestions UI implemented. Manual TransactionCandidate autosave UI exists, and frontend candidate suggestions can be refreshed/applied through candidate-specific endpoints. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** TC-2C.1d manual TransactionCandidate rule suggestions UI implemented. Manual TransactionCandidate autosave UI exists, and frontend candidate suggestions auto-refresh after saved rule-input changes and are applied/confirmed through candidate-specific endpoints. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -128,7 +128,7 @@ TC-2A / TC-2A.1 manual backend command rules:
 - `POST /api/transaction-candidates/{id}/post` posts only `MANUAL` candidates. `FILE_IMPORT` and `API_IMPORT` candidate posting is deferred and rejected by this command.
 - Manual post uses a pessimistic write lock on the candidate, recalculates normalized fields plus derived `amount`/`flow` from current `signedAmount`, requires a complete valid candidate, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies account/date/description/amount/flow/external reference/notes/category/tags, links it to the candidate, sets `status=POSTED`, and sets `postedAt`.
 - Manual post is concurrency-safe/idempotent after `POSTED`: retry returns the existing linked transaction candidate and does not create duplicate `FinancialTransaction` rows.
-- `validationStatus=INVALID/STALE` is recalculated during manual post from the current candidate fields; if the candidate still cannot become complete/valid, post is rejected. `descriptionReviewStatus=STALE` blocks manual post until refreshed. `classificationReviewStatus=NOT_EVALUATED` and `classificationReviewStatus=STALE` block manual post until the user refreshes/applies suggestions or manually selects category/tags.
+- `validationStatus=INVALID/STALE` is recalculated during manual post from the current candidate fields; if the candidate still cannot become complete/valid, post is rejected. `descriptionReviewStatus=STALE` blocks manual post until refreshed. `classificationReviewStatus=NOT_EVALUATED` and `classificationReviewStatus=STALE` block manual post until the user applies suggestions, confirms no suggestions, or manually selects category/tags.
 - Candidate post does **not** invoke `TransactionRuleEvaluationService` in TC-2A. Existing direct `POST /api/financial-transactions` behavior remains unchanged and still applies TransactionRules on create.
 - Candidates never affect balances directly; only the posted `FinancialTransaction` created by the post command affects balances.
 - Generic `TransactionCandidate` CRUD writes are technical/restricted: generic create only supports safe MANUAL drafts, generic update/PATCH cannot change lifecycle status or controlled review/link fields, and generic delete preserves `POSTED`/`CANCELLED` candidates.
@@ -143,7 +143,7 @@ TC-2B.1 manual UI rules:
 - Subsequent changes autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`; the UI has no explicit Save Draft button.
 - The UI may display amount plus flow, but sends only `signedAmount`; backend derives `amount` and `flow`.
 - Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail.
-- Candidate create/post does not invoke `TransactionRuleEvaluationService` in TC-2B.1/TC-2C. Candidate-specific rule preview/apply exists only through explicit user actions in the manual candidate UI.
+- Candidate create/post does not invoke `TransactionRuleEvaluationService` in TC-2B.1/TC-2C. Candidate-specific rule preview is automatic/read-only after saved rule-input edits; apply/confirm remains an explicit user action in the manual candidate UI.
 - `POST /api/transaction-candidates/{id}/rule-preview` evaluates active owner TransactionRules for an editable MANUAL candidate and returns transient suggestions/matches/conflicts/skips without mutating the candidate.
 - `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`: category fills only when empty/no conflict; tags are additive; manual category/tags are preserved.
 - Manual category/tag PATCH marks `classificationReviewStatus=USER_SELECTED`. Rule-input PATCH after fresh classification marks `classificationReviewStatus=STALE`; notes-only changes do not because rules do not evaluate notes.
