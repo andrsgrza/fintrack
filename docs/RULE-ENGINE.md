@@ -599,7 +599,7 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - There is no explicit Save Draft button.
 - Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail.
 - Cancel before candidate creation just navigates away; cancel after candidate creation calls the candidate cancel command.
-- Candidate create/post does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not apply TransactionRules in TC-2B.1/TC-2C.
+- Candidate create/post does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not auto-apply TransactionRules. TC-2C candidate apply remains an explicit user action.
 
 ### TC-2C.1a — backend TransactionCandidate rule preview/apply foundation ✅
 

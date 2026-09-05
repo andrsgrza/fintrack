@@ -396,10 +396,17 @@ describe('FinancialTransaction e2e test', () => {
           url: `/api/financial-transactions/${postedFinancialTransactionId}`,
         }).then(({ body }) => {
           financialTransaction = body;
+          expect(body.description).to.equal(manualCandidateDescription);
           expect(body.category.id).to.equal(suggestedCategoryId);
           expect(body.tags.map(transactionTag => transactionTag.id)).to.include(tag.id);
         });
       });
+      cy.visit(`${financialTransactionPageUrl}/drafts`);
+      cy.wait('@manualDraftsRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(200);
+        expect(response?.body.map(draft => draft.description)).not.to.include(manualCandidateDescription);
+      });
+      cy.contains('[data-cy="manualDraftRow"]', manualCandidateDescription).should('not.exist');
       cy.get('@rulePreviewRequest.all').should('have.length', 0);
     });
 
