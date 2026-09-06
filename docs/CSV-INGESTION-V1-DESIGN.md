@@ -438,14 +438,14 @@ I2C:
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
 - Pantalla 2 selections live only in frontend state until confirm; browser refresh loses category/tag adjustments in v1.
 - Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/debug smoke specs.
+- TC-3A adds backend-only `POST /api/transaction-ingestions/{id}/candidates/prepare`. It creates or syncs `FILE_IMPORT` `TransactionCandidate` rows for `VALID` `IngestionRecord`s after Pantalla 1. The command is idempotent, skips non-`VALID` rows, preserves existing candidate category/tags, marks fresh classification review `STALE` when rule-input fields change, does not mutate `rawData`, and does not create `FinancialTransaction` rows.
 
 Future:
 
 - Recoverable/persisted category/tag review choices.
 - Optional bulk review before import.
 - Bulk reevaluation remains deferred.
-- TC-1 through TC-2C.1a introduce `TransactionCandidate` as the central draft/review model, wire manual transaction creation to candidate autosave, and add backend candidate rule preview/apply commands. CSV ingestion does not create or read candidates yet. Current CSV v1 behavior still uses `IngestionRecord.rawData.normalized` for row review and keeps Pantalla 2 category/tag selections in frontend state until Confirm Import.
-- A future migration may create one `TransactionCandidate` per importable/reviewable row so Pantalla 1 edits candidate transaction fields, Pantalla 2 persists category/tag selections on candidates, and Confirm Import converts candidates into posted `FinancialTransaction` rows.
+- TC-3B+ will make Pantalla 2 candidate-backed so category/tag selections survive refresh, then migrate Confirm Import to post candidates instead of creating `FinancialTransaction` rows directly from `rawData.normalized`.
 
 ## 10. UI design
 
@@ -715,4 +715,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. Category/tag classification preview is surfaced in Pantalla 2 and remains non-persistent until Confirm Import. UserPreference-driven rule behavior is deferred.
+No FinancialTransactions are created during upload/review. TC-3A candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. Category/tag classification preview is surfaced in Pantalla 2 and remains non-persistent until Confirm Import until a later candidate-backed Pantalla 2 slice. UserPreference-driven rule behavior is deferred.

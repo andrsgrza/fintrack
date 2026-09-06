@@ -155,9 +155,16 @@ TC-2B.1 manual UI rules:
 - `FinancialTransaction` list/detail/edit remain posted-ledger surfaces only; drafts are linked through a separate "View drafts" action and are not mixed into the posted transaction table.
 - The recovery page can resume a draft through `/financial-transaction/drafts/{id}` or cancel it through `POST /api/transaction-candidates/{id}/cancel`; it does not post drafts from the list and does not expose generic `TransactionCandidate` CRUD as product UI.
 
+FILE ingestion candidate preparation:
+
+- `POST /api/transaction-ingestions/{id}/candidates/prepare` is a backend-only workflow command that creates/syncs `FILE_IMPORT` candidates for `VALID` rows after Pantalla 1.
+- Prepare uses `IngestionRecord.rawData.normalized` plus the parent account to populate candidate transaction fields, derives `amount`/`flow` from `signedAmount`, and maps description review metadata to candidate description review status.
+- Prepare skips non-`VALID` rows, is idempotent, preserves existing candidate category/tags, and marks classification `STALE` when rule-input fields change after a fresh classification.
+- Prepare does not create `FinancialTransaction` rows, does not mutate `rawData`, and does not store category/tags in `rawData`.
+- Confirm Import and Pantalla 2 remain unchanged until later TC-3 slices.
+
 Deferred:
 
-- CSV ingestion candidate creation.
 - Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
 - Persisting Pantalla 2 category/tag selections on candidates.
 - Description/rule re-evaluation endpoints.
@@ -1391,6 +1398,7 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | Explicit selections    | Confirm import requires one selection payload per `VALID` row and applies selected category/tags to created transactions after ownership/flow validation | **Done** |
 | Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                           | **Done** |
 | Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                      | **Done** |
+| Candidate prepare      | `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; no rawData mutation; no FT rows | **Done** |
 
 ---
 

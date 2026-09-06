@@ -21,6 +21,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
@@ -33,6 +34,11 @@ import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.CategoryRepository;
@@ -43,18 +49,22 @@ import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -116,6 +126,9 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Autowired
     private TransactionRuleConditionRepository transactionRuleConditionRepository;
+
+    @Autowired
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Autowired
     private DescriptionNormalizationRuleRepository descriptionNormalizationRuleRepository;
@@ -1123,6 +1136,261 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void prepareCandidatesCreatesFileImportCandidatesForValidRecordsOnly() throws Exception {
+        DescriptionNormalizationRule rule = persistDescriptionNormalizationRule("Normalize Uber", "Uber");
+        persistDescriptionNormalizationCondition(rule, "Uber");
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        List<IngestionRecord> records = recordsFor(ingestion);
+        List<String> rawDataBefore = records.stream().map(IngestionRecord::getRawData).toList();
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(post(prepareCandidatesUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionIngestionId").value(ingestion.getId()))
+            .andExpect(jsonPath("$.createdCount").value(3))
+            .andExpect(jsonPath("$.updatedCount").value(0))
+            .andExpect(jsonPath("$.unchangedCount").value(0))
+            .andExpect(jsonPath("$.skippedCount").value(0))
+            .andExpect(jsonPath("$.errorCount").value(0))
+            .andExpect(jsonPath("$.rows[0].action").value("CREATED"))
+            .andExpect(jsonPath("$.rows[2].action").value("CREATED"));
+
+        List<TransactionCandidate> candidates = transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
+            ingestion.getId(),
+            "user"
+        );
+        assertThat(candidates).hasSize(3);
+        TransactionCandidate uberCandidate = candidateForRecord(records.get(2));
+        assertThat(uberCandidate.getSource()).isEqualTo(TransactionCandidateSource.FILE_IMPORT);
+        assertThat(uberCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+        assertThat(uberCandidate.getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.VALID);
+        assertThat(uberCandidate.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+        assertThat(uberCandidate.getDescriptionReviewStatus()).isEqualTo(TransactionCandidateDescriptionReviewStatus.AUTO_APPLIED);
+        assertThat(uberCandidate.getUser().getLogin()).isEqualTo("user");
+        assertThat(uberCandidate.getAccount().getId()).isEqualTo(ingestion.getAccount().getId());
+        assertThat(uberCandidate.getTransactionIngestion().getId()).isEqualTo(ingestion.getId());
+        assertThat(uberCandidate.getIngestionRecord().getId()).isEqualTo(records.get(2).getId());
+        assertThat(uberCandidate.getFinancialTransaction()).isNull();
+        assertThat(uberCandidate.getTransactionDate()).isEqualTo(LocalDate.parse("2026-01-17"));
+        assertThat(uberCandidate.getPostingDate()).isEqualTo(LocalDate.parse("2026-01-18"));
+        assertThat(uberCandidate.getDescription()).isEqualTo("Uber");
+        assertThat(uberCandidate.getSignedAmount()).isEqualByComparingTo("-158.33");
+        assertThat(uberCandidate.getAmount()).isEqualByComparingTo("158.33");
+        assertThat(uberCandidate.getFlow()).isEqualTo(TransactionFlow.OUT);
+        assertThat(uberCandidate.getCurrencySnapshot()).isEqualTo(ingestion.getAccount().getCurrency());
+        assertThat(uberCandidate.getExternalReference()).isEqualTo("abc-123");
+        assertThat(uberCandidate.getNotes()).isEqualTo("quoted, note");
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+        assertThat(recordsFor(ingestion).stream().map(IngestionRecord::getRawData).toList()).isEqualTo(rawDataBefore);
+    }
+
+    @Test
+    @Transactional
+    void prepareCandidatesSkipsEveryNonValidRecordStatus() throws Exception {
+        TransactionIngestion ingestion = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        ingestion.setStatus(IngestionStatus.PARTIALLY_READY);
+        transactionIngestionRepository.saveAndFlush(ingestion);
+        IngestionRecord valid = validRecordFor(ingestion, 1);
+        IngestionRecord rejected = validRecordFor(ingestion, 2);
+        rejected.setStatus(IngestionRecordStatus.REJECTED);
+        IngestionRecord disabled = validRecordFor(ingestion, 3);
+        disabled.setStatus(IngestionRecordStatus.DISABLED);
+        IngestionRecord imported = validRecordFor(ingestion, 4);
+        imported.setStatus(IngestionRecordStatus.IMPORTED);
+        IngestionRecord skipped = validRecordFor(ingestion, 5);
+        skipped.setStatus(IngestionRecordStatus.SKIPPED_DUPLICATE);
+        IngestionRecord failed = validRecordFor(ingestion, 6);
+        failed.setStatus(IngestionRecordStatus.FAILED);
+        ingestionRecordRepository.saveAllAndFlush(List.of(rejected, disabled, imported, skipped, failed));
+
+        mockMvc
+            .perform(post(prepareCandidatesUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.createdCount").value(1))
+            .andExpect(jsonPath("$.skippedCount").value(5))
+            .andExpect(jsonPath("$.errorCount").value(0))
+            .andExpect(jsonPath("$.rows[0].ingestionRecordId").value(valid.getId()))
+            .andExpect(jsonPath("$.rows[0].action").value("CREATED"))
+            .andExpect(jsonPath("$.rows[1].action").value("SKIPPED"))
+            .andExpect(jsonPath("$.rows[2].action").value("SKIPPED"))
+            .andExpect(jsonPath("$.rows[3].action").value("SKIPPED"))
+            .andExpect(jsonPath("$.rows[4].action").value("SKIPPED"))
+            .andExpect(jsonPath("$.rows[5].action").value("SKIPPED"));
+
+        assertThat(transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user"))
+            .hasSize(1)
+            .first()
+            .extracting(candidate -> candidate.getIngestionRecord().getId())
+            .isEqualTo(valid.getId());
+    }
+
+    @Test
+    @Transactional
+    void prepareCandidatesIsIdempotentAndReportsUnchangedRows() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.createdCount").value(3));
+        mockMvc
+            .perform(post(prepareCandidatesUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.createdCount").value(0))
+            .andExpect(jsonPath("$.updatedCount").value(0))
+            .andExpect(jsonPath("$.unchangedCount").value(3))
+            .andExpect(jsonPath("$.skippedCount").value(0))
+            .andExpect(jsonPath("$.errorCount").value(0));
+
+        assertThat(
+            transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user")
+        ).hasSize(3);
+    }
+
+    @Test
+    @Transactional
+    void prepareCandidatesSyncsChangedNormalizedFieldsMarksClassificationStaleAndPreservesOutputs() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Reviewed", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setCategory(category);
+        candidate.setTags(new HashSet<>(Set.of(tag)));
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        candidate = transactionCandidateRepository.saveAndFlush(candidate);
+        Instant updatedAtBefore = candidate.getUpdatedAt();
+        setNormalizedFields(record, "2026-02-01", null, "Edited Uber ride", "-42.50", "MXN", "new-ref", "new notes");
+
+        mockMvc
+            .perform(post(prepareCandidatesUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.createdCount").value(0))
+            .andExpect(jsonPath("$.updatedCount").value(1))
+            .andExpect(jsonPath("$.unchangedCount").value(2));
+
+        TransactionCandidate synced = candidateForRecord(record);
+        assertThat(synced.getTransactionDate()).isEqualTo(LocalDate.parse("2026-02-01"));
+        assertThat(synced.getDescription()).isEqualTo("Edited Uber ride");
+        assertThat(synced.getSignedAmount()).isEqualByComparingTo("-42.50");
+        assertThat(synced.getAmount()).isEqualByComparingTo("42.50");
+        assertThat(synced.getFlow()).isEqualTo(TransactionFlow.OUT);
+        assertThat(synced.getExternalReference()).isEqualTo("new-ref");
+        assertThat(synced.getNotes()).isEqualTo("new notes");
+        assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.STALE);
+        assertThat(synced.getCategory().getId()).isEqualTo(category.getId());
+        assertThat(synced.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(synced.getUpdatedAt()).isAfter(updatedAtBefore);
+    }
+
+    @Test
+    @Transactional
+    void prepareCandidatesDoesNotMarkStaleForNotesOnlyChange() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+        setNormalizedFields(record, "2026-01-15", null, "NOMINA QUALTRICS", "33698.34", "MXN", null, "only notes changed");
+
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.updatedCount").value(1));
+
+        TransactionCandidate synced = candidateForRecord(record);
+        assertThat(synced.getNotes()).isEqualTo("only notes changed");
+        assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+    }
+
+    @Test
+    @Transactional
+    void prepareCandidatesDoesNotModifyPostedCandidateAndCreatesNoFinancialTransactions() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(ingestion.getAccount());
+        financialTransaction.setTransactionIngestion(ingestion);
+        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        candidate.setStatus(TransactionCandidateStatus.POSTED);
+        candidate.setFinancialTransaction(financialTransaction);
+        candidate.setPostedAt(Instant.now());
+        candidate.setDescription("Already posted");
+        transactionCandidateRepository.saveAndFlush(candidate);
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+        setNormalizedFields(record, "2026-02-01", null, "Should not sync", "-42.50", "MXN", null, null);
+
+        mockMvc
+            .perform(post(prepareCandidatesUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.createdCount").value(0))
+            .andExpect(jsonPath("$.updatedCount").value(0))
+            .andExpect(jsonPath("$.skippedCount").value(1))
+            .andExpect(jsonPath("$.rows[0].reason").value("Posted candidate not modified"));
+
+        TransactionCandidate unchanged = candidateForRecord(record);
+        assertThat(unchanged.getDescription()).isEqualTo("Already posted");
+        assertThat(unchanged.getFinancialTransaction().getId()).isEqualTo(financialTransaction.getId());
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void prepareCandidatesRejectsForeignNonFileCompletedAndNoValidRows() throws Exception {
+        TransactionIngestion foreign = createPendingFileTransactionIngestion(createAccountForUser(createOtherUser()));
+        foreign.setStatus(IngestionStatus.READY);
+        transactionIngestionRepository.saveAndFlush(foreign);
+        validRecordFor(foreign, 1);
+        mockMvc.perform(post(prepareCandidatesUrl(foreign))).andExpect(status().isBadRequest());
+
+        TransactionIngestion nonFile = createPendingFileTransactionIngestion(createCurrentUserAccount());
+        nonFile.setIngestionType(IngestionType.API);
+        nonFile.setStatus(IngestionStatus.READY);
+        transactionIngestionRepository.saveAndFlush(nonFile);
+        validRecordFor(nonFile, 1);
+        mockMvc.perform(post(prepareCandidatesUrl(nonFile))).andExpect(status().isBadRequest());
+
+        TransactionIngestion completed = createWorkflowWithSingleValidRow();
+        completed.setStatus(IngestionStatus.COMPLETED);
+        transactionIngestionRepository.saveAndFlush(completed);
+        mockMvc.perform(post(prepareCandidatesUrl(completed))).andExpect(status().isBadRequest());
+
+        TransactionIngestion noValidRows = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(noValidRows).get(0);
+        record.setStatus(IngestionRecordStatus.DISABLED);
+        ingestionRecordRepository.saveAndFlush(record);
+        noValidRows.setStatus(IngestionStatus.PARTIALLY_READY);
+        transactionIngestionRepository.saveAndFlush(noValidRows);
+        mockMvc.perform(post(prepareCandidatesUrl(noValidRows))).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void prepareCandidatesReportsErrorForUnsafeNormalizedDataWithoutMutatingRawData() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        String rawDataBefore = record.getRawData();
+        setNormalizedFields(record, "2026-01-15", null, "Broken amount", "0.00", "MXN", null, null);
+        String rawDataAfterManualCorruption = ingestionRecordRepository.findById(record.getId()).orElseThrow().getRawData();
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(post(prepareCandidatesUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.createdCount").value(0))
+            .andExpect(jsonPath("$.errorCount").value(1))
+            .andExpect(jsonPath("$.rows[0].action").value("ERROR"))
+            .andExpect(jsonPath("$.rows[0].reason").value("signedAmount must not be zero"));
+
+        assertThat(
+            transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user")
+        ).isEmpty();
+        assertThat(ingestionRecordRepository.findById(record.getId()).orElseThrow().getRawData()).isEqualTo(rawDataAfterManualCorruption);
+        assertThat(rawDataAfterManualCorruption).isNotEqualTo(rawDataBefore);
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+    }
+
+    @Test
+    @Transactional
     void classificationPreviewReturnsSuggestionsForValidReadyRowsWithoutMutatingWorkflow() throws Exception {
         Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
         Tag tag = persistTag("Ride share", currentMockUser());
@@ -1655,6 +1923,10 @@ class TransactionIngestionWorkflowResourceIT {
         return "/api/transaction-ingestions/" + ingestion.getId() + "/classification-preview";
     }
 
+    private String prepareCandidatesUrl(TransactionIngestion ingestion) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/candidates/prepare";
+    }
+
     private ResultActions confirmImport(TransactionIngestion ingestion) throws Exception {
         return confirmImport(
             ingestion,
@@ -1849,6 +2121,46 @@ class TransactionIngestionWorkflowResourceIT {
             .filter(record -> record.getTransactionIngestion().getId().equals(ingestion.getId()))
             .sorted(Comparator.comparing(IngestionRecord::getRecordIndex))
             .toList();
+    }
+
+    private TransactionCandidate candidateForRecord(IngestionRecord record) {
+        return transactionCandidateRepository.findOneWithRelationshipsByIngestionRecordIdAndUserLogin(record.getId(), "user").orElseThrow();
+    }
+
+    private void setNormalizedFields(
+        IngestionRecord record,
+        String transactionDate,
+        String postingDate,
+        String description,
+        String signedAmount,
+        String currency,
+        String externalReference,
+        String notes
+    ) throws Exception {
+        ObjectNode root = (ObjectNode) objectMapper.readTree(record.getRawData());
+        ObjectNode normalized = root.path("normalized").isObject() ? (ObjectNode) root.path("normalized") : root.putObject("normalized");
+        putNullable(normalized, "transactionDate", transactionDate);
+        putNullable(normalized, "postingDate", postingDate);
+        putNullable(normalized, "description", description);
+        putNullable(normalized, "signedAmount", signedAmount);
+        putNullable(normalized, "currency", currency);
+        putNullable(normalized, "externalReference", externalReference);
+        putNullable(normalized, "notes", notes);
+        if (signedAmount != null && !signedAmount.isBlank()) {
+            java.math.BigDecimal amount = new java.math.BigDecimal(signedAmount).abs();
+            normalized.put("amount", amount.setScale(2).toPlainString());
+            normalized.put("flow", new java.math.BigDecimal(signedAmount).signum() > 0 ? "IN" : "OUT");
+        }
+        record.setRawData(objectMapper.writeValueAsString(root));
+        ingestionRecordRepository.saveAndFlush(record);
+    }
+
+    private void putNullable(ObjectNode node, String fieldName, String value) {
+        if (value == null) {
+            node.putNull(fieldName);
+        } else {
+            node.put(fieldName, value);
+        }
     }
 
     private void assertNothingCreated() {

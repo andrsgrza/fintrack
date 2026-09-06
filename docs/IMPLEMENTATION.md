@@ -140,7 +140,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **TransactionCandidate exception:** TC-1/TC-2A treats candidates as product-owned draft/review state. Admin does not get special cross-user product behavior for candidate CRUD or manual commands; candidate operations resolve the current authenticated owner and validate every linked account/category/tag/ingestion record against that owner. The eventual `financialTransaction` link is server-controlled and is set only by explicit posting/conversion commands.
 
-## TransactionCandidate — TC-1/TC-2D.2 manual draft foundation, rule suggestions, and recovery UI
+## TransactionCandidate — TC-1/TC-3A draft/review foundation
 
 `TransactionCandidate` is the central in-progress transaction model. It is intentionally separate from `FinancialTransaction`, which remains posted/final ledger data that affects balances, dashboards, budgets, and reports.
 
@@ -177,7 +177,17 @@ TC-2D.2 adds the manual draft recovery page on top of the TC-2D.1 backend query:
 - The FinancialTransaction list links to the recovery page with a secondary "View drafts" action, but draft rows are not mixed into the posted FinancialTransaction table.
 - The endpoint/page do not expose generic `TransactionCandidate` CRUD as product UI.
 
-Still unchanged by TC-2D.2:
+TC-3A adds backend-only FILE import candidate preparation:
+
+- `POST /api/transaction-ingestions/{id}/candidates/prepare` creates or synchronizes one `FILE_IMPORT` `TransactionCandidate` for each `VALID` `IngestionRecord` in an owned FILE `TransactionIngestion`.
+- The command is allowed only for `READY` and `PARTIALLY_READY` FILE ingestions; `PENDING`, `PROCESSING`, `COMPLETED`, `PARTIALLY_COMPLETED`, `FAILED`, non-FILE, foreign, and missing-account ingestions are rejected.
+- Non-`VALID` rows (`REJECTED`, `DISABLED`, `IMPORTED`, `SKIPPED_DUPLICATE`, `FAILED`) are skipped.
+- New candidates are `READY_TO_POST`, `validationStatus=VALID`, `classificationReviewStatus=NOT_EVALUATED`, `source=FILE_IMPORT`, linked to the parent `TransactionIngestion` and source `IngestionRecord`, and mapped from `rawData.normalized`.
+- Existing non-posted candidates are synced from `rawData.normalized`, preserving selected category/tags. If rule-input fields changed after a fresh classification (`SUGGESTED`, `USER_SELECTED`, `NOT_APPLICABLE`), classification is marked `STALE`. Notes-only changes do not mark stale.
+- Existing `POSTED` candidates are skipped and not modified. `CANCELLED`/`FAILED` candidates are reported as row errors and are not resurrected.
+- Prepare is idempotent, returns created/updated/unchanged/skipped/error counts plus row results, does not mutate `rawData`, does not store category/tags in `rawData`, and does not create `FinancialTransaction` rows.
+
+Still unchanged by TC-3A:
 
 - Manual `POST /api/financial-transactions` still creates posted `FinancialTransaction` directly.
 - FinancialTransaction update/PATCH/rule-preview behavior is unchanged.
@@ -541,6 +551,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Candidate-specific rule-preview/apply UI        | ✅     | TC-2C.1d manual candidate UI auto-previews after saved rule-input changes, keeps apply/confirm explicit, uses candidate-specific endpoints, and blocks Post while classification is `NOT_EVALUATED` or `STALE` |
 | Candidate post classification backend guard     | ✅     | TC-2C.1c backend post rejects `NOT_EVALUATED` and `STALE`; only `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post when otherwise valid                                                               |
 | Candidate manual draft recovery query/UI        | ✅     | TC-2D.2 exposes `GET /api/transaction-candidates/manual-drafts` plus `/financial-transaction/drafts` for current-user `MANUAL` `DRAFT`/`READY_TO_POST` summaries; resume/cancel only, no post from list        |
+| FILE import candidate prepare/sync              | ✅     | TC-3A exposes `POST /api/transaction-ingestions/{id}/candidates/prepare`; creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; idempotent; no rawData mutation; no FinancialTransaction creation      |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                                                         |
 
 #### Validations ✅

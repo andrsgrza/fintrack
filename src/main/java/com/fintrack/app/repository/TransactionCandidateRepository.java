@@ -146,6 +146,64 @@ public interface TransactionCandidateRepository
     )
     Optional<TransactionCandidate> findOneWithRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tags",
+            "tags.user",
+        }
+    )
+    @Query(
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.ingestionRecord.id = :ingestionRecordId and transactionCandidate.user.login = :login"
+    )
+    Optional<TransactionCandidate> findOneWithRelationshipsByIngestionRecordIdAndUserLogin(
+        @Param("ingestionRecordId") Long ingestionRecordId,
+        @Param("login") String login
+    );
+
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tags",
+            "tags.user",
+        }
+    )
+    @Query(
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id = :transactionIngestionId and transactionCandidate.user.login = :login"
+    )
+    List<TransactionCandidate> findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
+        @Param("transactionIngestionId") Long transactionIngestionId,
+        @Param("login") String login
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
