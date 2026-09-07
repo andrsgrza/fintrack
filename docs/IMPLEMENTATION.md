@@ -140,7 +140,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **TransactionCandidate exception:** TC-1/TC-2A treats candidates as product-owned draft/review state. Admin does not get special cross-user product behavior for candidate CRUD or manual commands; candidate operations resolve the current authenticated owner and validate every linked account/category/tag/ingestion record against that owner. The eventual `financialTransaction` link is server-controlled and is set only by explicit posting/conversion commands.
 
-## TransactionCandidate — TC-1/TC-3A draft/review foundation
+## TransactionCandidate — TC-1/TC-3B draft/review foundation
 
 `TransactionCandidate` is the central in-progress transaction model. It is intentionally separate from `FinancialTransaction`, which remains posted/final ledger data that affects balances, dashboards, budgets, and reports.
 
@@ -187,7 +187,16 @@ TC-3A adds backend-only FILE import candidate preparation:
 - Existing `POSTED` candidates are skipped and not modified. `CANCELLED`/`FAILED` candidates are reported as row errors and are not resurrected.
 - Prepare is idempotent, returns created/updated/unchanged/skipped/error counts plus row results, does not mutate `rawData`, does not store category/tags in `rawData`, and does not create `FinancialTransaction` rows.
 
-Still unchanged by TC-3A:
+TC-3B exposes prepared FILE import candidates in the workflow read model:
+
+- `GET /api/transaction-ingestions/{id}/workflow` remains read-only and does not create/sync candidates.
+- Each workflow row may include an optional lightweight `candidate` summary when a prepared `TransactionCandidate` exists for that `IngestionRecord`.
+- Candidate summaries are loaded in one batch for the current-user owned `TransactionIngestion` and mapped by `ingestionRecord.id`; the workflow does not do one candidate lookup per row.
+- The row summary exposes scalar candidate fields plus lightweight account/category/tag ids and names. It does not expose full nested `TransactionCandidateDTO` graphs.
+- Rows without prepared candidates keep `candidate = null`/absent for JSON compatibility.
+- Candidate data is still produced by the TC-3A prepare endpoint before it appears in the workflow response.
+
+Still unchanged by TC-3B:
 
 - Manual `POST /api/financial-transactions` still creates posted `FinancialTransaction` directly.
 - FinancialTransaction update/PATCH/rule-preview behavior is unchanged.
@@ -552,6 +561,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Candidate post classification backend guard     | ✅     | TC-2C.1c backend post rejects `NOT_EVALUATED` and `STALE`; only `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post when otherwise valid                                                               |
 | Candidate manual draft recovery query/UI        | ✅     | TC-2D.2 exposes `GET /api/transaction-candidates/manual-drafts` plus `/financial-transaction/drafts` for current-user `MANUAL` `DRAFT`/`READY_TO_POST` summaries; resume/cancel only, no post from list        |
 | FILE import candidate prepare/sync              | ✅     | TC-3A exposes `POST /api/transaction-ingestions/{id}/candidates/prepare`; creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; idempotent; no rawData mutation; no FinancialTransaction creation      |
+| FILE import candidate workflow summaries        | ✅     | TC-3B exposes optional lightweight prepared candidate summaries on `GET /api/transaction-ingestions/{id}/workflow`; read-only; no candidate creation; Confirm Import and Pantalla 2 remain unchanged           |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                                                         |
 
 #### Validations ✅
@@ -1300,6 +1310,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-17 | CSV Ingestion I2A status lifecycle ✅: `IngestionRecordStatus.CREATED` removed; review rows now use `VALID`; `IMPORTED` reserved for confirm import; data migration updates existing `CREATED` rows to `VALID`; no TransactionIngestion status change and no confirm import yet.                                                                                                                                                                                   |
 | 2026-07-17 | CSV Ingestion I2B review flow ✅: upload page redirects to persisted TransactionIngestion review page; GET review endpoint returns FileIngestion metadata, counts and rows; enable/disable row actions implemented.                                                                                                                                                                                                                                                |
 | 2026-07-18 | CSV Ingestion I2B.2 normalized row edit ✅: PATCH review-row endpoint + inline UI edit for normalized fields; `rawData.raw` preserved; `amount`/`flow` derived from `signedAmount`; edit revalidates `VALID`/`REJECTED`; `DISABLED` must be enabled before editing; confirm import, FinancialTransaction creation and Rule Engine remain deferred.                                                                                                                 |
+| 2026-09-06 | CSV Ingestion TC-3B workflow candidate summaries ✅: `GET /api/transaction-ingestions/{id}/workflow` now exposes optional lightweight prepared `TransactionCandidate` summaries per row after TC-3A prepare; workflow GET remains read-only and does not create candidates, mutate `rawData`, create `FinancialTransaction` rows, or migrate Pantalla 2/Confirm Import.                                                                                            |
 | 2026-07-18 | CSV Ingestion readiness status migration ✅: added `READY`/`PARTIALLY_READY` as pre-import review statuses; FILE review now produces readiness statuses, not `COMPLETED`/`PARTIALLY_COMPLETED`; Liquibase maps old FILE review `COMPLETED -> READY` and `PARTIALLY_COMPLETED -> PARTIALLY_READY`; `PARTIALLY_COMPLETED` remains reserved.                                                                                                                          |
 | 2026-07-18 | TransactionIngestion create cleanup ✅: `/transaction-ingestion/new` is now the canonical FILE ingestion create workflow with Account + Ingestion Type + CSV file only; lifecycle/system fields hidden; FILE submit calls `POST /api/transaction-ingestions/file` and creates parent + file metadata + review rows together; API create remains TBD; `/file-ingestion/new` remains a parent-scoped secondary/debug upload.                                         |
 | 2026-07-19 | TransactionIngestion detail cleanup ✅: `/transaction-ingestion/{id}` is now the canonical workflow detail/review route; it shows parent summary, embeds read-only FILE metadata, and renders IngestionRecord review/result rows through `GET /api/transaction-ingestions/{id}/workflow`; API detail is TBD; PENDING FILE without metadata shows an unavailable state.                                                                                             |

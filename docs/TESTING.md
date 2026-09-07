@@ -600,7 +600,7 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** TC-3A includes manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, and backend-only FILE import candidate prepare/sync. Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, and UserPreference are not migrated to candidates yet.
+**Scope:** TC-3B includes manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, backend-only FILE import candidate prepare/sync, and optional prepared FILE candidate summaries in the TransactionIngestion workflow response. Pantalla 2, Confirm Import, DescriptionNormalizationRule re-evaluation, and UserPreference are not migrated to candidates yet.
 
 ### Summary counts
 
@@ -653,6 +653,15 @@ Key TC-3A FILE import candidate prepare assertions:
 - `POSTED` candidates are not modified.
 - foreign, non-FILE, completed, and no-valid-row preparations are rejected.
 - prepare creates no `FinancialTransaction` rows and does not mutate `IngestionRecord.rawData`.
+
+Key TC-3B FILE import workflow summary assertions:
+
+- `GET /api/transaction-ingestions/{id}/workflow` includes an optional lightweight candidate summary for rows with prepared candidates.
+- Candidate summaries include source/status/review statuses, normalized transaction fields, account id/name, category id/name, tag ids/names, timestamps, and financial transaction id when present.
+- Rows without prepared candidates keep `candidate` absent/null.
+- Workflow GET is read-only: it does not create candidates, create `FinancialTransaction` rows, or mutate `rawData`.
+- Candidate summaries are scoped to the current-user owned workflow and do not expose foreign candidate rows.
+- Confirm Import behavior is unchanged when prepared candidates exist.
 
 Key TC-2C.1a backend assertions:
 
@@ -2660,7 +2669,7 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 ## CSV Ingestion v1 tests
 
-**Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. TC-3A adds backend-only FILE import candidate prepare/sync. CSV v1 confirm import does not run the Rule Engine and is not migrated to candidates yet.
+**Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. TC-3A adds backend-only FILE import candidate prepare/sync. TC-3B exposes optional prepared candidate summaries in the workflow response. CSV v1 confirm import does not run the Rule Engine and is not migrated to candidates yet.
 
 ### I1A unit tests — parser/validator
 
@@ -2928,6 +2937,7 @@ Copy this block when hardening the next entity:
 | 2026-07-18 | CSV Ingestion I2B.2 row edit          | Backend IT covers PATCH normalized row edit for `VALID`/`REJECTED`, `DISABLED` edit rejection, immutable imported/skipped/failed rows, rawData raw preservation, derived amount/flow, counters/status recalculation, and no `FinancialTransaction` creation. Frontend tests cover inline edit, disabled rows without Edit, save/cancel, derived-field read-only behavior, and no confirm/import action.                                                                            |
 | 2026-07-18 | CSV Ingestion I2C confirm import      | Backend IT covers ready confirm, normalized payload mapping, `FILE_IMPORT` origin, imported row links, disabled rows skipped, stale readiness recalculation, completed idempotent retry, corrupt link guards, completed review read-only, foreign rejection, and no Rule Engine/category/tag/subscription application. Frontend tests cover Confirm Import visibility, not-ready blocking, completed read-only review, imported/disabled row display, and confirm error rendering. |
 | 2026-09-04 | CSV Ingestion TC-3A candidate prepare | Backend IT covers `POST /api/transaction-ingestions/{id}/candidates/prepare`, valid-only `FILE_IMPORT` candidate creation, non-valid row skips, idempotency, sync from `rawData.normalized`, stale classification marking, category/tag preservation, posted-candidate skip, guards, no `FinancialTransaction` creation, and rawData immutability.                                                                                                                                 |
+| 2026-09-06 | CSV Ingestion TC-3B workflow summary  | Backend IT covers optional prepared candidate summaries on `GET /api/transaction-ingestions/{id}/workflow`, category/tag summary fields, rows without candidates, read-only/no rawData mutation/no candidate creation, foreign candidate filtering, and unchanged Confirm Import behavior.                                                                                                                                                                                         |
 | 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                                                                                                                                                                     |
 | 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal.                                                                                                                                          |
 

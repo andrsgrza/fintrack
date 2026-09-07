@@ -1391,6 +1391,157 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void workflowIncludesCandidateSummaryAfterPrepare() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+
+        mockMvc
+            .perform(get(workflowUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].ingestionRecordId").value(record.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.id").value(candidate.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.source").value("FILE_IMPORT"))
+            .andExpect(jsonPath("$.rows[0].candidate.status").value("READY_TO_POST"))
+            .andExpect(jsonPath("$.rows[0].candidate.validationStatus").value("VALID"))
+            .andExpect(jsonPath("$.rows[0].candidate.classificationReviewStatus").value("NOT_EVALUATED"))
+            .andExpect(jsonPath("$.rows[0].candidate.descriptionReviewStatus").value("NOT_APPLICABLE"))
+            .andExpect(jsonPath("$.rows[0].candidate.transactionDate").value("2026-01-16"))
+            .andExpect(jsonPath("$.rows[0].candidate.postingDate").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].candidate.description").value("OXXO AGUILAS"))
+            .andExpect(jsonPath("$.rows[0].candidate.signedAmount").value(-274.00))
+            .andExpect(jsonPath("$.rows[0].candidate.amount").value(274.00))
+            .andExpect(jsonPath("$.rows[0].candidate.flow").value("OUT"))
+            .andExpect(jsonPath("$.rows[0].candidate.currencySnapshot").value("MXN"))
+            .andExpect(jsonPath("$.rows[0].candidate.accountId").value(ingestion.getAccount().getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.accountName").value(ingestion.getAccount().getName()))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds").isArray())
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds.length()").value(0))
+            .andExpect(jsonPath("$.rows[0].candidate.financialTransactionId").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].candidate.createdAt").exists())
+            .andExpect(jsonPath("$.rows[0].candidate.updatedAt").exists());
+    }
+
+    @Test
+    @Transactional
+    void workflowCandidateSummaryIncludesCategoryAndTags() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag firstTag = persistTag("Business", currentMockUser());
+        Tag secondTag = persistTag("Ride share", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setCategory(category);
+        candidate.setTags(new HashSet<>(Set.of(secondTag, firstTag)));
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(get(workflowUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].candidate.id").value(candidate.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryName").value("Transport"))
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds[0]").value(firstTag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds[1]").value(secondTag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.tagNames[0]").value("Business"))
+            .andExpect(jsonPath("$.rows[0].candidate.tagNames[1]").value("Ride share"))
+            .andExpect(jsonPath("$.rows[0].candidate.classificationReviewStatus").value("USER_SELECTED"));
+    }
+
+    @Test
+    @Transactional
+    void workflowCandidateSummaryIsAbsentBeforePrepareAndGetWorkflowIsReadOnly() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        List<String> rawDataBefore = recordsFor(ingestion).stream().map(IngestionRecord::getRawData).toList();
+        long candidateCountBefore = transactionCandidateRepository.count();
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc.perform(get(workflowUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.rows[0].candidate").doesNotExist());
+
+        assertThat(transactionCandidateRepository.count()).isEqualTo(candidateCountBefore);
+        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+        assertThat(recordsFor(ingestion).stream().map(IngestionRecord::getRawData).toList()).isEqualTo(rawDataBefore);
+    }
+
+    @Test
+    @Transactional
+    void workflowHandlesRowsWithoutCandidatesAfterPrepare() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithInvalidRow();
+        IngestionRecord rejected = recordsFor(ingestion).get(0);
+        IngestionRecord valid = recordsFor(ingestion).get(1);
+        mockMvc.perform(post(reviewUrl(ingestion, rejected, "disable"))).andExpect(status().isOk());
+
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate validCandidate = candidateForRecord(valid);
+
+        mockMvc
+            .perform(get(workflowUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].status").value("DISABLED"))
+            .andExpect(jsonPath("$.rows[0].candidate").doesNotExist())
+            .andExpect(jsonPath("$.rows[1].status").value("VALID"))
+            .andExpect(jsonPath("$.rows[1].candidate.id").value(validCandidate.getId()));
+    }
+
+    @Test
+    @Transactional
+    void workflowDoesNotExposeForeignCandidateData() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        User otherUser = createOtherUser();
+        TransactionCandidate foreignCandidate = new TransactionCandidate()
+            .source(TransactionCandidateSource.FILE_IMPORT)
+            .status(TransactionCandidateStatus.READY_TO_POST)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_APPLICABLE)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED)
+            .transactionDate(LocalDate.parse("2026-01-16"))
+            .description("Foreign candidate")
+            .signedAmount(new java.math.BigDecimal("-274.00"))
+            .amount(new java.math.BigDecimal("274.00"))
+            .flow(TransactionFlow.OUT)
+            .currencySnapshot(ingestion.getAccount().getCurrency())
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .user(otherUser)
+            .account(ingestion.getAccount())
+            .transactionIngestion(ingestion)
+            .ingestionRecord(record);
+        transactionCandidateRepository.saveAndFlush(foreignCandidate);
+
+        mockMvc.perform(get(workflowUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.rows[0].candidate").doesNotExist());
+    }
+
+    @Test
+    @Transactional
+    void confirmImportBehaviorIsUnchangedWhenPreparedCandidateExists() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Cash", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+
+        confirmImport(ingestion, List.of(confirmSelection(record.getId(), category.getId(), List.of(tag.getId()))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(1));
+
+        TransactionCandidate candidate = candidateForRecord(record);
+        FinancialTransaction transaction = financialTransactionRepository.findAll().get(0);
+        assertThat(candidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+        assertThat(candidate.getFinancialTransaction()).isNull();
+        assertThat(transaction.getCategory().getId()).isEqualTo(category.getId());
+        assertThat(transaction.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(transaction.getOrigin().name()).isEqualTo("FILE_IMPORT");
+    }
+
+    @Test
+    @Transactional
     void classificationPreviewReturnsSuggestionsForValidReadyRowsWithoutMutatingWorkflow() throws Exception {
         Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
         Tag tag = persistTag("Ride share", currentMockUser());
@@ -1913,6 +2064,10 @@ class TransactionIngestionWorkflowResourceIT {
     private String reviewUrl(TransactionIngestion ingestion, IngestionRecord record, String action) {
         String url = "/api/transaction-ingestions/" + ingestion.getId() + "/records/" + record.getId();
         return action == null ? url : url + "/" + action;
+    }
+
+    private String workflowUrl(TransactionIngestion ingestion) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/workflow";
     }
 
     private String confirmUrl(TransactionIngestion ingestion) {

@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-2D.2 manual draft recovery page implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion, API ingestion, bank sync, Pantalla 1, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** TC-3B implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion can now prepare `FILE_IMPORT` candidates after Pantalla 1 and expose optional prepared candidate summaries in the workflow response. API ingestion, bank sync, Pantalla 1 edits, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -161,6 +161,8 @@ FILE ingestion candidate preparation:
 - Prepare uses `IngestionRecord.rawData.normalized` plus the parent account to populate candidate transaction fields, derives `amount`/`flow` from `signedAmount`, and maps description review metadata to candidate description review status.
 - Prepare skips non-`VALID` rows, is idempotent, preserves existing candidate category/tags, and marks classification `STALE` when rule-input fields change after a fresh classification.
 - Prepare does not create `FinancialTransaction` rows, does not mutate `rawData`, and does not store category/tags in `rawData`.
+- `GET /api/transaction-ingestions/{id}/workflow` is read-only and may expose an optional lightweight prepared candidate summary per row after prepare has run.
+- Workflow GET never creates/syncs candidates; candidate summaries are absent for rows without prepared candidates.
 - Confirm Import and Pantalla 2 remain unchanged until later TC-3 slices.
 
 Deferred:
@@ -1399,6 +1401,7 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                           | **Done** |
 | Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                      | **Done** |
 | Candidate prepare      | `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; no rawData mutation; no FT rows | **Done** |
+| Candidate workflow DTO | `GET /api/transaction-ingestions/{id}/workflow` exposes optional lightweight prepared candidate summaries per row; read-only; no candidate creation      | **Done** |
 
 ---
 
