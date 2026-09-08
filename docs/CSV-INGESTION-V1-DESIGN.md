@@ -440,13 +440,20 @@ I2C:
 - Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/debug smoke specs.
 - TC-3A adds backend-only `POST /api/transaction-ingestions/{id}/candidates/prepare`. It creates or syncs `FILE_IMPORT` `TransactionCandidate` rows for `VALID` `IngestionRecord`s after Pantalla 1. The command is idempotent, skips non-`VALID` rows, preserves existing candidate category/tags, marks fresh classification review `STALE` when rule-input fields change, does not mutate `rawData`, and does not create `FinancialTransaction` rows.
 - TC-3B extends `GET /api/transaction-ingestions/{id}/workflow` with an optional lightweight prepared candidate summary per row. The read model is strictly read-only: it does not create/sync candidates, mutate `rawData`, create `FinancialTransaction` rows, or migrate Confirm Import/Pantalla 2 behavior.
+- TC-3C.1 adds backend-only ingestion-scoped FILE_IMPORT candidate classification commands:
+  - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions`.
+- These candidate endpoints classify prepared `FILE_IMPORT` candidates only. They do not mutate `IngestionRecord.rawData`, do not create `FinancialTransaction` rows, and do not change Confirm Import.
+- Candidate rule preview/apply evaluates active owner TransactionRules with `TransactionOrigin.FILE_IMPORT`. Apply uses `FILL_EMPTY_ONLY`: empty category can be filled, existing category is preserved, and tags are additive/deduplicated.
+- Candidate classification PATCH stores category/tags on `TransactionCandidate`, not in `rawData`. It must include at least one of `categoryId` or `tagIds`; omitted fields preserve existing values. Category compatibility still follows row flow: OUT accepts EXPENSE/BOTH, IN accepts INCOME/BOTH.
 
 Future:
 
-- Recoverable/persisted category/tag review choices.
-- Optional bulk review before import.
+- Frontend Pantalla 2 migration to these candidate-backed endpoints.
+- Confirm Import migration to post prepared candidates instead of creating transactions directly from `rawData.normalized`.
 - Bulk reevaluation remains deferred.
-- TC-3C+ will make Pantalla 2 candidate-backed so category/tag selections survive refresh, then migrate Confirm Import to post candidates instead of creating `FinancialTransaction` rows directly from `rawData.normalized`.
 
 ## 10. UI design
 
@@ -716,4 +723,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. TC-3A candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. TC-3B exposes prepared candidates in the workflow response but keeps workflow GET read-only. Category/tag classification preview is surfaced in Pantalla 2 and remains non-persistent until Confirm Import until a later candidate-backed Pantalla 2 slice. UserPreference-driven rule behavior is deferred.
+No FinancialTransactions are created during upload/review. TC-3A candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. TC-3B exposes prepared candidates in the workflow response but keeps workflow GET read-only. TC-3C.1 adds backend-only candidate classification commands that persist category/tags on prepared `FILE_IMPORT` candidates, never in `rawData`. The current Pantalla 2 frontend still uses the existing non-persistent v1 state until a later candidate-backed UI slice. UserPreference-driven rule behavior is deferred.

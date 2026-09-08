@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.IngestionRecord;
-import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.ImportFileType;
@@ -32,7 +31,7 @@ import com.fintrack.app.service.dto.CsvIngestionFileMetadataDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowResponseDTO;
-import com.fintrack.app.service.dto.TransactionCandidateWorkflowSummaryDTO;
+import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper;
 import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationResult;
 import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationService;
 import java.io.IOException;
@@ -41,12 +40,10 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -72,6 +69,7 @@ public class CsvIngestionWorkflowService {
     private final ObjectMapper objectMapper;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
     private final DescriptionNormalizationRuleEvaluationService descriptionNormalizationRuleEvaluationService;
+    private final TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper;
 
     public CsvIngestionWorkflowService(
         FinancialAccountRepository financialAccountRepository,
@@ -84,7 +82,8 @@ public class CsvIngestionWorkflowService {
         CanonicalCsvIngestionParser parser,
         ObjectMapper objectMapper,
         CsvIngestionReadinessService csvIngestionReadinessService,
-        DescriptionNormalizationRuleEvaluationService descriptionNormalizationRuleEvaluationService
+        DescriptionNormalizationRuleEvaluationService descriptionNormalizationRuleEvaluationService,
+        TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
@@ -97,6 +96,7 @@ public class CsvIngestionWorkflowService {
         this.objectMapper = objectMapper;
         this.csvIngestionReadinessService = csvIngestionReadinessService;
         this.descriptionNormalizationRuleEvaluationService = descriptionNormalizationRuleEvaluationService;
+        this.transactionCandidateWorkflowSummaryMapper = transactionCandidateWorkflowSummaryMapper;
     }
 
     public CsvIngestionWorkflowResponseDTO createWorkflow(Long accountId, MultipartFile file) {
@@ -395,46 +395,9 @@ public class CsvIngestionWorkflowService {
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
         dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(root));
-        dto.setCandidate(candidate == null ? null : toCandidateSummary(candidate));
+        dto.setCandidate(transactionCandidateWorkflowSummaryMapper.toDto(candidate));
         dto.setWarnings(messages(root.path("warnings")));
         return dto;
-    }
-
-    private TransactionCandidateWorkflowSummaryDTO toCandidateSummary(TransactionCandidate candidate) {
-        TransactionCandidateWorkflowSummaryDTO summary = new TransactionCandidateWorkflowSummaryDTO();
-        summary.setId(candidate.getId());
-        summary.setSource(candidate.getSource());
-        summary.setStatus(candidate.getStatus());
-        summary.setValidationStatus(candidate.getValidationStatus());
-        summary.setClassificationReviewStatus(candidate.getClassificationReviewStatus());
-        summary.setDescriptionReviewStatus(candidate.getDescriptionReviewStatus());
-        summary.setTransactionDate(candidate.getTransactionDate());
-        summary.setPostingDate(candidate.getPostingDate());
-        summary.setDescription(candidate.getDescription());
-        summary.setSignedAmount(candidate.getSignedAmount());
-        summary.setAmount(candidate.getAmount());
-        summary.setFlow(candidate.getFlow());
-        summary.setCurrencySnapshot(candidate.getCurrencySnapshot());
-        summary.setExternalReference(candidate.getExternalReference());
-        summary.setNotes(candidate.getNotes());
-        summary.setAccountId(candidate.getAccount() == null ? null : candidate.getAccount().getId());
-        summary.setAccountName(candidate.getAccount() == null ? null : candidate.getAccount().getName());
-        summary.setCategoryId(candidate.getCategory() == null ? null : candidate.getCategory().getId());
-        summary.setCategoryName(candidate.getCategory() == null ? null : candidate.getCategory().getName());
-        summary.setTagIds(candidate.getTags().stream().map(Tag::getId).filter(Objects::nonNull).sorted().toList());
-        summary.setTagNames(
-            candidate
-                .getTags()
-                .stream()
-                .filter(tag -> tag.getId() != null)
-                .sorted(Comparator.comparing(Tag::getId))
-                .map(Tag::getName)
-                .toList()
-        );
-        summary.setFinancialTransactionId(candidate.getFinancialTransaction() == null ? null : candidate.getFinancialTransaction().getId());
-        summary.setCreatedAt(candidate.getCreatedAt());
-        summary.setUpdatedAt(candidate.getUpdatedAt());
-        return summary;
     }
 
     private JsonNode rawDataNode(IngestionRecord record) {

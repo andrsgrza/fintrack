@@ -4,7 +4,7 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 3A FinancialTransaction preview endpoint implemented; TC-2C.1d manual TransactionCandidate automatic suggestions preview implemented.**
+Status: **Phase 3A FinancialTransaction preview endpoint implemented; TC-2C.1d manual TransactionCandidate automatic suggestions preview implemented; TC-3C.1 backend FILE_IMPORT candidate classification endpoints implemented.**
 
 Not implemented yet:
 
@@ -62,6 +62,13 @@ Subscription and description assignment are deliberately not outputs in the curr
   - saved rule-input changes automatically call candidate `rule-preview` and do not mutate category/tags;
   - Apply suggestions / Confirm no suggestions flushes autosave, calls candidate `apply-rules`, and hydrates the returned category/tags/status;
   - Post is blocked in the UI until classification is `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`.
+- Backend-only FILE_IMPORT candidate classification endpoints under TransactionIngestion:
+  - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions`;
+  - category/tags are stored on `TransactionCandidate`, not in `IngestionRecord.rawData`;
+  - no `FinancialTransaction` rows are created and Confirm Import remains unchanged.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
@@ -678,6 +685,15 @@ CSV ingestion uses the category/tag Transaction Rule evaluator only through a re
 - Confirm Import does not run the evaluator itself.
 - Confirm Import does not persist rule evaluation results or category/tag choices into `rawData`.
 - UserPreference and `AUTO_APPLY` behavior remain deferred.
+
+TC-3C.1 adds backend-only ingestion-scoped candidate classification commands for prepared `FILE_IMPORT` `TransactionCandidate`s:
+
+- `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification` writes user-selected category/tags to the candidate and marks `classificationReviewStatus=USER_SELECTED`; the request must include at least one of `categoryId` or `tagIds`.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview` evaluates active owner TransactionRules against current candidate state with `TransactionOrigin.FILE_IMPORT` and returns transient suggestions/matches/conflicts/skips.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` marks `NOT_APPLICABLE` only when a fresh evaluation has no suggestions.
+- These FILE candidate endpoints do not create `FinancialTransaction` rows, do not mutate `IngestionRecord.rawData`, do not call `/api/financial-transactions/rule-preview`, and do not change Confirm Import.
+- Pantalla 2 frontend migration to these candidate-backed endpoints remains deferred.
 
 Description normalization is not part of the category/tag Transaction Rule Engine.
 

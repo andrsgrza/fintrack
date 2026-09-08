@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-3B implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion can now prepare `FILE_IMPORT` candidates after Pantalla 1 and expose optional prepared candidate summaries in the workflow response. API ingestion, bank sync, Pantalla 1 edits, Pantalla 2, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** TC-3C.1 implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion can now prepare `FILE_IMPORT` candidates after Pantalla 1, expose optional prepared candidate summaries in the workflow response, and use backend-only ingestion-scoped candidate classification commands. API ingestion, bank sync, Pantalla 1 UI edits, Pantalla 2 frontend, Confirm Import, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -163,12 +163,23 @@ FILE ingestion candidate preparation:
 - Prepare does not create `FinancialTransaction` rows, does not mutate `rawData`, and does not store category/tags in `rawData`.
 - `GET /api/transaction-ingestions/{id}/workflow` is read-only and may expose an optional lightweight prepared candidate summary per row after prepare has run.
 - Workflow GET never creates/syncs candidates; candidate summaries are absent for rows without prepared candidates.
-- Confirm Import and Pantalla 2 remain unchanged until later TC-3 slices.
+- TC-3C.1 adds backend-only ingestion-scoped candidate classification commands for prepared `FILE_IMPORT` candidates:
+  - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification` stores user category/tag choices on the candidate and sets `classificationReviewStatus=USER_SELECTED`; the request must include at least one of `categoryId` or `tagIds`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview` evaluates current candidate state read-only;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` sets `NOT_APPLICABLE` only when a fresh evaluation has no suggestions.
+- FILE candidate classification commands require the parent ingestion to be current-user owned, `ingestionType=FILE`, candidate `source=FILE_IMPORT`, non-final candidate status, and linked `VALID` ingestion record.
+- Category compatibility is enforced against the candidate flow: OUT accepts EXPENSE/BOTH; IN accepts INCOME/BOTH.
+- FILE candidate classification stores category/tags on `TransactionCandidate` only. It never stores category/tag selections or rule results in `IngestionRecord.rawData`.
+- FILE candidate preview/apply uses `TransactionOrigin.FILE_IMPORT` when evaluating category/tag TransactionRules.
+- These endpoints do not create `FinancialTransaction` rows and do not call or change Confirm Import.
+- Pantalla 2 frontend remains on the existing v1 flow until a later TC-3 slice migrates it to candidate-backed state.
 
 Deferred:
 
 - Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
-- Persisting Pantalla 2 category/tag selections on candidates.
+- Migrating Pantalla 2 frontend to candidate-backed category/tag selections.
+- Migrating Confirm Import to post prepared candidates.
 - Description/rule re-evaluation endpoints.
 
 ---

@@ -1542,6 +1542,389 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void fileImportCandidateClassificationPatchSetsCategoryTagsAndUserSelectedWithoutMutatingRawDataOrCreatingTransactions()
+        throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag firstTag = persistTag("Business", currentMockUser());
+        Tag secondTag = persistTag("Ride share", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        String rawDataBefore = record.getRawData();
+        long transactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            classificationPayload(category.getId(), List.of(firstTag.getId(), secondTag.getId()))
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionIngestionId").value(ingestion.getId()))
+            .andExpect(jsonPath("$.candidate.id").value(candidate.getId()))
+            .andExpect(jsonPath("$.candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.candidate.categoryName").value("Transport"))
+            .andExpect(jsonPath("$.candidate.tagIds[0]").value(firstTag.getId()))
+            .andExpect(jsonPath("$.candidate.tagIds[1]").value(secondTag.getId()))
+            .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("USER_SELECTED"));
+
+        TransactionCandidate updated = candidateForRecord(record);
+        assertThat(updated.getCategory().getId()).isEqualTo(category.getId());
+        assertThat(updated.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(firstTag.getId(), secondTag.getId());
+        assertThat(updated.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        assertThat(recordsFor(ingestion).get(0).getRawData()).isEqualTo(rawDataBefore);
+        assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateClassificationPatchSupportsPreserveAndClearSemantics() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag originalTag = persistTag("Business", currentMockUser());
+        Tag replacementTag = persistTag("Ride share", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(category.getId(), List.of(originalTag.getId()))))
+            )
+            .andExpect(status().isOk());
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(tagOnlyClassificationPayload(List.of(replacementTag.getId()))))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.candidate.tagIds[0]").value(replacementTag.getId()));
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of())))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidate.categoryId").doesNotExist())
+            .andExpect(jsonPath("$.candidate.tagIds.length()").value(0))
+            .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("USER_SELECTED"));
+
+        mockMvc
+            .perform(patch(candidateClassificationUrl(ingestion, candidate)).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateClassificationPatchRejectsInvalidCategoryTagAndCandidateScope() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        TransactionIngestion otherIngestion = createWorkflowWithSingleValidRow();
+        IngestionRecord otherRecord = recordsFor(otherIngestion).get(0);
+        Category incompatibleIncomeCategory = persistCategory("Income", CategoryType.INCOME, currentMockUser());
+        User otherUser = createOtherUser();
+        Category foreignCategory = persistCategory("Foreign", CategoryType.EXPENSE, otherUser);
+        Tag foreignTag = persistTag("Foreign tag", otherUser);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        mockMvc.perform(post(prepareCandidatesUrl(otherIngestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        TransactionCandidate otherCandidate = candidateForRecord(otherRecord);
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(incompatibleIncomeCategory.getId(), List.of())))
+            )
+            .andExpect(status().isBadRequest());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(foreignCategory.getId(), List.of())))
+            )
+            .andExpect(status().isBadRequest());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of(foreignTag.getId()))))
+            )
+            .andExpect(status().isBadRequest());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, otherCandidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of())))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateClassificationPatchRejectsWrongSourceFinalStatusAndNonValidRecord() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+
+        candidate.setSource(TransactionCandidateSource.MANUAL);
+        transactionCandidateRepository.saveAndFlush(candidate);
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of())))
+            )
+            .andExpect(status().isBadRequest());
+
+        candidate.setSource(TransactionCandidateSource.API_IMPORT);
+        transactionCandidateRepository.saveAndFlush(candidate);
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of())))
+            )
+            .andExpect(status().isBadRequest());
+
+        candidate.setSource(TransactionCandidateSource.FILE_IMPORT);
+        for (TransactionCandidateStatus status : List.of(
+            TransactionCandidateStatus.POSTED,
+            TransactionCandidateStatus.CANCELLED,
+            TransactionCandidateStatus.FAILED
+        )) {
+            candidate.setStatus(status);
+            transactionCandidateRepository.saveAndFlush(candidate);
+            mockMvc
+                .perform(
+                    patch(candidateClassificationUrl(ingestion, candidate))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of())))
+                )
+                .andExpect(status().isBadRequest());
+        }
+
+        candidate.setStatus(TransactionCandidateStatus.READY_TO_POST);
+        transactionCandidateRepository.saveAndFlush(candidate);
+        record.setStatus(IngestionRecordStatus.DISABLED);
+        ingestionRecordRepository.saveAndFlush(record);
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of())))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateRulePreviewUsesFileImportOriginAndIsReadOnly() throws Exception {
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Ride share", currentMockUser());
+        TransactionRule rule = persistTransactionRule("File Uber rule", category, List.of(tag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "OXXO");
+        persistTransactionRuleCondition(rule, TransactionRuleField.ORIGIN, RuleOperator.EQUALS, "FILE_IMPORT");
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        Instant updatedAtBefore = candidate.getUpdatedAt();
+        String rawDataBefore = record.getRawData();
+        long transactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(post(candidateRulePreviewUrl(ingestion)).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactionIngestionId").value(ingestion.getId()))
+            .andExpect(jsonPath("$.rows[0].candidateId").value(candidate.getId()))
+            .andExpect(jsonPath("$.rows[0].action").value("PREVIEWED"))
+            .andExpect(jsonPath("$.rows[0].suggestedCategory.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.rows[0].suggestedTags[0].tagId").value(tag.getId()))
+            .andExpect(jsonPath("$.rows[0].matchedRules[0].ruleName").value("File Uber rule"))
+            .andExpect(jsonPath("$.rows[0].hasSuggestions").value(true));
+
+        TransactionCandidate reloaded = candidateForRecord(record);
+        assertThat(reloaded.getCategory()).isNull();
+        assertThat(reloaded.getTags()).isEmpty();
+        assertThat(reloaded.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+        assertThat(reloaded.getUpdatedAt()).isEqualTo(updatedAtBefore);
+        assertThat(recordsFor(ingestion).get(0).getRawData()).isEqualTo(rawDataBefore);
+        assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateRulePreviewSupportsCandidateIdsAndReturnsSkippedRowsForNotEvaluableCandidates() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setDescription(null);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(
+                post(candidateRulePreviewUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(candidateBatchPayload(List.of(candidate.getId()))))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows.length()").value(1))
+            .andExpect(jsonPath("$.rows[0].candidateId").value(candidate.getId()))
+            .andExpect(jsonPath("$.rows[0].action").value("SKIPPED"))
+            .andExpect(jsonPath("$.rows[0].error").value("Description is required for rule preview"));
+
+        mockMvc
+            .perform(
+                post(candidateRulePreviewUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(candidateBatchPayload(List.of(candidate.getId() + 9999))))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateRulePreviewAndApplyRejectSourceMismatch() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setSource(TransactionCandidateSource.API_IMPORT);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(post(candidateRulePreviewUrl(ingestion)).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest());
+
+        mockMvc
+            .perform(post(candidateApplyRulesUrl(ingestion)).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateApplyRulesUsesFillEmptyOnlyAndDoesNotMutateRawDataOrCreateTransactions() throws Exception {
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Ride share", currentMockUser());
+        TransactionRule rule = persistTransactionRule("OXXO rule", category, List.of(tag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "OXXO");
+        persistTransactionRuleCondition(rule, TransactionRuleField.ORIGIN, RuleOperator.EQUALS, "FILE_IMPORT");
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        String rawDataBefore = record.getRawData();
+        long transactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(post(candidateApplyRulesUrl(ingestion)).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].candidateId").value(candidate.getId()))
+            .andExpect(jsonPath("$.rows[0].action").value("APPLIED"))
+            .andExpect(jsonPath("$.rows[0].categoryApplied").value(true))
+            .andExpect(jsonPath("$.rows[0].tagIdsApplied[0]").value(tag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds[0]").value(tag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.classificationReviewStatus").value("SUGGESTED"));
+
+        TransactionCandidate updated = candidateForRecord(record);
+        assertThat(updated.getCategory().getId()).isEqualTo(category.getId());
+        assertThat(updated.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(updated.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+        assertThat(recordsFor(ingestion).get(0).getRawData()).isEqualTo(rawDataBefore);
+        assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateApplyRulesPreservesManualSelectionsAndAvoidsDuplicates() throws Exception {
+        Category manualCategory = persistCategory("Manual", CategoryType.EXPENSE, currentMockUser());
+        Category suggestedCategory = persistCategory("Suggested", CategoryType.EXPENSE, currentMockUser());
+        Tag manualTag = persistTag("Manual tag", currentMockUser());
+        Tag suggestedTag = persistTag("Suggested tag", currentMockUser());
+        TransactionRule rule = persistTransactionRule("OXXO rule", suggestedCategory, List.of(manualTag, suggestedTag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "OXXO");
+        persistTransactionRuleCondition(rule, TransactionRuleField.ORIGIN, RuleOperator.EQUALS, "FILE_IMPORT");
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setCategory(manualCategory);
+        candidate.setTags(new HashSet<>(Set.of(manualTag)));
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(post(candidateApplyRulesUrl(ingestion)).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].categoryApplied").value(false))
+            .andExpect(jsonPath("$.rows[0].tagIdsApplied.length()").value(1))
+            .andExpect(jsonPath("$.rows[0].tagIdsApplied[0]").value(suggestedTag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(manualCategory.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.classificationReviewStatus").value("USER_SELECTED"));
+
+        TransactionCandidate updated = candidateForRecord(record);
+        assertThat(updated.getCategory().getId()).isEqualTo(manualCategory.getId());
+        assertThat(updated.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(manualTag.getId(), suggestedTag.getId());
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateApplyRulesSetsNotApplicableWhenNoSuggestionsExist() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+
+        mockMvc
+            .perform(post(candidateApplyRulesUrl(ingestion)).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].candidateId").value(candidate.getId()))
+            .andExpect(jsonPath("$.rows[0].action").value("UNCHANGED"))
+            .andExpect(jsonPath("$.rows[0].hasSuggestions").value(false))
+            .andExpect(jsonPath("$.rows[0].candidate.classificationReviewStatus").value("NOT_APPLICABLE"));
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateConfirmNoSuggestionsSetsNotApplicableOnlyWhenNoSuggestionsExist() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+
+        mockMvc
+            .perform(post(candidateConfirmNoSuggestionsUrl(ingestion, candidate)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("NOT_APPLICABLE"));
+
+        Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
+        TransactionRule rule = persistTransactionRule("OXXO rule", category, List.of());
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "OXXO");
+        persistTransactionRuleCondition(rule, TransactionRuleField.ORIGIN, RuleOperator.EQUALS, "FILE_IMPORT");
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc.perform(post(candidateConfirmNoSuggestionsUrl(ingestion, candidate))).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void classificationPreviewReturnsSuggestionsForValidReadyRowsWithoutMutatingWorkflow() throws Exception {
         Category category = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
         Tag tag = persistTag("Ride share", currentMockUser());
@@ -2082,6 +2465,22 @@ class TransactionIngestionWorkflowResourceIT {
         return "/api/transaction-ingestions/" + ingestion.getId() + "/candidates/prepare";
     }
 
+    private String candidateClassificationUrl(TransactionIngestion ingestion, TransactionCandidate candidate) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/candidates/" + candidate.getId() + "/classification";
+    }
+
+    private String candidateRulePreviewUrl(TransactionIngestion ingestion) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/candidates/rule-preview";
+    }
+
+    private String candidateApplyRulesUrl(TransactionIngestion ingestion) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/candidates/apply-rules";
+    }
+
+    private String candidateConfirmNoSuggestionsUrl(TransactionIngestion ingestion, TransactionCandidate candidate) {
+        return "/api/transaction-ingestions/" + ingestion.getId() + "/candidates/" + candidate.getId() + "/confirm-no-suggestions";
+    }
+
     private ResultActions confirmImport(TransactionIngestion ingestion) throws Exception {
         return confirmImport(
             ingestion,
@@ -2107,6 +2506,25 @@ class TransactionIngestionWorkflowResourceIT {
         selection.put("categoryId", categoryId);
         selection.put("tagIds", tagIds);
         return selection;
+    }
+
+    private Map<String, Object> classificationPayload(Long categoryId, List<Long> tagIds) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("categoryId", categoryId);
+        payload.put("tagIds", tagIds);
+        return payload;
+    }
+
+    private Map<String, Object> tagOnlyClassificationPayload(List<Long> tagIds) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("tagIds", tagIds);
+        return payload;
+    }
+
+    private Map<String, Object> candidateBatchPayload(List<Long> candidateIds) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("candidateIds", candidateIds);
+        return payload;
     }
 
     private Map<String, Object> reviewPayload(
