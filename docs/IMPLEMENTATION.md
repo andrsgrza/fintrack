@@ -140,7 +140,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **TransactionCandidate exception:** TC-1/TC-2A treats candidates as product-owned draft/review state. Admin does not get special cross-user product behavior for candidate CRUD or manual commands; candidate operations resolve the current authenticated owner and validate every linked account/category/tag/ingestion record against that owner. The eventual `financialTransaction` link is server-controlled and is set only by explicit posting/conversion commands.
 
-## TransactionCandidate — TC-1/TC-3C.1 draft/review foundation
+## TransactionCandidate — TC-1/TC-3C.2 draft/review foundation
 
 `TransactionCandidate` is the central in-progress transaction model. It is intentionally separate from `FinancialTransaction`, which remains posted/final ledger data that affects balances, dashboards, budgets, and reports.
 
@@ -196,7 +196,7 @@ TC-3B exposes prepared FILE import candidates in the workflow read model:
 - Rows without prepared candidates keep `candidate = null`/absent for JSON compatibility.
 - Candidate data is still produced by the TC-3A prepare endpoint before it appears in the workflow response.
 
-TC-3C.1 adds backend-only FILE import candidate classification commands:
+TC-3C.1 adds FILE import candidate classification commands:
 
 - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification` stores reviewed category/tags on a prepared `FILE_IMPORT` candidate and marks classification `USER_SELECTED`. The request must include at least one of `categoryId` or `tagIds`; omitted fields preserve existing values.
 - `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview` evaluates current candidate state read-only using `TransactionOrigin.FILE_IMPORT`.
@@ -206,12 +206,23 @@ TC-3C.1 adds backend-only FILE import candidate classification commands:
 - Category/tags are persisted on `TransactionCandidate`; no category/tag selections or rule evaluation results are written to `IngestionRecord.rawData`.
 - These endpoints do not create `FinancialTransaction` rows and do not change Confirm Import.
 
-Still unchanged after TC-3C.1:
+TC-3C.2 adds candidate-backed Pantalla 2 for FILE ingestion:
+
+- The review UI calls `POST /api/transaction-ingestions/{id}/candidates/prepare`, reloads `GET /api/transaction-ingestions/{id}/workflow`, and requires every `VALID` row to have a usable `FILE_IMPORT` candidate before entering Pantalla 2.
+- Pantalla 2 uses the workflow row `candidate` summary as the source of truth for selected category, tags, and classification review status.
+- Batch preview calls `POST /api/transaction-ingestions/{id}/candidates/rule-preview` and keeps suggestions transiently keyed by candidate id.
+- Manual category/tag edits call `PATCH /api/transaction-ingestions/{id}/candidates/{candidateId}/classification`.
+- Per-row apply calls `POST /api/transaction-ingestions/{id}/candidates/apply-rules` with the selected candidate id and persists `FILL_EMPTY_ONLY` results on the candidate.
+- Per-row no-suggestion confirmation calls `POST /api/transaction-ingestions/{id}/candidates/{candidateId}/confirm-no-suggestions`.
+- Browser refresh reloads persisted candidate category/tag selections through the workflow row candidate summaries.
+- Confirm Import still calls the existing `POST /api/transaction-ingestions/{id}/confirm` backend contract. Before confirm, the UI reloads the workflow, validates every `VALID` candidate is `READY_TO_POST` and classification-reviewed, and builds the legacy per-record selection payload from persisted candidate category/tag ids.
+
+Still unchanged after TC-3C.2:
 
 - Manual `POST /api/financial-transactions` still creates posted `FinancialTransaction` directly.
 - FinancialTransaction update/PATCH/rule-preview behavior is unchanged.
-- CSV ingestion still uses `IngestionRecord.rawData.normalized` for Pantalla 1 and frontend-only category/tag state for Pantalla 2.
-- Confirm Import still creates `FinancialTransaction` rows from `rawData.normalized` plus explicit Pantalla 2 selections.
+- CSV ingestion still uses `IngestionRecord.rawData.normalized` for Pantalla 1; Pantalla 2 category/tag review now persists decisions on `FILE_IMPORT` candidates.
+- Confirm Import backend internals still create `FinancialTransaction` rows from `rawData.normalized` plus explicit per-record category/tag selections supplied by the frontend adapter.
 - No UserPreference, re-evaluation buttons, unified review screen, draft dashboard/menu entry, or CSV/API TransactionCandidate product UI exists yet.
 
 TC-2C.1b/1d adds the frontend rule suggestions slice for manual candidates:
@@ -571,8 +582,9 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Candidate post classification backend guard     | ✅     | TC-2C.1c backend post rejects `NOT_EVALUATED` and `STALE`; only `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` can post when otherwise valid                                                                |
 | Candidate manual draft recovery query/UI        | ✅     | TC-2D.2 exposes `GET /api/transaction-candidates/manual-drafts` plus `/financial-transaction/drafts` for current-user `MANUAL` `DRAFT`/`READY_TO_POST` summaries; resume/cancel only, no post from list         |
 | FILE import candidate prepare/sync              | ✅     | TC-3A exposes `POST /api/transaction-ingestions/{id}/candidates/prepare`; creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; idempotent; no rawData mutation; no FinancialTransaction creation       |
-| FILE import candidate workflow summaries        | ✅     | TC-3B exposes optional lightweight prepared candidate summaries on `GET /api/transaction-ingestions/{id}/workflow`; read-only; no candidate creation; Confirm Import and Pantalla 2 remain unchanged            |
+| FILE import candidate workflow summaries        | ✅     | TC-3B exposes optional lightweight prepared candidate summaries on `GET /api/transaction-ingestions/{id}/workflow`; read-only; no candidate creation                                                            |
 | FILE import candidate classification backend    | ✅     | TC-3C.1 exposes ingestion-scoped candidate classification PATCH/preview/apply/confirm-no-suggestions endpoints; category/tags persist on candidates only; no rawData mutation; no FinancialTransaction creation |
+| FILE import candidate-backed Pantalla 2         | ✅     | TC-3C.2 migrates TransactionIngestion category/tag review UI to candidate source of truth, persists selections on candidates, and builds the existing confirm payload from reloaded candidates                  |
 | Drag-and-drop reorder                           | ⏳     | Explicit drag-and-drop UX remains deferred; current implementation is button-based Move up / Move down                                                                                                          |
 
 #### Validations ✅
@@ -1071,21 +1083,21 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 
 #### I2 — confirm import
 
-| Item             | Status                                                                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Endpoint         | ✅ `POST /api/transaction-ingestions/{id}/confirm`.                                                                                                                       |
-| Shared readiness | ✅ Preview, review actions, and confirm use the same readiness calculation: `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows.                    |
-| Creation         | ✅ Creates `FinancialTransaction` rows from `VALID` review records only.                                                                                                  |
-| Source payload   | ✅ Uses `IngestionRecord.rawData.normalized` for transaction date, posting date, description, amount, flow, external reference, and notes.                                |
-| Origin           | ✅ Imported transactions use `origin = FILE_IMPORT`.                                                                                                                      |
-| Record link      | ✅ Each imported row becomes `IMPORTED` and links to its created `FinancialTransaction`.                                                                                  |
-| Skipped rows     | ✅ `DISABLED` rows remain disabled/skipped and do not block readiness by themselves.                                                                                      |
-| Parent status    | ✅ Successful confirm is all-or-nothing and marks the parent `COMPLETED`; retrying a completed import is idempotent and creates no duplicate transactions.                |
-| Classification   | ✅ `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag evaluator.                                    |
-| Pantalla 2 UI    | ✅ READY workflows continue to a same-page category/tag review step; suggestions prefill selectors, edits stay frontend-only until confirm, and refresh loses edits.      |
-| Selections       | ✅ Confirm import accepts explicit per-`VALID`-row `categoryId`/`tagIds` selections and applies them to created transactions after ownership/flow validation.             |
-| Rule Engine      | ✅ CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results or selections into `rawData`; UserPreference/AUTO_APPLY deferred. |
-| Counters         | ✅ Import counters are recalculated after confirm.                                                                                                                        |
+| Item             | Status                                                                                                                                                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint         | ✅ `POST /api/transaction-ingestions/{id}/confirm`.                                                                                                                                                                              |
+| Shared readiness | ✅ Preview, review actions, and confirm use the same readiness calculation: `READY` requires at least one `VALID` row and no `REJECTED`/`FAILED` rows.                                                                           |
+| Creation         | ✅ Creates `FinancialTransaction` rows from `VALID` review records only.                                                                                                                                                         |
+| Source payload   | ✅ Uses `IngestionRecord.rawData.normalized` for transaction date, posting date, description, amount, flow, external reference, and notes.                                                                                       |
+| Origin           | ✅ Imported transactions use `origin = FILE_IMPORT`.                                                                                                                                                                             |
+| Record link      | ✅ Each imported row becomes `IMPORTED` and links to its created `FinancialTransaction`.                                                                                                                                         |
+| Skipped rows     | ✅ `DISABLED` rows remain disabled/skipped and do not block readiness by themselves.                                                                                                                                             |
+| Parent status    | ✅ Successful confirm is all-or-nothing and marks the parent `COMPLETED`; retrying a completed import is idempotent and creates no duplicate transactions.                                                                       |
+| Classification   | ✅ TC-3C.2 Pantalla 2 uses ingestion-scoped candidate preview/apply commands; the legacy `classification-preview` endpoint remains backend-compatible but is no longer the workflow UI source of truth.                          |
+| Pantalla 2 UI    | ✅ READY workflows continue to a same-page category/tag review step; candidates are prepared, workflow is reloaded, suggestions are previewed transiently, and user decisions persist on candidates.                             |
+| Selections       | ✅ Confirm import accepts explicit per-`VALID`-row `categoryId`/`tagIds` selections and applies them to created transactions after ownership/flow validation; the UI now builds this payload from reloaded persisted candidates. |
+| Rule Engine      | ✅ CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results or selections into `rawData`; UserPreference/AUTO_APPLY deferred.                                                        |
+| Counters         | ✅ Import counters are recalculated after confirm.                                                                                                                                                                               |
 
 #### TC-3C.1 — FILE_IMPORT candidate classification backend
 
@@ -1099,7 +1111,7 @@ CSV Ingestion v1 uses the existing ingestion schema. No DB/JDL/Liquibase changes
 | Guards                 | ✅ Endpoints require current-user owned FILE parent ingestion, `FILE_IMPORT` candidate source, non-final candidate status, linked `VALID` ingestion record, account presence, category/tag ownership, and category-flow compatibility.                                                                   |
 | Persistence boundary   | ✅ Category/tags live on `TransactionCandidate`; `IngestionRecord.rawData` is not mutated and no category/tag selections or evaluation results are written to JSON.                                                                                                                                      |
 | Import boundary        | ✅ These endpoints create no `FinancialTransaction` rows and do not change `CsvIngestionConfirmImportService` semantics.                                                                                                                                                                                 |
-| UI boundary            | ✅ Backend foundation only; Pantalla 2 frontend still uses the existing v1 flow until a later TC-3 slice migrates it to candidate-backed state.                                                                                                                                                          |
+| UI boundary            | ✅ TC-3C.2 frontend uses these endpoints for Pantalla 2 candidate-backed category/tag review.                                                                                                                                                                                                            |
 
 ---
 
@@ -1336,7 +1348,8 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-17 | CSV Ingestion I2B review flow ✅: upload page redirects to persisted TransactionIngestion review page; GET review endpoint returns FileIngestion metadata, counts and rows; enable/disable row actions implemented.                                                                                                                                                                                                                                                |
 | 2026-07-18 | CSV Ingestion I2B.2 normalized row edit ✅: PATCH review-row endpoint + inline UI edit for normalized fields; `rawData.raw` preserved; `amount`/`flow` derived from `signedAmount`; edit revalidates `VALID`/`REJECTED`; `DISABLED` must be enabled before editing; confirm import, FinancialTransaction creation and Rule Engine remain deferred.                                                                                                                 |
 | 2026-09-06 | CSV Ingestion TC-3B workflow candidate summaries ✅: `GET /api/transaction-ingestions/{id}/workflow` now exposes optional lightweight prepared `TransactionCandidate` summaries per row after TC-3A prepare; workflow GET remains read-only and does not create candidates, mutate `rawData`, create `FinancialTransaction` rows, or migrate Pantalla 2/Confirm Import.                                                                                            |
-| 2026-09-08 | CSV Ingestion TC-3C.1 FILE candidate classification backend ✅: ingestion-scoped PATCH/preview/apply/confirm-no-suggestions endpoints classify prepared `FILE_IMPORT` `TransactionCandidate`s, use `TransactionOrigin.FILE_IMPORT` for rule evaluation, persist category/tags on candidates only, preserve `rawData`, create no `FinancialTransaction` rows, and leave Pantalla 2 frontend plus Confirm Import unchanged.                                          |
+| 2026-09-08 | CSV Ingestion TC-3C.1 FILE candidate classification backend ✅: ingestion-scoped PATCH/preview/apply/confirm-no-suggestions endpoints classify prepared `FILE_IMPORT` `TransactionCandidate`s, use `TransactionOrigin.FILE_IMPORT` for rule evaluation, persist category/tags on candidates only, preserve `rawData`, create no `FinancialTransaction` rows, and leave Confirm Import backend internals unchanged.                                                 |
+| 2026-09-08 | CSV Ingestion TC-3C.2 candidate-backed Pantalla 2 ✅: TransactionIngestion review UI prepares FILE candidates, reloads workflow candidate summaries, previews/applies/confirms suggestions through candidate endpoints, persists category/tag decisions on candidates, and builds the existing confirm payload from freshly reloaded candidate state.                                                                                                              |
 | 2026-07-18 | CSV Ingestion readiness status migration ✅: added `READY`/`PARTIALLY_READY` as pre-import review statuses; FILE review now produces readiness statuses, not `COMPLETED`/`PARTIALLY_COMPLETED`; Liquibase maps old FILE review `COMPLETED -> READY` and `PARTIALLY_COMPLETED -> PARTIALLY_READY`; `PARTIALLY_COMPLETED` remains reserved.                                                                                                                          |
 | 2026-07-18 | TransactionIngestion create cleanup ✅: `/transaction-ingestion/new` is now the canonical FILE ingestion create workflow with Account + Ingestion Type + CSV file only; lifecycle/system fields hidden; FILE submit calls `POST /api/transaction-ingestions/file` and creates parent + file metadata + review rows together; API create remains TBD; `/file-ingestion/new` remains a parent-scoped secondary/debug upload.                                         |
 | 2026-07-19 | TransactionIngestion detail cleanup ✅: `/transaction-ingestion/{id}` is now the canonical workflow detail/review route; it shows parent summary, embeds read-only FILE metadata, and renders IngestionRecord review/result rows through `GET /api/transaction-ingestions/{id}/workflow`; API detail is TBD; PENDING FILE without metadata shows an unavailable state.                                                                                             |

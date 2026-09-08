@@ -117,8 +117,14 @@
         "classification": {
           "title": "Revisar categorías y etiquetas",
           "continue": "Continuar a categorías/etiquetas",
-          "unsavedNotice": "Las categorías/etiquetas no se guardan hasta confirmar la importación.",
+          "persistedNotice": "Las categorías y etiquetas se guardan en candidatos antes de confirmar la importación.",
           "backToRows": "Volver a revisión de filas",
+          "reviewedRows": "Revisadas",
+          "notEvaluatedRows": "No evaluadas",
+          "staleRows": "Desactualizadas",
+          "suggestionsAvailable": "Sugerencias",
+          "confirmBlocked": "Revisa cada fila válida antes de confirmar la importación.",
+          "status": "Clasificación",
           "category": "Categoría",
           "tags": "Etiquetas",
           "noCategory": "Sin categoría",
@@ -126,7 +132,18 @@
           "ruleDetails": "Detalles de reglas",
           "matchedRules": "Reglas coincidentes",
           "conflicts": "Conflictos",
-          "skippedOutputs": "Omitidos"
+          "skippedOutputs": "Omitidos",
+          "rowBlocked": "El candidato no puede clasificarse.",
+          "retryPreview": "Actualizar sugerencias",
+          "applySuggestions": "Aplicar sugerencias",
+          "confirmNoSuggestions": "Confirmar sin sugerencias"
+        },
+        "classificationReviewStatus": {
+          "NOT_EVALUATED": "No evaluada",
+          "SUGGESTED": "Sugerida",
+          "USER_SELECTED": "Seleccionada por usuario",
+          "STALE": "Desactualizada",
+          "NOT_APPLICABLE": "No aplica"
         },
         "ingestionStatus": {
           "READY": "Lista para importar",
@@ -143,7 +160,11 @@
           "createFailed": "No se pudo crear la vista previa. Revisa el archivo e inténtalo de nuevo.",
           "workflowLoadFailed": "No se pudo cargar la vista previa persistida.",
           "recordUpdateFailed": "No se pudo actualizar la fila de vista previa. Revisa la fila e inténtalo de nuevo.",
+          "candidatePreparationFailed": "No se pudieron preparar los candidatos para clasificación.",
+          "classificationUpdateFailed": "No se pudo actualizar la clasificación de categoría/etiquetas. Inténtalo de nuevo.",
           "classificationPreviewFailed": "No se pudieron cargar las sugerencias de categorías/etiquetas. Vuelve a la revisión de filas e inténtalo de nuevo.",
+          "classificationConfirmBlocked": "Revisa todas las filas válidas antes de confirmar la importación.",
+          "confirmNoSuggestionsFailed": "No se pudo confirmar que esta fila no tiene sugerencias.",
           "confirmFailed": "No se pudo confirmar la importación. Revisa el estado de la vista previa e inténtalo de nuevo."
         }
       }

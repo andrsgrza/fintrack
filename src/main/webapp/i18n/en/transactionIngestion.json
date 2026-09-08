@@ -117,8 +117,14 @@
         "classification": {
           "title": "Review categories and tags",
           "continue": "Continue to category/tags",
-          "unsavedNotice": "Category/tag selections are not saved until import is confirmed.",
+          "persistedNotice": "Categories and tags are saved on candidates before confirming the import.",
           "backToRows": "Back to row review",
+          "reviewedRows": "Reviewed",
+          "notEvaluatedRows": "Not evaluated",
+          "staleRows": "Stale",
+          "suggestionsAvailable": "Suggestions",
+          "confirmBlocked": "Review every valid row before confirming import.",
+          "status": "Classification",
           "category": "Category",
           "tags": "Tags",
           "noCategory": "No category",
@@ -126,7 +132,18 @@
           "ruleDetails": "Rule details",
           "matchedRules": "Matched rules",
           "conflicts": "Conflicts",
-          "skippedOutputs": "Skipped"
+          "skippedOutputs": "Skipped",
+          "rowBlocked": "Candidate cannot be classified.",
+          "retryPreview": "Refresh suggestions",
+          "applySuggestions": "Apply suggestions",
+          "confirmNoSuggestions": "Confirm no suggestions"
+        },
+        "classificationReviewStatus": {
+          "NOT_EVALUATED": "Not evaluated",
+          "SUGGESTED": "Suggested",
+          "USER_SELECTED": "User selected",
+          "STALE": "Stale",
+          "NOT_APPLICABLE": "Not applicable"
         },
         "ingestionStatus": {
           "READY": "Ready to import",
@@ -143,7 +160,11 @@
           "createFailed": "Could not create file workflow. Check the file and try again.",
           "workflowLoadFailed": "Could not load the persisted workflow.",
           "recordUpdateFailed": "Could not update the workflow row. Check the row and try again.",
+          "candidatePreparationFailed": "Could not prepare transaction candidates for classification.",
+          "classificationUpdateFailed": "Could not update category/tag classification. Try again.",
           "classificationPreviewFailed": "Could not load category/tag suggestions. Return to row review and try again.",
+          "classificationConfirmBlocked": "Review all valid rows before confirming import.",
+          "confirmNoSuggestionsFailed": "Could not confirm that this row has no suggestions.",
           "confirmFailed": "Could not confirm import. Check the review status and try again."
         }
       }

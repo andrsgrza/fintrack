@@ -429,30 +429,30 @@ I2C:
 - Imported transactions should use `origin = FILE_IMPORT`.
 - Confirm import uses `rawData.normalized` as the source of transaction fields.
 - Confirm import does not run the Rule Engine itself.
-- Slice 2A adds backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
-- Slice 2B adds Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.
-- Confirm import accepts explicit per-`VALID`-row category/tag selections and applies those selections to the created `FinancialTransaction`s.
+- Slice 2A added the legacy backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
+- Slice 2B originally added Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.
+- TC-3C.2 migrates Pantalla 2 to candidate-backed classification: the UI prepares/syncs `FILE_IMPORT` `TransactionCandidate`s, reloads the workflow, previews rules through candidate endpoints, persists category/tag review choices on candidates, and builds the existing Confirm Import payload from freshly reloaded candidates.
+- Confirm import accepts explicit per-`VALID`-row category/tag selections and applies those selections to the created `FinancialTransaction`s. In TC-3C.2 those selections are supplied by the frontend adapter from persisted candidate state.
 - Category/tag selections are validated for current-user ownership, category flow compatibility, complete `VALID` record coverage, duplicate record ids, and duplicate tag ids.
 - Category/tag suggestions also follow the category/tag TransactionRule evaluator semantics. A rule that targets an EXPENSE category should include an effective `FLOW = OUT` condition, and a rule that targets an INCOME category should include an effective `FLOW = IN` condition through the configured TransactionRule guard. For example, an Uber expense rule should suggest the expense category for an OUT row and not for an IN/refund row.
 - Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
-- Pantalla 2 selections live only in frontend state until confirm; browser refresh loses category/tag adjustments in v1.
+- Pantalla 2 selections now persist on `TransactionCandidate`; browser refresh reloads reviewed category/tags from workflow row candidate summaries.
 - Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/debug smoke specs.
 - TC-3A adds backend-only `POST /api/transaction-ingestions/{id}/candidates/prepare`. It creates or syncs `FILE_IMPORT` `TransactionCandidate` rows for `VALID` `IngestionRecord`s after Pantalla 1. The command is idempotent, skips non-`VALID` rows, preserves existing candidate category/tags, marks fresh classification review `STALE` when rule-input fields change, does not mutate `rawData`, and does not create `FinancialTransaction` rows.
 - TC-3B extends `GET /api/transaction-ingestions/{id}/workflow` with an optional lightweight prepared candidate summary per row. The read model is strictly read-only: it does not create/sync candidates, mutate `rawData`, create `FinancialTransaction` rows, or migrate Confirm Import/Pantalla 2 behavior.
-- TC-3C.1 adds backend-only ingestion-scoped FILE_IMPORT candidate classification commands:
+- TC-3C.1 adds ingestion-scoped FILE_IMPORT candidate classification commands:
   - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification`;
   - `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview`;
   - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules`;
   - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions`.
-- These candidate endpoints classify prepared `FILE_IMPORT` candidates only. They do not mutate `IngestionRecord.rawData`, do not create `FinancialTransaction` rows, and do not change Confirm Import.
+- These candidate endpoints classify prepared `FILE_IMPORT` candidates only. They do not mutate `IngestionRecord.rawData`, do not create `FinancialTransaction` rows, and do not change the existing Confirm Import backend contract.
 - Candidate rule preview/apply evaluates active owner TransactionRules with `TransactionOrigin.FILE_IMPORT`. Apply uses `FILL_EMPTY_ONLY`: empty category can be filled, existing category is preserved, and tags are additive/deduplicated.
 - Candidate classification PATCH stores category/tags on `TransactionCandidate`, not in `rawData`. It must include at least one of `categoryId` or `tagIds`; omitted fields preserve existing values. Category compatibility still follows row flow: OUT accepts EXPENSE/BOTH, IN accepts INCOME/BOTH.
 
 Future:
 
-- Frontend Pantalla 2 migration to these candidate-backed endpoints.
-- Confirm Import migration to post prepared candidates instead of creating transactions directly from `rawData.normalized`.
+- Confirm Import backend migration to post prepared candidates instead of creating transactions directly from `rawData.normalized`.
 - Bulk reevaluation remains deferred.
 
 ## 10. UI design
@@ -723,4 +723,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. TC-3A candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. TC-3B exposes prepared candidates in the workflow response but keeps workflow GET read-only. TC-3C.1 adds backend-only candidate classification commands that persist category/tags on prepared `FILE_IMPORT` candidates, never in `rawData`. The current Pantalla 2 frontend still uses the existing non-persistent v1 state until a later candidate-backed UI slice. UserPreference-driven rule behavior is deferred.
+No FinancialTransactions are created during upload/review. TC-3A candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. TC-3B exposes prepared candidates in the workflow response but keeps workflow GET read-only. TC-3C.2 uses candidate-backed Pantalla 2 classification commands that persist category/tags on prepared `FILE_IMPORT` candidates, never in `rawData`. Confirm Import still uses the existing backend contract through a frontend adapter that reloads candidate state and submits the legacy per-record selection payload. UserPreference-driven rule behavior is deferred.
