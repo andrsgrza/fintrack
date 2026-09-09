@@ -22,6 +22,8 @@ const mockGetCategories = jest.fn(params => ({ type: 'category/getEntities', pay
 const mockGetTags = jest.fn(params => ({ type: 'tag/getEntities', payload: params }));
 let mockState;
 
+const confirmImportCalls = () => mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/confirm');
+
 jest.mock('app/config/store', () => ({
   useAppDispatch: () => mockDispatch,
   useAppSelector: selector => selector(mockState),
@@ -977,11 +979,7 @@ describe('TransactionIngestion file workflow', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
-    await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm', {
-        records: [{ recordId: 300, categoryId: 9, tagIds: [3, 6] }],
-      }),
-    );
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
   });
 
   it('candidate-backed classification applies suggestions per row and confirms no-suggestion rows before import', async () => {
@@ -1141,14 +1139,7 @@ describe('TransactionIngestion file workflow', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
-    await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm', {
-        records: [
-          { recordId: 310, categoryId: 7, tagIds: [3] },
-          { recordId: 311, categoryId: null, tagIds: [] },
-        ],
-      }),
-    );
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
   });
 
   it('reload keeps persisted candidate category and tags as classification source of truth', async () => {
@@ -1283,7 +1274,7 @@ describe('TransactionIngestion file workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
     expect(await screen.findByText('Review every valid row before confirming import.')).toBeTruthy();
-    expect(mockAxiosPost).not.toHaveBeenCalledWith('api/transaction-ingestions/100/confirm', expect.anything());
+    expect(confirmImportCalls()).toHaveLength(0);
   });
 
   it('confirm success marks imported rows, leaves disabled rows, and makes review read-only', async () => {
@@ -1325,11 +1316,7 @@ describe('TransactionIngestion file workflow', () => {
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
-    await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm', {
-        records: [{ recordId: 300, categoryId: 9, tagIds: [5] }],
-      }),
-    );
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
     await waitFor(() => expect(screen.getAllByText('Import completed').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Imported');
     expectRowStatus(302, 'Disabled');

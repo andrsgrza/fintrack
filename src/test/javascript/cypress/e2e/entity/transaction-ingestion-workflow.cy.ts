@@ -305,10 +305,10 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@confirmImportRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(response?.body.status).to.equal('COMPLETED');
-      const outSelection = request.body.records.find(record => record.categoryId === expenseCategory?.id);
-      const inSelection = request.body.records.find(record => record.categoryId === null);
-      expect(outSelection?.tagIds).to.include(tag?.id);
-      expect(inSelection?.tagIds).to.deep.equal([]);
+      expect(request.body === null || request.body === undefined || request.body === '' || request.body === 'null').to.equal(true);
+      expect(JSON.stringify(request.body ?? '')).not.to.contain('records');
+      expect(JSON.stringify(request.body ?? '')).not.to.contain('categoryId');
+      expect(JSON.stringify(request.body ?? '')).not.to.contain('tagIds');
     });
     cy.then(() => {
       expect(oldClassificationPreviewCalled).to.equal(false);
@@ -459,7 +459,10 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@confirmImportRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(response?.body.status).to.equal('COMPLETED');
-      expect(request.body.records).to.have.length(1);
+      expect(request.body === null || request.body === undefined || request.body === '' || request.body === 'null').to.equal(true);
+      expect(JSON.stringify(request.body ?? '')).not.to.contain('records');
+      expect(JSON.stringify(request.body ?? '')).not.to.contain('categoryId');
+      expect(JSON.stringify(request.body ?? '')).not.to.contain('tagIds');
       expect(response?.body.createdNow).to.equal(1);
       expect(response?.body.skipped).to.equal(1);
     });

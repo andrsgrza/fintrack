@@ -685,7 +685,7 @@ TC-3C.2 migrates Pantalla 2 in the TransactionIngestion workflow UI to prepared 
 - Preview does not mutate candidate category/tags and does not write to `rawData`.
 - User edits in Pantalla 2 call candidate classification PATCH and are persisted on `TransactionCandidate`.
 - Browser refresh reloads persisted category/tag selections from the workflow row candidate summaries.
-- Before Confirm Import, the UI may still reload the workflow and build the legacy confirm payload from persisted candidate category/tag ids for compatibility.
+- Before Confirm Import, the current UI reloads the workflow and validates that all `VALID` row candidates are ready/reviewed, then calls `/confirm` without legacy `records`/category/tag payload.
 - TC-3D.1 changes Confirm Import itself to read persisted `FILE_IMPORT` candidates as the source of truth. Request `categoryId`/`tagIds` are tolerated only as legacy client data and are not trusted.
 - Confirm Import does not run the evaluator and does not persist rule evaluation results or category/tag choices into `rawData`.
 - UserPreference and `AUTO_APPLY` behavior remain deferred.

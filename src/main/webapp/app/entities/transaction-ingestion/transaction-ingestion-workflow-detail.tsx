@@ -115,16 +115,6 @@ interface ICsvIngestionConfirmImportResponse {
   rows?: ICsvIngestionWorkflowRow[];
 }
 
-interface ICsvIngestionConfirmImportRecordSelection {
-  recordId: number;
-  categoryId: number | null;
-  tagIds: number[];
-}
-
-interface ICsvIngestionConfirmImportRequest {
-  records: ICsvIngestionConfirmImportRecordSelection[];
-}
-
 interface ICsvIngestionWorkflowRowEditDraft {
   transactionDate?: string;
   postingDate?: string;
@@ -289,19 +279,6 @@ const selectedOptions = (options: HTMLCollectionOf<HTMLOptionElement>) =>
   Array.from(options)
     .filter(option => option.selected)
     .map(option => option.value);
-
-const confirmPayloadFromCandidateRows = (rows: ICsvIngestionWorkflowRow[]): ICsvIngestionConfirmImportRequest => ({
-  records: rows.flatMap(row => {
-    if (row.status !== 'VALID' || row.ingestionRecordId === undefined || !row.candidate) {
-      return [];
-    }
-    return {
-      recordId: row.ingestionRecordId,
-      categoryId: row.candidate.categoryId ?? null,
-      tagIds: row.candidate.tagIds ?? [],
-    };
-  }),
-});
 
 const candidatePreviewRowsById = (rows: IFileImportCandidateRulePreviewRow[] = []) =>
   rows.reduce<Record<number, IFileImportCandidateRulePreviewRow>>((acc, row) => {
@@ -782,7 +759,6 @@ export const TransactionIngestionWorkflowDetail = () => {
       }
       const response = await axios.post<ICsvIngestionConfirmImportResponse>(
         `api/transaction-ingestions/${workflow.transactionIngestionId}/confirm`,
-        confirmPayloadFromCandidateRows(reloadedWorkflow.rows ?? []),
       );
       applyConfirmResponse(response.data);
     } catch (error) {
