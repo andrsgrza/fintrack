@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-3C.2 implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion can now prepare `FILE_IMPORT` candidates after Pantalla 1, expose optional prepared candidate summaries in the workflow response, and use candidate-backed Pantalla 2 category/tag review. API ingestion, bank sync, Pantalla 1 UI edits, Confirm Import backend internals, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** TC-3D.1 implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion can now prepare `FILE_IMPORT` candidates after Pantalla 1, expose optional prepared candidate summaries in the workflow response, use candidate-backed Pantalla 2 category/tag review, and post reviewed `FILE_IMPORT` candidates during Confirm Import. API ingestion, bank sync, Pantalla 1 UI edits, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -172,13 +172,17 @@ FILE ingestion candidate preparation:
 - Category compatibility is enforced against the candidate flow: OUT accepts EXPENSE/BOTH; IN accepts INCOME/BOTH.
 - FILE candidate classification stores category/tags on `TransactionCandidate` only. It never stores category/tag selections or rule results in `IngestionRecord.rawData`.
 - FILE candidate preview/apply uses `TransactionOrigin.FILE_IMPORT` when evaluating category/tag TransactionRules.
-- These endpoints do not create `FinancialTransaction` rows and do not call or change the existing Confirm Import backend contract.
-- TC-3C.2 migrates Pantalla 2 frontend to candidate-backed state. The UI prepares candidates, reloads the workflow, previews rule suggestions through candidate endpoints, persists manual/apply/no-suggestion classification decisions on candidates, and reloads candidates before building the existing confirm payload.
+- FILE candidate classification endpoints do not create `FinancialTransaction` rows. Confirm Import is the separate posting command.
+- TC-3C.2 migrates Pantalla 2 frontend to candidate-backed state. The UI prepares candidates, reloads the workflow, previews rule suggestions through candidate endpoints, persists manual/apply/no-suggestion classification decisions on candidates, and reloads candidates before confirm.
+- TC-3D.1 migrates Confirm Import backend internals to the existing `POST /api/transaction-ingestions/{id}/confirm` path using reviewed `FILE_IMPORT` candidates as the source of truth.
+- The legacy confirm request shape may still be sent by older/frontend adapter clients. Backend validates legacy `recordId`s when present but does not trust request `categoryId`/`tagIds`; persisted candidate category/tags win.
+- Confirm requires every current `VALID` row to have exactly one reviewed candidate linked to the same ingestion, record, owner, and account with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`.
+- Confirm creates final `FinancialTransaction` rows from candidate fields/category/tags, sets `origin=FILE_IMPORT`, links candidates and ingestion records to the created transactions, marks candidates `POSTED`, marks records `IMPORTED`, and completes the parent ingestion all-or-nothing.
 
 Deferred:
 
 - Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
-- Migrating Confirm Import backend internals to post prepared candidates.
+- Removing the temporary legacy confirm payload adapter once all clients can rely on candidate-backed confirm without `records`.
 - Description/rule re-evaluation endpoints.
 
 ---
@@ -1387,31 +1391,31 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### Canonical CSV transaction rules
 
-| Rule                 | Decision                                                                                                                         | Status   |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Contract             | Header must be exact, ordered, and case-sensitive                                                                                | **Done** |
-| Sign convention      | Positive `signedAmount` → `flow = IN`                                                                                            | **Done** |
-| Sign convention      | Negative `signedAmount` → `flow = OUT`                                                                                           | **Done** |
-| Amount normalization | Preview/review `amount = abs(signedAmount)`; confirm import uses the normalized amount when creating `FinancialTransaction` rows | **Done** |
-| Zero amount          | `signedAmount = 0` is invalid, not skipped                                                                                       | **Done** |
-| Currency             | Row `currency` must match selected account currency                                                                              | **Done** |
-| Account type         | CSV sign convention is canonical; do not infer flow from bank/account type/kind                                                  | **Done** |
+| Rule                 | Decision                                                                                                                                                           | Status   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Contract             | Header must be exact, ordered, and case-sensitive                                                                                                                  | **Done** |
+| Sign convention      | Positive `signedAmount` → `flow = IN`                                                                                                                              | **Done** |
+| Sign convention      | Negative `signedAmount` → `flow = OUT`                                                                                                                             | **Done** |
+| Amount normalization | Preview/review `amount = abs(signedAmount)`; candidate preparation derives `amount`/`flow` from `signedAmount`, and confirm import posts candidate `amount`/`flow` | **Done** |
+| Zero amount          | `signedAmount = 0` is invalid, not skipped                                                                                                                         | **Done** |
+| Currency             | Row `currency` must match selected account currency                                                                                                                | **Done** |
+| Account type         | CSV sign convention is canonical; do not infer flow from bank/account type/kind                                                                                    | **Done** |
 
 ### I2 — confirm import
 
-| Rule                   | Decision                                                                                                                                                 | Status   |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Confirm import         | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` review records only after recalculating `READY` status  | **Done** |
-| Source fields          | Imported transactions are built from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                                          | **Done** |
-| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                                                                         | **Done** |
-| Row transitions        | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                  | **Done** |
-| Parent transition      | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new          | **Done** |
-| Classification preview | `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only and returns category/tag suggestions                     | **Done** |
-| Explicit selections    | Confirm import requires one selection payload per `VALID` row and applies selected category/tags to created transactions after ownership/flow validation | **Done** |
-| Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                           | **Done** |
-| Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                      | **Done** |
-| Candidate prepare      | `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; no rawData mutation; no FT rows | **Done** |
-| Candidate workflow DTO | `GET /api/transaction-ingestions/{id}/workflow` exposes optional lightweight prepared candidate summaries per row; read-only; no candidate creation      | **Done** |
+| Rule                   | Decision                                                                                                                                                                                        | Status   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Confirm import         | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` review records only after recalculating `READY` status                                         | **Done** |
+| Source fields          | Imported transactions are built from reviewed `FILE_IMPORT` candidate fields synced from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                             | **Done** |
+| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                                                                                                                | **Done** |
+| Row transitions        | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                                                         | **Done** |
+| Parent transition      | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new                                                 | **Done** |
+| Classification preview | `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only and returns category/tag suggestions                                                            | **Done** |
+| Explicit selections    | Confirm import requires reviewed candidate classification for each `VALID` row and applies candidate category/tags after ownership/flow validation; legacy request category/tag ids are ignored | **Done** |
+| Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                                                                  | **Done** |
+| Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                                                             | **Done** |
+| Candidate prepare      | `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; no rawData mutation; no FT rows                                        | **Done** |
+| Candidate workflow DTO | `GET /api/transaction-ingestions/{id}/workflow` exposes optional lightweight prepared candidate summaries per row; read-only; no candidate creation                                             | **Done** |
 
 ---
 

@@ -600,7 +600,7 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** TC-3C.2 includes manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, FILE import candidate prepare/sync, optional prepared FILE candidate summaries in the TransactionIngestion workflow response, ingestion-scoped FILE candidate classification commands, and candidate-backed Pantalla 2 frontend category/tag review. Pantalla 1 UI, Confirm Import backend internals, DescriptionNormalizationRule re-evaluation, and UserPreference are not migrated to candidates yet.
+**Scope:** TC-3D.1 includes manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, FILE import candidate prepare/sync, optional prepared FILE candidate summaries in the TransactionIngestion workflow response, ingestion-scoped FILE candidate classification commands, candidate-backed Pantalla 2 frontend category/tag review, and candidate-backed Confirm Import backend posting. Pantalla 1 UI, DescriptionNormalizationRule re-evaluation, and UserPreference are not migrated to candidates yet.
 
 ### Summary counts
 
@@ -661,7 +661,7 @@ Key TC-3B FILE import workflow summary assertions:
 - Rows without prepared candidates keep `candidate` absent/null.
 - Workflow GET is read-only: it does not create candidates, create `FinancialTransaction` rows, or mutate `rawData`.
 - Candidate summaries are scoped to the current-user owned workflow and do not expose foreign candidate rows.
-- Confirm Import behavior is unchanged when prepared candidates exist.
+- Confirm Import now posts reviewed `FILE_IMPORT` candidates when prepared candidates exist.
 
 Key TC-3C.1/TC-3C.2 FILE import candidate classification assertions:
 
@@ -673,7 +673,7 @@ Key TC-3C.1/TC-3C.2 FILE import candidate classification assertions:
 - `POST /api/transaction-ingestions/{id}/candidates/apply-rules` re-evaluates current DB state and applies `FILL_EMPTY_ONLY`: empty category fills from non-conflicting suggestion, manual category is preserved, tags are additive, and duplicates are skipped.
 - Apply keeps existing manual category/tag choices as `USER_SELECTED`, sets `SUGGESTED` when rule suggestions are available/applied for an unclassified candidate, and sets `NOT_APPLICABLE` when no suggestions exist.
 - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` sets `NOT_APPLICABLE` only after fresh evaluation confirms no suggestions; it rejects if suggestions exist.
-- FILE candidate classification endpoints create no `FinancialTransaction` rows, do not mutate `IngestionRecord.rawData`, do not call the public `/api/financial-transactions/rule-preview` endpoint, and do not change Confirm Import behavior.
+- FILE candidate classification endpoints create no `FinancialTransaction` rows, do not mutate `IngestionRecord.rawData`, and do not call the public `/api/financial-transactions/rule-preview` endpoint. Confirm Import is the separate backend command that posts reviewed candidates.
 
 Key TC-2C.1a backend assertions:
 
@@ -2681,7 +2681,7 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 ## CSV Ingestion v1 tests
 
-**Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. TC-3A adds FILE import candidate prepare/sync. TC-3B exposes optional prepared candidate summaries in the workflow response. TC-3C.1 adds FILE candidate classification commands. TC-3C.2 migrates Pantalla 2 frontend to candidate-backed category/tag review. CSV v1 Confirm Import backend internals are not migrated to post candidates directly yet.
+**Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. TC-3A adds FILE import candidate prepare/sync. TC-3B exposes optional prepared candidate summaries in the workflow response. TC-3C.1 adds FILE candidate classification commands. TC-3C.2 migrates Pantalla 2 frontend to candidate-backed category/tag review. TC-3D.1 migrates Confirm Import backend internals to post reviewed `FILE_IMPORT` candidates directly.
 
 ### I1A unit tests — parser/validator
 
@@ -2830,11 +2830,11 @@ CSV review row action tests continue to cover the canonical mutation flow:
 
 ### I2C resource/integration tests — confirm import
 
-- confirm import creates `FinancialTransaction` rows from valid review rows.
+- confirm import creates `FinancialTransaction` rows from reviewed `FILE_IMPORT` candidates linked to valid review rows.
 - imported transactions use `origin = FILE_IMPORT`.
 - `IngestionRecord` links to created `FinancialTransaction`.
-- confirm uses `rawData.normalized` transaction date, posting date, description, amount, flow, external reference, and notes.
-- imported transactions use the parent account and parent `TransactionIngestion`.
+- confirm uses candidate transaction date, posting date, description, amount, flow, external reference, notes, category, and tags as the backend source of truth.
+- imported transactions use the candidate account and parent `TransactionIngestion`.
 - classification preview evaluates `VALID` rows read-only and returns category/tag suggestions without mutating records or creating transactions.
 - classification preview respects TransactionRule FLOW/category semantics; the regression case covers an Uber EXPENSE rule with `FLOW = OUT`, where an OUT row receives the category/tag suggestion and an IN refund row does not.
 - READY review UI shows "Continue to category/tags", prepares FILE_IMPORT candidates, reloads the workflow, calls candidate rule preview, and renders Pantalla 2 from workflow row candidate summaries.
@@ -2852,10 +2852,11 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - `src/test/javascript/cypress/e2e/entity/file-ingestion.cy.ts` and `src/test/javascript/cypress/e2e/entity/ingestion-record.cy.ts` are technical/debug smoke specs. They verify the generated/debug pages remain reachable and marked technical without restoring old product CRUD expectations.
 - Run the current ingestion E2E pattern with:
   `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
-- confirm import accepts explicit category/tag selections for every `VALID` row and applies validated selections to created transactions.
+- confirm import requires every current `VALID` row to have exactly one reviewed, valid, `READY_TO_POST` `FILE_IMPORT` candidate. Legacy request `recordId`s may be validated for compatibility, but request `categoryId`/`tagIds` are ignored and persisted candidates win.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
 - TC-3C.2 candidate-backed Pantalla 2 persists category/tags on prepared `FILE_IMPORT` candidates only; it does not persist category/tags into `rawData` and does not create transactions before Confirm Import.
 - TC-3C.2 candidate preview/apply uses `TransactionOrigin.FILE_IMPORT` and returns candidate-scoped suggestions without using `/api/financial-transactions/rule-preview` or the legacy ingestion `classification-preview` endpoint as the UI source of truth.
+- TC-3D.1 marks confirmed candidates `POSTED`, sets `postedAt`, links candidate `financialTransaction`, marks rows `IMPORTED`, and keeps completed retry idempotent.
 - imported transactions do not get financial subscription from the Rule Engine.
 - disabled rows remain `DISABLED` and do not create transactions.
 - stale parent readiness is recalculated before confirm.
@@ -2949,11 +2950,12 @@ Copy this block when hardening the next entity:
 | 2026-07-17 | CSV Ingestion I2A status lifecycle                          | `IngestionRecordStatus.CREATED` removed; review tests expect `VALID`; imported-record domain tests use `IMPORTED`; frontend review test renders translated `Valid`/`Rejected`; Liquibase migrates existing `CREATED` rows to `VALID`.                                                                                                                                                                                                                                                                                              |
 | 2026-07-17 | CSV Ingestion I2B review flow                               | Backend IT covers persisted GET review, FileIngestion metadata, enable/disable transitions, counters/status recalculation, imported-row guard and mismatched parent guard. Frontend tests cover redirect to review page, metadata/status rendering, enable/disable actions, and no confirm/import action.                                                                                                                                                                                                                          |
 | 2026-07-18 | CSV Ingestion I2B.2 row edit                                | Backend IT covers PATCH normalized row edit for `VALID`/`REJECTED`, `DISABLED` edit rejection, immutable imported/skipped/failed rows, rawData raw preservation, derived amount/flow, counters/status recalculation, and no `FinancialTransaction` creation. Frontend tests cover inline edit, disabled rows without Edit, save/cancel, derived-field read-only behavior, and no confirm/import action.                                                                                                                            |
-| 2026-07-18 | CSV Ingestion I2C confirm import                            | Backend IT covers ready confirm, normalized payload mapping, `FILE_IMPORT` origin, imported row links, disabled rows skipped, stale readiness recalculation, completed idempotent retry, corrupt link guards, completed review read-only, foreign rejection, and no Rule Engine/category/tag/subscription application. Frontend tests cover Confirm Import visibility, not-ready blocking, completed read-only review, imported/disabled row display, and confirm error rendering.                                                 |
+| 2026-07-18 | CSV Ingestion I2C confirm import                            | Backend IT covers ready confirm, `FILE_IMPORT` origin, imported row links, disabled rows skipped, stale readiness recalculation, completed idempotent retry, corrupt link guards, completed review read-only, foreign rejection, and no Rule Engine/subscription application. Frontend tests cover Confirm Import visibility, not-ready blocking, completed read-only review, imported/disabled row display, and confirm error rendering.                                                                                          |
 | 2026-09-04 | CSV Ingestion TC-3A candidate prepare                       | Backend IT covers `POST /api/transaction-ingestions/{id}/candidates/prepare`, valid-only `FILE_IMPORT` candidate creation, non-valid row skips, idempotency, sync from `rawData.normalized`, stale classification marking, category/tag preservation, posted-candidate skip, guards, no `FinancialTransaction` creation, and rawData immutability.                                                                                                                                                                                 |
 | 2026-09-06 | CSV Ingestion TC-3B workflow summary                        | Backend IT covers optional prepared candidate summaries on `GET /api/transaction-ingestions/{id}/workflow`, category/tag summary fields, rows without candidates, read-only/no rawData mutation/no candidate creation, foreign candidate filtering, and unchanged Confirm Import behavior.                                                                                                                                                                                                                                         |
 | 2026-09-08 | CSV Ingestion TC-3C.1 FILE candidate classification backend | Backend IT covers ingestion-scoped FILE candidate category/tag PATCH, absent/null/empty preserve-clear-replace semantics, ownership and category-flow guards, batch candidate rule preview/apply with `TransactionOrigin.FILE_IMPORT`, skipped non-evaluable rows, `FILL_EMPTY_ONLY` apply, confirm-no-suggestions, no rawData mutation, no `FinancialTransaction` creation, no Confirm Import behavior change.                                                                                                                    |
 | 2026-09-08 | CSV Ingestion TC-3C.2 candidate-backed Pantalla 2           | Jest covers candidate prepare/reload/preview, persisted candidate category/tag edits, per-row apply suggestions, confirm-no-suggestions, blocking missing/not-reviewed candidates, confirm payload construction from freshly reloaded candidates, and no legacy `classification-preview` use. Cypress covers the real workflow with OUT vs IN rule behavior, candidate apply/no-suggestion decisions, persisted selections after reload, confirm payload from candidates, and absence of the old preview endpoints in the UI flow. |
+| 2026-09-08 | CSV Ingestion TC-3D.1 candidate-backed Confirm Import       | Backend IT covers Confirm Import posting from reviewed `FILE_IMPORT` candidates, ignored legacy category/tag payload values, optional no-body confirm, candidate status/validation/classification guards, candidate/record/transaction links, all-or-nothing rollback, completed retry idempotency, rawData immutability, and TransactionIngestion delete cleanup for prepared/posted candidates and candidate tag joins.                                                                                                          |
 | 2026-07-11 | **Decision 11C — snapshot audit**                           | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                                                                                                                                                                                                                     |
 | 2026-07-11 | **Decision 11C implemented ✅**                             | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal.                                                                                                                                                                                          |
 

@@ -217,5 +217,31 @@ public interface TransactionCandidateRepository
     )
     void deleteTagLinksByTransactionCandidateId(@Param("transactionCandidateId") Long transactionCandidateId);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select id from transaction_candidate where transaction_ingestion_id = :transactionIngestionId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id = :transactionIngestionId"
+    )
+    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select tc.id from transaction_candidate tc join transaction_ingestion ti on tc.transaction_ingestion_id = ti.id where ti.account_id = :accountId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByTransactionIngestionAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id in (select transactionIngestion.id from TransactionIngestion transactionIngestion where transactionIngestion.account.id = :accountId)"
+    )
+    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
+
     long countByUserLogin(String login);
 }

@@ -20,6 +20,7 @@ import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
@@ -67,6 +68,9 @@ class TransactionIngestionServiceTest {
 
     @Mock
     private IngestionRecordRepository ingestionRecordRepository;
+
+    @Mock
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @InjectMocks
     private TransactionIngestionService transactionIngestionService;
@@ -356,6 +360,7 @@ class TransactionIngestionServiceTest {
             fileIngestionRepository,
             apiIngestionRepository,
             internalTransferRepository,
+            transactionCandidateRepository,
             ingestionRecordRepository,
             financialTransactionRepository,
             transactionIngestionRepository
@@ -363,6 +368,8 @@ class TransactionIngestionServiceTest {
         inOrder.verify(fileIngestionRepository).deleteByTransactionIngestionId(100L);
         inOrder.verify(apiIngestionRepository).deleteByTransactionIngestionId(100L);
         inOrder.verify(internalTransferRepository).deleteByTransactionIngestionIdInEitherRole(100L);
+        inOrder.verify(transactionCandidateRepository).deleteTagLinksByTransactionIngestionId(100L);
+        inOrder.verify(transactionCandidateRepository).deleteByTransactionIngestionId(100L);
         inOrder.verify(ingestionRecordRepository).deleteByTransactionIngestionId(100L);
         inOrder.verify(financialTransactionRepository).deleteTagLinksByTransactionIngestionId(100L);
         inOrder.verify(financialTransactionRepository).deleteByTransactionIngestionId(100L);

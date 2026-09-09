@@ -10,6 +10,7 @@ import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
@@ -56,6 +57,8 @@ public class TransactionIngestionService {
 
     private final IngestionRecordRepository ingestionRecordRepository;
 
+    private final TransactionCandidateRepository transactionCandidateRepository;
+
     public TransactionIngestionService(
         TransactionIngestionRepository transactionIngestionRepository,
         TransactionIngestionMapper transactionIngestionMapper,
@@ -65,7 +68,8 @@ public class TransactionIngestionService {
         ApiIngestionRepository apiIngestionRepository,
         FinancialTransactionRepository financialTransactionRepository,
         InternalTransferRepository internalTransferRepository,
-        IngestionRecordRepository ingestionRecordRepository
+        IngestionRecordRepository ingestionRecordRepository,
+        TransactionCandidateRepository transactionCandidateRepository
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.transactionIngestionMapper = transactionIngestionMapper;
@@ -76,6 +80,7 @@ public class TransactionIngestionService {
         this.financialTransactionRepository = financialTransactionRepository;
         this.internalTransferRepository = internalTransferRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
+        this.transactionCandidateRepository = transactionCandidateRepository;
     }
 
     /**
@@ -226,6 +231,8 @@ public class TransactionIngestionService {
         fileIngestionRepository.deleteByTransactionIngestionId(id);
         apiIngestionRepository.deleteByTransactionIngestionId(id);
         internalTransferRepository.deleteByTransactionIngestionIdInEitherRole(id);
+        transactionCandidateRepository.deleteTagLinksByTransactionIngestionId(id);
+        transactionCandidateRepository.deleteByTransactionIngestionId(id);
         ingestionRecordRepository.deleteByTransactionIngestionId(id);
         financialTransactionRepository.deleteTagLinksByTransactionIngestionId(id);
         financialTransactionRepository.deleteByTransactionIngestionId(id);
@@ -244,6 +251,8 @@ public class TransactionIngestionService {
         fileIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
         apiIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
         internalTransferRepository.deleteByTransactionIngestionAccountIdInEitherRole(accountId);
+        transactionCandidateRepository.deleteTagLinksByTransactionIngestionAccountId(accountId);
+        transactionCandidateRepository.deleteByTransactionIngestionAccountId(accountId);
         ingestionRecordRepository.deleteByTransactionIngestionAccountId(accountId);
         financialTransactionRepository.deleteTagLinksByTransactionIngestionAccountId(accountId);
         financialTransactionRepository.deleteByTransactionIngestionAccountId(accountId);
