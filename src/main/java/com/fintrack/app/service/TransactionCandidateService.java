@@ -337,10 +337,12 @@ public class TransactionCandidateService {
             new IllegalArgumentException("Entity not found")
         );
         rejectFinalMutation(existing);
+        rejectGenericCrudMutableCandidate(existing);
         rejectSourceChange(existing, transactionCandidateDTO);
         rejectGenericStatusChange(existing, transactionCandidateDTO, updateNode);
         rejectServerTimestampChanges(existing, transactionCandidateDTO, updateNode);
         rejectClientControlledFieldsOnUpdate(transactionCandidateDTO, updateNode);
+        rejectGenericWorkflowLinkMutation(transactionCandidateDTO, updateNode);
 
         TransactionCandidate candidate = transactionCandidateMapper.toEntity(transactionCandidateDTO);
         candidate.setUser(existing.getUser());
@@ -375,10 +377,12 @@ public class TransactionCandidateService {
         return findAccessibleEntity(transactionCandidateDTO.getId())
             .map(existing -> {
                 rejectFinalMutation(existing);
+                rejectGenericCrudMutableCandidate(existing);
                 rejectSourceChange(existing, transactionCandidateDTO);
                 rejectGenericStatusChange(existing, transactionCandidateDTO, patchNode);
                 rejectServerTimestampChanges(existing, transactionCandidateDTO, patchNode);
                 rejectClientControlledFieldsOnUpdate(transactionCandidateDTO, patchNode);
+                rejectGenericWorkflowLinkMutation(transactionCandidateDTO, patchNode);
 
                 TransactionCandidateStatus previousStatus = existing.getStatus();
                 transactionCandidateMapper.partialUpdate(existing, transactionCandidateDTO);
@@ -474,7 +478,7 @@ public class TransactionCandidateService {
         if (candidate.isEmpty()) {
             return false;
         }
-        rejectPostedOrCancelledDelete(candidate.get());
+        rejectGenericDelete(candidate.get());
         transactionCandidateRepository.deleteTagLinksByTransactionCandidateId(id);
         transactionCandidateRepository.deleteById(id);
         return true;
@@ -1080,10 +1084,15 @@ public class TransactionCandidateService {
     }
 
     private void rejectGenericCreateControlledFields(TransactionCandidateDTO dto) {
-        if (dto.getSource() != null && dto.getSource() != TransactionCandidateSource.MANUAL) {
-            throw new IllegalArgumentException("Generic TransactionCandidate create only supports manual draft candidates");
+        if (dto.getSource() == TransactionCandidateSource.FILE_IMPORT) {
+            throw new IllegalArgumentException("Generic candidate CRUD cannot create file import candidates");
+        }
+        if (dto.getSource() == TransactionCandidateSource.API_IMPORT) {
+            throw new IllegalArgumentException("Generic candidate CRUD cannot create api import candidates");
         }
         rejectCreateField(dto.getStatus(), "Status is controlled by command endpoints");
+        rejectCreateField(dto.getTransactionIngestion(), "Transaction ingestion links are managed by ingestion workflow commands");
+        rejectCreateField(dto.getIngestionRecord(), "Ingestion record links are managed by ingestion workflow commands");
     }
 
     private void rejectManualCommandControlledFieldsOnCreate(TransactionCandidateDTO dto) {
@@ -1139,9 +1148,52 @@ public class TransactionCandidateService {
         }
     }
 
-    private void rejectPostedOrCancelledDelete(TransactionCandidate candidate) {
+    private void rejectGenericCrudMutableCandidate(TransactionCandidate existing) {
+        if (existing.getSource() == TransactionCandidateSource.FILE_IMPORT) {
+            throw new IllegalArgumentException("File import candidates are managed by ingestion workflow commands");
+        }
+        if (existing.getSource() == TransactionCandidateSource.API_IMPORT) {
+            throw new IllegalArgumentException("API import candidates are not supported by generic candidate CRUD");
+        }
+        if (existing.getTransactionIngestion() != null || existing.getIngestionRecord() != null) {
+            throw new IllegalArgumentException("Workflow-linked candidates are managed by workflow commands");
+        }
+    }
+
+    private void rejectGenericWorkflowLinkMutation(TransactionCandidateDTO dto, JsonNode node) {
+        rejectUpdateField(
+            dto.getTransactionIngestion(),
+            node,
+            "transactionIngestion",
+            "Transaction ingestion links are managed by ingestion workflow commands"
+        );
+        rejectUpdateField(
+            dto.getIngestionRecord(),
+            node,
+            "ingestionRecord",
+            "Ingestion record links are managed by ingestion workflow commands"
+        );
+    }
+
+    private void rejectGenericDelete(TransactionCandidate candidate) {
         if (candidate.getStatus() == TransactionCandidateStatus.POSTED || candidate.getStatus() == TransactionCandidateStatus.CANCELLED) {
             throw new IllegalArgumentException("Posted or cancelled transaction candidates cannot be deleted");
+        }
+        if (candidate.getSource() == TransactionCandidateSource.FILE_IMPORT) {
+            throw new IllegalArgumentException("File import candidates cannot be deleted through generic candidate CRUD");
+        }
+        if (candidate.getSource() == TransactionCandidateSource.API_IMPORT) {
+            throw new IllegalArgumentException("API import candidates cannot be deleted through generic candidate CRUD");
+        }
+        if (
+            candidate.getTransactionIngestion() != null ||
+            candidate.getIngestionRecord() != null ||
+            candidate.getFinancialTransaction() != null
+        ) {
+            throw new IllegalArgumentException("Workflow-linked candidates cannot be deleted through generic candidate CRUD");
+        }
+        if (candidate.getStatus() != TransactionCandidateStatus.DRAFT || candidate.getSource() != TransactionCandidateSource.MANUAL) {
+            throw new IllegalArgumentException("Generic candidate CRUD can delete only unlinked manual draft candidates");
         }
     }
 

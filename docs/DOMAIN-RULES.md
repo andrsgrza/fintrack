@@ -135,7 +135,7 @@ TC-2A / TC-2A.1 manual backend command rules:
 - `validationStatus=INVALID/STALE` is recalculated during manual post from the current candidate fields; if the candidate still cannot become complete/valid, post is rejected. `descriptionReviewStatus=STALE` blocks manual post until refreshed. `classificationReviewStatus=NOT_EVALUATED` and `classificationReviewStatus=STALE` block manual post until the user applies suggestions, confirms no suggestions, or manually selects category/tags.
 - Candidate post does **not** invoke `TransactionRuleEvaluationService` in TC-2A. Existing direct `POST /api/financial-transactions` behavior remains unchanged and still applies TransactionRules on create.
 - Candidates never affect balances directly; only the posted `FinancialTransaction` created by the post command affects balances.
-- Generic `TransactionCandidate` CRUD writes are technical/restricted: generic create only supports safe MANUAL drafts, generic update/PATCH cannot change lifecycle status or controlled review/link fields, and generic delete preserves `POSTED`/`CANCELLED` candidates.
+- Generic `TransactionCandidate` CRUD writes are technical/restricted: generic create only supports basic unlinked `MANUAL` drafts; generic update/PATCH applies only to unlinked `MANUAL` candidates and cannot change lifecycle status, source, ingestion links, financial transaction links, controlled review fields, server timestamps, or derived `amount`/`flow`; generic delete is limited to unlinked `MANUAL` `DRAFT` candidates and rejects `FILE_IMPORT`, `API_IMPORT`, `POSTED`, `CANCELLED`, workflow-linked, or posted-transaction-linked candidates.
 
 TC-2B.1 manual UI rules:
 

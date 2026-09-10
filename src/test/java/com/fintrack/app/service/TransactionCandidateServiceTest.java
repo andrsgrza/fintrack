@@ -13,8 +13,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
+import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CategoryType;
@@ -220,7 +222,36 @@ class TransactionCandidateServiceTest {
 
         assertThatThrownBy(() -> transactionCandidateService.save(dto))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Generic TransactionCandidate create only supports manual draft candidates");
+            .hasMessageContaining("Generic candidate CRUD cannot create file import candidates");
+    }
+
+    @Test
+    void genericCreateRejectsApiImportCandidate() {
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.API_IMPORT);
+
+        assertThatThrownBy(() -> transactionCandidateService.save(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Generic candidate CRUD cannot create api import candidates");
+    }
+
+    @Test
+    void genericCreateRejectsTransactionIngestionLink() {
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setTransactionIngestion(refTransactionIngestion(1L));
+
+        assertThatThrownBy(() -> transactionCandidateService.save(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Transaction ingestion links are managed by ingestion workflow commands");
+    }
+
+    @Test
+    void genericCreateRejectsIngestionRecordLink() {
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setIngestionRecord(refIngestionRecord(1L));
+
+        assertThatThrownBy(() -> transactionCandidateService.save(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Ingestion record links are managed by ingestion workflow commands");
     }
 
     @Test
@@ -729,7 +760,7 @@ class TransactionCandidateServiceTest {
 
         assertThatThrownBy(() -> transactionCandidateService.save(dto))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Generic TransactionCandidate create only supports manual draft candidates");
+            .hasMessageContaining("Generic candidate CRUD cannot create file import candidates");
     }
 
     @Test
@@ -739,7 +770,7 @@ class TransactionCandidateServiceTest {
 
         assertThatThrownBy(() -> transactionCandidateService.save(dto))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Generic TransactionCandidate create only supports manual draft candidates");
+            .hasMessageContaining("Generic candidate CRUD cannot create file import candidates");
     }
 
     @Test
@@ -944,6 +975,87 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
+    void genericUpdateRejectsTransactionIngestionLinkMutation() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setId(1L);
+        dto.setCreatedAt(existing.getCreatedAt());
+        dto.setUpdatedAt(existing.getUpdatedAt());
+        dto.setTransactionIngestion(refTransactionIngestion(1L));
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.update(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Transaction ingestion links are managed by ingestion workflow commands");
+    }
+
+    @Test
+    void genericPatchRejectsIngestionRecordLinkMutation() throws Exception {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(1L);
+        dto.setIngestionRecord(refIngestionRecord(1L));
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() ->
+            transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"ingestionRecord\":{\"id\":1}}"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Ingestion record links are managed by ingestion workflow commands");
+    }
+
+    @Test
+    void genericUpdateRejectsFileImportCandidateMutation() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST);
+        existing.setSource(TransactionCandidateSource.FILE_IMPORT);
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
+        dto.setId(1L);
+        dto.setCreatedAt(existing.getCreatedAt());
+        dto.setUpdatedAt(existing.getUpdatedAt());
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.update(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("File import candidates are managed by ingestion workflow commands");
+    }
+
+    @Test
+    void genericPatchRejectsApiImportCandidateMutation() throws Exception {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        existing.setSource(TransactionCandidateSource.API_IMPORT);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(1L);
+        dto.setDescription("Patched");
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() ->
+            transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"description\":\"Patched\"}"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("API import candidates are not supported by generic candidate CRUD");
+    }
+
+    @Test
+    void genericUpdateRejectsExistingWorkflowLinkedCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        existing.setTransactionIngestion(transactionIngestion(user));
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setId(1L);
+        dto.setCreatedAt(existing.getCreatedAt());
+        dto.setUpdatedAt(existing.getUpdatedAt());
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.update(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Workflow-linked candidates are managed by workflow commands");
+    }
+
+    @Test
     void sourceImmutable() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
@@ -1100,6 +1212,66 @@ class TransactionCandidateServiceTest {
             .hasMessageContaining("Posted or cancelled transaction candidates cannot be deleted");
     }
 
+    @Test
+    void deleteRejectsFileImportCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST);
+        existing.setSource(TransactionCandidateSource.FILE_IMPORT);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("File import candidates cannot be deleted through generic candidate CRUD");
+    }
+
+    @Test
+    void deleteRejectsApiImportCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        existing.setSource(TransactionCandidateSource.API_IMPORT);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("API import candidates cannot be deleted through generic candidate CRUD");
+    }
+
+    @Test
+    void deleteRejectsWorkflowLinkedCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        existing.setIngestionRecord(ingestionRecord(user));
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Workflow-linked candidates cannot be deleted through generic candidate CRUD");
+    }
+
+    @Test
+    void deleteRejectsFinancialTransactionLinkedCandidate() {
+        FinancialTransaction financialTransaction = new FinancialTransaction().id(99L).account(account(user));
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        existing.setFinancialTransaction(financialTransaction);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Workflow-linked candidates cannot be deleted through generic candidate CRUD");
+    }
+
+    @Test
+    void deleteRejectsReadyManualCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Generic candidate CRUD can delete only unlinked manual draft candidates");
+    }
+
     private TransactionCandidateDTO dto(TransactionCandidateSource source) {
         TransactionCandidateDTO dto = new TransactionCandidateDTO();
         dto.setSource(source);
@@ -1207,6 +1379,20 @@ class TransactionCandidateServiceTest {
         tag.setName("Tag");
         tag.setUser(owner);
         return tag;
+    }
+
+    private TransactionIngestion transactionIngestion(User owner) {
+        TransactionIngestion transactionIngestion = new TransactionIngestion();
+        transactionIngestion.setId(1L);
+        transactionIngestion.setAccount(account(owner));
+        return transactionIngestion;
+    }
+
+    private IngestionRecord ingestionRecord(User owner) {
+        IngestionRecord ingestionRecord = new IngestionRecord();
+        ingestionRecord.setId(1L);
+        ingestionRecord.setTransactionIngestion(transactionIngestion(owner));
+        return ingestionRecord;
     }
 
     private FinancialAccountDTO refAccount(Long id) {

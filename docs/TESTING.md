@@ -637,7 +637,7 @@ Key TC-1/TC-2A assertions:
 - `PATCH /api/transaction-candidates/{id}/manual-draft` updates editable draft fields, derives amount/flow from signedAmount, and recalculates DRAFT vs READY_TO_POST.
 - `POST /api/transaction-candidates/{id}/cancel` marks non-final manual drafts CANCELLED and sets `cancelledAt`.
 - `POST /api/transaction-candidates/{id}/post` supports MANUAL only, uses a pessimistic write lock, recalculates current normalized/derived fields, rejects incomplete/cancelled/file/API candidates and stale description/classification review states, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies category/tags, links the candidate, and is idempotent on retry.
-- Generic `TransactionCandidate` writes are restricted: generic create cannot create file/API import candidates or set status; generic update/PATCH cannot change status; generic delete rejects `POSTED`/`CANCELLED`.
+- Generic `TransactionCandidate` writes are restricted: generic create cannot create file/API import candidates, attach ingestion links, set status, or set server-controlled fields; generic update/PATCH cannot change status, mutate workflow-linked/non-`MANUAL` candidates, or set workflow/server-controlled fields; generic delete is limited to unlinked `MANUAL` `DRAFT` candidates and rejects file/API import, posted/cancelled, workflow-linked, or transaction-linked candidates while allowed draft delete cleans candidate-tag joins.
 - Candidate post does not invoke TransactionRule evaluation; candidate rule preview/apply exists only through explicit candidate command endpoints.
 
 Key TC-3A FILE import candidate prepare assertions:
