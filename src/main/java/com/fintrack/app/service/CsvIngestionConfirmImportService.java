@@ -26,8 +26,6 @@ import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.CsvIngestionReadinessService.CsvIngestionReadinessSnapshot;
-import com.fintrack.app.service.dto.CsvIngestionConfirmImportRecordSelectionDTO;
-import com.fintrack.app.service.dto.CsvIngestionConfirmImportRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
@@ -36,7 +34,6 @@ import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -84,7 +81,7 @@ public class CsvIngestionConfirmImportService {
     }
 
     @Transactional(noRollbackFor = IngestionNotReadyException.class)
-    public CsvIngestionConfirmImportResponseDTO confirm(Long transactionIngestionId, CsvIngestionConfirmImportRequestDTO request) {
+    public CsvIngestionConfirmImportResponseDTO confirm(Long transactionIngestionId) {
         TransactionIngestion ingestion = resolveAccessibleFileIngestion(transactionIngestionId);
         List<IngestionRecord> records = records(ingestion);
         validateNoCorruptFinancialTransactionLinks(records);
@@ -102,7 +99,6 @@ public class CsvIngestionConfirmImportService {
             throw new IngestionNotReadyException(NOT_READY_MESSAGE);
         }
 
-        validateLegacyRecordIdsIfPresent(request, records);
         Map<Long, TransactionCandidate> candidatesByRecordId = validateAndResolveCandidates(ingestion, records);
 
         int createdNow = 0;
@@ -134,39 +130,6 @@ public class CsvIngestionConfirmImportService {
         transactionIngestionRepository.save(ingestion);
 
         return response(ingestion, records, createdNow);
-    }
-
-    private void validateLegacyRecordIdsIfPresent(CsvIngestionConfirmImportRequestDTO request, List<IngestionRecord> records) {
-        if (request == null || request.getRecords() == null) {
-            return;
-        }
-        List<IngestionRecord> validRecords = records.stream().filter(record -> record.getStatus() == IngestionRecordStatus.VALID).toList();
-        Map<Long, IngestionRecord> validRecordById = new HashMap<>();
-        for (IngestionRecord record : validRecords) {
-            validRecordById.put(record.getId(), record);
-        }
-
-        if (request.getRecords().size() != validRecords.size()) {
-            throw new IllegalArgumentException("Confirm import must include exactly all valid ingestion records");
-        }
-
-        Set<Long> seenRecordIds = new HashSet<>();
-        for (CsvIngestionConfirmImportRecordSelectionDTO selection : request.getRecords()) {
-            if (selection == null || selection.getRecordId() == null) {
-                throw new IllegalArgumentException("Confirm import record id is required");
-            }
-            if (!seenRecordIds.add(selection.getRecordId())) {
-                throw new IllegalArgumentException("Confirm import record ids must be unique");
-            }
-            IngestionRecord record = validRecordById.get(selection.getRecordId());
-            if (record == null) {
-                throw new IllegalArgumentException("Confirm import record does not belong to the valid record set");
-            }
-        }
-
-        if (!seenRecordIds.equals(validRecordById.keySet())) {
-            throw new IllegalArgumentException("Confirm import must include exactly all valid ingestion records");
-        }
     }
 
     private Map<Long, TransactionCandidate> validateAndResolveCandidates(TransactionIngestion ingestion, List<IngestionRecord> records) {

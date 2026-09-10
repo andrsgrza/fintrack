@@ -175,14 +175,13 @@ FILE ingestion candidate preparation:
 - FILE candidate classification endpoints do not create `FinancialTransaction` rows. Confirm Import is the separate posting command.
 - TC-3C.2 migrates Pantalla 2 frontend to candidate-backed state. The UI prepares candidates, reloads the workflow, previews rule suggestions through candidate endpoints, persists manual/apply/no-suggestion classification decisions on candidates, and reloads candidates before confirm.
 - TC-3D.1 migrates Confirm Import backend internals to the existing `POST /api/transaction-ingestions/{id}/confirm` path using reviewed `FILE_IMPORT` candidates as the source of truth.
-- The current frontend does not send the legacy confirm request shape. Backend still tolerates it for older/external clients by validating legacy `recordId`s when present, but it does not trust request `categoryId`/`tagIds`; persisted candidate category/tags win.
+- The current frontend does not send the legacy confirm request shape. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body; persisted candidate category/tags are the only classification source of truth.
 - Confirm requires every current `VALID` row to have exactly one reviewed candidate linked to the same ingestion, record, owner, and account with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`.
 - Confirm creates final `FinancialTransaction` rows from candidate fields/category/tags, sets `origin=FILE_IMPORT`, links candidates and ingestion records to the created transactions, marks candidates `POSTED`, marks records `IMPORTED`, and completes the parent ingestion all-or-nothing.
 
 Deferred:
 
 - Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
-- Removing backend tolerance for the legacy confirm request shape once older/external clients can rely on candidate-backed confirm without `records`.
 - Description/rule re-evaluation endpoints.
 
 ---
@@ -1403,19 +1402,19 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### I2 — confirm import
 
-| Rule                   | Decision                                                                                                                                                                                        | Status   |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Confirm import         | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` review records only after recalculating `READY` status                                         | **Done** |
-| Source fields          | Imported transactions are built from reviewed `FILE_IMPORT` candidate fields synced from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                             | **Done** |
-| Origin                 | Imported transactions use `origin = FILE_IMPORT`                                                                                                                                                | **Done** |
-| Row transitions        | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                                                         | **Done** |
-| Parent transition      | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new                                                 | **Done** |
-| Classification preview | `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only and returns category/tag suggestions                                                            | **Done** |
-| Explicit selections    | Confirm import requires reviewed candidate classification for each `VALID` row and applies candidate category/tags after ownership/flow validation; legacy request category/tag ids are ignored | **Done** |
-| Rule Engine            | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                                                                  | **Done** |
-| Evaluation persistence | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                                                             | **Done** |
-| Candidate prepare      | `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; no rawData mutation; no FT rows                                        | **Done** |
-| Candidate workflow DTO | `GET /api/transaction-ingestions/{id}/workflow` exposes optional lightweight prepared candidate summaries per row; read-only; no candidate creation                                             | **Done** |
+| Rule                           | Decision                                                                                                                                                                                        | Status      |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Confirm import                 | `POST /api/transaction-ingestions/{id}/confirm` creates `FinancialTransaction` rows from `VALID` review records only after recalculating `READY` status                                         | **Done**    |
+| Source fields                  | Imported transactions are built from reviewed `FILE_IMPORT` candidate fields synced from `rawData.normalized`; `rawData.raw` remains the original CSV audit payload                             | **Done**    |
+| Origin                         | Imported transactions use `origin = FILE_IMPORT`                                                                                                                                                | **Done**    |
+| Row transitions                | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                                                         | **Done**    |
+| Parent transition              | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new                                                 | **Done**    |
+| Removed classification preview | `POST /api/transaction-ingestions/{id}/classification-preview` was removed in TC-4B. Active Pantalla 2 uses candidate-backed preview/apply endpoints.                                           | **Removed** |
+| Explicit selections            | Confirm import requires reviewed candidate classification for each `VALID` row and applies candidate category/tags after ownership/flow validation; old request category/tag ids are not parsed | **Done**    |
+| Rule Engine                    | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                                                                  | **Done**    |
+| Evaluation persistence         | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                                                             | **Done**    |
+| Candidate prepare              | `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs `FILE_IMPORT` candidates for `VALID` rows only; no rawData mutation; no FT rows                                        | **Done**    |
+| Candidate workflow DTO         | `GET /api/transaction-ingestions/{id}/workflow` exposes optional lightweight prepared candidate summaries per row; read-only; no candidate creation                                             | **Done**    |
 
 ---
 

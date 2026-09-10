@@ -119,7 +119,7 @@ Configured backend rule creation/update is also available through:
 
 The configured API accepts/returns a parent `TransactionRule` plus its ordered conditions. It preserves server-managed parent fields, server-assigns condition positions, and replaces the full condition set on configured PUT. The product create/edit UI uses this API and keeps condition edits in local frontend state until save.
 
-The old empty-draft product flow is not the recommended UI path. Technical/debug generated surfaces remain temporarily for direct maintenance, and backend validation remains the source of truth while those surfaces exist. This branch does not add ingestion category/tag review behavior and does not implement UserPreference.
+The old empty-draft product flow is no longer the active product UI path. Technical/debug generated surfaces remain temporarily for direct maintenance, and backend validation remains the source of truth while those surfaces exist. File ingestion category/tag review is now candidate-backed after Pantalla 1; UserPreference remains deferred.
 
 Rules with a resulting EXPENSE or INCOME category are guarded before activation/configured persistence:
 
@@ -457,7 +457,7 @@ The mutation uses `FILL_EMPTY_ONLY`.
 
 Phase 2 remains unchanged: create through the central `FinancialTransactionService.save(...)` path may receive `FILL_EMPTY_ONLY` rule application. It is not currently restricted to `MANUAL` origin only.
 
-Manual create UI calls the Phase 3A draft preview endpoint between a details step and a categorization step. Preview suggestions are UI assistance only; the final save still uses normal backend create. Category/tags sent by Step 2 are treated as explicit user choices, so backend create does not override the category. If UI/direct API creates without category/tags, Phase 2 may still fill empty category/tags.
+The active manual create UI uses `MANUAL` `TransactionCandidate` autosave. Candidate-specific preview/apply commands provide rule suggestions, and posting the candidate creates the final `FinancialTransaction`. The old two-step FinancialTransaction draft preview UI is superseded as product UI, though the backend `POST /api/financial-transactions/rule-preview` endpoint remains available for direct/compatibility use. Direct API creates through `POST /api/financial-transactions` still use Phase 2 `FILL_EMPTY_ONLY` behavior.
 
 ### Update
 
@@ -686,9 +686,11 @@ TC-3C.2 migrates Pantalla 2 in the TransactionIngestion workflow UI to prepared 
 - User edits in Pantalla 2 call candidate classification PATCH and are persisted on `TransactionCandidate`.
 - Browser refresh reloads persisted category/tag selections from the workflow row candidate summaries.
 - Before Confirm Import, the current UI reloads the workflow and validates that all `VALID` row candidates are ready/reviewed, then calls `/confirm` without legacy `records`/category/tag payload.
-- TC-3D.1 changes Confirm Import itself to read persisted `FILE_IMPORT` candidates as the source of truth. Request `categoryId`/`tagIds` are tolerated only as legacy client data and are not trusted.
+- TC-3D.1 changes Confirm Import itself to read persisted `FILE_IMPORT` candidates as the source of truth. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body.
 - Confirm Import does not run the evaluator and does not persist rule evaluation results or category/tag choices into `rawData`.
 - UserPreference and `AUTO_APPLY` behavior remain deferred.
+
+The older ingestion `POST /api/transaction-ingestions/{id}/classification-preview` endpoint was removed in TC-4B because the candidate-backed flow has no active dependency on it. New frontend/product code must use the candidate-backed prepare/rule-preview/apply/classification commands above.
 
 The ingestion-scoped candidate classification commands for prepared `FILE_IMPORT` `TransactionCandidate`s are:
 

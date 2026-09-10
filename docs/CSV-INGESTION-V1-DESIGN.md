@@ -429,11 +429,11 @@ I2C:
 - Imported transactions should use `origin = FILE_IMPORT`.
 - TC-3D.1 migrates Confirm Import backend internals to use prepared `FILE_IMPORT` `TransactionCandidate`s as the source of final transaction fields and category/tag classification.
 - Confirm import does not run the Rule Engine itself.
-- Slice 2A added the legacy backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
+- Slice 2A added the old backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview`. TC-4B removes that endpoint/service/DTO path because there is no active consumer; active Pantalla 2 product behavior uses candidate-backed preview/apply endpoints.
 - Slice 2B originally added Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.
 - TC-3C.2 migrates Pantalla 2 to candidate-backed classification: the UI prepares/syncs `FILE_IMPORT` `TransactionCandidate`s, reloads the workflow, previews rules through candidate endpoints, and persists category/tag review choices on candidates.
-- TC-3D.1 keeps accepting the legacy Confirm Import request shape for compatibility, but the backend no longer trusts request `categoryId`/`tagIds`; persisted candidates win. TC-3D.2 removes the current frontend legacy confirm payload adapter.
-- Candidate category/tags are validated defensively for current-user ownership and category flow compatibility. If a legacy payload is present, its `recordId`s must still cover exactly all current `VALID` rows without duplicates.
+- TC-3D.2 removes the current frontend legacy confirm payload adapter. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body; Confirm Import reads persisted candidates as the source of truth.
+- Candidate category/tags are validated defensively for current-user ownership and category flow compatibility.
 - Category/tag suggestions also follow the category/tag TransactionRule evaluator semantics. A rule that targets an EXPENSE category should include an effective `FLOW = OUT` condition, and a rule that targets an INCOME category should include an effective `FLOW = IN` condition through the configured TransactionRule guard. For example, an Uber expense rule should suggest the expense category for an OUT row and not for an IN/refund row.
 - Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
@@ -453,7 +453,6 @@ I2C:
 
 Future:
 
-- Remove backend tolerance for the legacy confirm payload once external/older clients no longer depend on it.
 - Bulk reevaluation remains deferred.
 
 ## 10. UI design
@@ -678,7 +677,7 @@ Already decided and not open for I1:
 - account comes through `TransactionIngestion`.
 - I1 does not run Rule Engine.
 - I1 does not create `FinancialTransaction` rows.
-- I2C confirm import does not run the Rule Engine; Slice 2A adds a separate read-only classification-preview endpoint for import-time category/tag suggestions.
+- I2C confirm import does not run the Rule Engine. Slice 2A added a separate read-only `classification-preview` endpoint for the old import-time category/tag suggestion flow; TC-4B removes that old endpoint. Active Pantalla 2 uses candidate-backed preview/apply endpoints.
 
 ## Description normalization during upload
 
@@ -724,4 +723,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. TC-3A candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. TC-3B exposes prepared candidates in the workflow response but keeps workflow GET read-only. TC-3C.2 uses candidate-backed Pantalla 2 classification commands that persist category/tags on prepared `FILE_IMPORT` candidates, never in `rawData`. TC-3D.1 Confirm Import posts those candidates into final `FinancialTransaction` rows. TC-3D.2 current frontend confirm validates persisted candidates, then posts `/confirm` with no legacy `records`/category/tag payload; backend category/tags come from persisted candidates. UserPreference-driven rule behavior is deferred.
+No FinancialTransactions are created during upload/review. TC-3A candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. TC-3B exposes prepared candidates in the workflow response but keeps workflow GET read-only. TC-3C.2 uses candidate-backed Pantalla 2 classification commands that persist category/tags on prepared `FILE_IMPORT` candidates, never in `rawData`. TC-3D.1 Confirm Import posts those candidates into final `FinancialTransaction` rows. TC-3D.2 current frontend confirm validates persisted candidates, then posts `/confirm` with no legacy `records`/category/tag payload; backend category/tags come from persisted candidates. TC-4B removes the old `classification-preview` implementation and backend parsing of the old confirm `records/categoryId/tagIds` body. UserPreference-driven rule behavior is deferred.

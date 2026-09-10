@@ -2852,12 +2852,18 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - `src/test/javascript/cypress/e2e/entity/file-ingestion.cy.ts` and `src/test/javascript/cypress/e2e/entity/ingestion-record.cy.ts` are technical/debug smoke specs. They verify the generated/debug pages remain reachable and marked technical without restoring old product CRUD expectations.
 - Run the current ingestion E2E pattern with:
   `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
-- confirm import requires every current `VALID` row to have exactly one reviewed, valid, `READY_TO_POST` `FILE_IMPORT` candidate. Legacy request `recordId`s may be validated for compatibility, but request `categoryId`/`tagIds` are ignored and persisted candidates win.
+- confirm import requires every current `VALID` row to have exactly one reviewed, valid, `READY_TO_POST` `FILE_IMPORT` candidate. Confirm no longer parses the old `records/categoryId/tagIds` request body; persisted candidates win.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
 - TC-3C.2 candidate-backed Pantalla 2 persists category/tags on prepared `FILE_IMPORT` candidates only; it does not persist category/tags into `rawData` and does not create transactions before Confirm Import.
 - TC-3C.2 candidate preview/apply uses `TransactionOrigin.FILE_IMPORT` and returns candidate-scoped suggestions without using `/api/financial-transactions/rule-preview` or the legacy ingestion `classification-preview` endpoint as the UI source of truth.
 - TC-3D.2 frontend confirm reloads and validates persisted candidates, then calls `/confirm` with no legacy `records`/category/tag payload.
 - TC-3D.1 marks confirmed candidates `POSTED`, sets `postedAt`, links candidate `financialTransaction`, marks rows `IMPORTED`, and keeps completed retry idempotent.
+
+TC-4B legacy removal coverage:
+
+- The old `POST /api/transaction-ingestions/{id}/classification-preview` endpoint/service/DTO tests were removed with the legacy implementation; active frontend tests assert the candidate-backed flow does not call that endpoint.
+- Confirm Import tests prove request-body category/tag values cannot override persisted `FILE_IMPORT` candidate category/tags.
+- The current frontend Confirm Import test coverage continues to assert `/confirm` is posted without legacy `records`/category/tag payload.
 - imported transactions do not get financial subscription from the Rule Engine.
 - disabled rows remain `DISABLED` and do not create transactions.
 - stale parent readiness is recalculated before confirm.
