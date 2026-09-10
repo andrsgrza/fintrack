@@ -1306,6 +1306,17 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | API metadata immutable after create            | `idempotencyKey`, `sourceSystem`, `apiVersion`, `endpoint`, `clientReference`, `receivedAt`, `createdAt` have no mutable v1 semantics | **Done**       |
 | List/read shows snapshot fields                | UI displays prefix/name even if token deleted                                                                                         | **Done** (11C) |
 
+### UI / product workflow
+
+| Rule                                                                 | Decision                                                                                           | Status  |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------- |
+| API_IMPORT product flow                                              | Deferred; no runtime API ingestion command UI exists yet                                           | Planned |
+| ApiIngestion generated UI                                            | Technical/debug metadata inspection only                                                           | Done    |
+| ApiIngestion list/detail                                             | Read-only product surfaces; list keeps View and hides Create/Edit/Delete; detail hides Edit/Delete | Done    |
+| Direct generated ApiIngestion write routes (`new`, `edit`, `delete`) | Show safe unavailable technical state; do not render generated write forms                         | Done    |
+| Backend generic ApiIngestion write endpoints                         | Temporarily retained for technical/test compatibility; not canonical product workflow commands     | Done    |
+| Future API ingestion writes                                          | Should be explicit TransactionIngestion workflow commands, not generated ApiIngestion CRUD         | Planned |
+
 ### Product rules
 
 | Rule                                                        | Decision                                    | Status                |

@@ -2558,12 +2558,16 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 **API shape:** POST uses `ApiIngestionCreateRequestDTO.apiAccessTokenId` as create-only input to copy snapshots. Read/list/update/PATCH use `ApiIngestionDTO` and must not expose or accept an `apiAccessToken` relation.
 
+**UI scope:** ApiIngestion is technical/debug metadata only until the API_IMPORT product workflow exists. The list/detail pages are read-only product surfaces with Technical marking: list keeps View and hides Create/Edit/Delete; detail hides Edit/Delete; direct `/api-ingestion/new`, `/api-ingestion/:id/edit`, and `/api-ingestion/:id/delete` routes show a safe unavailable state instead of generated write forms. Backend generic write tests remain because behavior was not changed in TC-4C.
+
 ### Summary counts
 
 | Type           | File                      | Tests  | Custom vs generated                                                             |
 | -------------- | ------------------------- | ------ | ------------------------------------------------------------------------------- |
 | Integration IT | `ApiIngestionResourceIT`  | **51** | 36 ownership/domain (incl. 11C + normalization/immutability) + 15 JHipster CRUD |
 | Unit — service | `ApiIngestionServiceTest` | **10** | All custom                                                                      |
+| Jest UI        | `api-ingestion`           | —      | Technical/read-only affordances + unavailable write-route state                 |
+| Cypress E2E    | `api-ingestion.cy.ts`     | —      | Technical/read-only smoke; no skipped generated CRUD tests                      |
 
 ```bash
 ./mvnw -Dskip.npm -Dskip.installnodenpm \

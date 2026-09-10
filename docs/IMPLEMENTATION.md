@@ -919,6 +919,8 @@ Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. 
 | PATCH                                                                                        | `JsonNode`; no campos mutables v1; parent / snapshots / `requestId` / metadata / timestamps `null`/change → `400`; absent preserves                         | —                |
 | List/read                                                                                    | Muestra snapshots aunque el token fue borrado                                                                                                               | —                |
 
+**UI / product scope:** API_IMPORT product ingestion is deferred. ApiIngestion remains a technical/debug metadata surface only: list/detail are read-only with Technical marking, product Create/Edit/Delete affordances are hidden, and direct generated write routes show a safe unavailable state instead of generated forms. Backend generic writes remain temporarily available for technical/test compatibility, but canonical future API ingestion should use TransactionIngestion workflow commands.
+
 **Fuera de scope:** pipeline, idempotency real, status machine, delete guards de hijos.
 
 #### Refactor 11C ✅
@@ -929,7 +931,7 @@ Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. 
 - [x] DTO/mapper: quitar `apiAccessToken`; exponer snapshots en read; usar `ApiIngestionCreateRequestDTO.apiAccessTokenId` solo en POST
 - [x] Service: en create, normalizar strings, resolver token accesible por id → copiar snapshots; quitar persist FK; no mutable fields v1; direct delete blocked
 - [x] `ApiAccessToken`: quitar `apiIngestions` one-to-many + `JsonIgnoreProperties`
-- [x] UI: create usa token selector solo para captura; edit/list muestra snapshots read-only
+- [x] UI: list/detail show snapshots read-only with Technical marking; product Create/Edit/Delete are hidden; direct generated write routes show unavailable technical state
 - [x] Tests 11C (ver `TESTING.md`)
 
 #### Checklist ownership ✅ (pre-11C baseline)

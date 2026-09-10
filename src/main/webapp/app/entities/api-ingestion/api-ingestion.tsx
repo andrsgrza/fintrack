@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Table } from 'reactstrap';
+import { Alert, Button, Table } from 'reactstrap';
 import { TextFormat, Translate, getSortState } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
@@ -72,13 +72,13 @@ export const ApiIngestion = () => {
             <FontAwesomeIcon icon="sync" spin={loading} />{' '}
             <Translate contentKey="fintrackApp.apiIngestion.home.refreshListLabel">Refresh List</Translate>
           </Button>
-          <Link to="/api-ingestion/new" className="btn btn-primary jh-create-entity" id="jh-create-entity" data-cy="entityCreateButton">
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.apiIngestion.home.createLabel">Create new Api Ingestion</Translate>
-          </Link>
         </div>
       </h2>
+      <Alert color="secondary" fade={false} data-cy="technicalViewBanner">
+        <Translate contentKey="fintrackApp.apiIngestion.technicalView">
+          Technical view — API ingestion product flow is deferred. This page is metadata/debug only.
+        </Translate>
+      </Alert>
       <div className="table-responsive">
         {apiIngestionList && apiIngestionList.length > 0 ? (
           <Table responsive>
@@ -166,23 +166,6 @@ export const ApiIngestion = () => {
                         <FontAwesomeIcon icon="eye" />{' '}
                         <span className="d-none d-md-inline">
                           <Translate contentKey="entity.action.view">View</Translate>
-                        </span>
-                      </Button>
-                      <Button tag={Link} to={`/api-ingestion/${apiIngestion.id}/edit`} color="primary" size="sm" data-cy="entityEditButton">
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.edit">Edit</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        onClick={() => (window.location.href = `/api-ingestion/${apiIngestion.id}/delete`)}
-                        color="danger"
-                        size="sm"
-                        data-cy="entityDeleteButton"
-                      >
-                        <FontAwesomeIcon icon="trash" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.delete">Delete</Translate>
                         </span>
                       </Button>
                     </div>

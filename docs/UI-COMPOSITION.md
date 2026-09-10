@@ -653,7 +653,7 @@ When a FILE workflow is `READY`, the review page transitions to Pantalla 2 in th
 
 The old `POST /api/transaction-ingestions/{id}/classification-preview` endpoint was removed in TC-4B, and Confirm Import no longer parses the old `records/categoryId/tagIds` request body. They are not part of the active TransactionIngestion workflow UI composition; UI code must use the candidate-backed commands and post `/confirm` without per-row classification payload.
 
-Generated ingestion CRUD routes remain available for direct inspection and debugging, but they are not the product workflow. `FileIngestion` and `IngestionRecord` stay in the Entities menu with a compact Technical badge. Their list/detail/create/edit pages show technical/debug context banners where applicable. Product mutation actions that would compete with the parent workflow are hidden: TransactionIngestion list/workflow detail do not show Edit; FileIngestion list/detail do not show Edit/Delete; IngestionRecord list/detail do not show Create/Edit/Delete. Routes remain available for deep links and debugging; no redirects are used.
+Generated ingestion CRUD routes remain available for direct inspection and debugging, but they are not the product workflow. `FileIngestion`, `IngestionRecord`, and `ApiIngestion` stay in the Entities menu with a compact Technical badge. Their list/detail pages show technical/debug context banners where applicable. Product mutation actions that would compete with a workflow are hidden: TransactionIngestion list/workflow detail do not show Edit; FileIngestion list/detail do not show Edit/Delete; IngestionRecord list/detail do not show Create/Edit/Delete; ApiIngestion list/detail show View/read-only metadata only and hide Create/Edit/Delete. ApiIngestion direct write routes (`/api-ingestion/new`, `/api-ingestion/:id/edit`, `/api-ingestion/:id/delete`) do not render generated create/edit/delete forms; they show a safe unavailable technical state and link back to the list because API_IMPORT product commands are deferred. Routes remain available for deep links and debugging; no redirects are used.
 
 ### Temporary generated ingestion write surfaces
 
@@ -662,7 +662,8 @@ The following generated write surfaces are kept temporarily for generated/debug 
 - `/transaction-ingestion/:id/edit` with `PUT /api/transaction-ingestions/{id}` and `PATCH /api/transaction-ingestions/{id}`;
 - generated `POST /api/transaction-ingestions`;
 - generated FileIngestion write routes with `POST /api/file-ingestions`, `PUT /api/file-ingestions/{id}`, and `PATCH /api/file-ingestions/{id}`;
-- generated IngestionRecord write routes with `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`.
+- generated IngestionRecord write routes with `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`;
+- generated ApiIngestion write routes with `POST /api/api-ingestions`, `PUT /api/api-ingestions/{id}`, and `PATCH /api/api-ingestions/{id}`.
 
 Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and tests may remain while these generated technical routes remain. A later backend hardening slice may reject or remove these generated write paths after their technical routes are removed.
 

@@ -1,7 +1,5 @@
 import {
-  entityConfirmDeleteButtonSelector,
   entityCreateButtonSelector,
-  entityCreateCancelButtonSelector,
   entityCreateSaveButtonSelector,
   entityDeleteButtonSelector,
   entityDetailsBackButtonSelector,
@@ -10,276 +8,204 @@ import {
   entityTableSelector,
 } from '../../support/entity';
 
-describe('ApiIngestion e2e test', () => {
+describe('ApiIngestion technical read-only e2e test', () => {
   const apiIngestionPageUrl = '/api-ingestion';
   const apiIngestionPageUrlPattern = new RegExp('/api-ingestion(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  // const apiIngestionSample = {"requestId":"unearth gadzooks","apiVersion":"ouch hm swordfish","endpoint":"unto yum lest","receivedAt":"2026-07-06T23:54:45.962Z","createdAt":"2026-07-07T07:37:30.202Z"};
 
-  let apiIngestion;
-  // let transactionIngestion;
-  // let apiAccessToken;
+  interface E2EEntity {
+    id: number;
+    name?: string;
+    sourceLabel?: string;
+    [key: string]: unknown;
+  }
+
+  let account: E2EEntity | undefined;
+  let transactionIngestion: E2EEntity | undefined;
+  let apiAccessToken: E2EEntity | undefined;
+  let apiIngestion: E2EEntity | undefined;
+
+  const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   beforeEach(() => {
     cy.login(username, password);
-  });
 
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // create an instance at the required relationship entity:
     cy.authenticatedRequest({
       method: 'POST',
-      url: '/api/transaction-ingestions',
-      body: {"ingestionType":"API","status":"PROCESSING","sourceLabel":"pro functional beside","startedAt":"2026-07-07T01:11:39.691Z","completedAt":"2026-07-07T01:25:45.625Z","recordsReceived":28333,"recordsCreated":29796,"recordsSkipped":14520,"recordsRejected":27344,"errorMessage":"esteemed","createdAt":"2026-07-07T12:38:50.043Z"},
+      url: '/api/financial-accounts',
+      body: {
+        name: uniqueName('api-ingestion-account'),
+        institutionName: 'E2E Bank',
+        accountType: 'DEBIT',
+        currency: 'MXN',
+        initialBalance: 0,
+        initialBalanceDate: '2026-01-01',
+        active: true,
+      },
     }).then(({ body }) => {
-      transactionIngestion = body;
+      account = body;
     });
-    // create an instance at the required relationship entity:
-    cy.authenticatedRequest({
-      method: 'POST',
-      url: '/api/api-access-tokens',
-      body: {"name":"schnitzel","tokenPrefix":"narrowcast boohoo no","tokenHash":"phooey yowza","status":"REVOKED","createdAt":"2026-07-06T17:52:24.274Z","updatedAt":"2026-07-07T15:24:24.561Z","lastUsedAt":"2026-07-06T18:07:44.699Z","expiresAt":"2026-07-06T18:27:41.137Z","revokedAt":"2026-07-07T16:02:22.600Z"},
-    }).then(({ body }) => {
-      apiAccessToken = body;
+
+    cy.then(() => {
+      expect(account?.id).to.be.a('number');
+
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/api-access-tokens',
+        body: {
+          name: uniqueName('api-ingestion-token'),
+        },
+      }).then(({ body }) => {
+        apiAccessToken = body;
+      });
+    });
+
+    cy.then(() => {
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/transaction-ingestions',
+        body: {
+          ingestionType: 'API',
+          status: 'PENDING',
+          sourceLabel: uniqueName('api-ingestion-parent'),
+          startedAt: '2026-01-01T00:00:00Z',
+          recordsReceived: 0,
+          recordsCreated: 0,
+          recordsSkipped: 0,
+          recordsRejected: 0,
+          createdAt: '2026-01-01T00:00:00Z',
+          account: { id: account?.id },
+        },
+      }).then(({ body }) => {
+        transactionIngestion = body;
+      });
+    });
+
+    cy.then(() => {
+      expect(transactionIngestion?.id).to.be.a('number');
+      expect(apiAccessToken?.id).to.be.a('number');
+
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/api-ingestions',
+        body: {
+          requestId: uniqueName('api-request'),
+          idempotencyKey: uniqueName('idem'),
+          sourceSystem: 'cypress',
+          apiVersion: 'v1',
+          endpoint: '/transactions',
+          clientReference: uniqueName('client-ref'),
+          transactionIngestion: { id: transactionIngestion?.id },
+          apiAccessTokenId: apiAccessToken?.id,
+        },
+      }).then(({ body }) => {
+        apiIngestion = body;
+      });
     });
   });
-   */
 
   beforeEach(() => {
     cy.intercept('GET', '/api/api-ingestions+(?*|)').as('entitiesRequest');
+    cy.intercept('GET', '/api/api-ingestions/*').as('entityRequest');
     cy.intercept('GET', '/api/transaction-ingestions/api-ingestion-is-null').as('apiIngestionParentCandidatesRequest');
     cy.intercept('POST', '/api/api-ingestions').as('postEntityRequest');
     cy.intercept('DELETE', '/api/api-ingestions/*').as('deleteEntityRequest');
   });
 
-  /* Disabled due to incompatibility
-  beforeEach(() => {
-    // Simulate relationships api for better performance and reproducibility.
-    cy.intercept('GET', '/api/transaction-ingestions', {
-      statusCode: 200,
-      body: [transactionIngestion],
-    });
-
-    cy.intercept('GET', '/api/api-access-tokens', {
-      statusCode: 200,
-      body: [apiAccessToken],
-    });
-
-  });
-   */
-
   afterEach(() => {
-    if (apiIngestion) {
-      cy.authenticatedRequest({
-        method: 'DELETE',
-        url: `/api/api-ingestions/${apiIngestion.id}`,
-      }).then(() => {
-        apiIngestion = undefined;
-      });
-    }
-  });
-
-  /* Disabled due to incompatibility
-  afterEach(() => {
-    if (transactionIngestion) {
+    if (transactionIngestion?.id) {
       cy.authenticatedRequest({
         method: 'DELETE',
         url: `/api/transaction-ingestions/${transactionIngestion.id}`,
-      }).then(() => {
-        transactionIngestion = undefined;
+        failOnStatusCode: false,
       });
+      transactionIngestion = undefined;
     }
-    if (apiAccessToken) {
+
+    if (apiAccessToken?.id) {
       cy.authenticatedRequest({
         method: 'DELETE',
         url: `/api/api-access-tokens/${apiAccessToken.id}`,
-      }).then(() => {
-        apiAccessToken = undefined;
+        failOnStatusCode: false,
       });
+      apiAccessToken = undefined;
     }
-  });
-   */
 
-  it('ApiIngestions menu should load ApiIngestions page', () => {
+    if (account?.id) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/financial-accounts/${account.id}`,
+        failOnStatusCode: false,
+      });
+      account = undefined;
+    }
+
+    apiIngestion = undefined;
+  });
+
+  it('ApiIngestions menu should load the technical read-only page', () => {
+    cy.intercept('GET', '/api/api-ingestions+(?*|)', {
+      body: [apiIngestion],
+      headers: { 'x-total-count': '1' },
+    }).as('currentApiIngestionEntitiesRequest');
+
     cy.visit('/');
     cy.clickOnEntityMenuItem('api-ingestion');
-    cy.wait('@entitiesRequest').then(({ response }) => {
-      if (response?.body.length === 0) {
-        cy.get(entityTableSelector).should('not.exist');
-      } else {
-        cy.get(entityTableSelector).should('exist');
-      }
-    });
+
+    cy.wait('@currentApiIngestionEntitiesRequest').its('response.statusCode').should('eq', 200);
     cy.getEntityHeading('ApiIngestion').should('exist');
+    cy.get('[data-cy="technicalViewBanner"]').should('exist');
+    cy.get(entityCreateButtonSelector).should('not.exist');
+    cy.get(entityTableSelector).should('exist');
+    cy.contains(entityTableSelector, apiIngestion?.requestId as string).within(() => {
+      cy.get(entityDetailsButtonSelector).should('exist');
+      cy.get(entityEditButtonSelector).should('not.exist');
+      cy.get(entityDeleteButtonSelector).should('not.exist');
+    });
     cy.url().should('match', apiIngestionPageUrlPattern);
   });
 
-  describe('ApiIngestion page', () => {
-    describe('create button click', () => {
-      beforeEach(() => {
-        cy.visit(apiIngestionPageUrl);
-        cy.wait('@entitiesRequest');
-      });
+  it('view button should load technical read-only details', () => {
+    cy.intercept('GET', '/api/api-ingestions+(?*|)', {
+      body: [apiIngestion],
+      headers: { 'x-total-count': '1' },
+    }).as('currentApiIngestionEntitiesRequest');
 
-      it('should load create ApiIngestion page', () => {
-        cy.get(entityCreateButtonSelector).click();
-        cy.url().should('match', new RegExp('/api-ingestion/new$'));
-        cy.getEntityCreateUpdateHeading('ApiIngestion');
-        cy.wait('@apiIngestionParentCandidatesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', apiIngestionPageUrlPattern);
-      });
+    cy.visit(apiIngestionPageUrl);
+    cy.wait('@currentApiIngestionEntitiesRequest').its('response.statusCode').should('eq', 200);
+
+    cy.contains(entityTableSelector, apiIngestion?.requestId as string).within(() => {
+      cy.get(entityDetailsButtonSelector).click();
     });
 
-    describe('with existing value', () => {
-      /* Disabled due to incompatibility
-      beforeEach(() => {
-        cy.authenticatedRequest({
-          method: 'POST',
-          url: '/api/api-ingestions',
-          body: {
-            ...apiIngestionSample,
-            transactionIngestion: transactionIngestion,
-            apiAccessToken: apiAccessToken,
-          },
-        }).then(({ body }) => {
-          apiIngestion = body;
-
-          cy.intercept(
-            {
-              method: 'GET',
-              url: '/api/api-ingestions+(?*|)',
-              times: 1,
-            },
-            {
-              statusCode: 200,
-              body: [apiIngestion],
-            }
-          ).as('entitiesRequestInternal');
-        });
-
-        cy.visit(apiIngestionPageUrl);
-
-        cy.wait('@entitiesRequestInternal');
-      });
-       */
-
-      beforeEach(function () {
-        cy.visit(apiIngestionPageUrl);
-
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          if (response?.body.length === 0) {
-            this.skip();
-          }
-        });
-      });
-
-      it('detail button click should load details ApiIngestion page', () => {
-        cy.get(entityDetailsButtonSelector).first().click();
-        cy.getEntityDetailsHeading('apiIngestion');
-        cy.get(entityDetailsBackButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', apiIngestionPageUrlPattern);
-      });
-
-      it('edit button click should load edit ApiIngestion page and go back', () => {
-        cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('ApiIngestion');
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', apiIngestionPageUrlPattern);
-      });
-
-      it('edit button click should load edit ApiIngestion page and save', () => {
-        cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('ApiIngestion');
-        cy.get(entityCreateSaveButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', apiIngestionPageUrlPattern);
-      });
-
-      // Reason: cannot create a required entity with relationship with required relationships.
-      it.skip('last delete button click should delete instance of ApiIngestion', () => {
-        cy.intercept('GET', '/api/api-ingestions/*').as('dialogDeleteRequest');
-        cy.get(entityDeleteButtonSelector).last().click();
-        cy.wait('@dialogDeleteRequest');
-        cy.getEntityDeleteDialogHeading('apiIngestion').should('exist');
-        cy.get(entityConfirmDeleteButtonSelector).click();
-        cy.wait('@deleteEntityRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(204);
-        });
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', apiIngestionPageUrlPattern);
-
-        apiIngestion = undefined;
-      });
-    });
+    cy.wait('@entityRequest').its('response.statusCode').should('eq', 200);
+    cy.getEntityDetailsHeading('apiIngestion').should('exist');
+    cy.get('[data-cy="technicalViewBanner"]').should('exist');
+    cy.get(entityEditButtonSelector).should('not.exist');
+    cy.get(entityDeleteButtonSelector).should('not.exist');
+    cy.get(entityDetailsBackButtonSelector).click();
+    cy.wait('@currentApiIngestionEntitiesRequest').its('response.statusCode').should('eq', 200);
+    cy.url().should('match', apiIngestionPageUrlPattern);
   });
 
-  describe('new ApiIngestion page', () => {
-    beforeEach(() => {
-      cy.visit(`${apiIngestionPageUrl}`);
-      cy.get(entityCreateButtonSelector).click();
-      cy.getEntityCreateUpdateHeading('ApiIngestion');
-    });
+  it('direct write routes show a safe unavailable state', () => {
+    cy.visit('/api-ingestion/new');
+    cy.get('[data-cy="apiIngestionWriteUnavailableHeading"]').should('exist');
+    cy.get('[data-cy="technicalViewBanner"]').should('exist');
+    cy.get('[data-cy="writeUnavailableBanner"]').should('exist');
+    cy.get(entityCreateSaveButtonSelector).should('not.exist');
+    cy.get('@apiIngestionParentCandidatesRequest.all').should('have.length', 0);
+    cy.get('@postEntityRequest.all').should('have.length', 0);
 
-    // Reason: cannot create a required entity with relationship with required relationships.
-    it.skip('should create an instance of ApiIngestion', () => {
-      cy.get(`[data-cy="requestId"]`).type('even besides achieve');
-      cy.get(`[data-cy="requestId"]`).should('have.value', 'even besides achieve');
+    cy.visit(`/api-ingestion/${apiIngestion?.id}/edit`);
+    cy.get('[data-cy="apiIngestionWriteUnavailableHeading"]').should('exist');
+    cy.get(entityCreateSaveButtonSelector).should('not.exist');
+    cy.get(entityEditButtonSelector).should('not.exist');
 
-      cy.get(`[data-cy="idempotencyKey"]`).type('defrag unfit');
-      cy.get(`[data-cy="idempotencyKey"]`).should('have.value', 'defrag unfit');
-
-      cy.get(`[data-cy="sourceSystem"]`).type('than dual for');
-      cy.get(`[data-cy="sourceSystem"]`).should('have.value', 'than dual for');
-
-      cy.get(`[data-cy="apiVersion"]`).type('a into');
-      cy.get(`[data-cy="apiVersion"]`).should('have.value', 'a into');
-
-      cy.get(`[data-cy="endpoint"]`).type('successfully aw yuck');
-      cy.get(`[data-cy="endpoint"]`).should('have.value', 'successfully aw yuck');
-
-      cy.get(`[data-cy="clientReference"]`).type('waist down');
-      cy.get(`[data-cy="clientReference"]`).should('have.value', 'waist down');
-
-      cy.get(`[data-cy="receivedAt"]`).type('2026-07-07T05:48');
-      cy.get(`[data-cy="receivedAt"]`).blur();
-      cy.get(`[data-cy="receivedAt"]`).should('have.value', '2026-07-07T05:48');
-
-      cy.get(`[data-cy="createdAt"]`).type('2026-07-07T00:10');
-      cy.get(`[data-cy="createdAt"]`).blur();
-      cy.get(`[data-cy="createdAt"]`).should('have.value', '2026-07-07T00:10');
-
-      cy.get(`[data-cy="transactionIngestion"]`).select(1);
-      cy.get(`[data-cy="apiAccessToken"]`).select(1);
-
-      cy.get(entityCreateSaveButtonSelector).click();
-
-      cy.wait('@postEntityRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(201);
-        apiIngestion = response.body;
-      });
-      cy.wait('@entitiesRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-      });
-      cy.url().should('match', apiIngestionPageUrlPattern);
-    });
+    cy.visit(`/api-ingestion/${apiIngestion?.id}/delete`);
+    cy.get('[data-cy="apiIngestionWriteUnavailableHeading"]').should('exist');
+    cy.get(entityDeleteButtonSelector).should('not.exist');
+    cy.get('@deleteEntityRequest.all').should('have.length', 0);
   });
 });

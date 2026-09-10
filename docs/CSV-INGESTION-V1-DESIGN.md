@@ -99,7 +99,9 @@ Recommended I1 values:
 
 ### ApiIngestion
 
-Untouched in this phase.
+ApiIngestion remains API metadata/debug only in CSV/file-ingestion phases. The API ingestion runtime/product workflow is deferred.
+
+Generated ApiIngestion list/detail pages may remain reachable for technical inspection, but ApiIngestion create/edit/delete are not product actions for the CSV workflow and should not be used as canonical ingestion commands.
 
 ## 3. `rawData` JSON contract
 

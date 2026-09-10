@@ -14,6 +14,9 @@
       "delete": {
         "question": "Api Ingestion {{ id }} cannot be deleted directly. Delete the parent Transaction Ingestion flow to clean up this API metadata."
       },
+      "technicalView": "Technical view — API ingestion product flow is deferred. This page is metadata/debug only.",
+      "writeUnavailableTitle": "Api Ingestion technical view",
+      "writeUnavailable": "Api Ingestion create, edit, and delete are not product actions yet. API ingestion metadata is managed by future API ingestion workflow commands.",
       "detail": {
         "title": "Api Ingestion"
       },
