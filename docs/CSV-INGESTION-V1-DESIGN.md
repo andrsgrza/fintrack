@@ -430,6 +430,7 @@ I2C:
 - Confirm import creates `FinancialTransaction` rows from valid `IngestionRecord` rows.
 - Imported transactions should use `origin = FILE_IMPORT`.
 - TC-3D.1 migrates Confirm Import backend internals to use prepared `FILE_IMPORT` `TransactionCandidate`s as the source of final transaction fields and category/tag classification.
+- In the active candidate lifecycle, `FILE_IMPORT` candidates are prepared for `VALID` rows and normally move from `READY_TO_POST` to `POSTED` during Confirm Import. `API_IMPORT` and `NEEDS_REVIEW` remain reserved/deferred and are not part of CSV v1 runtime behavior.
 - Confirm import does not run the Rule Engine itself.
 - Slice 2A added the old backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview`. TC-4B removes that endpoint/service/DTO path because there is no active consumer; active Pantalla 2 product behavior uses candidate-backed preview/apply endpoints.
 - Slice 2B originally added Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.

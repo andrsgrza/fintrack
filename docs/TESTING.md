@@ -602,6 +602,8 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Scope:** TC-3D.1 includes manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, FILE import candidate prepare/sync, optional prepared FILE candidate summaries in the TransactionIngestion workflow response, ingestion-scoped FILE candidate classification commands, candidate-backed Pantalla 2 frontend category/tag review, and candidate-backed Confirm Import backend posting. Pantalla 1 UI, DescriptionNormalizationRule re-evaluation, and UserPreference are not migrated to candidates yet.
 
+**Lifecycle enum alignment:** Backend/JDL/source enums include `NEEDS_REVIEW`, but no current manual or FILE workflow produces it; tests should treat it as reserved/deferred until TC-5C formalizes or removes it. `FAILED` and `validationStatus=INVALID/STALE` are guarded/reserved/internal outside the normal happy path. `descriptionReviewStatus` covers description normalization/review and is intentionally separate from category/tag `classificationReviewStatus`.
+
 ### Summary counts
 
 | Type           | File                              | Tests | Notes                                                                                                                                                                                     |

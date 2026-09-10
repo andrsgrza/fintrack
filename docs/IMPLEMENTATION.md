@@ -140,19 +140,21 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **TransactionCandidate exception:** TC-1/TC-2A treats candidates as product-owned draft/review state. Admin does not get special cross-user product behavior for candidate CRUD or manual commands; candidate operations resolve the current authenticated owner and validate every linked account/category/tag/ingestion record against that owner. The eventual `financialTransaction` link is server-controlled and is set only by explicit posting/conversion commands.
 
-## TransactionCandidate — TC-1/TC-3C.2 draft/review foundation
+## TransactionCandidate — active draft/review foundation
 
 `TransactionCandidate` is the central in-progress transaction model. It is intentionally separate from `FinancialTransaction`, which remains posted/final ledger data that affects balances, dashboards, budgets, and reports.
 
-TC-1/TC-1A adds the backend foundation:
+The active foundation includes:
 
 - JDL/.jhipster metadata, Liquibase table, backend entity/DTO/mapper/repository/service/resource.
 - Direct owner via `user`.
 - Optional links to `FinancialAccount`, `Category`, `Tag`, `TransactionIngestion`, and `IngestionRecord`; the optional `FinancialTransaction` link is readable but server-controlled/write-rejected in normal CRUD.
-- Lifecycle/status foundation for manual drafts and file/API ingestion review. Bank sync is deferred and is not an active TC-1A source value.
+- Lifecycle/status support for manual drafts and `FILE_IMPORT` ingestion review. `API_IMPORT` and bank sync are deferred.
 - Server-owned timestamps, derived `amount`/`flow`, server-owned review statuses, and same-owner validations.
-- `TransactionCandidateSource` describes how a candidate entered draft/review. `TransactionOrigin` describes final posted `FinancialTransaction` classification. They are not interchangeable; TC-1A does not store `TransactionOrigin` on `TransactionCandidate`.
+- `TransactionCandidateSource` describes how a candidate entered draft/review. `TransactionOrigin` describes final posted `FinancialTransaction` classification. They are not interchangeable; `TransactionCandidate` does not store `TransactionOrigin`.
 - Future posting mapping: `MANUAL → MANUAL`, `FILE_IMPORT → FILE_IMPORT`, `API_IMPORT → API`. Bank sync remains unsupported until the final transaction origin model supports it.
+- `NEEDS_REVIEW` is reserved/deferred and is not produced by the current manual or file workflows. `FAILED` and `validationStatus=INVALID/STALE` are guarded/reserved/internal until TC-5C formalizes or removes them.
+- `descriptionReviewStatus` tracks description normalization/review separately from `classificationReviewStatus`, which tracks category/tag review and gates manual post/file confirm.
 
 TC-2A / TC-2A.1 adds manual command endpoints:
 

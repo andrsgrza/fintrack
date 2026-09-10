@@ -29,7 +29,8 @@ import tech.jhipster.web.util.ResponseUtil;
 /**
  * REST controller for managing {@link com.fintrack.app.domain.TransactionCandidate}.
  *
- * TC-1 backend foundation only: this technical endpoint is not wired into the product UI yet.
+ * Product command endpoints are active for manual draft recovery/posting and FILE_IMPORT ingestion review.
+ * The generated CRUD-shaped endpoints remain technical/restricted compatibility surfaces; they are not product UI.
  */
 @RestController
 @RequestMapping("/api/transaction-candidates")

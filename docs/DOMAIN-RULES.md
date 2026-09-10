@@ -99,11 +99,11 @@ Domain boundary:
 - `FinancialTransaction` means posted/final ledger transaction and affects balances, dashboards, budgets, and reports.
 - `TransactionCandidate` means transaction in progress/review and does **not** affect balances, dashboards, budgets, or reports.
 - `FinancialTransaction` must not be used as an incomplete draft.
-- `TransactionCandidate` is central, not ingestion-specific: it is intended to support manual drafts and file/API ingestion review. Bank sync is deferred and is not an active TC-1A source value.
-- `TransactionCandidateSource` means how the candidate entered the draft/review pipeline. `TransactionOrigin` means how a final posted `FinancialTransaction` is classified. They are not interchangeable and `TransactionCandidate` does not store `TransactionOrigin` in TC-1A.
+- `TransactionCandidate` is central, not ingestion-specific: it actively supports manual drafts and `FILE_IMPORT` ingestion review. `API_IMPORT` and bank sync are deferred.
+- `TransactionCandidateSource` means how the candidate entered the draft/review pipeline. `TransactionOrigin` means how a final posted `FinancialTransaction` is classified. They are not interchangeable and `TransactionCandidate` does not store `TransactionOrigin`.
 - Future source→origin mapping for a posting/conversion command: `MANUAL → MANUAL`, `FILE_IMPORT → FILE_IMPORT`, `API_IMPORT → API`. Bank sync remains unsupported until `TransactionOrigin` explicitly supports it.
 
-TC-1/TC-1A foundation rules:
+Active candidate foundation rules:
 
 - Candidate owner is direct `user`.
 - Optional account/category/tags/transaction ingestion/ingestion record links must belong to the candidate owner.
@@ -117,6 +117,10 @@ TC-1/TC-1A foundation rules:
 - `POSTED` requires a linked `FinancialTransaction`; that link is set only by server-side posting/conversion commands and cannot be set through normal create/update/PATCH.
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
+- `NEEDS_REVIEW` is reserved/deferred: no current manual or file workflow produces it, and TC-5C must either formalize or remove it.
+- `FAILED` is guarded/reserved: validation requires a failure reason, but current manual/file product commands do not use it as a normal writer-owned terminal state.
+- `validationStatus=INVALID` and `validationStatus=STALE` are guarded/internal states for failed or stale validation paths; current happy-path manual and file flows normally use `UNKNOWN` for incomplete drafts and `VALID` for postable candidates.
+- `descriptionReviewStatus` is for description normalization/review and is separate from `classificationReviewStatus`, which is for category/tags review.
 
 TC-2A / TC-2A.1 manual backend command rules:
 
