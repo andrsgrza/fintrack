@@ -1,6 +1,5 @@
 import {
   entityCreateButtonSelector,
-  entityCreateCancelButtonSelector,
   entityDeleteButtonSelector,
   entityDetailsBackButtonSelector,
   entityDetailsButtonSelector,
@@ -22,6 +21,7 @@ describe('IngestionRecord technical/debug e2e smoke test', () => {
 
   let account: E2EEntity | undefined;
   let transactionIngestionId: number | undefined;
+  let ingestionRecordId: number | undefined;
   const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   beforeEach(() => {
@@ -88,6 +88,8 @@ describe('IngestionRecord technical/debug e2e smoke test', () => {
           createdAt: '2026-01-01T00:00:00Z',
           transactionIngestion: { id: transactionIngestionId },
         },
+      }).then(({ body }) => {
+        ingestionRecordId = body.id;
       });
     });
 
@@ -104,6 +106,7 @@ describe('IngestionRecord technical/debug e2e smoke test', () => {
       });
       transactionIngestionId = undefined;
     }
+    ingestionRecordId = undefined;
 
     if (account?.id) {
       cy.authenticatedRequest({
@@ -142,12 +145,26 @@ describe('IngestionRecord technical/debug e2e smoke test', () => {
     cy.url().should('match', ingestionRecordPageUrlPattern);
   });
 
-  it('standalone create route should be marked as technical/debug, not canonical workflow', () => {
+  it('direct generated write routes should be unavailable', () => {
+    cy.intercept('POST', '/api/ingestion-records').as('createIngestionRecordRequest');
+    cy.intercept('PUT', '/api/ingestion-records/*').as('updateIngestionRecordRequest');
+    cy.intercept('DELETE', '/api/ingestion-records/*').as('deleteIngestionRecordRequest');
+
     cy.visit('/ingestion-record/new');
 
-    cy.getEntityCreateUpdateHeading('IngestionRecord').should('exist');
+    cy.get('[data-cy="ingestionRecordWriteUnavailableHeading"]').should('exist');
     cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
-    cy.get(entityCreateCancelButtonSelector).click();
-    cy.url().should('match', ingestionRecordPageUrlPattern);
+    cy.get('[data-cy="rawData"]').should('not.exist');
+
+    cy.visit(`/ingestion-record/${ingestionRecordId}/edit`);
+    cy.get('[data-cy="ingestionRecordWriteUnavailableHeading"]').should('exist');
+    cy.get('[data-cy="status"]').should('not.exist');
+
+    cy.visit(`/ingestion-record/${ingestionRecordId}/delete`);
+    cy.get('[data-cy="ingestionRecordWriteUnavailableHeading"]').should('exist');
+    cy.get(entityDeleteButtonSelector).should('not.exist');
+    cy.get('@createIngestionRecordRequest.all').should('have.length', 0);
+    cy.get('@updateIngestionRecordRequest.all').should('have.length', 0);
+    cy.get('@deleteIngestionRecordRequest.all').should('have.length', 0);
   });
 });

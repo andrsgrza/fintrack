@@ -1,6 +1,5 @@
 import {
   entityCreateButtonSelector,
-  entityCreateCancelButtonSelector,
   entityDetailsBackButtonSelector,
   entityDetailsButtonSelector,
   entityEditButtonSelector,
@@ -122,6 +121,7 @@ describe('FileIngestion technical/debug e2e smoke test', () => {
     cy.getEntityHeading('FileIngestion').should('exist');
     cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
     cy.get(entityTableSelector).should('exist');
+    cy.get(entityCreateButtonSelector).should('not.exist');
     cy.url().should('match', fileIngestionPageUrlPattern);
   });
 
@@ -140,19 +140,31 @@ describe('FileIngestion technical/debug e2e smoke test', () => {
     cy.url().should('match', fileIngestionPageUrlPattern);
   });
 
-  it('create page should be marked as secondary/debug parent-scoped upload flow', () => {
+  it('direct generated write routes should be unavailable', () => {
+    cy.intercept('POST', '/api/transaction-ingestions/*/file-ingestion').as('attachFileRequest');
+    cy.intercept('PUT', '/api/file-ingestions/*').as('updateFileIngestionRequest');
+    cy.intercept('DELETE', '/api/file-ingestions/*').as('deleteFileIngestionRequest');
+
     cy.visit(fileIngestionPageUrl);
     cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
+    cy.get(entityCreateButtonSelector).should('not.exist');
 
-    cy.get(entityCreateButtonSelector).click();
+    cy.visit('/file-ingestion/new');
     cy.url().should('match', new RegExp('/file-ingestion/new$'));
-    cy.getEntityCreateUpdateHeading('FileIngestion').should('exist');
+    cy.get('[data-cy="fileIngestionWriteUnavailableHeading"]').should('exist');
+    cy.get('[data-cy="writeUnavailableBanner"]').should('be.visible');
     cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
-    cy.wait('@fileIngestionParentCandidatesRequest').its('response.statusCode').should('eq', 200);
-    cy.get('[data-cy="transactionIngestion"]').should('exist');
-    cy.get('[data-cy="csvFile"]').should('exist');
-    cy.get(entityCreateCancelButtonSelector).click();
-    cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
-    cy.url().should('match', fileIngestionPageUrlPattern);
+    cy.get('[data-cy="csvFile"]').should('not.exist');
+
+    cy.visit(`/file-ingestion/${fileIngestionId}/edit`);
+    cy.get('[data-cy="fileIngestionWriteUnavailableHeading"]').should('exist');
+    cy.get('[data-cy="originalFilename"]').should('not.exist');
+
+    cy.visit(`/file-ingestion/${fileIngestionId}/delete`);
+    cy.get('[data-cy="fileIngestionWriteUnavailableHeading"]').should('exist');
+    cy.get(entityDeleteButtonSelector).should('not.exist');
+    cy.get('@attachFileRequest.all').should('have.length', 0);
+    cy.get('@updateFileIngestionRequest.all').should('have.length', 0);
+    cy.get('@deleteFileIngestionRequest.all').should('have.length', 0);
   });
 });

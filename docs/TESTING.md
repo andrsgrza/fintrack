@@ -2762,27 +2762,27 @@ Covered by `transaction-ingestion-workflow-detail.spec.tsx`.
 - Duplicate checksum warning renders as a non-blocking warning.
 - Row table renders statuses strictly from `row.status`, including `DISABLED`.
 
-`file-ingestion-update.spec.tsx` covers the cleaned `/file-ingestion/new` route:
+`file-ingestion-update.spec.tsx` covers the cleaned generated FileIngestion write routes:
 
-- create mode shows only the TransactionIngestion parent selector and CSV file input.
-- create mode is marked as a secondary/debug upload flow.
-- server-owned metadata fields such as original filename, file type, content type, file size, checksum, parser, storage key, and statement dates are not rendered on create.
-- submit posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`.
-- success redirects to `/transaction-ingestion/{id}`.
-- backend validation errors are shown and the file input is cleared after failure.
+- `/file-ingestion/new`, `/file-ingestion/{id}/edit`, and `/file-ingestion/{id}/delete` show the technical write-unavailable state.
+- the generated FileIngestion write routes do not render CSV upload inputs, metadata edit fields, Save, Upload, or Delete actions.
+- canonical CSV upload remains `/transaction-ingestion/new`.
 
 Generated/debug ingestion UI action cleanup is covered by targeted frontend specs:
 
-- TransactionIngestion list does not render an Edit action while keeping View/Delete and the New File Import workflow action.
+- TransactionIngestion list renders one clear New File Import workflow action, does not render an Edit action, and keeps View/Delete.
 - TransactionIngestion workflow detail does not render an Edit action.
-- FileIngestion list/detail/create/edit pages show technical/debug context markers where applicable.
-- FileIngestion list/detail keep View/context navigation but do not render Edit/Delete actions.
-- IngestionRecord list/detail/create/edit pages show technical/debug context markers where applicable.
+- `/transaction-ingestion/{id}/edit` shows the technical write-unavailable state.
+- FileIngestion list/detail show technical/read-only context markers.
+- FileIngestion list/detail keep View/context navigation but do not render Create/Edit/Delete actions.
+- FileIngestion generated write routes show the technical write-unavailable state.
+- IngestionRecord list/detail show technical/read-only context markers.
 - IngestionRecord list/detail keep View/context navigation but do not render Create/Edit/Delete actions.
+- IngestionRecord generated write routes show the technical write-unavailable state.
 - Entities menu still contains FileIngestion and IngestionRecord and marks each with a Technical badge.
 - Routes remain available; tests do not expect redirects or backend behavior changes.
 
-Temporary generated ingestion write surface marking is documentation/comment-only:
+Temporary generated ingestion write endpoint marking keeps backend behavior-compatible, while frontend generated write routes are unavailable:
 
 - Generated write endpoints for TransactionIngestion, FileIngestion, and IngestionRecord remain behavior-compatible.
 - ResourceIT tests for generated `POST`/`PUT`/`PATCH` write paths continue to assert existing response codes and validations.

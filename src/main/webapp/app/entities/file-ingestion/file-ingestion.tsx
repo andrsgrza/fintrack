@@ -72,11 +72,6 @@ export const FileIngestion = () => {
             <FontAwesomeIcon icon="sync" spin={loading} />{' '}
             <Translate contentKey="fintrackApp.fileIngestion.home.refreshListLabel">Refresh List</Translate>
           </Button>
-          <Link to="/file-ingestion/new" className="btn btn-primary jh-create-entity" id="jh-create-entity" data-cy="entityCreateButton">
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.fileIngestion.home.createLabel">Create new File Ingestion</Translate>
-          </Link>
         </div>
       </h2>
       <Alert color="secondary" fade={false} data-cy="technicalViewBanner">

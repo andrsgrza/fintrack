@@ -15,6 +15,8 @@
         "question": "Are you sure you want to delete Ingestion Record {{ id }}?"
       },
       "technicalView": "Technical view — ingestion rows are managed from the Transaction Ingestion workflow.",
+      "writeUnavailableTitle": "Ingestion Record technical view",
+      "writeUnavailable": "Ingestion Record create, edit, and delete are not product actions. Use the Transaction Ingestion workflow row review instead.",
       "workflowLink": "Open workflow",
       "detail": {
         "title": "Ingestion Record"

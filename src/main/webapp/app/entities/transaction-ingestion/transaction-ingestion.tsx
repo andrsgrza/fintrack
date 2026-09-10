@@ -104,11 +104,6 @@ export const TransactionIngestion = () => {
             id="jh-create-entity"
             data-cy="entityCreateButton"
           >
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.transactionIngestion.home.createLabel">Create new Transaction Ingestion</Translate>
-          </Link>
-          <Link to="/transaction-ingestion/new" className="btn btn-primary jh-create-entity ms-2" data-cy="fileImportButton">
             <FontAwesomeIcon icon="cloud" />
             &nbsp;
             <Translate contentKey="fintrackApp.transactionIngestion.home.newFileImportLabel">New File Import</Translate>

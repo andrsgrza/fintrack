@@ -311,11 +311,13 @@ describe('TransactionIngestion file workflow', () => {
     registerTranslations();
   });
 
-  it('adds New File Import action on TransactionIngestion list', () => {
+  it('adds one clear New File Import action on TransactionIngestion list', () => {
     renderList();
 
     const newFileImport = screen.getByRole('link', { name: /new file import/i });
     expect(newFileImport.getAttribute('href')).toBe('/transaction-ingestion/new');
+    expect(screen.getAllByRole('link', { name: /new file import/i })).toHaveLength(1);
+    expect(screen.queryByRole('link', { name: /create new transaction ingestion/i })).toBeNull();
   });
 
   it('does not render TransactionIngestion list Edit action', () => {

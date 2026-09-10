@@ -4,6 +4,7 @@ import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import enFileIngestion from 'app/../i18n/en/fileIngestion.json';
+import FileIngestionRoutes from './index';
 import { FileIngestion } from './file-ingestion';
 import { FileIngestionDetail } from './file-ingestion-detail';
 
@@ -83,17 +84,26 @@ const renderDetail = () => {
   );
 };
 
+const renderRoute = (path: string) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/file-ingestion/*" element={<FileIngestionRoutes />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
 describe('FileIngestion technical UI actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     registerTranslations();
   });
 
-  it('marks the list as technical and keeps only View plus Create actions', () => {
+  it('marks the list as technical and keeps only View action', () => {
     renderList();
 
     expect(screen.getByText('Technical view — File metadata is managed by the Transaction Ingestion workflow.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /create a new file ingestion/i }).getAttribute('href')).toBe('/file-ingestion/new');
+    expect(screen.queryByRole('link', { name: /create a new file ingestion/i })).toBeNull();
     expect(screen.getByRole('link', { name: /view/i }).getAttribute('href')).toBe('/file-ingestion/200');
     expect(screen.queryByRole('link', { name: /edit/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();
@@ -105,5 +115,25 @@ describe('FileIngestion technical UI actions', () => {
     expect(screen.getByText('Technical view — File metadata is managed by the Transaction Ingestion workflow.')).toBeTruthy();
     expect(screen.queryByRole('link', { name: /edit/i })).toBeNull();
     expect(screen.getByRole('link', { name: /open workflow/i }).getAttribute('href')).toBe('/transaction-ingestion/100');
+  });
+
+  it('renders unavailable state for direct generated write routes', () => {
+    renderRoute('/file-ingestion/new');
+    expect(screen.getByText('File Ingestion technical view')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'File Ingestion create, edit, and delete are not product actions. File metadata is created and managed by the Transaction Ingestion workflow.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();
+
+    renderRoute('/file-ingestion/200/edit');
+    expect(screen.getAllByText('File Ingestion technical view')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
+
+    renderRoute('/file-ingestion/200/delete');
+    expect(screen.getAllByText('File Ingestion technical view')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();
   });
 });

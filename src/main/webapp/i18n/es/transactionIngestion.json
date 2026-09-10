@@ -15,6 +15,9 @@
       "delete": {
         "question": "¿Seguro que quiere eliminar Transaction Ingestion {{ id }}?"
       },
+      "technicalView": "Transaction Ingestion se administra mediante comandos del flujo.",
+      "writeUnavailableTitle": "Edición técnica de Transaction Ingestion no disponible",
+      "writeUnavailable": "La edición generada de Transaction Ingestion no es una acción de producto. Usa el flujo de importación.",
       "detail": {
         "title": "Transaction Ingestion"
       },

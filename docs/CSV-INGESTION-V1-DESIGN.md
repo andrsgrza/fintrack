@@ -29,7 +29,7 @@ Recommendation:
 
 I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid review rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and review rows in one submit, then redirects to canonical workflow detail `/transaction-ingestion/{id}`, where the user can return later to inspect parent summary, read-only FileIngestion metadata, and review rows. `/file-ingestion/new` is not metadata CRUD; it is a parent-scoped CSV upload command that attaches server-derived file metadata and records to an existing pending FILE `TransactionIngestion`. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and review rows in one submit, then redirects to canonical workflow detail `/transaction-ingestion/{id}`, where the user can return later to inspect parent summary, read-only FileIngestion metadata, and review rows. TC-4D makes generated FileIngestion write routes unavailable in the UI; users do not manually create/edit/delete FileIngestion metadata from generated screens. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
 
 ## 2. Responsibility split using current entities
 
@@ -101,7 +101,7 @@ Recommended I1 values:
 
 ApiIngestion remains API metadata/debug only in CSV/file-ingestion phases. The API ingestion runtime/product workflow is deferred.
 
-Generated ApiIngestion list/detail pages may remain reachable for technical inspection, but ApiIngestion create/edit/delete are not product actions for the CSV workflow and should not be used as canonical ingestion commands.
+Generated ApiIngestion list/detail pages may remain reachable for technical inspection, but ApiIngestion create/edit/delete are not product actions for the CSV workflow and should not be used as canonical ingestion commands. TC-4D applies the same frontend convention to FileIngestion and IngestionRecord: generated list/detail are read-only technical inspection surfaces, and direct generated write routes show an unavailable state instead of generated forms/modals.
 
 ## 3. `rawData` JSON contract
 
@@ -440,7 +440,7 @@ I2C:
 - Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
 - Pantalla 2 selections now persist on `TransactionCandidate`; browser refresh reloads reviewed category/tags from workflow row candidate summaries.
-- Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/debug smoke specs.
+- Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/read-only smoke specs.
 - TC-3A adds backend-only `POST /api/transaction-ingestions/{id}/candidates/prepare`. It creates or syncs `FILE_IMPORT` `TransactionCandidate` rows for `VALID` `IngestionRecord`s after Pantalla 1. The command is idempotent, skips non-`VALID` rows, preserves existing candidate category/tags, marks fresh classification review `STALE` when rule-input fields change, does not mutate `rawData`, and does not create `FinancialTransaction` rows.
 - TC-3B extends `GET /api/transaction-ingestions/{id}/workflow` with an optional lightweight prepared candidate summary per row. The read model is strictly read-only: it does not create/sync candidates, mutate `rawData`, create `FinancialTransaction` rows, or migrate Confirm Import/Pantalla 2 behavior.
 - TC-3C.1 adds ingestion-scoped FILE_IMPORT candidate classification commands:
@@ -498,16 +498,17 @@ Future shortcut:
 FileIngestion:
 
 - Not the main create UX.
-- Generated pages remain available for technical/debug inspection.
-- List/detail/create/edit show technical/debug context markers where applicable.
-- List/detail hide Edit/Delete because file metadata is server-derived and parent-owned.
-- `/file-ingestion/new` remains available as the parent-scoped upload command for an existing pending FILE `TransactionIngestion`.
+- Generated list/detail remain available for technical/debug inspection.
+- List/detail show technical/read-only context markers.
+- List/detail hide Create/Edit/Delete because file metadata is server-derived and parent-owned.
+- Generated write routes (`/file-ingestion/new`, `/file-ingestion/{id}/edit`, `/file-ingestion/{id}/delete`) show the technical write-unavailable state. Users upload files through `/transaction-ingestion/new`.
 
 IngestionRecord:
 
 - Not the main create/edit UX.
-- Generated pages remain available for technical/debug inspection.
-- List/detail/create/edit show technical/debug context markers where applicable.
+- Generated list/detail remain available for technical/debug inspection.
+- List/detail show technical/read-only context markers.
+- Generated write routes (`/ingestion-record/new`, `/ingestion-record/{id}/edit`, `/ingestion-record/{id}/delete`) show the technical write-unavailable state. Pantalla 1 remains the canonical row review/edit workflow.
 - List/detail hide Create/Edit/Delete because review-row actions are managed from the TransactionIngestion workflow review page.
 
 ApiIngestion:

@@ -15,6 +15,9 @@
       "delete": {
         "question": "Are you sure you want to delete Transaction Ingestion {{ id }}?"
       },
+      "technicalView": "Transaction Ingestion is managed by workflow commands.",
+      "writeUnavailableTitle": "Transaction Ingestion technical edit unavailable",
+      "writeUnavailable": "Generated Transaction Ingestion edit is not a product action. Use the ingestion workflow instead.",
       "detail": {
         "title": "Transaction Ingestion"
       },
