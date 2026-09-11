@@ -655,6 +655,9 @@ Key TC-3A FILE import candidate prepare assertions:
 - `POSTED` candidates are not modified.
 - foreign, non-FILE, completed, and no-valid-row preparations are rejected.
 - prepare creates no `FinancialTransaction` rows and does not mutate `IngestionRecord.rawData`.
+- TC-5D.1 row-review cleanup/sync asserts disabling a prepared row deletes the unposted `FILE_IMPORT` candidate and candidate tag joins, workflow reload no longer exposes `row.candidate`, re-enable does not restore the old candidate, and a later prepare creates a fresh candidate when the row is valid.
+- TC-5D.1 edit coverage asserts editing a prepared `VALID` row syncs existing candidate fields immediately, preserves candidate category/tags, marks fresh classification `STALE` when rule-input fields changed, keeps notes-only edits fresh, and deletes the unposted candidate plus tag joins when the edited row becomes `REJECTED`.
+- Row review candidate cleanup/sync keeps `rawData` as the review source and does not store category/tags in `rawData`.
 
 Key TC-3B FILE import workflow summary assertions:
 

@@ -40,6 +40,7 @@ public class CsvIngestionRecordReviewService {
     private final CanonicalCsvIngestionParser parser;
     private final ObjectMapper objectMapper;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
+    private final FileImportTransactionCandidatePreparationService fileImportTransactionCandidatePreparationService;
 
     public CsvIngestionRecordReviewService(
         TransactionIngestionRepository transactionIngestionRepository,
@@ -47,7 +48,8 @@ public class CsvIngestionRecordReviewService {
         CurrentUserService currentUserService,
         CanonicalCsvIngestionParser parser,
         ObjectMapper objectMapper,
-        CsvIngestionReadinessService csvIngestionReadinessService
+        CsvIngestionReadinessService csvIngestionReadinessService,
+        FileImportTransactionCandidatePreparationService fileImportTransactionCandidatePreparationService
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
@@ -55,6 +57,7 @@ public class CsvIngestionRecordReviewService {
         this.parser = parser;
         this.objectMapper = objectMapper;
         this.csvIngestionReadinessService = csvIngestionReadinessService;
+        this.fileImportTransactionCandidatePreparationService = fileImportTransactionCandidatePreparationService;
     }
 
     public CsvIngestionRecordReviewResponseDTO disable(Long ingestionId, Long recordId) {
@@ -63,6 +66,7 @@ public class CsvIngestionRecordReviewService {
             throw new IllegalArgumentException("Only valid or rejected workflow rows can be disabled");
         }
         rejectLinkedFinancialTransaction(record);
+        fileImportTransactionCandidatePreparationService.deleteUnpostedFileImportCandidateForRecord(record);
 
         record.setStatus(IngestionRecordStatus.DISABLED);
         record.setErrorCode(null);
@@ -119,6 +123,11 @@ public class CsvIngestionRecordReviewService {
         );
         applyValidationResult(record, result, true);
         ingestionRecordRepository.save(record);
+        if (record.getStatus() == IngestionRecordStatus.VALID) {
+            fileImportTransactionCandidatePreparationService.syncExistingFileImportCandidateForValidRecord(record);
+        } else {
+            fileImportTransactionCandidatePreparationService.deleteUnpostedFileImportCandidateForRecord(record);
+        }
 
         return response(record);
     }

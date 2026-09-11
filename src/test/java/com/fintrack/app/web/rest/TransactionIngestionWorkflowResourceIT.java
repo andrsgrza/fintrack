@@ -821,6 +821,30 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void disableValidRowWithPreparedCandidateDeletesCandidateAndCandidateTagJoins() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Tag tag = persistTag("Prepared disabled row tag", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setTags(new HashSet<>(Set.of(tag)));
+        transactionCandidateRepository.saveAndFlush(candidate);
+        Long candidateId = candidate.getId();
+
+        assertThat(candidateTagJoinRows(candidateId).longValue()).isEqualTo(1L);
+
+        mockMvc
+            .perform(post(reviewUrl(ingestion, record, "disable")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("DISABLED"));
+
+        assertThat(candidateTagJoinRows(candidateId).longValue()).isZero();
+        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        mockMvc.perform(get(workflowUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.rows[0].candidate").doesNotExist());
+    }
+
+    @Test
+    @Transactional
     void disablingLastValidRowMakesBatchPartiallyReady() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);
@@ -910,6 +934,32 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void reEnableAfterDisableDoesNotRestoreOldCandidateAndPrepareCreatesFreshCandidate() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        Long deletedCandidateId = candidateForRecord(record).getId();
+
+        mockMvc.perform(post(reviewUrl(ingestion, record, "disable"))).andExpect(status().isOk());
+        mockMvc
+            .perform(post(reviewUrl(ingestion, record, "enable")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("VALID"));
+
+        assertThat(transactionCandidateRepository.findById(deletedCandidateId)).isEmpty();
+        assertThat(
+            transactionCandidateRepository.findOneWithRelationshipsByIngestionRecordIdAndUserLogin(record.getId(), "user")
+        ).isEmpty();
+
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.createdCount").value(1));
+
+        TransactionCandidate freshCandidate = candidateForRecord(record);
+        assertThat(freshCandidate.getId()).isNotEqualTo(deletedCandidateId);
+        assertThat(freshCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+    }
+
+    @Test
+    @Transactional
     void editValidRowWithValidDataKeepsRawDataRawAndDerivesAmountAndFlow() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
@@ -951,6 +1001,77 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void editPreparedValidRowSyncsCandidatePreservesOutputsAndMarksClassificationStale() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category category = persistCategory("Edited sync category", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Edited sync tag", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setCategory(category);
+        candidate.setTags(new HashSet<>(Set.of(tag)));
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+        candidate = transactionCandidateRepository.saveAndFlush(candidate);
+        Instant updatedAtBefore = candidate.getUpdatedAt();
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-02-01", "2026-02-02", "Edited prepared row", "-42.50", "MXN", "edited-ref", "edited notes")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("VALID"));
+
+        TransactionCandidate synced = candidateForRecord(record);
+        assertThat(synced.getTransactionDate()).isEqualTo(LocalDate.parse("2026-02-01"));
+        assertThat(synced.getPostingDate()).isEqualTo(LocalDate.parse("2026-02-02"));
+        assertThat(synced.getDescription()).isEqualTo("Edited prepared row");
+        assertThat(synced.getSignedAmount()).isEqualByComparingTo("-42.50");
+        assertThat(synced.getAmount()).isEqualByComparingTo("42.50");
+        assertThat(synced.getFlow()).isEqualTo(TransactionFlow.OUT);
+        assertThat(synced.getExternalReference()).isEqualTo("edited-ref");
+        assertThat(synced.getNotes()).isEqualTo("edited notes");
+        assertThat(synced.getCategory().getId()).isEqualTo(category.getId());
+        assertThat(synced.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.STALE);
+        assertThat(synced.getUpdatedAt()).isAfter(updatedAtBefore);
+    }
+
+    @Test
+    @Transactional
+    void editPreparedValidRowWithNotesOnlyDoesNotMarkClassificationStale() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-16", null, "OXXO AGUILAS", "-274.00", "MXN", null, "only notes changed")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("VALID"));
+
+        TransactionCandidate synced = candidateForRecord(record);
+        assertThat(synced.getNotes()).isEqualTo("only notes changed");
+        assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+    }
+
+    @Test
+    @Transactional
     void editValidRowWithInvalidDataMarksRejectedAndUpdatesCounters() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(0);
@@ -975,6 +1096,32 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
             IngestionStatus.PARTIALLY_READY
         );
+    }
+
+    @Test
+    @Transactional
+    void editPreparedRowToRejectedDeletesUnpostedCandidateAndCandidateTagJoins() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Tag tag = persistTag("Rejected edited row tag", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setTags(new HashSet<>(Set.of(tag)));
+        transactionCandidateRepository.saveAndFlush(candidate);
+        Long candidateId = candidate.getId();
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(reviewPayload("2026-01-20", null, "Corrected", "0", "MXN", null, null)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.status").value("REJECTED"));
+
+        assertThat(candidateTagJoinRows(candidateId).longValue()).isZero();
+        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        mockMvc.perform(get(workflowUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.rows[0].candidate").doesNotExist());
     }
 
     @Test

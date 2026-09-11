@@ -75,6 +75,43 @@ public class FileImportTransactionCandidatePreparationService {
         return response;
     }
 
+    public void deleteUnpostedFileImportCandidateForRecord(IngestionRecord record) {
+        String ownerLogin = currentUserService.getCurrentUserLogin();
+        transactionCandidateRepository
+            .findOneWithRelationshipsByIngestionRecordIdAndUserLogin(record.getId(), ownerLogin)
+            .ifPresent(this::deleteUnpostedFileImportCandidate);
+    }
+
+    public void syncExistingFileImportCandidateForValidRecord(IngestionRecord record) {
+        if (!isValidRecord(record)) {
+            return;
+        }
+        String ownerLogin = currentUserService.getCurrentUserLogin();
+        transactionCandidateRepository
+            .findOneWithRelationshipsByIngestionRecordIdAndUserLogin(record.getId(), ownerLogin)
+            .ifPresent(candidate -> {
+                CandidateFields fields = candidateFields(record.getTransactionIngestion(), record);
+                PrepareTransactionCandidateRowResultDTO result = syncExistingCandidate(record, candidate, fields);
+                if (result.getAction() == PrepareTransactionCandidateRowAction.ERROR) {
+                    throw new IllegalArgumentException(result.getReason());
+                }
+                if (result.getAction() == PrepareTransactionCandidateRowAction.SKIPPED) {
+                    throw new IllegalArgumentException(result.getReason());
+                }
+            });
+    }
+
+    private void deleteUnpostedFileImportCandidate(TransactionCandidate candidate) {
+        if (candidate.getSource() != TransactionCandidateSource.FILE_IMPORT) {
+            throw new IllegalArgumentException("Existing candidate source is not FILE_IMPORT");
+        }
+        if (candidate.getStatus() == TransactionCandidateStatus.POSTED || candidate.getFinancialTransaction() != null) {
+            throw new IllegalArgumentException("Posted transaction candidate cannot be removed by row review");
+        }
+        transactionCandidateRepository.deleteTagLinksByTransactionCandidateId(candidate.getId());
+        transactionCandidateRepository.delete(candidate);
+    }
+
     private TransactionIngestion resolveAccessibleFileIngestion(Long transactionIngestionId, String ownerLogin) {
         if (transactionIngestionId == null) {
             throw new IllegalArgumentException("Transaction ingestion is required");

@@ -164,6 +164,9 @@ FILE ingestion candidate preparation:
 - Prepare uses `IngestionRecord.rawData.normalized` plus the parent account to populate candidate transaction fields, derives `amount`/`flow` from `signedAmount`, and maps description review metadata to candidate description review status.
 - Prepare skips non-`VALID` rows, is idempotent, preserves existing candidate category/tags, and marks classification `STALE` when rule-input fields change after a fresh classification.
 - Prepare does not create `FinancialTransaction` rows, does not mutate `rawData`, and does not store category/tags in `rawData`.
+- Pantalla 1 row review keeps prepared candidates consistent before Confirm Import: disabling a row removes its unposted `FILE_IMPORT` candidate and candidate tag joins; re-enabling the row does not restore the old candidate, and the next prepare creates a fresh candidate if the row is valid.
+- Editing a prepared row reprocesses `rawData.normalized` as the review source. If the edited row remains `VALID`, the existing unposted `FILE_IMPORT` candidate is synced immediately using prepare semantics, preserving candidate category/tags and marking fresh classification `STALE` when rule-input fields changed. Notes-only edits do not mark classification stale. If the edited row becomes non-`VALID`, its unposted candidate is removed.
+- Posted/imported candidates or candidates linked to a `FinancialTransaction` are not silently deleted by row review actions.
 - `GET /api/transaction-ingestions/{id}/workflow` is read-only and may expose an optional lightweight prepared candidate summary per row after prepare has run.
 - Workflow GET never creates/syncs candidates; candidate summaries are absent for rows without prepared candidates.
 - TC-3C.1 adds ingestion-scoped candidate classification commands for prepared `FILE_IMPORT` candidates:
