@@ -117,7 +117,7 @@ Active candidate foundation rules:
 - `POSTED` requires a linked `FinancialTransaction`; that link is set only by server-side posting/conversion commands and cannot be set through normal create/update/PATCH.
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
-- `NEEDS_REVIEW` is reserved/deferred: no current manual or file workflow produces it, and TC-5C must either formalize or remove it.
+- There is no global `NEEDS_REVIEW` candidate lifecycle status. Review needs are represented by specific fields: `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`.
 - `FAILED` is guarded/reserved: validation requires a failure reason, but current manual/file product commands do not use it as a normal writer-owned terminal state.
 - `validationStatus=INVALID` and `validationStatus=STALE` are guarded/internal states for failed or stale validation paths; current happy-path manual and file flows normally use `UNKNOWN` for incomplete drafts and `VALID` for postable candidates.
 - `descriptionReviewStatus` is for description normalization/review and is separate from `classificationReviewStatus`, which is for category/tags review.
@@ -155,7 +155,6 @@ TC-2B.1 manual UI rules:
 - TC-2D.2 exposes `/financial-transaction/drafts` as the product recovery page for manual drafts.
 - The recovery page loads `GET /api/transaction-candidates/manual-drafts` and shows lightweight summaries for the current user's recoverable `MANUAL` candidates only.
 - Recoverable manual draft statuses are `DRAFT` and `READY_TO_POST`. The query/UI excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT` candidates.
-- `NEEDS_REVIEW` is currently excluded from manual draft recovery because the manual candidate flow does not produce it; it remains deferred until it has explicit product semantics.
 - `FinancialTransaction` list/detail/edit remain posted-ledger surfaces only; drafts are linked through a separate "View drafts" action and are not mixed into the posted transaction table.
 - The recovery page can resume a draft through `/financial-transaction/drafts/{id}` or cancel it through `POST /api/transaction-candidates/{id}/cancel`; it does not post drafts from the list and does not expose generic `TransactionCandidate` CRUD as product UI.
 

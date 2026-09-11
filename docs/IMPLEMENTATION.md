@@ -149,11 +149,11 @@ The active foundation includes:
 - JDL/.jhipster metadata, Liquibase table, backend entity/DTO/mapper/repository/service/resource.
 - Direct owner via `user`.
 - Optional links to `FinancialAccount`, `Category`, `Tag`, `TransactionIngestion`, and `IngestionRecord`; the optional `FinancialTransaction` link is readable but server-controlled/write-rejected in normal CRUD.
-- Lifecycle/status support for manual drafts and `FILE_IMPORT` ingestion review. `API_IMPORT` and bank sync are deferred.
+- Lifecycle/status support for manual drafts and `FILE_IMPORT` ingestion review. Active `TransactionCandidateStatus` values are `DRAFT`, `READY_TO_POST`, `POSTED`, `CANCELLED`, and `FAILED`; `API_IMPORT` and bank sync are deferred.
 - Server-owned timestamps, derived `amount`/`flow`, server-owned review statuses, and same-owner validations.
 - `TransactionCandidateSource` describes how a candidate entered draft/review. `TransactionOrigin` describes final posted `FinancialTransaction` classification. They are not interchangeable; `TransactionCandidate` does not store `TransactionOrigin`.
 - Future posting mapping: `MANUAL → MANUAL`, `FILE_IMPORT → FILE_IMPORT`, `API_IMPORT → API`. Bank sync remains unsupported until the final transaction origin model supports it.
-- `NEEDS_REVIEW` is reserved/deferred and is not produced by the current manual or file workflows. `FAILED` and `validationStatus=INVALID/STALE` are guarded/reserved/internal until TC-5C formalizes or removes them.
+- There is no global `NEEDS_REVIEW` candidate status. “Needs review” is represented by specific review/status fields: `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`. `FAILED` and `validationStatus=INVALID/STALE` are guarded/reserved/internal outside normal happy-path flows.
 - `descriptionReviewStatus` tracks description normalization/review separately from `classificationReviewStatus`, which tracks category/tag review and gates manual post/file confirm.
 
 TC-2A / TC-2A.1 adds manual command endpoints:
@@ -172,7 +172,6 @@ TC-2D.2 adds the manual draft recovery page on top of the TC-2D.1 backend query:
 - `GET /api/transaction-candidates/manual-drafts` returns lightweight summaries for the current user's recoverable `MANUAL` candidates.
 - Included statuses are `DRAFT` and `READY_TO_POST`.
 - Excluded statuses/sources are `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT`.
-- `NEEDS_REVIEW` is excluded because the current manual flow does not produce it; it remains deferred until explicit product semantics are added.
 - Results are sorted by `updatedAt DESC, id DESC`.
 - `/financial-transaction/drafts` loads the recovery summaries, displays compact draft/account/date/amount/status/classification/category/tags metadata, and provides Resume plus Cancel draft actions.
 - Resume navigates to `/financial-transaction/drafts/{id}`. Cancel calls the candidate cancel command; the list does not post candidates.

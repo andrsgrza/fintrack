@@ -2078,7 +2078,6 @@ class TransactionIngestionWorkflowResourceIT {
 
         for (TransactionCandidateStatus status : List.of(
             TransactionCandidateStatus.DRAFT,
-            TransactionCandidateStatus.NEEDS_REVIEW,
             TransactionCandidateStatus.CANCELLED,
             TransactionCandidateStatus.FAILED
         )) {

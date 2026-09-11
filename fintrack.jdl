@@ -76,7 +76,6 @@ enum TransactionCandidateSource {
 
 enum TransactionCandidateStatus {
   DRAFT,
-  NEEDS_REVIEW,
   READY_TO_POST,
   POSTED,
   CANCELLED,

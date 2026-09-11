@@ -16,7 +16,7 @@
       "fieldName": "status",
       "fieldType": "TransactionCandidateStatus",
       "fieldValidateRules": ["required"],
-      "fieldValues": "DRAFT,NEEDS_REVIEW,READY_TO_POST,POSTED,CANCELLED,FAILED"
+      "fieldValues": "DRAFT,READY_TO_POST,POSTED,CANCELLED,FAILED"
     },
     {
       "fieldName": "validationStatus",

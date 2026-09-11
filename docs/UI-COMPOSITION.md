@@ -598,8 +598,8 @@ TC-2D.2 adds the manual draft recovery page:
 
 - `/financial-transaction/drafts` loads `GET /api/transaction-candidates/manual-drafts`.
 - It shows current-user recoverable `MANUAL` draft summaries only.
-- It includes only `DRAFT` and `READY_TO_POST` and excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, `API_IMPORT`, and currently-unused `NEEDS_REVIEW`.
-- `NEEDS_REVIEW` and `API_IMPORT` are reserved/deferred; they must not appear as active manual draft recovery/product UI states until a later lifecycle slice formalizes them.
+- It includes only `DRAFT` and `READY_TO_POST` and excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT`.
+- There is no global `NEEDS_REVIEW` candidate status; review needs are represented by specific review/status fields. `API_IMPORT` is reserved/deferred and must not appear as an active manual draft recovery/product UI state until a later lifecycle slice formalizes it.
 - It displays compact description/account/date/amount/status/classification/category/tags/updated-at metadata with fallback copy for incomplete drafts.
 - Resume links to `/financial-transaction/drafts/{id}`.
 - Cancel draft calls `POST /api/transaction-candidates/{id}/cancel`, then removes/reloads the row.

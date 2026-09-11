@@ -414,8 +414,8 @@ public class TransactionCandidateService {
     /**
      * Get recoverable manual transaction draft summaries for the current owner.
      *
-     * TC-2D.1 intentionally includes only DRAFT and READY_TO_POST. NEEDS_REVIEW is not produced by the
-     * current manual draft flow and remains excluded until it has explicit product semantics.
+     * TC-2D.1 intentionally includes only DRAFT and READY_TO_POST. Broader review needs are represented by
+     * validationStatus, descriptionReviewStatus, and classificationReviewStatus rather than a global lifecycle state.
      *
      * @param pageable the pagination information.
      * @return the page of lightweight manual draft summaries.

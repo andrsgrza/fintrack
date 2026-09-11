@@ -500,12 +500,7 @@ class TransactionCandidateResourceIT {
         createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.POSTED, baseTime.plusSeconds(240));
         createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.CANCELLED, baseTime.plusSeconds(300));
         createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.FAILED, baseTime.plusSeconds(360));
-        createSummaryCandidate(
-            owner,
-            TransactionCandidateSource.MANUAL,
-            TransactionCandidateStatus.NEEDS_REVIEW,
-            baseTime.plusSeconds(420)
-        );
+        createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.FAILED, baseTime.plusSeconds(420));
         createSummaryCandidate(
             otherUser,
             TransactionCandidateSource.MANUAL,

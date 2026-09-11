@@ -702,7 +702,7 @@ The ingestion-scoped candidate classification commands for prepared `FILE_IMPORT
 
 Candidate-backed Confirm Import uses the existing `POST /api/transaction-ingestions/{id}/confirm` path. For non-completed imports, every current `VALID` row must have exactly one reviewed `FILE_IMPORT` candidate with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`. Confirm creates `FinancialTransaction` rows from candidate fields/category/tags, sets candidates to `POSTED`, links candidates and `IngestionRecord`s to the created transactions, preserves `rawData`, and completes the parent ingestion all-or-nothing. Completed retry remains idempotent and creates no duplicates.
 
-`classificationReviewStatus` is the category/tag review gate used by manual post and FILE confirm. It is separate from `descriptionReviewStatus`, which records description normalization/review state. `NEEDS_REVIEW`, `API_IMPORT`, and candidate failure-state expansion are reserved/deferred until a later lifecycle slice formalizes or removes them.
+`classificationReviewStatus` is the category/tag review gate used by manual post and FILE confirm. It is separate from `descriptionReviewStatus`, which records description normalization/review state. There is no global `NEEDS_REVIEW` candidate status; review needs are represented by specific review/status fields. `API_IMPORT` and candidate failure-state expansion remain reserved/deferred until a later lifecycle slice formalizes them.
 
 Description normalization is not part of the category/tag Transaction Rule Engine.
 
