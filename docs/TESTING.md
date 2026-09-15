@@ -600,7 +600,7 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
 
-**Scope:** manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, FILE import candidate prepare/sync, optional prepared FILE candidate summaries in the TransactionIngestion workflow response, ingestion-scoped FILE candidate classification commands, unified frontend category/tag row review, and candidate-backed Confirm Import backend posting. DescriptionNormalizationRule re-evaluation and UserPreference are not migrated to candidates yet.
+**Scope:** manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, FILE import candidate prepare/sync, optional prepared FILE candidate summaries in the TransactionIngestion workflow response, ingestion-scoped FILE candidate classification commands, single-screen scoped description/category/tag reevaluation, unified frontend category/tag row review, and candidate-backed Confirm Import backend posting. UserPreference and reevaluation configuration are not migrated to candidates yet.
 
 **Lifecycle enum alignment:** Active `TransactionCandidateStatus` values are `DRAFT`, `READY_TO_POST`, `POSTED`, `CANCELLED`, and `FAILED`. There is no global `NEEDS_REVIEW` candidate status; tests should model review needs through `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`. `FAILED` and `validationStatus=INVALID/STALE` are guarded/reserved/internal outside the normal happy path. `descriptionReviewStatus` covers description normalization/review and is intentionally separate from category/tag `classificationReviewStatus`.
 
@@ -679,11 +679,14 @@ Key TC-3C.1/TC-3C.2 FILE import candidate classification assertions:
 - PATCH requires at least one of `categoryId` or `tagIds`; absent-field semantics preserve existing category/tags; explicit `categoryId: null` clears category; explicit `tagIds: []` clears tags; provided tag ids replace the set.
 - PATCH rejects incompatible category flow, foreign category/tag ids, candidate ids outside the ingestion, non-`FILE_IMPORT` candidates, final candidates, and candidates linked to non-`VALID` records.
 - `POST /api/transaction-ingestions/{id}/candidates/rule-preview` evaluates current persisted candidate state with `TransactionOrigin.FILE_IMPORT`, returns suggestions/matched rules/conflicts/skips, and does not mutate candidate/rawData/transactions.
+- Rule preview also accepts `scope=CATEGORY`, `scope=TAGS`, or `scope=ALL`; these tests verify scope only filters transient category/tag suggestions and related output, never applies or persists them.
 - Batch preview/apply support optional `candidateIds`, validate duplicate/missing/out-of-ingestion ids, and return per-candidate skipped rows for non-evaluable candidates.
 - `POST /api/transaction-ingestions/{id}/candidates/apply-rules` re-evaluates current DB state and applies `FILL_EMPTY_ONLY`: empty category fills from non-conflicting suggestion, manual category is preserved, tags are additive, and duplicates are skipped.
+- Batch apply with the `apply-rules` body omitted covers all candidates in the current ingestion: characterization verifies multiple eligible candidates receive category/tag outputs, a manual `USER_SELECTED` candidate is preserved, `rawData` is unchanged, and no `FinancialTransaction` is created. Frontend coverage verifies the distinct global **Apply all classification suggestions** action uses that no-body request, disables duplicate clicks, reloads candidate summaries, clears applied previews, preserves manual selections, reports independently skipped rows, and does not call reevaluation or Confirm Import.
 - Apply keeps existing manual category/tag choices as `USER_SELECTED`, sets `SUGGESTED` when rule suggestions are available/applied for an unclassified candidate, and sets `NOT_APPLICABLE` when no suggestions exist.
 - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` sets `NOT_APPLICABLE` only after fresh evaluation confirms no suggestions; it rejects if suggestions exist.
 - FILE candidate classification endpoints create no `FinancialTransaction` rows, do not mutate `IngestionRecord.rawData`, and do not call the public `/api/financial-transactions/rule-preview` endpoint. Confirm Import is the separate backend command that posts reviewed candidates.
+- Description reevaluation tests call `POST /api/transaction-ingestions/{id}/descriptions/reevaluate` for an ingestion or selected rows. They cover active-rule priority ordering, no-match behavior, owner/record scoping, non-VALID skip behavior, `USER_EDIT` preservation with transient suggestion, candidate synchronization when normalized description changes, and the absence of category/tag writes or FinancialTransaction creation.
 
 Key TC-2C.1a backend assertions:
 
@@ -2849,6 +2852,7 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - confirm uses candidate transaction date, posting date, description, amount, flow, external reference, notes, category, and tags as the backend source of truth.
 - imported transactions use the candidate account and parent `TransactionIngestion`.
 - candidate-backed preview evaluates `VALID` row candidates read-only and returns category/tag suggestions without mutating records or creating transactions.
+- Scoped reevaluation coverage proves the same page renders explicit description/category/tag/all and eligible-row actions; description reevaluation uses original raw description and preserves manual description values; category/tag/all actions call scoped preview only; none sends apply, confirm-no-suggestions, or Confirm Import.
 - candidate-backed preview respects TransactionRule FLOW/category semantics; the regression case covers an Uber EXPENSE rule with `FLOW = OUT`, where an OUT row receives the category/tag suggestion and an IN refund row does not.
 - direct FinancialTransaction delete is blocked for candidate-linked imported transactions; workflow-level TransactionIngestion delete remains the controlled cleanup path for deleting the whole workflow tree.
 - A READY review with valid rows missing candidates automatically prepares FILE_IMPORT candidates once for the missing-row set, reloads the workflow, calls candidate rule preview, and keeps row review plus classification in one table.
@@ -2857,6 +2861,7 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - Cypress coverage for the real workflow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
   Run it with a dedicated clean user so existing manual TransactionRules cannot influence suggestions:
   `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
+- The workflow E2E also asserts all four global reevaluation controls and the eligible-row action are visible, sends their description/candidate-preview requests with the correct global or row scope, and proves no rule-apply or confirm-no-suggestions request occurs until the test explicitly uses Apply suggestions.
 - Cypress workflow hardening coverage also includes:
   - invalid CSV header stays on `/transaction-ingestion/new`, shows a backend error, and does not navigate to review;
   - `PARTIALLY_READY` uploads render rejected row errors, do not prepare candidates, and do not enable candidate classification controls;

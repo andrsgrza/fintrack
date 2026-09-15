@@ -47,7 +47,10 @@ export interface IPrepareFileImportCandidatesResponse {
 
 export interface IFileImportCandidateBatchRequest {
   candidateIds?: number[];
+  scope?: FileImportCandidateRulePreviewScope;
 }
+
+export type FileImportCandidateRulePreviewScope = 'CATEGORY' | 'TAGS' | 'ALL';
 
 export interface IFileImportRuleMatch {
   ruleId?: number;
@@ -138,11 +141,18 @@ const ingestionApiUrl = 'api/transaction-ingestions';
 export const prepareFileImportCandidates = (ingestionId: number) =>
   axios.post<IPrepareFileImportCandidatesResponse>(`${ingestionApiUrl}/${ingestionId}/candidates/prepare`);
 
-export const previewFileImportCandidateRules = (ingestionId: number, candidateIds?: number[]) =>
-  axios.post<IFileImportCandidateRulePreviewResponse>(
-    `${ingestionApiUrl}/${ingestionId}/candidates/rule-preview`,
-    candidateIds?.length ? ({ candidateIds } satisfies IFileImportCandidateBatchRequest) : undefined,
-  );
+export const previewFileImportCandidateRules = (
+  ingestionId: number,
+  candidateIds?: number[],
+  scope: FileImportCandidateRulePreviewScope = 'ALL',
+) => {
+  const request =
+    candidateIds?.length || scope !== 'ALL'
+      ? ({ ...(candidateIds?.length ? { candidateIds } : {}), scope } satisfies IFileImportCandidateBatchRequest)
+      : undefined;
+
+  return axios.post<IFileImportCandidateRulePreviewResponse>(`${ingestionApiUrl}/${ingestionId}/candidates/rule-preview`, request);
+};
 
 export const applyFileImportCandidateRules = (ingestionId: number, candidateIds?: number[]) =>
   axios.post<IFileImportCandidateApplyRulesResponse>(

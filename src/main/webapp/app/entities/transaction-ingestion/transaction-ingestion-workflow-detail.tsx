@@ -16,14 +16,17 @@ import { getEntity } from './transaction-ingestion.reducer';
 import {
   applyFileImportCandidateRules,
   confirmNoSuggestions,
+  FileImportCandidateRulePreviewScope,
   IFileImportCandidateRulePreviewRow,
   IFileImportCandidateRulePreviewResponse,
+  IFileImportCandidateApplyRulesRow,
   IFileImportCandidateWorkflowSummary,
   IPrepareFileImportCandidatesResponse,
   prepareFileImportCandidates,
   previewFileImportCandidateRules,
   updateFileImportCandidateClassification,
 } from './transaction-ingestion-candidate-classification.service';
+import { IDescriptionReevaluationResult, reevaluateIngestionDescriptions } from './transaction-ingestion-description-reevaluation.service';
 
 interface ICsvIngestionWorkflowMessage {
   code?: string;
@@ -172,7 +175,13 @@ const renderDescriptionReviewDetail = (labelKey: string, fallbackLabel: string, 
     </div>
   ) : null;
 
-const DescriptionReviewDisplay = ({ row }: { row: ICsvIngestionWorkflowRow }) => {
+const DescriptionReviewDisplay = ({
+  row,
+  reevaluation,
+}: {
+  row: ICsvIngestionWorkflowRow;
+  reevaluation?: IDescriptionReevaluationResult;
+}) => {
   const review = row.descriptionReview;
   const source = review?.source;
 
@@ -208,6 +217,14 @@ const DescriptionReviewDisplay = ({ row }: { row: ICsvIngestionWorkflowRow }) =>
             {translate('fintrackApp.transactionIngestion.workflow.descriptionReview.originallyAutoNormalizedBy', {
               ruleName: review.ruleName,
             })}
+          </small>
+        ) : null}
+        {!isRuleSource && reevaluation?.action === 'MANUAL_PRESERVED' && reevaluation.suggestedDescription ? (
+          <small className="text-muted d-block mt-1" data-testid={descriptionReviewTestId(row, 'reevaluationSuggestion')}>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.reevaluationSuggestion">
+              Reevaluation suggestion
+            </Translate>
+            : {reevaluation.suggestedDescription}
           </small>
         ) : null}
         <details className="small mt-1" data-testid={descriptionReviewTestId(row, 'details')}>
@@ -287,6 +304,45 @@ const candidatePreviewRowsById = (rows: IFileImportCandidateRulePreviewRow[] = [
     }
     return acc;
   }, {});
+
+const mergeScopedPreviewRows = (
+  currentRows: Record<number, IFileImportCandidateRulePreviewRow>,
+  rows: IFileImportCandidateRulePreviewRow[] = [],
+  scope: FileImportCandidateRulePreviewScope,
+  replaceAll: boolean,
+) => {
+  if (scope === 'ALL' && replaceAll) {
+    return candidatePreviewRowsById(rows);
+  }
+
+  return rows.reduce<Record<number, IFileImportCandidateRulePreviewRow>>((nextRows, row) => {
+    if (row.candidateId === undefined) {
+      return nextRows;
+    }
+    const existing = nextRows[row.candidateId];
+    const merged =
+      scope === 'ALL'
+        ? { ...existing, ...row }
+        : scope === 'CATEGORY'
+          ? {
+              ...existing,
+              ...row,
+              suggestedTags: existing?.suggestedTags ?? [],
+            }
+          : {
+              ...existing,
+              ...row,
+              suggestedCategory: existing?.suggestedCategory ?? null,
+            };
+    return {
+      ...nextRows,
+      [row.candidateId]: {
+        ...merged,
+        hasSuggestions: Boolean(merged.suggestedCategory) || (merged.suggestedTags ?? []).length > 0,
+      },
+    };
+  }, currentRows);
+};
 
 const replaceWorkflowCandidate = (
   row: ICsvIngestionWorkflowRow,
@@ -399,6 +455,15 @@ export const TransactionIngestionWorkflowDetail = () => {
   >({});
   const [loadingClassification, setLoadingClassification] = useState(false);
   const [classificationActionInProgress, setClassificationActionInProgress] = useState<number | null>(null);
+  const [applyingAllSuggestions, setApplyingAllSuggestions] = useState(false);
+  const [classificationApplyAllWarning, setClassificationApplyAllWarning] = useState<string | null>(null);
+  const [descriptionReevaluationByRecordId, setDescriptionReevaluationByRecordId] = useState<
+    Record<number, IDescriptionReevaluationResult>
+  >({});
+  const [reevaluationInProgress, setReevaluationInProgress] = useState<{
+    kind: 'DESCRIPTIONS' | 'CATEGORY' | 'TAGS' | 'ALL' | 'ROW';
+    recordId?: number;
+  } | null>(null);
 
   const loadWorkflow = useCallback(async (workflowId: number | string) => {
     setLoadingReview(true);
@@ -459,6 +524,13 @@ export const TransactionIngestionWorkflowDetail = () => {
     }
     previewedCandidateKeyRef.current = null;
     const updatedRow = data.row;
+    if (updatedRow.ingestionRecordId !== undefined) {
+      setDescriptionReevaluationByRecordId(current => {
+        const remaining = { ...current };
+        delete remaining[updatedRow.ingestionRecordId];
+        return remaining;
+      });
+    }
     setWorkflow(currentWorkflow => {
       if (!currentWorkflow) {
         return currentWorkflow;
@@ -596,11 +668,12 @@ export const TransactionIngestionWorkflowDetail = () => {
   const completed = workflow?.status === 'COMPLETED';
   const failed = workflow?.status === 'FAILED';
   const confirmAvailable = workflow?.status === 'READY' && (counts.validRows ?? 0) > 0;
-  const processing = workflow?.status === 'PROCESSING' || confirmingImport || loadingClassification;
+  const processing = workflow?.status === 'PROCESSING' || confirmingImport;
   const showNoTransactionsCreatedBanner = reviewActionsEnabled;
   const showActionsColumn = reviewActionsEnabled;
   const showErrorColumn = !completed || rows.some(row => row.errorMessage || row.errorCode);
   const classificationRows = rows.filter(row => row.status === 'VALID');
+  const hasEligibleDescriptionRows = classificationRows.length > 0;
   const reviewedClassificationRows = classificationRows.filter(row => candidateHasReviewedClassification(row.candidate)).length;
   const notEvaluatedClassificationRows = classificationRows.filter(
     row => row.candidate?.classificationReviewStatus === 'NOT_EVALUATED',
@@ -614,6 +687,9 @@ export const TransactionIngestionWorkflowDetail = () => {
     classificationRows.find(row => candidateBlocksClassification(row) || !candidateHasReviewedClassification(row.candidate)),
   );
   const showClassificationColumns = reviewActionsEnabled || rows.some(row => row.candidate?.id);
+  const classificationReevaluationAvailable =
+    workflow?.status === 'READY' && classificationRows.length > 0 && !validateCandidateBackedWorkflow(workflow);
+  const classificationReevaluationRunning = Boolean(reevaluationInProgress) || loadingClassification || applyingAllSuggestions;
 
   const canDisable = (row: ICsvIngestionWorkflowRow) => reviewActionsEnabled && ['VALID', 'REJECTED'].includes(row.status ?? '');
   const canEnable = (row: ICsvIngestionWorkflowRow) => reviewActionsEnabled && row.status === 'DISABLED';
@@ -633,12 +709,39 @@ export const TransactionIngestionWorkflowDetail = () => {
     );
   };
 
-  const loadRulePreview = useCallback(async (transactionIngestionId: number) => {
-    const response = await previewFileImportCandidateRules(transactionIngestionId);
-    const preview = response.data;
-    setClassificationPreviewByCandidateId(candidatePreviewRowsById(preview.rows ?? []));
-    return preview;
-  }, []);
+  const clearPersistedClassificationPreviews = (applyRows: IFileImportCandidateApplyRulesRow[] = []) => {
+    const persistedCandidateIds = new Set(
+      applyRows
+        .filter(row => row.candidateId !== undefined && ['APPLIED', 'UNCHANGED'].includes(row.action ?? ''))
+        .map(row => row.candidateId),
+    );
+    if (persistedCandidateIds.size === 0) {
+      return;
+    }
+    setClassificationPreviewByCandidateId(currentPreviewById => {
+      const remainingPreviewById = { ...currentPreviewById };
+      persistedCandidateIds.forEach(candidateId => delete remainingPreviewById[candidateId]);
+      return remainingPreviewById;
+    });
+  };
+
+  const reloadWorkflowAfterRuleApply = async (transactionIngestionId: number) => {
+    const reloadedWorkflow = await loadWorkflow(transactionIngestionId);
+    // Apply has already persisted the returned candidate values. Avoid immediately recreating a
+    // transient preview that would make those same suggestions look unapplied again.
+    previewedCandidateKeyRef.current = candidatePreviewKey(reloadedWorkflow);
+    return reloadedWorkflow;
+  };
+
+  const loadRulePreview = useCallback(
+    async (transactionIngestionId: number, candidateIds?: number[], scope: FileImportCandidateRulePreviewScope = 'ALL') => {
+      const response = await previewFileImportCandidateRules(transactionIngestionId, candidateIds, scope);
+      const preview = response.data;
+      setClassificationPreviewByCandidateId(current => mergeScopedPreviewRows(current, preview.rows ?? [], scope, !candidateIds?.length));
+      return preview;
+    },
+    [],
+  );
 
   const prepareCandidatesForUnifiedReview = useCallback(
     async (transactionIngestionId: number) => {
@@ -727,25 +830,125 @@ export const TransactionIngestionWorkflowDetail = () => {
     })();
   }, [loadRulePreview, workflow]);
 
-  const retryRulePreview = async () => {
+  const reevaluateDescriptions = async (recordIds?: number[]) => {
     if (!workflow?.transactionIngestionId) {
       return;
     }
+    const response = await reevaluateIngestionDescriptions(workflow.transactionIngestionId, recordIds);
+    const result = response.data;
+    setDescriptionReevaluationByRecordId(current => ({
+      ...current,
+      ...(result.rows ?? []).reduce<Record<number, IDescriptionReevaluationResult>>((rowsById, row) => {
+        if (row.ingestionRecordId !== undefined) {
+          rowsById[row.ingestionRecordId] = row;
+        }
+        return rowsById;
+      }, {}),
+    }));
+    await loadWorkflow(workflow.transactionIngestionId);
+  };
 
-    if (validateCandidateBackedWorkflow(workflow)) {
-      preparedCandidateKeyRef.current = null;
-      await prepareCandidatesForUnifiedReview(workflow.transactionIngestionId);
+  const reevaluateRuleSuggestions = async (scope: FileImportCandidateRulePreviewScope, candidateIds?: number[]) => {
+    if (!workflow?.transactionIngestionId) {
       return;
     }
+    await loadRulePreview(workflow.transactionIngestionId, candidateIds, scope);
+  };
 
+  const reevaluateDescriptionsOnly = async () => {
+    if (!hasEligibleDescriptionRows || reevaluationInProgress) {
+      return;
+    }
     setBackendError(null);
-    setLoadingClassification(true);
+    setReevaluationInProgress({ kind: 'DESCRIPTIONS' });
     try {
-      await loadRulePreview(workflow.transactionIngestionId);
+      await reevaluateDescriptions();
+    } catch (error) {
+      setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionReevaluationFailed'));
+    } finally {
+      setReevaluationInProgress(null);
+    }
+  };
+
+  const reevaluateClassificationScope = async (scope: Extract<FileImportCandidateRulePreviewScope, 'CATEGORY' | 'TAGS'>) => {
+    if (!classificationReevaluationAvailable || reevaluationInProgress) {
+      return;
+    }
+    setBackendError(null);
+    setReevaluationInProgress({ kind: scope });
+    try {
+      await reevaluateRuleSuggestions(scope);
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationPreviewFailed'));
     } finally {
-      setLoadingClassification(false);
+      setReevaluationInProgress(null);
+    }
+  };
+
+  const reevaluateAll = async () => {
+    if (!hasEligibleDescriptionRows || !classificationReevaluationAvailable || reevaluationInProgress) {
+      return;
+    }
+    setBackendError(null);
+    setReevaluationInProgress({ kind: 'ALL' });
+    let descriptionsSucceeded = false;
+    let classificationSucceeded = false;
+    try {
+      await reevaluateDescriptions();
+      descriptionsSucceeded = true;
+    } catch (error) {
+      // Continue with the independent read-only candidate preview and report the combined outcome below.
+    }
+    try {
+      await reevaluateRuleSuggestions('ALL');
+      classificationSucceeded = true;
+    } catch (error) {
+      // The first completed domain is retained; no suggestions are applied by either request.
+    } finally {
+      if (!descriptionsSucceeded || !classificationSucceeded) {
+        setBackendError(
+          translate(
+            descriptionsSucceeded || classificationSucceeded
+              ? 'fintrackApp.transactionIngestion.workflow.errors.reevaluationPartialFailed'
+              : 'fintrackApp.transactionIngestion.workflow.errors.reevaluationFailed',
+          ),
+        );
+      }
+      setReevaluationInProgress(null);
+    }
+  };
+
+  const reevaluateRow = async (row: ICsvIngestionWorkflowRow) => {
+    const candidateId = row.candidate?.id;
+    if (!row.ingestionRecordId || candidateId === undefined || !classificationReevaluationAvailable || reevaluationInProgress) {
+      return;
+    }
+    setBackendError(null);
+    setReevaluationInProgress({ kind: 'ROW', recordId: row.ingestionRecordId });
+    let descriptionsSucceeded = false;
+    let classificationSucceeded = false;
+    try {
+      await reevaluateDescriptions([row.ingestionRecordId]);
+      descriptionsSucceeded = true;
+    } catch (error) {
+      // A scoped preview is still independent and can provide current category/tag suggestions.
+    }
+    try {
+      await reevaluateRuleSuggestions('ALL', [candidateId]);
+      classificationSucceeded = true;
+    } catch (error) {
+      // Report below without fabricating local preview success.
+    } finally {
+      if (!descriptionsSucceeded || !classificationSucceeded) {
+        setBackendError(
+          translate(
+            descriptionsSucceeded || classificationSucceeded
+              ? 'fintrackApp.transactionIngestion.workflow.errors.reevaluationPartialFailed'
+              : 'fintrackApp.transactionIngestion.workflow.errors.reevaluationFailed',
+          ),
+        );
+      }
+      setReevaluationInProgress(null);
     }
   };
 
@@ -795,14 +998,42 @@ export const TransactionIngestionWorkflowDetail = () => {
       const response = await applyFileImportCandidateRules(workflow.transactionIngestionId, [candidateId]);
       const applyRows = response.data.rows ?? [];
       applyRows.forEach(row => updateCandidateInWorkflow(row.candidate));
-      setClassificationPreviewByCandidateId(currentPreviewById => ({
-        ...currentPreviewById,
-        ...candidatePreviewRowsById(applyRows),
-      }));
+      clearPersistedClassificationPreviews(applyRows);
+      await reloadWorkflowAfterRuleApply(workflow.transactionIngestionId);
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationUpdateFailed'));
     } finally {
       setClassificationActionInProgress(null);
+    }
+  };
+
+  const applyAllClassificationSuggestions = async () => {
+    if (
+      !workflow?.transactionIngestionId ||
+      !classificationReevaluationAvailable ||
+      classificationReevaluationRunning ||
+      classificationActionInProgress !== null
+    ) {
+      return;
+    }
+    setBackendError(null);
+    setClassificationApplyAllWarning(null);
+    setApplyingAllSuggestions(true);
+    try {
+      // Omitting candidateIds is the existing batch contract: apply current FILE_IMPORT
+      // classification suggestions for every candidate belonging to this ingestion.
+      const response = await applyFileImportCandidateRules(workflow.transactionIngestionId);
+      const applyRows = response.data.rows ?? [];
+      applyRows.forEach(row => updateCandidateInWorkflow(row.candidate));
+      clearPersistedClassificationPreviews(applyRows);
+      await reloadWorkflowAfterRuleApply(workflow.transactionIngestionId);
+      if (applyRows.some(row => row.action === 'SKIPPED')) {
+        setClassificationApplyAllWarning(translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllPartial'));
+      }
+    } catch (error) {
+      setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllFailed'));
+    } finally {
+      setApplyingAllSuggestions(false);
     }
   };
 
@@ -1321,6 +1552,22 @@ export const TransactionIngestionWorkflowDetail = () => {
             </Button>
           </>
         ) : null}
+        {!isEditing && row.status === 'VALID' && row.candidate?.id && !candidateBlocksClassification(row) ? (
+          <Button
+            size="sm"
+            color="secondary"
+            disabled={classificationReevaluationRunning}
+            onClick={() => reevaluateRow(row)}
+            data-testid={`workflowRowReevaluate-${row.ingestionRecordId ?? row.recordIndex}`}
+          >
+            {reevaluationInProgress?.kind === 'ROW' && reevaluationInProgress.recordId === row.ingestionRecordId ? (
+              <Spinner size="sm" />
+            ) : (
+              <FontAwesomeIcon icon="sync" />
+            )}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.row">Reevaluate this row</Translate>
+          </Button>
+        ) : null}{' '}
         {!isEditing && canEdit(row) ? (
           <Button
             size="sm"
@@ -1358,7 +1605,7 @@ export const TransactionIngestionWorkflowDetail = () => {
     ) : null;
 
   const renderClassificationSummary = () =>
-    confirmAvailable ? (
+    reviewActionsEnabled && hasEligibleDescriptionRows ? (
       <div className="mb-3" data-cy="workflowClassificationControls">
         <Alert color="info" fade={false} data-cy="workflowClassificationPersistedNotice">
           <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.persistedNotice">
@@ -1398,10 +1645,76 @@ export const TransactionIngestionWorkflowDetail = () => {
             </Translate>
           </Alert>
         ) : null}
-        <Button color="secondary" size="sm" disabled={processing} onClick={retryRulePreview} data-cy="workflowClassificationPreviewRetry">
-          {loadingClassification ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}{' '}
-          <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.retryPreview">Refresh suggestions</Translate>
-        </Button>
+        <div className="d-flex flex-wrap gap-2" data-cy="workflowReevaluationControls">
+          <Button
+            color="secondary"
+            size="sm"
+            disabled={classificationReevaluationRunning}
+            onClick={reevaluateDescriptionsOnly}
+            data-cy="workflowReevaluateDescriptions"
+          >
+            {reevaluationInProgress?.kind === 'DESCRIPTIONS' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.descriptions">Reevaluate descriptions</Translate>
+          </Button>
+          <Button
+            color="secondary"
+            size="sm"
+            disabled={!classificationReevaluationAvailable || classificationReevaluationRunning}
+            onClick={() => reevaluateClassificationScope('CATEGORY')}
+            data-cy="workflowReevaluateCategories"
+          >
+            {reevaluationInProgress?.kind === 'CATEGORY' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.categories">Reevaluate categories</Translate>
+          </Button>
+          <Button
+            color="secondary"
+            size="sm"
+            disabled={!classificationReevaluationAvailable || classificationReevaluationRunning}
+            onClick={() => reevaluateClassificationScope('TAGS')}
+            data-cy="workflowReevaluateTags"
+          >
+            {reevaluationInProgress?.kind === 'TAGS' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.tags">Reevaluate tags</Translate>
+          </Button>
+          <Button
+            color="primary"
+            size="sm"
+            disabled={!classificationReevaluationAvailable || classificationReevaluationRunning}
+            onClick={reevaluateAll}
+            data-cy="workflowReevaluateAll"
+          >
+            {reevaluationInProgress?.kind === 'ALL' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.all">Reevaluate all</Translate>
+          </Button>
+          <div className="border-start border-secondary ps-2 ms-1">
+            <Button
+              color="success"
+              size="sm"
+              disabled={
+                !classificationReevaluationAvailable || classificationReevaluationRunning || classificationActionInProgress !== null
+              }
+              onClick={applyAllClassificationSuggestions}
+              data-cy="workflowApplyAllSuggestions"
+            >
+              {applyingAllSuggestions ? <Spinner size="sm" /> : null}{' '}
+              {applyingAllSuggestions ? (
+                <Translate
+                  key="applying-all-classification-suggestions"
+                  contentKey="fintrackApp.transactionIngestion.workflow.classification.applyingAllSuggestions"
+                >
+                  Applying classification suggestions...
+                </Translate>
+              ) : (
+                <Translate
+                  key="apply-all-classification-suggestions"
+                  contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestions"
+                >
+                  Apply all classification suggestions
+                </Translate>
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
     ) : null;
 
@@ -1423,6 +1736,12 @@ export const TransactionIngestionWorkflowDetail = () => {
         {backendError ? (
           <Alert color="danger" data-cy="workflowBackendError" fade={false}>
             {backendError}
+          </Alert>
+        ) : null}
+
+        {classificationApplyAllWarning ? (
+          <Alert color="warning" data-cy="workflowApplyAllWarning" data-testid="workflowApplyAllWarning" fade={false}>
+            {classificationApplyAllWarning}
           </Alert>
         ) : null}
 
@@ -1608,6 +1927,7 @@ export const TransactionIngestionWorkflowDetail = () => {
                     const rowBlocked = candidateBlocksClassification(row);
                     const actionBusy =
                       processing ||
+                      applyingAllSuggestions ||
                       reviewActionInProgress === row.ingestionRecordId ||
                       (candidateId !== undefined && classificationActionInProgress === candidateId);
                     const isEditing = editingRecordId === row.ingestionRecordId;
@@ -1656,7 +1976,10 @@ export const TransactionIngestionWorkflowDetail = () => {
                               onChange={event => updateEditDraft('description', event.target.value)}
                             />
                           ) : (
-                            <DescriptionReviewDisplay row={row} />
+                            <DescriptionReviewDisplay
+                              row={row}
+                              reevaluation={descriptionReevaluationByRecordId[row.ingestionRecordId ?? -1]}
+                            />
                           )}
                         </td>
                         <td>
@@ -1709,7 +2032,13 @@ export const TransactionIngestionWorkflowDetail = () => {
                             row.notes
                           )}
                         </td>
-                        {renderClassificationRowCells(row, candidate, classificationPreview, actionBusy || isEditing, rowBlocked)}
+                        {renderClassificationRowCells(
+                          row,
+                          candidate,
+                          classificationPreview,
+                          actionBusy || isEditing || classificationReevaluationRunning,
+                          rowBlocked,
+                        )}
                         {showErrorColumn ? <td>{row.errorMessage || row.errorCode}</td> : null}
                         {renderReviewActionsCell(row, isEditing, actionBusy)}
                       </tr>
@@ -1723,7 +2052,13 @@ export const TransactionIngestionWorkflowDetail = () => {
               <div className="mt-3">
                 <Button
                   color="success"
-                  disabled={processing || classificationConfirmBlocked}
+                  disabled={
+                    processing ||
+                    loadingClassification ||
+                    Boolean(reevaluationInProgress) ||
+                    applyingAllSuggestions ||
+                    classificationConfirmBlocked
+                  }
                   onClick={confirmImport}
                   data-cy="workflowConfirmImport"
                 >

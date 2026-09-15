@@ -681,7 +681,7 @@ The current unified `TransactionIngestion` workflow review uses prepared `FILE_I
 
 - `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs candidates for eligible `VALID` rows that are missing them; the unified page runs it automatically once for that missing-row set.
 - The UI reloads `GET /api/transaction-ingestions/{id}/workflow` and uses each row's `candidate` summary as the source of truth for selected category/tags and `classificationReviewStatus`.
-- `POST /api/transaction-ingestions/{id}/candidates/rule-preview` evaluates current candidate state read-only and returns transient suggestions, matched rules, conflicts, and skipped outputs keyed by candidate id.
+- `POST /api/transaction-ingestions/{id}/candidates/rule-preview` evaluates current candidate state read-only and returns transient suggestions, matched rules, conflicts, and skipped outputs keyed by candidate id. Its optional `scope` is `CATEGORY`, `TAGS`, or `ALL`; scope filters returned output only and never applies a selection.
 - Preview does not mutate candidate category/tags and does not write to `rawData`.
 - User category/tag edits in the unified row call candidate classification PATCH and are persisted on `TransactionCandidate`.
 - Browser refresh reloads persisted category/tag selections from the workflow row candidate summaries.
@@ -695,10 +695,14 @@ The older ingestion `POST /api/transaction-ingestions/{id}/classification-previe
 The ingestion-scoped candidate classification commands for prepared `FILE_IMPORT` `TransactionCandidate`s are:
 
 - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification` writes user-selected category/tags to the candidate and marks `classificationReviewStatus=USER_SELECTED`; the request must include at least one of `categoryId` or `tagIds`.
-- `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview` evaluates active owner TransactionRules against current candidate state with `TransactionOrigin.FILE_IMPORT` and returns transient suggestions/matches/conflicts/skips.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview` evaluates active owner TransactionRules against current candidate state with `TransactionOrigin.FILE_IMPORT` and returns transient suggestions/matches/conflicts/skips. `scope=CATEGORY`, `scope=TAGS`, and `scope=ALL` reuse the same evaluator and limit only the response surface.
 - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`.
 - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` marks `NOT_APPLICABLE` only when a fresh evaluation has no suggestions.
 - These FILE candidate classification endpoints do not create `FinancialTransaction` rows, do not mutate `IngestionRecord.rawData`, and do not call `/api/financial-transactions/rule-preview`.
+
+The single ingestion review also exposes **Apply all classification suggestions**. It reuses that same ingestion-scoped `apply-rules` command with the body omitted (therefore no `candidateIds`), so the backend evaluates and independently processes every eligible `FILE_IMPORT` candidate belonging to the current ingestion. It is not a reevaluation action and does not apply description-normalization output. Category fills only when empty and non-conflicting, tags remain additive/deduplicated, and existing manual category/tags keep `USER_SELECTED`. The UI reloads candidate summaries afterwards and clears only the transient previews for processed candidates. No `FinancialTransaction` is created until the separate Confirm Import command.
+
+The unified ingestion review exposes explicit scoped reevaluation controls. Reevaluate categories and Reevaluate tags call scoped candidate preview; Reevaluate all combines that preview with description reevaluation; and Reevaluate this row scopes both operations to one row/candidate. These are review operations, not Apply or Confirm operations: manual candidate values remain unchanged, suggestions remain transient, and no FinancialTransaction is created.
 
 Candidate-backed Confirm Import uses the existing `POST /api/transaction-ingestions/{id}/confirm` path. For non-completed imports, every current `VALID` row must have exactly one reviewed `FILE_IMPORT` candidate with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`. Confirm creates `FinancialTransaction` rows from candidate fields/category/tags, sets candidates to `POSTED`, links candidates and `IngestionRecord`s to the created transactions, preserves `rawData`, and completes the parent ingestion all-or-nothing. Completed retry remains idempotent and creates no duplicates.
 
@@ -713,6 +717,7 @@ Description normalization is not part of the category/tag Transaction Rule Engin
 - It outputs only `resultingDescription`.
 - First matching description normalization rule wins.
 - It runs during FILE upload/record creation before row review.
+- It can be rerun for a current FILE ingestion through `POST /api/transaction-ingestions/{id}/descriptions/reevaluate`, optionally scoped by `recordIds`. That command still evaluates `rawData.raw.description`; it preserves a `USER_EDIT` normalized value and returns any new match only as a transient suggestion.
 - It does not run on manual FinancialTransaction create/update/PATCH.
 - It does not run during Confirm Import.
 - It does not invoke category/tag TransactionRule evaluation.

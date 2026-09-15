@@ -24,6 +24,7 @@ import com.fintrack.app.service.dto.FileImportCandidateClassificationRequestDTO;
 import com.fintrack.app.service.dto.FileImportCandidateClassificationResponseDTO;
 import com.fintrack.app.service.dto.FileImportCandidateRulePreviewResponseDTO;
 import com.fintrack.app.service.dto.FileImportCandidateRulePreviewRowDTO;
+import com.fintrack.app.service.dto.FileImportCandidateRulePreviewScope;
 import com.fintrack.app.service.dto.RuleMatchResultDTO;
 import com.fintrack.app.service.dto.RuleOutputConflictDTO;
 import com.fintrack.app.service.dto.SkippedRuleOutputDTO;
@@ -32,6 +33,7 @@ import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper
 import com.fintrack.app.service.rules.CategorySuggestion;
 import com.fintrack.app.service.rules.RuleMatchResult;
 import com.fintrack.app.service.rules.RuleOutputConflict;
+import com.fintrack.app.service.rules.RuleOutputField;
 import com.fintrack.app.service.rules.SkippedRuleOutput;
 import com.fintrack.app.service.rules.TagSuggestion;
 import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationResult;
@@ -123,10 +125,11 @@ public class FileImportCandidateClassificationService {
         String userLogin = currentUserService.getCurrentUserLogin();
         TransactionIngestion ingestion = resolveAccessibleFileIngestion(transactionIngestionId, userLogin);
         List<TransactionCandidate> candidates = resolveBatchCandidates(ingestion, request, userLogin);
+        FileImportCandidateRulePreviewScope scope = previewScope(request);
 
         FileImportCandidateRulePreviewResponseDTO response = new FileImportCandidateRulePreviewResponseDTO();
         response.setTransactionIngestionId(ingestion.getId());
-        response.setRows(candidates.stream().map(candidate -> previewRow(candidate, userLogin)).toList());
+        response.setRows(candidates.stream().map(candidate -> previewRow(candidate, userLogin, scope)).toList());
         return response;
     }
 
@@ -160,12 +163,16 @@ public class FileImportCandidateClassificationService {
         return response;
     }
 
-    private FileImportCandidateRulePreviewRowDTO previewRow(TransactionCandidate candidate, String userLogin) {
+    private FileImportCandidateRulePreviewRowDTO previewRow(
+        TransactionCandidate candidate,
+        String userLogin,
+        FileImportCandidateRulePreviewScope scope
+    ) {
         FileImportCandidateRulePreviewRowDTO row = basePreviewRow(candidate);
         try {
             validateMutableFileImportCandidate(candidate);
             TransactionRuleEvaluationResult evaluation = evaluate(candidate, userLogin);
-            populateEvaluation(row, evaluation);
+            populateEvaluation(row, evaluation, scope);
             row.setAction("PREVIEWED");
         } catch (IllegalArgumentException e) {
             row.setAction("SKIPPED");
@@ -279,6 +286,10 @@ public class FileImportCandidateClassificationService {
             .toList();
         validateBatchCandidateSources(selectedCandidates);
         return selectedCandidates;
+    }
+
+    private FileImportCandidateRulePreviewScope previewScope(FileImportCandidateBatchRequestDTO request) {
+        return request == null || request.getScope() == null ? FileImportCandidateRulePreviewScope.ALL : request.getScope();
     }
 
     private void validateBatchCandidateSources(List<TransactionCandidate> candidates) {
@@ -398,14 +409,44 @@ public class FileImportCandidateClassificationService {
         return row;
     }
 
-    private void populateEvaluation(FileImportCandidateRulePreviewRowDTO row, TransactionRuleEvaluationResult evaluation) {
-        row.setSuggestedCategory(toCategorySuggestionDTO(evaluation.suggestedCategory()));
-        row.setSuggestedTags(evaluation.suggestedTags().stream().map(this::toTagSuggestionDTO).toList());
+    private void populateEvaluation(
+        FileImportCandidateRulePreviewRowDTO row,
+        TransactionRuleEvaluationResult evaluation,
+        FileImportCandidateRulePreviewScope scope
+    ) {
+        boolean includeCategory = scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.CATEGORY;
+        boolean includeTags = scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.TAGS;
+        row.setSuggestedCategory(includeCategory ? toCategorySuggestionDTO(evaluation.suggestedCategory()) : null);
+        row.setSuggestedTags(includeTags ? evaluation.suggestedTags().stream().map(this::toTagSuggestionDTO).toList() : List.of());
         row.setMatchedRules(evaluation.matchedRules().stream().map(this::toRuleMatchResultDTO).toList());
-        row.setConflicts(evaluation.conflicts().stream().map(this::toRuleOutputConflictDTO).toList());
-        row.setSkippedOutputs(evaluation.skippedOutputs().stream().map(this::toSkippedRuleOutputDTO).toList());
-        row.setHasSuggestions(evaluation.hasSuggestions());
-        row.setHasConflicts(evaluation.hasConflicts());
+        row.setConflicts(
+            evaluation
+                .conflicts()
+                .stream()
+                .filter(conflict -> includesOutput(scope, conflict.field()))
+                .map(this::toRuleOutputConflictDTO)
+                .toList()
+        );
+        row.setSkippedOutputs(
+            evaluation
+                .skippedOutputs()
+                .stream()
+                .filter(skipped -> includesOutput(scope, skipped.field()))
+                .map(this::toSkippedRuleOutputDTO)
+                .toList()
+        );
+        row.setHasSuggestions(
+            (includeCategory && evaluation.suggestedCategory() != null) || (includeTags && !evaluation.suggestedTags().isEmpty())
+        );
+        row.setHasConflicts(!row.getConflicts().isEmpty());
+    }
+
+    private boolean includesOutput(FileImportCandidateRulePreviewScope scope, RuleOutputField field) {
+        return (
+            scope == FileImportCandidateRulePreviewScope.ALL ||
+            (scope == FileImportCandidateRulePreviewScope.CATEGORY && field == RuleOutputField.CATEGORY) ||
+            (scope == FileImportCandidateRulePreviewScope.TAGS && field == RuleOutputField.TAGS)
+        );
     }
 
     private void populateEvaluation(FileImportCandidateApplyRulesRowDTO row, TransactionRuleEvaluationResult evaluation) {

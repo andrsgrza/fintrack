@@ -115,7 +115,15 @@
           "rule": "Regla",
           "editedAt": "Editada el",
           "editedBy": "Editada por",
-          "originallyAutoNormalizedBy": "Originalmente normalizada por {{ruleName}}, después editada manualmente"
+          "originallyAutoNormalizedBy": "Originalmente normalizada por {{ruleName}}, después editada manualmente",
+          "reevaluationSuggestion": "Sugerencia de reevaluación"
+        },
+        "reevaluation": {
+          "descriptions": "Reevaluar descripciones",
+          "categories": "Reevaluar categorías",
+          "tags": "Reevaluar etiquetas",
+          "all": "Reevaluar todo",
+          "row": "Reevaluar esta fila"
         },
         "classification": {
           "persistedNotice": "Las categorías y etiquetas se guardan en candidatos antes de confirmar la importación.",
@@ -134,8 +142,9 @@
           "conflicts": "Conflictos",
           "skippedOutputs": "Omitidos",
           "rowBlocked": "El candidato no puede clasificarse.",
-          "retryPreview": "Actualizar sugerencias",
           "applySuggestions": "Aplicar sugerencias",
+          "applyAllSuggestions": "Aplicar todas las sugerencias de clasificación",
+          "applyingAllSuggestions": "Aplicando sugerencias de clasificación...",
           "confirmNoSuggestions": "Confirmar sin sugerencias"
         },
         "classificationReviewStatus": {
@@ -162,7 +171,12 @@
           "recordUpdateFailed": "No se pudo actualizar la fila de vista previa. Revisa la fila e inténtalo de nuevo.",
           "candidatePreparationFailed": "No se pudieron preparar los candidatos para clasificación.",
           "classificationUpdateFailed": "No se pudo actualizar la clasificación de categoría/etiquetas. Inténtalo de nuevo.",
+          "classificationApplyAllFailed": "No se pudieron aplicar todas las sugerencias de clasificación. Se conservaron las selecciones actuales.",
+          "classificationApplyAllPartial": "No se pudieron aplicar algunas sugerencias de clasificación. Revisa las filas afectadas.",
           "classificationPreviewFailed": "No se pudieron cargar las sugerencias de categorías/etiquetas. Vuelve a la revisión de filas e inténtalo de nuevo.",
+          "descriptionReevaluationFailed": "No se pudieron reevaluar las descripciones. Se conservaron los valores actuales de revisión.",
+          "reevaluationFailed": "No se pudo reevaluar este alcance de revisión. Se conservaron los valores actuales.",
+          "reevaluationPartialFailed": "Algunas reevaluaciones terminaron, pero otro alcance de revisión falló. Se conservaron los valores actuales.",
           "classificationConfirmBlocked": "Revisa todas las filas válidas antes de confirmar la importación.",
           "confirmNoSuggestionsFailed": "No se pudo confirmar que esta fila no tiene sugerencias.",
           "confirmFailed": "No se pudo confirmar la importación. Revisa el estado de la vista previa e inténtalo de nuevo."

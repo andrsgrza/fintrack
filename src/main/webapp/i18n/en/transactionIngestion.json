@@ -115,7 +115,15 @@
           "rule": "Rule",
           "editedAt": "Edited at",
           "editedBy": "Edited by",
-          "originallyAutoNormalizedBy": "Originally auto-normalized by {{ruleName}}, then edited manually"
+          "originallyAutoNormalizedBy": "Originally auto-normalized by {{ruleName}}, then edited manually",
+          "reevaluationSuggestion": "Reevaluation suggestion"
+        },
+        "reevaluation": {
+          "descriptions": "Reevaluate descriptions",
+          "categories": "Reevaluate categories",
+          "tags": "Reevaluate tags",
+          "all": "Reevaluate all",
+          "row": "Reevaluate this row"
         },
         "classification": {
           "persistedNotice": "Categories and tags are saved on candidates before confirming the import.",
@@ -134,8 +142,9 @@
           "conflicts": "Conflicts",
           "skippedOutputs": "Skipped",
           "rowBlocked": "Candidate cannot be classified.",
-          "retryPreview": "Refresh suggestions",
           "applySuggestions": "Apply suggestions",
+          "applyAllSuggestions": "Apply all classification suggestions",
+          "applyingAllSuggestions": "Applying classification suggestions...",
           "confirmNoSuggestions": "Confirm no suggestions"
         },
         "classificationReviewStatus": {
@@ -162,7 +171,12 @@
           "recordUpdateFailed": "Could not update the workflow row. Check the row and try again.",
           "candidatePreparationFailed": "Could not prepare transaction candidates for classification.",
           "classificationUpdateFailed": "Could not update category/tag classification. Try again.",
+          "classificationApplyAllFailed": "Could not apply all classification suggestions. Existing selections were preserved.",
+          "classificationApplyAllPartial": "Some classification suggestions could not be applied. Review the affected rows.",
           "classificationPreviewFailed": "Could not load category/tag suggestions. Return to row review and try again.",
+          "descriptionReevaluationFailed": "Could not reevaluate descriptions. Existing review values were preserved.",
+          "reevaluationFailed": "Could not reevaluate this review scope. Existing values were preserved.",
+          "reevaluationPartialFailed": "Some reevaluation results completed, but another review scope failed. Existing values were preserved.",
           "classificationConfirmBlocked": "Review all valid rows before confirming import.",
           "confirmNoSuggestionsFailed": "Could not confirm that this row has no suggestions.",
           "confirmFailed": "Could not confirm import. Check the review status and try again."
