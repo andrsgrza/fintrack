@@ -89,6 +89,7 @@ public class CsvIngestionConfirmImportService {
         if (ingestion.getStatus() == IngestionStatus.COMPLETED) {
             return response(ingestion, records, 0);
         }
+        validateNoCorruptPreCompletedCandidates(ingestion, records);
         if (!isConfirmPrecheckStatusAllowed(ingestion.getStatus())) {
             throw new IllegalArgumentException("Only ready file ingestions can be confirmed");
         }
@@ -309,6 +310,66 @@ public class CsvIngestionConfirmImportService {
             if (record.getStatus() == IngestionRecordStatus.VALID && record.getFinancialTransaction() != null) {
                 throw new IllegalArgumentException("Valid ingestion record is already linked to a financial transaction");
             }
+        }
+    }
+
+    private void validateNoCorruptPreCompletedCandidates(TransactionIngestion ingestion, List<IngestionRecord> records) {
+        String userLogin = currentUserService.getCurrentUserLogin();
+        Map<Long, IngestionRecord> recordsById = new HashMap<>();
+        records.forEach(record -> recordsById.put(record.getId(), record));
+
+        for (TransactionCandidate candidate : transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
+            ingestion.getId(),
+            userLogin
+        )) {
+            if (candidate.getSource() != TransactionCandidateSource.FILE_IMPORT) {
+                throw new IllegalArgumentException("Only FILE_IMPORT transaction candidates can be confirmed from file ingestion");
+            }
+            IngestionRecord record = candidate.getIngestionRecord();
+            if (record == null || record.getId() == null) {
+                throw new IllegalArgumentException("Transaction candidate is missing its ingestion record");
+            }
+            if (
+                record.getTransactionIngestion() == null ||
+                !Objects.equals(record.getTransactionIngestion().getId(), ingestion.getId()) ||
+                !recordsById.containsKey(record.getId())
+            ) {
+                throw new IllegalArgumentException("Transaction candidate does not belong to this ingestion");
+            }
+
+            IngestionRecord persistedRecord = recordsById.get(record.getId());
+            if (candidate.getStatus() == TransactionCandidateStatus.POSTED) {
+                validatePostedCandidateMatchesImportedRecord(candidate, persistedRecord);
+            } else {
+                validateUnpostedCandidateMatchesPreImportRecord(candidate, persistedRecord);
+            }
+        }
+    }
+
+    private void validatePostedCandidateMatchesImportedRecord(TransactionCandidate candidate, IngestionRecord record) {
+        if (record.getStatus() != IngestionRecordStatus.IMPORTED) {
+            throw new IllegalArgumentException("Posted transaction candidate requires an imported ingestion record");
+        }
+        if (candidate.getFinancialTransaction() == null) {
+            throw new IllegalArgumentException("Posted transaction candidate is missing its financial transaction");
+        }
+        if (
+            record.getFinancialTransaction() == null ||
+            !Objects.equals(candidate.getFinancialTransaction().getId(), record.getFinancialTransaction().getId())
+        ) {
+            throw new IllegalArgumentException("Posted transaction candidate financial transaction must match ingestion record");
+        }
+    }
+
+    private void validateUnpostedCandidateMatchesPreImportRecord(TransactionCandidate candidate, IngestionRecord record) {
+        if (record.getStatus() == IngestionRecordStatus.IMPORTED) {
+            throw new IllegalArgumentException("Imported ingestion record requires a posted transaction candidate");
+        }
+        if (record.getStatus() != IngestionRecordStatus.VALID) {
+            throw new IllegalArgumentException("Transaction candidate is linked to a non-valid ingestion record");
+        }
+        if (candidate.getFinancialTransaction() != null) {
+            throw new IllegalArgumentException("Unposted transaction candidate cannot be linked to a financial transaction");
         }
     }
 

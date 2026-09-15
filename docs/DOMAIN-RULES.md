@@ -188,6 +188,7 @@ FILE ingestion candidate preparation:
 - TC-3D.1 migrates Confirm Import backend internals to the existing `POST /api/transaction-ingestions/{id}/confirm` path using reviewed `FILE_IMPORT` candidates as the source of truth.
 - The current frontend does not send the legacy confirm request shape. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body; persisted candidate category/tags are the only classification source of truth.
 - Confirm requires every current `VALID` row to have exactly one reviewed candidate linked to the same ingestion, record, owner, and account with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`.
+- Before a non-completed Confirm Import runs, all existing `FILE_IMPORT` candidates for that ingestion must also be internally consistent with their rows: unposted candidates may only be linked to `VALID` rows and must not link a `FinancialTransaction`; `POSTED` candidates may only be linked to `IMPORTED` rows and must link the same `FinancialTransaction` as the row. Candidates tied to non-`VALID` rows, mismatched records/ingestions, or mismatched transaction links reject confirm all-or-nothing.
 - Confirm creates final `FinancialTransaction` rows from candidate fields/category/tags, sets `origin=FILE_IMPORT`, links candidates and ingestion records to the created transactions, marks candidates `POSTED`, marks records `IMPORTED`, and completes the parent ingestion all-or-nothing.
 
 Deferred:
