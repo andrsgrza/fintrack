@@ -9,7 +9,6 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
-import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
@@ -31,6 +30,7 @@ import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper;
+import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -265,11 +265,7 @@ public class CsvIngestionConfirmImportService {
         if (category == null || flow == null) {
             return;
         }
-        CategoryType categoryType = category.getCategoryType();
-        if (flow == TransactionFlow.OUT && categoryType != CategoryType.EXPENSE && categoryType != CategoryType.BOTH) {
-            throw new IllegalArgumentException("Category type is not compatible with transaction flow");
-        }
-        if (flow == TransactionFlow.IN && categoryType != CategoryType.INCOME && categoryType != CategoryType.BOTH) {
+        if (!CategoryFlowCompatibilityValidator.isCompatible(category.getCategoryType(), flow)) {
             throw new IllegalArgumentException("Category type is not compatible with transaction flow");
         }
     }

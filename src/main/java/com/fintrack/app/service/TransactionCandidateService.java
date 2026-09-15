@@ -8,7 +8,6 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
-import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
@@ -47,6 +46,7 @@ import com.fintrack.app.service.rules.TagSuggestion;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
+import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -932,10 +932,13 @@ public class TransactionCandidateService {
         if (category == null || flow == null) {
             return;
         }
-        if (category.getCategoryType() == CategoryType.EXPENSE && flow != TransactionFlow.OUT) {
+        if (CategoryFlowCompatibilityValidator.isCompatible(category.getCategoryType(), flow)) {
+            return;
+        }
+        if (flow == TransactionFlow.IN) {
             throw new IllegalArgumentException("Expense categories require OUT flow");
         }
-        if (category.getCategoryType() == CategoryType.INCOME && flow != TransactionFlow.IN) {
+        if (flow == TransactionFlow.OUT) {
             throw new IllegalArgumentException("Income categories require IN flow");
         }
     }

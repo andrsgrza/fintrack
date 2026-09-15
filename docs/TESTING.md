@@ -627,7 +627,7 @@ Key TC-1/TC-2A assertions:
 - account/category/tags/transaction ingestion/ingestion record must belong to the candidate owner.
 - direct client writes to `financialTransaction` are rejected because the link is server-controlled for a future posting command.
 - server-owned timestamps and review/lifecycle-derived fields are protected.
-- category type is compatible with flow, including INCOME/EXPENSE rejection and BOTH acceptance.
+- category type is compatible with flow, including INCOME/EXPENSE rejection and BOTH acceptance; TC-5E.2 also covers the shared internal category-flow validator directly while retaining public/service characterization tests.
 - admin has no cross-user product bypass.
 - `FAILED` requires a failure reason and cannot transition directly to `POSTED`.
 - `POSTED`/`CANCELLED` candidates cannot be mutated as drafts.

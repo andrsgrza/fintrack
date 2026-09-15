@@ -7,7 +7,6 @@ import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
-import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -43,6 +42,7 @@ import com.fintrack.app.service.rules.TagSuggestion;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
+import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -956,11 +956,7 @@ public class FinancialTransactionService {
         if (category == null || flow == null) {
             return;
         }
-        CategoryType categoryType = category.getCategoryType();
-        if (flow == TransactionFlow.OUT && categoryType != CategoryType.EXPENSE && categoryType != CategoryType.BOTH) {
-            throw new IllegalArgumentException("Category type is not compatible with transaction flow");
-        }
-        if (flow == TransactionFlow.IN && categoryType != CategoryType.INCOME && categoryType != CategoryType.BOTH) {
+        if (!CategoryFlowCompatibilityValidator.isCompatible(category.getCategoryType(), flow)) {
             throw new IllegalArgumentException("Category type is not compatible with transaction flow");
         }
     }
