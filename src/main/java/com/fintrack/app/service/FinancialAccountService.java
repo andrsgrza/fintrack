@@ -9,6 +9,7 @@ import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
 import java.math.BigDecimal;
@@ -56,6 +57,8 @@ public class FinancialAccountService {
 
     private final FinancialTransactionRepository financialTransactionRepository;
 
+    private final TransactionCandidateRepository transactionCandidateRepository;
+
     public FinancialAccountService(
         FinancialAccountRepository financialAccountRepository,
         FinancialAccountMapper financialAccountMapper,
@@ -65,7 +68,8 @@ public class FinancialAccountService {
         BudgetRepository budgetRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
         CreditAccountDetailsRepository creditAccountDetailsRepository,
-        FinancialTransactionRepository financialTransactionRepository
+        FinancialTransactionRepository financialTransactionRepository,
+        TransactionCandidateRepository transactionCandidateRepository
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.financialAccountMapper = financialAccountMapper;
@@ -76,6 +80,7 @@ public class FinancialAccountService {
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.creditAccountDetailsRepository = creditAccountDetailsRepository;
         this.financialTransactionRepository = financialTransactionRepository;
+        this.transactionCandidateRepository = transactionCandidateRepository;
     }
 
     /**
@@ -238,7 +243,13 @@ public class FinancialAccountService {
             return false;
         }
         FinancialAccount account = financialAccount.get();
+        if (transactionCandidateRepository.existsAccountCandidateOutsideWorkflowCleanup(id)) {
+            throw new IllegalArgumentException("Account cannot be deleted because it is used by transaction candidates.");
+        }
         transactionIngestionService.deleteAllForAccount(account);
+        if (transactionCandidateRepository.existsByAccountId(id)) {
+            throw new IllegalArgumentException("Account cannot be deleted because it is used by transaction candidates.");
+        }
         financialTransactionService.deleteAllForAccount(account);
         budgetRepository.deleteAccountLinksByAccountId(id);
         financialSubscriptionRepository.clearAccountByAccountId(id);

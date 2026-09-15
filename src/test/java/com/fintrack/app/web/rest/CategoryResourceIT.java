@@ -15,15 +15,25 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
+import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
@@ -113,6 +123,9 @@ class CategoryResourceIT {
 
     @Autowired
     private TransactionRuleRepository transactionRuleRepository;
+
+    @Autowired
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -2013,6 +2026,63 @@ class CategoryResourceIT {
         return em.getReference(Category.class, savedCategory.getId());
     }
 
+    private FinancialAccount createAccountForCategoryOwner(Category savedCategory) {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account.setUser(savedCategory.getUser());
+        em.persist(account);
+        em.flush();
+        return account;
+    }
+
+    private TransactionCandidate createCandidateWithCategory(
+        Category savedCategory,
+        TransactionCandidateSource source,
+        TransactionCandidateStatus status
+    ) {
+        FinancialAccount account = createAccountForCategoryOwner(savedCategory);
+        TransactionCandidate candidate = new TransactionCandidate()
+            .source(source)
+            .status(status)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED)
+            .transactionDate(java.time.LocalDate.parse("2026-01-10"))
+            .description("Candidate using category")
+            .signedAmount(new java.math.BigDecimal("-10.00"))
+            .amount(new java.math.BigDecimal("10.00"))
+            .flow(TransactionFlow.OUT)
+            .currencySnapshot(CurrencyCode.MXN)
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT)
+            .postedAt(status == TransactionCandidateStatus.POSTED ? DEFAULT_UPDATED_AT : null)
+            .user(savedCategory.getUser())
+            .account(account)
+            .category(managedCategoryReference(savedCategory));
+        em.persist(candidate);
+        em.flush();
+        return candidate;
+    }
+
+    private void assertDeleteCategoryReferencedByCandidateRejected(TransactionCandidateSource source, TransactionCandidateStatus status)
+        throws Exception {
+        Category persistedCategory = persistCategory();
+        TransactionCandidate candidate = createCandidateWithCategory(persistedCategory, source, status);
+        Long categoryId = persistedCategory.getId();
+        Long candidateId = candidate.getId();
+
+        restCategoryMockMvc
+            .perform(delete(ENTITY_API_URL_ID, categoryId).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+
+        em.clear();
+        assertThat(categoryRepository.existsById(categoryId)).isTrue();
+        TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidateId).orElseThrow();
+        assertThat(persistedCandidate.getCategory()).isNotNull();
+        assertThat(persistedCandidate.getCategory().getId()).isEqualTo(categoryId);
+    }
+
     @Test
     @Transactional
     void deleteCategoryWithDirectActiveChildFails() throws Exception {
@@ -2148,6 +2218,24 @@ class CategoryResourceIT {
         assertThat(persistedRule.getResultingCategory()).isNull();
         assertThat(persistedRule.getActive()).isFalse();
         insertedCategory = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteCategoryReferencedByManualDraftCandidateRejectsAndLeavesCandidateUnchanged() throws Exception {
+        assertDeleteCategoryReferencedByCandidateRejected(TransactionCandidateSource.MANUAL, TransactionCandidateStatus.DRAFT);
+    }
+
+    @Test
+    @Transactional
+    void deleteCategoryReferencedByFileImportCandidateRejectsAndLeavesCandidateUnchanged() throws Exception {
+        assertDeleteCategoryReferencedByCandidateRejected(TransactionCandidateSource.FILE_IMPORT, TransactionCandidateStatus.READY_TO_POST);
+    }
+
+    @Test
+    @Transactional
+    void deleteCategoryReferencedByPostedCandidateRejectsAndLeavesCandidateUnchanged() throws Exception {
+        assertDeleteCategoryReferencedByCandidateRejected(TransactionCandidateSource.MANUAL, TransactionCandidateStatus.POSTED);
     }
 
     @Test

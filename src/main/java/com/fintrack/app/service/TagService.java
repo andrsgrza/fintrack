@@ -3,6 +3,7 @@ package com.fintrack.app.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.TagMapper;
 import java.time.Instant;
@@ -28,11 +29,19 @@ public class TagService {
 
     private final TagMapper tagMapper;
 
+    private final TransactionCandidateRepository transactionCandidateRepository;
+
     private final CurrentUserService currentUserService;
 
-    public TagService(TagRepository tagRepository, TagMapper tagMapper, CurrentUserService currentUserService) {
+    public TagService(
+        TagRepository tagRepository,
+        TagMapper tagMapper,
+        TransactionCandidateRepository transactionCandidateRepository,
+        CurrentUserService currentUserService
+    ) {
         this.tagRepository = tagRepository;
         this.tagMapper = tagMapper;
+        this.transactionCandidateRepository = transactionCandidateRepository;
         this.currentUserService = currentUserService;
     }
 
@@ -165,6 +174,9 @@ public class TagService {
             return false;
         }
         Long tagId = tag.orElseThrow().getId();
+        if (transactionCandidateRepository.existsByTagId(tagId)) {
+            throw new IllegalArgumentException("Tag cannot be deleted because it is used by transaction candidates.");
+        }
         unlinkTagFromAllRelationships(tagId);
         tagRepository.deleteById(tagId);
         return true;

@@ -304,18 +304,18 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 ### Summary counts
 
-| Type                   | File                                                    | Tests   | Custom vs generated                                                                                                                                                            |
-| ---------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Integration IT         | `FinancialAccountResourceIT`                            | **145** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor + balance endpoint tests, plus JHipster CRUD/filters |
-| Unit — service         | `FinancialAccountServiceTest`                           | **24**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor guard)                                            |
-| Unit — balance service | `FinancialAccountBalanceServiceTest`                    | **8**   | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading)                                                                               |
-| Unit — calculators     | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                      |
-| Unit — foundation      | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                    |
-| Unit — domain          | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                      |
-| Unit — mapper          | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                      |
-| Unit — DTO             | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                      |
-| Unit — criteria        | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                      |
-| E2E                    | `financial-account.cy.ts`                               | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                                |
+| Type                   | File                                                    | Tests   | Custom vs generated                                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT         | `FinancialAccountResourceIT`                            | **147** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor + balance endpoint tests, plus JHipster CRUD/filters |
+| Unit — service         | `FinancialAccountServiceTest`                           | **26**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor guard)                                            |
+| Unit — balance service | `FinancialAccountBalanceServiceTest`                    | **9**   | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading)                                                                                                                    |
+| Unit — calculators     | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                                                           |
+| Unit — foundation      | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                                                         |
+| Unit — domain          | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                                                           |
+| Unit — mapper          | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                                                           |
+| Unit — DTO             | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                                                           |
+| Unit — criteria        | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                                                           |
+| E2E                    | `financial-account.cy.ts`                               | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                                                                     |
 
 ---
 
@@ -640,6 +640,7 @@ Key TC-1/TC-2A assertions:
 - Generic `TransactionCandidate` writes are restricted: generic create cannot create file/API import candidates, attach ingestion links, set status, or set server-controlled fields; generic update/PATCH cannot change status, mutate workflow-linked/non-`MANUAL` candidates, or set workflow/server-controlled fields; generic delete is limited to unlinked `MANUAL` `DRAFT` candidates and rejects file/API import, posted/cancelled, workflow-linked, or transaction-linked candidates while allowed draft delete cleans candidate-tag joins.
 - Candidate post does not invoke TransactionRule evaluation; candidate rule preview/apply exists only through explicit candidate command endpoints.
 - Direct FinancialTransaction delete rejects MANUAL and FILE_IMPORT posted candidate links, leaves the transaction and candidate linked, leaves FILE_IMPORT ingestion records untouched, and also rejects corrupt non-POSTED candidate links.
+- TC-5D.3 reference guards reject Category/Tag delete when candidates reference them, reject FinancialAccount delete when manual/non-workflow candidates reference the account, and keep controlled FILE_IMPORT ingestion/account cleanup FK-safe by deleting candidate tag joins/candidates before imported transactions/account removal.
 
 Key TC-3A FILE import candidate prepare assertions:
 
@@ -846,7 +847,7 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their tags. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules:** DELETE allowed when in use — unlink from `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags` (join rows only), then delete tag. Related entities survive. `active=false` keeps links. `createdAt` / `updatedAt` are server-owned: create ignores client timestamps; PUT/PATCH preserve `createdAt`, reject changed/null timestamp fields, and set `updatedAt = now`. See [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
+**Domain rules:** DELETE allowed when in use by posted/product relationships — unlink from `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags` (join rows only), then delete tag. Related entities survive. DELETE is blocked when `TransactionCandidate` tag joins reference the tag because candidate review state must not be silently unlinked. `active=false` keeps links. `createdAt` / `updatedAt` are server-owned: create ignores client timestamps; PUT/PATCH preserve `createdAt`, reject changed/null timestamp fields, and set `updatedAt = now`. See [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
 
 **Frontend UX:** Tag create/edit shows only `name`, `description`, `color`, `active`. It does not show/send `user`, `createdAt`, `updatedAt`, or relationship editors. Edit uses PATCH with editable fields only so existing relationships survive. Detail/list show clean catalog fields and do not show raw relationship IDs; related read-only lists are deferred.
 
@@ -854,16 +855,16 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 ### Summary counts
 
-| Type            | File              | Tests  | Custom vs generated                                                                               |
-| --------------- | ----------------- | ------ | ------------------------------------------------------------------------------------------------- |
-| Integration IT  | `TagResourceIT`   | **89** | 41 custom (ownership + uniqueness + timestamp lifecycle + delete domain) + generated CRUD/filters |
-| Unit — service  | `TagServiceTest`  | **22** | All custom (ownership + uniqueness + timestamp lifecycle)                                         |
-| Unit — domain   | `TagTest`         | **5**  | Generated                                                                                         |
-| Unit — mapper   | `TagMapperTest`   | **1**  | Generated                                                                                         |
-| Unit — DTO      | `TagDTOTest`      | **1**  | Generated                                                                                         |
-| Unit — criteria | `TagCriteriaTest` | **5**  | Generated                                                                                         |
-| Frontend unit   | `tag-ux.spec.tsx` | **6**  | Create/edit/detail/list UX cleanup                                                                |
-| E2E             | `tag.cy.ts`       | **10** | 3 ownership + 7 CRUD/navigation                                                                   |
+| Type            | File              | Tests  | Custom vs generated                                                                                                                    |
+| --------------- | ----------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TagResourceIT`   | **92** | Custom ownership + uniqueness + timestamp lifecycle + delete domain, including candidate reference guards, plus generated CRUD/filters |
+| Unit — service  | `TagServiceTest`  | **23** | All custom (ownership + uniqueness + timestamp lifecycle + candidate reference delete guard)                                           |
+| Unit — domain   | `TagTest`         | **5**  | Generated                                                                                                                              |
+| Unit — mapper   | `TagMapperTest`   | **1**  | Generated                                                                                                                              |
+| Unit — DTO      | `TagDTOTest`      | **1**  | Generated                                                                                                                              |
+| Unit — criteria | `TagCriteriaTest` | **5**  | Generated                                                                                                                              |
+| Frontend unit   | `tag-ux.spec.tsx` | **6**  | Create/edit/detail/list UX cleanup                                                                                                     |
+| E2E             | `tag.cy.ts`       | **10** | 3 ownership + 7 CRUD/navigation                                                                                                        |
 
 **Run:**
 
@@ -1013,19 +1014,19 @@ Happy-path CRUD, required-field checks, criteria per field (`name`, `description
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their categories. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules:** block delete when direct children exist; leaf delete cleans references (FT/FS null, budget M2M, rule `resultingCategory` null + `active=false`); `parentCategory` immutable after create; `categoryType` mutable only when unused; child `categoryType` must match parent. Default categories on signup — **Deferred** (separate pass). See [`DOMAIN-RULES.md` §5](DOMAIN-RULES.md#5-category).
+**Domain rules:** block delete when direct children exist; leaf delete cleans posted/product references (FT/FS null, budget M2M, rule `resultingCategory` null + `active=false`); delete is blocked when `TransactionCandidate.category` references the category; `parentCategory` immutable after create; `categoryType` mutable only when unused; child `categoryType` must match parent. Default categories on signup — **Deferred** (separate pass). See [`DOMAIN-RULES.md` §5](DOMAIN-RULES.md#5-category).
 
 ### Summary counts
 
-| Type            | File                   | Tests   | Custom vs generated                                                                                     |
-| --------------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| Integration IT  | `CategoryResourceIT`   | **103** | 48 custom (16 ownership + 10 parent immutability + 9 uniqueness + 13 domain) + 55 JHipster CRUD/filters |
-| Unit — service  | `CategoryServiceTest`  | **16**  | All custom (ownership + delete cleanup + immutability + type guards)                                    |
-| Unit — domain   | `CategoryTest`         | **5**   | Generated                                                                                               |
-| Unit — mapper   | `CategoryMapperTest`   | **1**   | Generated                                                                                               |
-| Unit — DTO      | `CategoryDTOTest`      | **1**   | Generated                                                                                               |
-| Unit — criteria | `CategoryCriteriaTest` | **5**   | Generated                                                                                               |
-| E2E             | `category.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                         |
+| Type            | File                   | Tests   | Custom vs generated                                                                                                                   |
+| --------------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `CategoryResourceIT`   | **117** | Custom ownership + parent immutability + uniqueness + delete domain, including candidate reference guards, plus JHipster CRUD/filters |
+| Unit — service  | `CategoryServiceTest`  | **27**  | All custom (ownership + delete cleanup + candidate reference guard + immutability + type guards)                                      |
+| Unit — domain   | `CategoryTest`         | **5**   | Generated                                                                                                                             |
+| Unit — mapper   | `CategoryMapperTest`   | **1**   | Generated                                                                                                                             |
+| Unit — DTO      | `CategoryDTOTest`      | **1**   | Generated                                                                                                                             |
+| Unit — criteria | `CategoryCriteriaTest` | **5**   | Generated                                                                                                                             |
+| E2E             | `category.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                       |
 
 **Run:**
 
@@ -2960,7 +2961,8 @@ Copy this block when hardening the next entity:
 | 2026-07-09 | IngestionRecord                                             | Superseded by 2026-07-12 domain pass; initial ownership baseline was 74 IT + 7 service.                                                                                                                                                                                                                                                                                                                                                   |
 | 2026-07-12 | IngestionRecord domain rules                                | 87 IT, 7 service unit, +1 FT helper IT; status consistency, parent final freeze, externalRecordId parent-scoped uniqueness, rawData log safety, direct delete blocked.                                                                                                                                                                                                                                                                    |
 | 2026-07-12 | FinancialTransaction domain rules                           | 135 IT, 10 service unit; JsonNode presence semantics, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup, and TC-5D.2 candidate-linked direct delete guard.                                                                                                                                                                         |
-| 2026-07-12 | FinancialAccount domain rules                               | 118 IT, 12 service unit; delete orchestration for ingestion/transaction trees and account-level links, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                                                                                                                |
+| 2026-07-12 | FinancialAccount domain rules                               | 120 IT, 14 service unit; delete orchestration for ingestion/transaction trees, account-level links, and TransactionCandidate account-reference guards, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                                                                |
+| 2026-09-15 | TransactionCandidate TC-5D.3 dependency delete guards       | Category/Tag delete rejects MANUAL/FILE_IMPORT/POSTED candidate references; FinancialAccount delete rejects manual/non-workflow candidates and still allows controlled FILE_IMPORT ingestion/account cleanup to remove candidate joins/candidates first.                                                                                                                                                                                  |
 | 2026-07-13 | FinancialAccount balance read model                         | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                                                                                                                           |
 | 2026-07-17 | CSV Ingestion I1A/I1B backend                               | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted workflow endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                                                                                                                        |
 | 2026-07-17 | CSV Ingestion I1C frontend                                  | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart workflow submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                                                                                                                |

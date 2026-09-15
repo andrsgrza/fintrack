@@ -116,6 +116,9 @@ Active candidate foundation rules:
 - EXPENSE category requires OUT flow; INCOME category requires IN flow.
 - `POSTED` requires a linked `FinancialTransaction`; that link is set only by server-side posting/conversion commands and cannot be set through normal create/update/PATCH.
 - A posted `FinancialTransaction` linked from a `TransactionCandidate` cannot be deleted through the direct FinancialTransaction delete endpoint. The candidate link is provenance/audit trail and must not be silently unlinked. If a non-`POSTED` candidate is ever linked to a transaction, direct transaction delete also rejects that corrupt state.
+- Category delete is blocked while any `TransactionCandidate.category` references the category. The service must not silently clear candidate categories, because candidate category is part of draft/provenance/review state.
+- Tag delete is blocked while any `TransactionCandidate` tag join references the tag. The service must not silently remove candidate tags.
+- FinancialAccount delete is blocked while a `MANUAL` or otherwise non-workflow-cleaned `TransactionCandidate` references the account. Controlled workflow cleanup may delete `FILE_IMPORT` candidates first as part of deleting an ingestion/account workflow tree; any candidate that would survive the account delete must reject the delete.
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
 - There is no global `NEEDS_REVIEW` candidate lifecycle status. Review needs are represented by specific fields: `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`.

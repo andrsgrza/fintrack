@@ -13,15 +13,25 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
+import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
@@ -103,6 +113,9 @@ class TagResourceIT {
 
     @Autowired
     private BudgetRepository budgetRepository;
+
+    @Autowired
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -1588,6 +1601,62 @@ class TagResourceIT {
         return em.getReference(Tag.class, savedTag.getId());
     }
 
+    private FinancialAccount createAccountForTagOwner(Tag savedTag) {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account.setUser(savedTag.getUser());
+        em.persist(account);
+        em.flush();
+        return account;
+    }
+
+    private TransactionCandidate createCandidateWithTag(
+        Tag savedTag,
+        TransactionCandidateSource source,
+        TransactionCandidateStatus status
+    ) {
+        FinancialAccount account = createAccountForTagOwner(savedTag);
+        TransactionCandidate candidate = new TransactionCandidate()
+            .source(source)
+            .status(status)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED)
+            .transactionDate(java.time.LocalDate.parse("2026-01-10"))
+            .description("Candidate using tag")
+            .signedAmount(new java.math.BigDecimal("-10.00"))
+            .amount(new java.math.BigDecimal("10.00"))
+            .flow(TransactionFlow.OUT)
+            .currencySnapshot(CurrencyCode.MXN)
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT)
+            .postedAt(status == TransactionCandidateStatus.POSTED ? DEFAULT_UPDATED_AT : null)
+            .user(savedTag.getUser())
+            .account(account)
+            .addTags(managedTagReference(savedTag));
+        em.persist(candidate);
+        em.flush();
+        return candidate;
+    }
+
+    private void assertDeleteTagReferencedByCandidateRejected(TransactionCandidateSource source, TransactionCandidateStatus status)
+        throws Exception {
+        Tag persistedTag = persistTag();
+        TransactionCandidate candidate = createCandidateWithTag(persistedTag, source, status);
+        Long tagId = persistedTag.getId();
+        Long candidateId = candidate.getId();
+
+        restTagMockMvc
+            .perform(delete(ENTITY_API_URL_ID, tagId).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("tag"));
+
+        em.clear();
+        assertThat(tagRepository.existsById(tagId)).isTrue();
+        TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidateId).orElseThrow();
+        assertThat(persistedCandidate.getTags()).extracting(Tag::getId).containsExactly(tagId);
+    }
+
     @Test
     @Transactional
     void deleteUnusedTagSucceeds() throws Exception {
@@ -1638,6 +1707,24 @@ class TagResourceIT {
         TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
         assertThat(persistedRule.getResultingTags()).isEmpty();
         insertedTag = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteTagReferencedByManualDraftCandidateRejectsAndLeavesCandidateJoinUnchanged() throws Exception {
+        assertDeleteTagReferencedByCandidateRejected(TransactionCandidateSource.MANUAL, TransactionCandidateStatus.DRAFT);
+    }
+
+    @Test
+    @Transactional
+    void deleteTagReferencedByFileImportCandidateRejectsAndLeavesCandidateJoinUnchanged() throws Exception {
+        assertDeleteTagReferencedByCandidateRejected(TransactionCandidateSource.FILE_IMPORT, TransactionCandidateStatus.READY_TO_POST);
+    }
+
+    @Test
+    @Transactional
+    void deleteTagReferencedByPostedCandidateRejectsAndLeavesCandidateJoinUnchanged() throws Exception {
+        assertDeleteTagReferencedByCandidateRejected(TransactionCandidateSource.MANUAL, TransactionCandidateStatus.POSTED);
     }
 
     @Test

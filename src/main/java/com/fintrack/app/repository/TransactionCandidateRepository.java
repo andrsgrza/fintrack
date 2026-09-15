@@ -212,6 +212,21 @@ public interface TransactionCandidateRepository
 
     Optional<TransactionCandidate> findFirstByFinancialTransactionId(Long financialTransactionId);
 
+    boolean existsByCategoryId(Long categoryId);
+
+    @Query(
+        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate join transactionCandidate.tags tag where tag.id = :tagId"
+    )
+    boolean existsByTagId(@Param("tagId") Long tagId);
+
+    @Query(
+        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
+        "where transactionCandidate.account.id = :accountId and (transactionCandidate.source <> com.fintrack.app.domain.enumeration.TransactionCandidateSource.FILE_IMPORT or transactionCandidate.transactionIngestion is null)"
+    )
+    boolean existsAccountCandidateOutsideWorkflowCleanup(@Param("accountId") Long accountId);
+
+    boolean existsByAccountId(Long accountId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
         value = "delete from rel_transaction_candidate__tags where transaction_candidate_id = :transactionCandidateId",

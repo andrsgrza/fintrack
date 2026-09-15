@@ -23,6 +23,7 @@ import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
@@ -31,9 +32,15 @@ import com.fintrack.app.domain.enumeration.ImportFileType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.FinancialAccountRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialAccountService;
@@ -136,6 +143,9 @@ class FinancialAccountResourceIT {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Mock
     private FinancialAccountRepository financialAccountRepositoryMock;
@@ -355,6 +365,56 @@ class FinancialAccountResourceIT {
         em.persist(record);
         em.flush();
         return record;
+    }
+
+    private TransactionCandidate createCandidate(
+        FinancialAccount account,
+        TransactionCandidateSource source,
+        TransactionCandidateStatus status
+    ) {
+        TransactionCandidate candidate = new TransactionCandidate()
+            .source(source)
+            .status(status)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_EVALUATED)
+            .transactionDate(LocalDate.parse("2026-01-10"))
+            .description("Candidate using account")
+            .signedAmount(new BigDecimal("-10.00"))
+            .amount(new BigDecimal("10.00"))
+            .flow(TransactionFlow.OUT)
+            .currencySnapshot(account.getCurrency())
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT)
+            .postedAt(status == TransactionCandidateStatus.POSTED ? DEFAULT_UPDATED_AT : null)
+            .user(account.getUser())
+            .account(account);
+        em.persist(candidate);
+        em.flush();
+        return candidate;
+    }
+
+    private TransactionCandidate createFileImportCandidate(
+        FinancialAccount account,
+        TransactionIngestion ingestion,
+        IngestionRecord record,
+        FinancialTransaction financialTransaction,
+        Tag tag
+    ) {
+        TransactionCandidate candidate = createCandidate(
+            account,
+            TransactionCandidateSource.FILE_IMPORT,
+            TransactionCandidateStatus.POSTED
+        );
+        candidate
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED)
+            .transactionIngestion(ingestion)
+            .ingestionRecord(record)
+            .financialTransaction(financialTransaction)
+            .addTags(tag);
+        candidate = em.merge(candidate);
+        em.flush();
+        return candidate;
     }
 
     private InternalTransfer createInternalTransfer(FinancialTransaction outgoingTransaction, FinancialTransaction incomingTransaction) {
@@ -2548,6 +2608,32 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
+    void deleteFinancialAccountReferencedByManualDraftCandidateRejectsAndLeavesCandidateLinked() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        TransactionCandidate candidate = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.DRAFT
+        );
+        Long accountId = financialAccount.getId();
+        Long candidateId = candidate.getId();
+
+        restFinancialAccountMockMvc
+            .perform(delete(ENTITY_API_URL_ID, accountId).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("financialAccount"));
+
+        em.clear();
+        assertThat(financialAccountRepository.existsById(accountId)).isTrue();
+        TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidateId).orElseThrow();
+        assertThat(persistedCandidate.getAccount()).isNotNull();
+        assertThat(persistedCandidate.getAccount().getId()).isEqualTo(accountId);
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
     void deleteFinancialAccountWithInternalTransferPreservesOppositeTransaction() throws Exception {
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
         FinancialAccount otherAccount = createAccount("OTHER_ACCOUNT");
@@ -2608,6 +2694,45 @@ class FinancialAccountResourceIT {
         assertThat(
             TestUtil.findAll(em, FinancialTransaction.class).stream().noneMatch(tx -> fileTransactionId.equals(tx.getId()))
         ).isTrue();
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialAccountWithFileImportCandidateThroughIngestionCleanupDeletesCandidateFirst() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        TransactionIngestion fileParent = createTransactionIngestion(financialAccount, IngestionType.FILE);
+        FileIngestion fileIngestion = createFileIngestion(fileParent);
+        FinancialTransaction fileTransaction = createTransaction(financialAccount, LocalDate.parse("2026-01-10"));
+        fileTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
+        fileTransaction.setTransactionIngestion(fileParent);
+        fileTransaction = em.merge(fileTransaction);
+        IngestionRecord record = createIngestionRecord(fileParent, fileTransaction);
+        Tag tag = TagResourceIT.createEntity(em);
+        em.persist(tag);
+        TransactionCandidate candidate = createFileImportCandidate(financialAccount, fileParent, record, fileTransaction, tag);
+
+        Long accountId = financialAccount.getId();
+        Long fileParentId = fileParent.getId();
+        Long fileIngestionId = fileIngestion.getId();
+        Long recordId = record.getId();
+        Long fileTransactionId = fileTransaction.getId();
+        Long candidateId = candidate.getId();
+        Long tagId = tag.getId();
+
+        restFinancialAccountMockMvc
+            .perform(delete(ENTITY_API_URL_ID, accountId).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        assertThat(financialAccountRepository.existsById(accountId)).isFalse();
+        assertThat(TestUtil.findAll(em, TransactionIngestion.class).stream().noneMatch(ti -> fileParentId.equals(ti.getId()))).isTrue();
+        assertThat(TestUtil.findAll(em, FileIngestion.class).stream().noneMatch(fi -> fileIngestionId.equals(fi.getId()))).isTrue();
+        assertThat(TestUtil.findAll(em, IngestionRecord.class).stream().noneMatch(ir -> recordId.equals(ir.getId()))).isTrue();
+        assertThat(
+            TestUtil.findAll(em, FinancialTransaction.class).stream().noneMatch(tx -> fileTransactionId.equals(tx.getId()))
+        ).isTrue();
+        assertThat(transactionCandidateRepository.existsById(candidateId)).isFalse();
+        assertThat(TestUtil.findAll(em, Tag.class).stream().anyMatch(persistedTag -> tagId.equals(persistedTag.getId()))).isTrue();
         insertedFinancialAccount = null;
     }
 
