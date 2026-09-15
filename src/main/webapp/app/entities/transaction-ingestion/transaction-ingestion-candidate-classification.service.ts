@@ -20,11 +20,19 @@ export interface IFileImportCandidateWorkflowSummary {
   accountName?: string | null;
   categoryId?: number | null;
   categoryName?: string | null;
+  categorySource?: 'AUTOMATIC' | 'MANUAL' | null;
   tagIds?: number[];
   tagNames?: string[];
+  selectedTags?: IFileImportCandidateTagSelection[];
   financialTransactionId?: number | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface IFileImportCandidateTagSelection {
+  tagId?: number;
+  tagName?: string;
+  source?: 'AUTOMATIC' | 'MANUAL';
 }
 
 export interface IPrepareFileImportCandidateRow {

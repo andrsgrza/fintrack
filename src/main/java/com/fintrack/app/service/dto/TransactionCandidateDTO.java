@@ -2,6 +2,7 @@ package com.fintrack.app.service.dto;
 
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -36,6 +37,8 @@ public class TransactionCandidateDTO implements Serializable {
     private TransactionCandidateDescriptionReviewStatus descriptionReviewStatus;
 
     private TransactionCandidateClassificationReviewStatus classificationReviewStatus;
+
+    private TransactionCandidateClassificationSource categorySource;
 
     private LocalDate transactionDate;
 
@@ -131,6 +134,14 @@ public class TransactionCandidateDTO implements Serializable {
 
     public void setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus classificationReviewStatus) {
         this.classificationReviewStatus = classificationReviewStatus;
+    }
+
+    public TransactionCandidateClassificationSource getCategorySource() {
+        return categorySource;
+    }
+
+    public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
+        this.categorySource = categorySource;
     }
 
     public LocalDate getTransactionDate() {

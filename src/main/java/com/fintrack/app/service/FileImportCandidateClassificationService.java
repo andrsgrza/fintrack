@@ -8,6 +8,7 @@ import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
@@ -106,9 +107,10 @@ public class FileImportCandidateClassificationService {
         }
         if (request.hasCategoryId()) {
             candidate.setCategory(resolveCategory(request.getCategoryId(), userLogin, candidate.getFlow()));
+            candidate.setCategorySource(candidate.getCategory() == null ? null : TransactionCandidateClassificationSource.MANUAL);
         }
         if (request.hasTagIds()) {
-            candidate.setTags(resolveTags(request.getTagIds(), userLogin));
+            candidate.replaceTags(resolveTags(request.getTagIds(), userLogin), TransactionCandidateClassificationSource.MANUAL);
         }
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         candidate.setUpdatedAt(Instant.now());
@@ -186,10 +188,7 @@ public class FileImportCandidateClassificationService {
         try {
             validateMutableFileImportCandidate(candidate);
             TransactionRuleEvaluationResult evaluation = evaluate(candidate, userLogin);
-            boolean hadManualClassification =
-                candidate.getClassificationReviewStatus() == TransactionCandidateClassificationReviewStatus.USER_SELECTED ||
-                candidate.getCategory() != null ||
-                (candidate.getTags() != null && !candidate.getTags().isEmpty());
+            boolean hadManualClassification = candidate.hasManualClassification();
             TransactionCandidateRuleApplicationResult application = transactionCandidateRuleApplicationService.applyFillEmptyOnly(
                 candidate,
                 evaluation,

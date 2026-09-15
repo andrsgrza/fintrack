@@ -22,6 +22,7 @@ import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -919,6 +920,38 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
+    void createRejectsClientSuppliedCategoryProvenance() {
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
+
+        assertThatThrownBy(() -> transactionCandidateService.save(dto))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Category source is server-controlled");
+    }
+
+    @Test
+    void manualDraftPatchRejectsClientSuppliedCategoryProvenance() throws Exception {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setId(existing.getId());
+        dto.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(existing.getId(), "user")).thenReturn(
+            Optional.of(existing)
+        );
+
+        assertThatThrownBy(() ->
+            transactionCandidateService.updateManualDraft(
+                existing.getId(),
+                dto,
+                new ObjectMapper().readTree("{\"categorySource\":\"AUTOMATIC\"}")
+            )
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Category source is server-controlled");
+    }
+
+    @Test
     void updateBeforeFinalStatusSucceedsWhenStatusIsUnchanged() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
@@ -1197,15 +1230,14 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void deleteCleansTagJoinRows() {
+    void deleteRemovesCandidateWithItsTagAssociations() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
 
         when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
 
         assertThat(transactionCandidateService.delete(1L)).isTrue();
 
-        verify(transactionCandidateRepository).deleteTagLinksByTransactionCandidateId(1L);
-        verify(transactionCandidateRepository).deleteById(1L);
+        verify(transactionCandidateRepository).delete(existing);
     }
 
     @Test

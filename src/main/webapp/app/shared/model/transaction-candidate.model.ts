@@ -11,6 +11,7 @@ import { TransactionCandidateStatus } from 'app/shared/model/enumerations/transa
 import { TransactionCandidateValidationStatus } from 'app/shared/model/enumerations/transaction-candidate-validation-status.model';
 import { TransactionCandidateDescriptionReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-description-review-status.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
+import { TransactionCandidateClassificationSource } from 'app/shared/model/enumerations/transaction-candidate-classification-source.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 
@@ -21,6 +22,7 @@ export interface ITransactionCandidate {
   validationStatus?: keyof typeof TransactionCandidateValidationStatus;
   descriptionReviewStatus?: keyof typeof TransactionCandidateDescriptionReviewStatus;
   classificationReviewStatus?: keyof typeof TransactionCandidateClassificationReviewStatus;
+  categorySource?: keyof typeof TransactionCandidateClassificationSource | null;
   transactionDate?: dayjs.Dayjs | string | null;
   postingDate?: dayjs.Dayjs | string | null;
   description?: string | null;

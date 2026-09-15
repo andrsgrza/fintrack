@@ -2,6 +2,7 @@ package com.fintrack.app.service.dto;
 
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -54,9 +55,13 @@ public class TransactionCandidateWorkflowSummaryDTO implements Serializable {
 
     private String categoryName;
 
+    private TransactionCandidateClassificationSource categorySource;
+
     private List<Long> tagIds = new ArrayList<>();
 
     private List<String> tagNames = new ArrayList<>();
+
+    private List<TransactionCandidateTagSelectionDTO> selectedTags = new ArrayList<>();
 
     private Long financialTransactionId;
 
@@ -216,6 +221,14 @@ public class TransactionCandidateWorkflowSummaryDTO implements Serializable {
         this.categoryName = categoryName;
     }
 
+    public TransactionCandidateClassificationSource getCategorySource() {
+        return categorySource;
+    }
+
+    public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
+        this.categorySource = categorySource;
+    }
+
     public List<Long> getTagIds() {
         return tagIds;
     }
@@ -230,6 +243,14 @@ public class TransactionCandidateWorkflowSummaryDTO implements Serializable {
 
     public void setTagNames(List<String> tagNames) {
         this.tagNames = tagNames;
+    }
+
+    public List<TransactionCandidateTagSelectionDTO> getSelectedTags() {
+        return selectedTags;
+    }
+
+    public void setSelectedTags(List<TransactionCandidateTagSelectionDTO> selectedTags) {
+        this.selectedTags = selectedTags;
     }
 
     public Long getFinancialTransactionId() {

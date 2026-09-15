@@ -126,6 +126,16 @@ Active candidate foundation rules:
 - `validationStatus=INVALID` and `validationStatus=STALE` are guarded/internal states for failed or stale validation paths; current happy-path manual and file flows normally use `UNKNOWN` for incomplete drafts and `VALID` for postable candidates.
 - `descriptionReviewStatus` is for description normalization/review and is separate from `classificationReviewStatus`, which is for category/tags review.
 
+### Persisted category/tag provenance
+
+- `TransactionCandidate.categorySource` is nullable server-owned metadata: `AUTOMATIC` for a newly rule-applied category, `MANUAL` for an explicit category selection, and `null` only when no category is selected.
+- Candidate tags persist through explicit `TransactionCandidateTag` rows, not an implicit candidate/tag many-to-many relation. Each row is unique per candidate/tag and has non-null `source` (`AUTOMATIC` or `MANUAL`). `TransactionCandidate.getTags()` is a derived compatibility view; writes must use the explicit association helpers/commands.
+- A category-only manual classification PATCH sets or clears only category provenance and leaves tag provenance unchanged. A tag-only PATCH treats its submitted multi-select set as the user’s final explicit choice: retained and new tags become `MANUAL`, omitted tags are removed, and category provenance is unchanged.
+- Rule application remains `FILL_EMPTY_ONLY`: it assigns only a newly empty category/tags as `AUTOMATIC`; it never replaces an existing category, never downgrades a `MANUAL` tag, and never duplicates an existing candidate/tag relation.
+- Candidate rule preview/reevaluation is read-only. It does not change category/tag values, provenance, association rows, or `rawData`.
+- Confirm Import copies candidate category/tags into the final `FinancialTransaction`; provenance stays only on the candidate and is not copied into ledger data or `rawData`.
+- Deleting an individual candidate uses ORM orphan cleanup for its tag associations. Workflow/account bulk cleanup deletes association rows before bulk candidate deletion. Category and Tag deletion remain blocked while a candidate references them.
+
 TC-2A / TC-2A.1 manual backend command rules:
 
 - `POST /api/transaction-candidates/manual` creates a recoverable manual draft with `source=MANUAL`, `status=DRAFT`, current-user owner, server timestamps, and no `FinancialTransaction`.

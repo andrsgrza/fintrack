@@ -152,6 +152,9 @@ The active foundation includes:
 - Lifecycle/status support for manual drafts and `FILE_IMPORT` ingestion review. Active `TransactionCandidateStatus` values are `DRAFT`, `READY_TO_POST`, `POSTED`, `CANCELLED`, and `FAILED`; `API_IMPORT` and bank sync are deferred.
 - Server-owned timestamps, derived `amount`/`flow`, server-owned review statuses, and same-owner validations.
 - `TransactionCandidateSource` describes how a candidate entered draft/review. `TransactionOrigin` describes final posted `FinancialTransaction` classification. They are not interchangeable; `TransactionCandidate` does not store `TransactionOrigin`.
+- TC-CONFIG-0A adds server-owned classification provenance without changing product controls: nullable `categorySource` is `AUTOMATIC`, `MANUAL`, or absent with no category; selected tags are explicit `TransactionCandidateTag` rows with non-null per-row `source`. The workflow candidate summary exposes read-only `categorySource` and `selectedTags` (`tagId`, `tagName`, `source`) while retaining plain tag ids/names for compatibility.
+- The compatibility `TransactionCandidate.getTags()` accessor is derived from those association rows. Runtime persistence uses association-aware helpers, so a tag multi-select can promote retained selections to `MANUAL` without delete/reinsert duplicates.
+- Manual category PATCH assigns `MANUAL` or clears it; manual tag PATCH promotes every submitted tag to `MANUAL` and removes omitted relations without changing category provenance. Rule application sets only newly applied values to `AUTOMATIC`, preserves manual values, and reevaluation/preview stays read-only. Candidate-to-transaction conversion copies category/tags but not provenance.
 - Future posting mapping: `MANUAL → MANUAL`, `FILE_IMPORT → FILE_IMPORT`, `API_IMPORT → API`. Bank sync remains unsupported until the final transaction origin model supports it.
 - There is no global `NEEDS_REVIEW` candidate status. “Needs review” is represented by specific review/status fields: `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`. `FAILED` and `validationStatus=INVALID/STALE` are guarded/reserved/internal outside normal happy-path flows.
 - `descriptionReviewStatus` tracks description normalization/review separately from `classificationReviewStatus`, which tracks category/tag review and gates manual post/file confirm.
@@ -208,7 +211,7 @@ TC-3C.1 adds FILE import candidate classification commands:
 - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`.
 - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` marks `NOT_APPLICABLE` only when fresh evaluation has no suggestions.
 - Commands are ingestion-scoped, current-user scoped, limited to `FILE_IMPORT` candidates linked to `VALID` records, and reject final candidates.
-- Category/tags are persisted on `TransactionCandidate`; no category/tag selections or rule evaluation results are written to `IngestionRecord.rawData`.
+- Category/tags are persisted on `TransactionCandidate`; no category/tag selections, provenance, or rule evaluation results are written to `IngestionRecord.rawData`. The explicit candidate-tag association has a unique candidate/tag key and a non-null provenance source.
 - These endpoints do not create `FinancialTransaction` rows and do not change Confirm Import.
 
 The unified FILE-ingestion review uses candidate-backed classification:

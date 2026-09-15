@@ -10,6 +10,7 @@ import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -271,7 +272,7 @@ public class TransactionCandidateService {
         return findAccessibleEntity(id).map(candidate -> {
             rejectManualRuleReviewCommand(candidate);
             TransactionRuleEvaluationResult evaluation = evaluateRules(candidate);
-            boolean hadManualSelections = candidate.getCategory() != null || !candidate.getTags().isEmpty();
+            boolean hadManualSelections = candidate.hasManualClassification();
             TransactionCandidateRuleApplicationResult application = transactionCandidateRuleApplicationService.applyFillEmptyOnly(
                 candidate,
                 evaluation,
@@ -484,8 +485,9 @@ public class TransactionCandidateService {
             return false;
         }
         rejectGenericDelete(candidate.get());
-        transactionCandidateRepository.deleteTagLinksByTransactionCandidateId(id);
-        transactionCandidateRepository.deleteById(id);
+        // This is an entity delete, so orphanRemoval deletes explicit tag associations before the candidate.
+        // Native link deletion is reserved for bulk deletion paths, where JPA cascades do not apply.
+        transactionCandidateRepository.delete(candidate.get());
         return true;
     }
 
@@ -549,7 +551,8 @@ public class TransactionCandidateService {
         String ownerLogin = currentUserService.getCurrentUserLogin();
         candidate.setAccount(resolveOptionalAccount(dto.getAccount(), ownerLogin));
         candidate.setCategory(resolveOptionalCategory(dto.getCategory(), ownerLogin));
-        candidate.setTags(resolveTags(dto.getTags(), ownerLogin));
+        candidate.setCategorySource(candidate.getCategory() == null ? null : TransactionCandidateClassificationSource.MANUAL);
+        candidate.replaceTags(resolveTags(dto.getTags(), ownerLogin), TransactionCandidateClassificationSource.MANUAL);
         candidate.setTransactionIngestion(resolveOptionalTransactionIngestion(dto.getTransactionIngestion(), ownerLogin));
         candidate.setIngestionRecord(resolveOptionalIngestionRecord(dto.getIngestionRecord(), ownerLogin));
     }
@@ -561,9 +564,10 @@ public class TransactionCandidateService {
         }
         if (fieldPresent(patchNode, "category")) {
             candidate.setCategory(resolveOptionalCategory(dto.getCategory(), ownerLogin));
+            candidate.setCategorySource(candidate.getCategory() == null ? null : TransactionCandidateClassificationSource.MANUAL);
         }
         if (fieldPresent(patchNode, "tags")) {
-            candidate.setTags(resolveTags(dto.getTags(), ownerLogin));
+            candidate.replaceTags(resolveTags(dto.getTags(), ownerLogin), TransactionCandidateClassificationSource.MANUAL);
         }
         if (fieldPresent(patchNode, "transactionIngestion")) {
             candidate.setTransactionIngestion(resolveOptionalTransactionIngestion(dto.getTransactionIngestion(), ownerLogin));
@@ -1049,6 +1053,7 @@ public class TransactionCandidateService {
         rejectCreateField(dto.getValidationStatus(), "Validation status is server-controlled");
         rejectCreateField(dto.getDescriptionReviewStatus(), "Description review status is server-controlled");
         rejectCreateField(dto.getClassificationReviewStatus(), "Classification review status is server-controlled");
+        rejectCreateField(dto.getCategorySource(), "Category source is server-controlled");
         rejectCreateField(dto.getAmount(), "Amount is derived from signed amount");
         rejectCreateField(dto.getFlow(), "Flow is derived from signed amount");
         rejectCreateField(dto.getCreatedAt(), "Created at is server-controlled");
@@ -1108,6 +1113,7 @@ public class TransactionCandidateService {
             "classificationReviewStatus",
             "Classification review status is server-controlled"
         );
+        rejectUpdateField(dto.getCategorySource(), node, "categorySource", "Category source is server-controlled");
         rejectUpdateField(dto.getAmount(), node, "amount", "Amount is derived from signed amount");
         rejectUpdateField(dto.getFlow(), node, "flow", "Flow is derived from signed amount");
         if ((node == null && dto.getFinancialTransaction() != null) || (node != null && node.has("financialTransaction"))) {

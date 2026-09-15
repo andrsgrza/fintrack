@@ -35,6 +35,7 @@ import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -346,6 +347,7 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(uberRecord);
         candidate.setCategory(manualCategory);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
         candidate.setTags(new HashSet<>(Set.of(manualTag)));
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
         transactionCandidateRepository.saveAndFlush(candidate);
@@ -432,6 +434,8 @@ class TransactionIngestionWorkflowResourceIT {
         IngestionRecord record = recordsFor(ingestion).get(0);
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(record);
+        assertThat(candidate.getCategorySource()).isNull();
+        assertThat(candidate.getTagAssociations()).isEmpty();
 
         mockMvc
             .perform(
@@ -1351,6 +1355,7 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(record);
         candidate.setCategory(category);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
         candidate.setTags(new HashSet<>(Set.of(tag)));
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
         candidate = transactionCandidateRepository.saveAndFlush(candidate);
@@ -1380,6 +1385,8 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(synced.getNotes()).isEqualTo("edited notes");
         assertThat(synced.getCategory().getId()).isEqualTo(category.getId());
         assertThat(synced.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(synced.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(synced.getTagSource(tag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
         assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.STALE);
         assertThat(synced.getUpdatedAt()).isAfter(updatedAtBefore);
     }
@@ -1745,6 +1752,7 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(record);
         candidate.setCategory(category);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
         candidate.setTags(new HashSet<>(Set.of(tag)));
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         candidate = transactionCandidateRepository.saveAndFlush(candidate);
@@ -1769,6 +1777,8 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.STALE);
         assertThat(synced.getCategory().getId()).isEqualTo(category.getId());
         assertThat(synced.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(synced.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(synced.getTagSource(tag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
         assertThat(synced.getUpdatedAt()).isAfter(updatedAtBefore);
     }
 
@@ -1887,6 +1897,8 @@ class TransactionIngestionWorkflowResourceIT {
 
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(record);
+        assertThat(candidate.getCategorySource()).isNull();
+        assertThat(candidate.getTagAssociations()).isEmpty();
 
         mockMvc
             .perform(get(workflowUrl(ingestion)))
@@ -1908,8 +1920,11 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(jsonPath("$.rows[0].candidate.accountId").value(ingestion.getAccount().getId()))
             .andExpect(jsonPath("$.rows[0].candidate.accountName").value(ingestion.getAccount().getName()))
             .andExpect(jsonPath("$.rows[0].candidate.categoryId").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].candidate.categorySource").doesNotExist())
             .andExpect(jsonPath("$.rows[0].candidate.tagIds").isArray())
             .andExpect(jsonPath("$.rows[0].candidate.tagIds.length()").value(0))
+            .andExpect(jsonPath("$.rows[0].candidate.selectedTags").isArray())
+            .andExpect(jsonPath("$.rows[0].candidate.selectedTags.length()").value(0))
             .andExpect(jsonPath("$.rows[0].candidate.financialTransactionId").doesNotExist())
             .andExpect(jsonPath("$.rows[0].candidate.createdAt").exists())
             .andExpect(jsonPath("$.rows[0].candidate.updatedAt").exists());
@@ -1926,6 +1941,7 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(record);
         candidate.setCategory(category);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
         candidate.setTags(new HashSet<>(Set.of(secondTag, firstTag)));
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         transactionCandidateRepository.saveAndFlush(candidate);
@@ -1936,10 +1952,15 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(jsonPath("$.rows[0].candidate.id").value(candidate.getId()))
             .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(category.getId()))
             .andExpect(jsonPath("$.rows[0].candidate.categoryName").value("Transport"))
+            .andExpect(jsonPath("$.rows[0].candidate.categorySource").value("MANUAL"))
             .andExpect(jsonPath("$.rows[0].candidate.tagIds[0]").value(firstTag.getId()))
             .andExpect(jsonPath("$.rows[0].candidate.tagIds[1]").value(secondTag.getId()))
             .andExpect(jsonPath("$.rows[0].candidate.tagNames[0]").value("Business"))
             .andExpect(jsonPath("$.rows[0].candidate.tagNames[1]").value("Ride share"))
+            .andExpect(jsonPath("$.rows[0].candidate.selectedTags[0].tagId").value(firstTag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.selectedTags[0].source").value("MANUAL"))
+            .andExpect(jsonPath("$.rows[0].candidate.selectedTags[1].tagId").value(secondTag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.selectedTags[1].source").value("MANUAL"))
             .andExpect(jsonPath("$.rows[0].candidate.classificationReviewStatus").value("USER_SELECTED"));
     }
 
@@ -2070,13 +2091,19 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(jsonPath("$.candidate.id").value(candidate.getId()))
             .andExpect(jsonPath("$.candidate.categoryId").value(category.getId()))
             .andExpect(jsonPath("$.candidate.categoryName").value("Transport"))
+            .andExpect(jsonPath("$.candidate.categorySource").value("MANUAL"))
             .andExpect(jsonPath("$.candidate.tagIds[0]").value(firstTag.getId()))
             .andExpect(jsonPath("$.candidate.tagIds[1]").value(secondTag.getId()))
+            .andExpect(jsonPath("$.candidate.selectedTags[0].source").value("MANUAL"))
+            .andExpect(jsonPath("$.candidate.selectedTags[1].source").value("MANUAL"))
             .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("USER_SELECTED"));
 
         TransactionCandidate updated = candidateForRecord(record);
         assertThat(updated.getCategory().getId()).isEqualTo(category.getId());
         assertThat(updated.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(firstTag.getId(), secondTag.getId());
+        assertThat(updated.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(updated.getTagSource(firstTag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(updated.getTagSource(secondTag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
         assertThat(updated.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         assertThat(recordsFor(ingestion).get(0).getRawData()).isEqualTo(rawDataBefore);
         assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
@@ -2109,6 +2136,7 @@ class TransactionIngestionWorkflowResourceIT {
             )
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.candidate.categorySource").value("MANUAL"))
             .andExpect(jsonPath("$.candidate.tagIds[0]").value(replacementTag.getId()));
 
         mockMvc
@@ -2119,12 +2147,116 @@ class TransactionIngestionWorkflowResourceIT {
             )
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.candidate.categoryId").doesNotExist())
+            .andExpect(jsonPath("$.candidate.categorySource").doesNotExist())
             .andExpect(jsonPath("$.candidate.tagIds.length()").value(0))
             .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("USER_SELECTED"));
 
         mockMvc
             .perform(patch(candidateClassificationUrl(ingestion, candidate)).contentType(MediaType.APPLICATION_JSON).content("{}"))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateTagMultiSelectPromotesRetainedTagsToManualWithoutChangingCategoryProvenance() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category automaticCategory = persistCategory("Automatic transport", CategoryType.EXPENSE, currentMockUser());
+        Tag automaticRetained = persistTag("Automatic retained", currentMockUser());
+        Tag automaticRemoved = persistTag("Automatic removed", currentMockUser());
+        Tag manualRetained = persistTag("Manual retained", currentMockUser());
+        Tag manualAdded = persistTag("Manual added", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setCategory(automaticCategory);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(automaticRetained, TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(automaticRemoved, TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(manualRetained, TransactionCandidateClassificationSource.MANUAL);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            tagOnlyClassificationPayload(List.of(automaticRetained.getId(), manualRetained.getId(), manualAdded.getId()))
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidate.categoryId").value(automaticCategory.getId()))
+            .andExpect(jsonPath("$.candidate.categorySource").value("AUTOMATIC"))
+            .andExpect(jsonPath("$.candidate.selectedTags.length()").value(3));
+
+        TransactionCandidate reloaded = candidateForRecord(record);
+        assertThat(reloaded.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+        assertThat(reloaded.getTags())
+            .extracting(Tag::getId)
+            .containsExactlyInAnyOrder(automaticRetained.getId(), manualRetained.getId(), manualAdded.getId());
+        assertThat(reloaded.getTagSource(automaticRetained)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(reloaded.getTagSource(manualRetained)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(reloaded.getTagSource(manualAdded)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(reloaded.getTagSource(automaticRemoved)).isNull();
+        assertThat(candidateTagJoinRows(reloaded.getId()).longValue()).isEqualTo(3L);
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateCategoryPatchReplacesAutomaticCategoryAndClearsWithoutChangingTagProvenance() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category automaticCategory = persistCategory("Suggested transport", CategoryType.EXPENSE, currentMockUser());
+        Category manualCategory = persistCategory("Manual transport", CategoryType.EXPENSE, currentMockUser());
+        Category replacementManualCategory = persistCategory("Replacement manual transport", CategoryType.EXPENSE, currentMockUser());
+        Tag automaticTag = persistTag("Suggested tag", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setCategory(automaticCategory);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(automaticTag, TransactionCandidateClassificationSource.AUTOMATIC);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(categoryOnlyClassificationPayload(manualCategory.getId())))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidate.categoryId").value(manualCategory.getId()))
+            .andExpect(jsonPath("$.candidate.categorySource").value("MANUAL"))
+            .andExpect(jsonPath("$.candidate.selectedTags[0].tagId").value(automaticTag.getId()))
+            .andExpect(jsonPath("$.candidate.selectedTags[0].source").value("AUTOMATIC"));
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(categoryOnlyClassificationPayload(replacementManualCategory.getId())))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidate.categoryId").value(replacementManualCategory.getId()))
+            .andExpect(jsonPath("$.candidate.categorySource").value("MANUAL"))
+            .andExpect(jsonPath("$.candidate.selectedTags[0].tagId").value(automaticTag.getId()))
+            .andExpect(jsonPath("$.candidate.selectedTags[0].source").value("AUTOMATIC"));
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(categoryOnlyClassificationPayload(null)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidate.categoryId").doesNotExist())
+            .andExpect(jsonPath("$.candidate.categorySource").doesNotExist())
+            .andExpect(jsonPath("$.candidate.selectedTags[0].source").value("AUTOMATIC"));
+
+        TransactionCandidate reloaded = candidateForRecord(record);
+        assertThat(reloaded.getCategory()).isNull();
+        assertThat(reloaded.getCategorySource()).isNull();
+        assertThat(reloaded.getTagSource(automaticTag)).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
     }
 
     @Test
@@ -2345,6 +2477,7 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(oxxoRecord);
         candidate.setCategory(manualCategory);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
         candidate.setTags(new HashSet<>(Set.of(manualTag)));
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         transactionCandidateRepository.saveAndFlush(candidate);
@@ -2392,6 +2525,8 @@ class TransactionIngestionWorkflowResourceIT {
         TransactionCandidate reloaded = candidateForRecord(oxxoRecord);
         assertThat(reloaded.getCategory().getId()).isEqualTo(manualCategory.getId());
         assertThat(reloaded.getTags()).extracting(Tag::getId).containsExactly(manualTag.getId());
+        assertThat(reloaded.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(reloaded.getTagSource(manualTag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
         assertThat(reloaded.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         assertThat(reloaded.getUpdatedAt()).isEqualTo(updatedAtBefore);
         assertThat(ingestionRecordRepository.findById(oxxoRecord.getId()).orElseThrow().getRawData()).isEqualTo(rawDataBefore);
@@ -2471,12 +2606,16 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(jsonPath("$.rows[0].categoryApplied").value(true))
             .andExpect(jsonPath("$.rows[0].tagIdsApplied[0]").value(tag.getId()))
             .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categorySource").value("AUTOMATIC"))
             .andExpect(jsonPath("$.rows[0].candidate.tagIds[0]").value(tag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.selectedTags[0].source").value("AUTOMATIC"))
             .andExpect(jsonPath("$.rows[0].candidate.classificationReviewStatus").value("SUGGESTED"));
 
         TransactionCandidate updated = candidateForRecord(record);
         assertThat(updated.getCategory().getId()).isEqualTo(category.getId());
         assertThat(updated.getTags()).extracting(Tag::getId).containsExactly(tag.getId());
+        assertThat(updated.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+        assertThat(updated.getTagSource(tag)).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
         assertThat(updated.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
         assertThat(recordsFor(ingestion).get(0).getRawData()).isEqualTo(rawDataBefore);
         assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
@@ -2497,6 +2636,7 @@ class TransactionIngestionWorkflowResourceIT {
         mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
         TransactionCandidate candidate = candidateForRecord(record);
         candidate.setCategory(manualCategory);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
         candidate.setTags(new HashSet<>(Set.of(manualTag)));
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         transactionCandidateRepository.saveAndFlush(candidate);
@@ -2513,6 +2653,9 @@ class TransactionIngestionWorkflowResourceIT {
         TransactionCandidate updated = candidateForRecord(record);
         assertThat(updated.getCategory().getId()).isEqualTo(manualCategory.getId());
         assertThat(updated.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(manualTag.getId(), suggestedTag.getId());
+        assertThat(updated.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(updated.getTagSource(manualTag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(updated.getTagSource(suggestedTag)).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
     }
 
     @Test
@@ -3581,6 +3724,12 @@ class TransactionIngestionWorkflowResourceIT {
     private Map<String, Object> tagOnlyClassificationPayload(List<Long> tagIds) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("tagIds", tagIds);
+        return payload;
+    }
+
+    private Map<String, Object> categoryOnlyClassificationPayload(Long categoryId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("categoryId", categoryId);
         return payload;
     }
 

@@ -4,9 +4,9 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -57,6 +57,7 @@ public class TransactionCandidateRuleApplicationService {
             !evaluation.suggestedCategory().conflictsWithCurrentValue()
         ) {
             candidate.setCategory(categoryResolver.apply(evaluation.suggestedCategory().categoryId()));
+            candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
             return true;
         }
         return false;
@@ -74,7 +75,7 @@ public class TransactionCandidateRuleApplicationService {
                 continue;
             }
             Tag tag = tagResolver.apply(suggestedTag.tagId());
-            addTag(candidate, tag);
+            candidate.addTag(tag, TransactionCandidateClassificationSource.AUTOMATIC);
             tagIds.add(tag.getId());
             tagIdsApplied.add(tag.getId());
         }
@@ -101,20 +102,5 @@ public class TransactionCandidateRuleApplicationService {
             return new HashSet<>();
         }
         return candidate.getTags().stream().map(Tag::getId).filter(Objects::nonNull).collect(Collectors.toSet());
-    }
-
-    private void addTag(TransactionCandidate candidate, Tag tag) {
-        Set<Tag> tags = candidate.getTags();
-        if (tags == null) {
-            tags = new LinkedHashSet<>();
-            candidate.setTags(tags);
-        }
-        try {
-            tags.add(tag);
-        } catch (UnsupportedOperationException e) {
-            tags = new LinkedHashSet<>(tags);
-            candidate.setTags(tags);
-            tags.add(tag);
-        }
     }
 }

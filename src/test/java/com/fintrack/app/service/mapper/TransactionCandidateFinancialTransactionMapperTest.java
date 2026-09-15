@@ -69,7 +69,7 @@ class TransactionCandidateFinancialTransactionMapperTest {
     }
 
     @Test
-    void nullTagsAreSafeAndCandidateIsNotMutated() {
+    void emptyCandidateTagAssociationsMapSafelyWithoutMutatingTheCandidate() {
         Instant now = Instant.parse("2026-09-15T12:00:00Z");
         TransactionCandidate candidate = new TransactionCandidate();
         candidate.setTags(null);
@@ -77,6 +77,6 @@ class TransactionCandidateFinancialTransactionMapperTest {
         FinancialTransaction financialTransaction = mapper.toFinancialTransaction(candidate, TransactionOrigin.MANUAL, now);
 
         assertThat(financialTransaction.getTags()).isEmpty();
-        assertThat(candidate.getTags()).isNull();
+        assertThat(candidate.getTags()).isEmpty();
     }
 }

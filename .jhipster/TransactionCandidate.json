@@ -37,6 +37,11 @@
       "fieldValues": "NOT_EVALUATED,SUGGESTED,USER_SELECTED,STALE,NOT_APPLICABLE"
     },
     {
+      "fieldName": "categorySource",
+      "fieldType": "TransactionCandidateClassificationSource",
+      "fieldValues": "AUTOMATIC,MANUAL"
+    },
+    {
       "fieldName": "transactionDate",
       "fieldType": "LocalDate"
     },
@@ -157,13 +162,6 @@
       "relationshipName": "financialTransaction",
       "relationshipSide": "left",
       "relationshipType": "one-to-one"
-    },
-    {
-      "otherEntityField": "name",
-      "otherEntityName": "tag",
-      "relationshipName": "tags",
-      "relationshipSide": "left",
-      "relationshipType": "many-to-many"
     }
   ],
   "searchEngine": "no",

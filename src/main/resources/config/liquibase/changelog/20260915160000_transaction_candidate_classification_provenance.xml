@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20260915160000-1" author="codex">
+        <addColumn tableName="transaction_candidate">
+            <column name="category_source" type="varchar(255)"/>
+        </addColumn>
+        <addColumn tableName="rel_transaction_candidate__tags">
+            <column name="id" type="bigint"/>
+            <column name="source" type="varchar(255)"/>
+        </addColumn>
+        <sql>update rel_transaction_candidate__tags set id = nextval('sequence_generator') where id is null</sql>
+        <addNotNullConstraint tableName="rel_transaction_candidate__tags" columnName="id" columnDataType="bigint"/>
+        <dropPrimaryKey tableName="rel_transaction_candidate__tags"/>
+        <addPrimaryKey columnNames="id" tableName="rel_transaction_candidate__tags"/>
+        <addUniqueConstraint tableName="rel_transaction_candidate__tags" columnNames="transaction_candidate_id,tags_id" constraintName="ux_transaction_candidate_tag"/>
+    </changeSet>
+
+    <changeSet id="20260915160000-2" author="codex">
+        <sql>update transaction_candidate set category_source = 'MANUAL' where category_id is not null and classification_review_status = 'USER_SELECTED'</sql>
+        <sql>update transaction_candidate set category_source = 'AUTOMATIC' where category_id is not null and classification_review_status &lt;&gt; 'USER_SELECTED'</sql>
+        <sql>update rel_transaction_candidate__tags set source = 'MANUAL' where transaction_candidate_id in (select id from transaction_candidate where classification_review_status = 'USER_SELECTED')</sql>
+        <sql>update rel_transaction_candidate__tags set source = 'AUTOMATIC' where source is null</sql>
+        <addNotNullConstraint tableName="rel_transaction_candidate__tags" columnName="source" columnDataType="varchar(255)"/>
+    </changeSet>
+</databaseChangeLog>

@@ -41,6 +41,8 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "ingestionRecord", ignore = true)
     @Mapping(target = "financialTransaction", ignore = true)
     @Mapping(target = "tags", ignore = true)
+    @Mapping(target = "categorySource", ignore = true)
+    @Mapping(target = "tagAssociations", ignore = true)
     @Mapping(target = "removeTags", ignore = true)
     TransactionCandidate toEntity(TransactionCandidateDTO transactionCandidateDTO);
 
@@ -53,6 +55,8 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "ingestionRecord", ignore = true)
     @Mapping(target = "financialTransaction", ignore = true)
     @Mapping(target = "tags", ignore = true)
+    @Mapping(target = "categorySource", ignore = true)
+    @Mapping(target = "tagAssociations", ignore = true)
     @Mapping(target = "removeTags", ignore = true)
     void partialUpdate(@MappingTarget TransactionCandidate entity, TransactionCandidateDTO dto);
 

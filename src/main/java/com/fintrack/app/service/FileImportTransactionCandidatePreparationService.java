@@ -108,7 +108,8 @@ public class FileImportTransactionCandidatePreparationService {
         if (candidate.getStatus() == TransactionCandidateStatus.POSTED || candidate.getFinancialTransaction() != null) {
             throw new IllegalArgumentException("Posted transaction candidate cannot be removed by row review");
         }
-        transactionCandidateRepository.deleteTagLinksByTransactionCandidateId(candidate.getId());
+        // Entity deletion cascades to the explicit candidate-tag associations. Do not remove the rows
+        // natively first: the managed association collection would then try to delete them again.
         transactionCandidateRepository.delete(candidate);
     }
 

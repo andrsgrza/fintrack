@@ -6,7 +6,7 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
-import java.util.LinkedHashSet;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -30,6 +30,7 @@ class TransactionCandidateRuleApplicationServiceTest {
 
         assertThat(candidate.getCategory()).isNotNull();
         assertThat(candidate.getCategory().getId()).isEqualTo(10L);
+        assertThat(candidate.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
         assertThat(result.categoryApplied()).isTrue();
         assertThat(result.recommendedClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
     }
@@ -73,7 +74,8 @@ class TransactionCandidateRuleApplicationServiceTest {
     @Test
     void existingTagsArePreservedAndNewSuggestedTagsAreAddedOnlyOnce() {
         Tag existingTag = tag(1L);
-        TransactionCandidate candidate = new TransactionCandidate().tags(new LinkedHashSet<>(Set.of(existingTag)));
+        TransactionCandidate candidate = new TransactionCandidate();
+        candidate.addTag(existingTag, TransactionCandidateClassificationSource.AUTOMATIC);
         TransactionRuleEvaluationResult evaluation = evaluation(
             null,
             List.of(tagSuggestion(1L, false, false), tagSuggestion(2L, false, false), tagSuggestion(2L, false, true))
@@ -88,8 +90,22 @@ class TransactionCandidateRuleApplicationServiceTest {
         );
 
         assertThat(candidate.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(1L, 2L);
+        assertThat(candidate.getTagSource(existingTag)).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+        assertThat(candidate.getTagSource(tag(2L))).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
         assertThat(result.tagIdsApplied()).containsExactly(2L);
         assertThat(result.recommendedClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+    }
+
+    @Test
+    void automaticApplyDoesNotDowngradeAnExistingManualTag() {
+        Tag manualTag = tag(1L);
+        TransactionCandidate candidate = new TransactionCandidate();
+        candidate.addTag(manualTag, TransactionCandidateClassificationSource.MANUAL);
+
+        service.applyFillEmptyOnly(candidate, evaluation(null, List.of(tagSuggestion(1L, false, false))), false, this::category, this::tag);
+
+        assertThat(candidate.getTagSource(manualTag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(candidate.getTagAssociations()).hasSize(1);
     }
 
     @Test

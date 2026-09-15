@@ -105,6 +105,11 @@ enum TransactionCandidateClassificationReviewStatus {
   NOT_APPLICABLE
 }
 
+enum TransactionCandidateClassificationSource {
+  AUTOMATIC,
+  MANUAL
+}
+
 enum CategoryType {
   EXPENSE,
   INCOME,
@@ -299,6 +304,7 @@ entity TransactionCandidate {
   validationStatus TransactionCandidateValidationStatus required
   descriptionReviewStatus TransactionCandidateDescriptionReviewStatus required
   classificationReviewStatus TransactionCandidateClassificationReviewStatus required
+  categorySource TransactionCandidateClassificationSource
   transactionDate LocalDate
   postingDate LocalDate
   description String maxlength(500)
@@ -314,6 +320,10 @@ entity TransactionCandidate {
   postedAt Instant
   cancelledAt Instant
   failedAt Instant
+}
+
+entity TransactionCandidateTag {
+  source TransactionCandidateClassificationSource required
 }
 
 /**
@@ -563,7 +573,11 @@ relationship ManyToOne {
 
 relationship ManyToMany {
   FinancialTransaction{tags(name)} to Tag{financialTransactions}
-  TransactionCandidate{tags(name)} to Tag
+}
+
+relationship ManyToOne {
+  TransactionCandidateTag{transactionCandidate required} to TransactionCandidate
+  TransactionCandidateTag{tag required} to Tag
 }
 
 /**

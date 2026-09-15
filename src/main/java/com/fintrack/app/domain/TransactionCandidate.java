@@ -3,6 +3,7 @@ package com.fintrack.app.domain;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -60,6 +61,11 @@ public class TransactionCandidate implements Serializable {
     @Enumerated(EnumType.STRING)
     @Column(name = "classification_review_status", nullable = false)
     private TransactionCandidateClassificationReviewStatus classificationReviewStatus;
+
+    /** Server-owned origin of the persisted category; null means no category is selected. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category_source")
+    private TransactionCandidateClassificationSource categorySource;
 
     @Column(name = "transaction_date")
     private LocalDate transactionDate;
@@ -156,14 +162,8 @@ public class TransactionCandidate implements Serializable {
     )
     private FinancialTransaction financialTransaction;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "rel_transaction_candidate__tags",
-        joinColumns = @JoinColumn(name = "transaction_candidate_id"),
-        inverseJoinColumns = @JoinColumn(name = "tags_id")
-    )
-    @JsonIgnoreProperties(value = { "user", "financialTransactions", "transactionRules", "subscriptions", "budgets" }, allowSetters = true)
-    private Set<Tag> tags = new HashSet<>();
+    @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TransactionCandidateTag> tagAssociations = new HashSet<>();
 
     public Long getId() {
         return this.id;
@@ -241,6 +241,14 @@ public class TransactionCandidate implements Serializable {
 
     public void setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus classificationReviewStatus) {
         this.classificationReviewStatus = classificationReviewStatus;
+    }
+
+    public TransactionCandidateClassificationSource getCategorySource() {
+        return categorySource;
+    }
+
+    public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
+        this.categorySource = categorySource;
     }
 
     public LocalDate getTransactionDate() {
@@ -475,6 +483,9 @@ public class TransactionCandidate implements Serializable {
 
     public void setCategory(Category category) {
         this.category = category;
+        if (category == null) {
+            this.categorySource = null;
+        }
     }
 
     public TransactionIngestion getTransactionIngestion() {
@@ -516,12 +527,37 @@ public class TransactionCandidate implements Serializable {
         this.financialTransaction = financialTransaction;
     }
 
+    /**
+     * Derived compatibility view of the explicit candidate-tag associations.
+     *
+     * Persist classification provenance through {@link #addTag(Tag, TransactionCandidateClassificationSource)} or
+     * {@link #replaceTags(Set, TransactionCandidateClassificationSource)}, never by mutating this returned set.
+     */
     public Set<Tag> getTags() {
-        return this.tags;
+        Set<Tag> tags = new HashSet<>();
+        for (TransactionCandidateTag association : tagAssociations) {
+            if (association.getTag() != null) tags.add(association.getTag());
+        }
+        return tags;
     }
 
+    /**
+     * Compatibility setter for explicit user selections. Runtime code that knows the origin must use
+     * {@link #replaceTags(Set, TransactionCandidateClassificationSource)} directly.
+     */
     public void setTags(Set<Tag> tags) {
-        this.tags = tags;
+        replaceTags(tags, TransactionCandidateClassificationSource.MANUAL);
+    }
+
+    public void replaceTags(Set<Tag> tags, TransactionCandidateClassificationSource source) {
+        if (source == null && tags != null && !tags.isEmpty()) {
+            throw new IllegalArgumentException("Transaction candidate tag source is required");
+        }
+        Set<Tag> selectedTags = tags == null ? Set.of() : new HashSet<>(tags);
+        // Keep retained associations in place. Clearing and recreating them can make Hibernate insert a
+        // replacement before it deletes the orphan, violating the candidate/tag unique constraint.
+        tagAssociations.removeIf(association -> association.getTag() == null || !selectedTags.contains(association.getTag()));
+        selectedTags.forEach(tag -> addTag(tag, source));
     }
 
     public TransactionCandidate tags(Set<Tag> tags) {
@@ -530,13 +566,56 @@ public class TransactionCandidate implements Serializable {
     }
 
     public TransactionCandidate addTags(Tag tag) {
-        this.tags.add(tag);
+        addTag(tag, TransactionCandidateClassificationSource.MANUAL);
         return this;
     }
 
     public TransactionCandidate removeTags(Tag tag) {
-        this.tags.remove(tag);
+        tagAssociations.removeIf(association -> association.getTag() != null && association.getTag().equals(tag));
         return this;
+    }
+
+    public Set<TransactionCandidateTag> getTagAssociations() {
+        return tagAssociations;
+    }
+
+    public void setTagAssociations(Set<TransactionCandidateTag> tagAssociations) {
+        this.tagAssociations.clear();
+        if (tagAssociations != null) tagAssociations.forEach(association -> addTag(association.getTag(), association.getSource()));
+    }
+
+    public void addTag(Tag tag, TransactionCandidateClassificationSource source) {
+        if (tag == null) return;
+        tagAssociations
+            .stream()
+            .filter(association -> tag.equals(association.getTag()))
+            .findFirst()
+            .ifPresentOrElse(
+                association -> association.setSource(source),
+                () -> {
+                    TransactionCandidateTag association = new TransactionCandidateTag();
+                    association.setTransactionCandidate(this);
+                    association.setTag(tag);
+                    association.setSource(source);
+                    tagAssociations.add(association);
+                }
+            );
+    }
+
+    public TransactionCandidateClassificationSource getTagSource(Tag tag) {
+        return tagAssociations
+            .stream()
+            .filter(association -> tag != null && tag.equals(association.getTag()))
+            .map(TransactionCandidateTag::getSource)
+            .findFirst()
+            .orElse(null);
+    }
+
+    public boolean hasManualClassification() {
+        return (
+            categorySource == TransactionCandidateClassificationSource.MANUAL ||
+            tagAssociations.stream().anyMatch(association -> association.getSource() == TransactionCandidateClassificationSource.MANUAL)
+        );
     }
 
     @Override

@@ -890,12 +890,23 @@ class TransactionCandidateResourceIT {
             .user(owner)
             .tags(Set.of(tag));
         candidate = transactionCandidateRepository.saveAndFlush(candidate);
+        Long candidateId = candidate.getId();
+        Number associationsBeforeDelete = (Number) em
+            .createNativeQuery("select count(*) from rel_transaction_candidate__tags where transaction_candidate_id = :candidateId")
+            .setParameter("candidateId", candidateId)
+            .getSingleResult();
+        assertThat(associationsBeforeDelete.longValue()).isEqualTo(1L);
 
-        restTransactionCandidateMockMvc.perform(delete(ENTITY_API_URL_ID, candidate.getId())).andExpect(status().isNoContent());
+        restTransactionCandidateMockMvc.perform(delete(ENTITY_API_URL_ID, candidateId)).andExpect(status().isNoContent());
 
         em.flush();
         em.clear();
-        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
+        Number associationsAfterDelete = (Number) em
+            .createNativeQuery("select count(*) from rel_transaction_candidate__tags where transaction_candidate_id = :candidateId")
+            .setParameter("candidateId", candidateId)
+            .getSingleResult();
+        assertThat(associationsAfterDelete.longValue()).isZero();
+        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
     }
 
     @Test

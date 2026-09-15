@@ -69,6 +69,7 @@ Subscription and description assignment are deliberately not outputs in the curr
   - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions`;
   - category/tags are stored on `TransactionCandidate`, not in `IngestionRecord.rawData`;
   - these classification endpoints create no `FinancialTransaction` rows; TC-3D.1 Confirm Import separately posts reviewed `FILE_IMPORT` candidates.
+- Candidate classification provenance is server-owned: a rule-applied new category/tag is `AUTOMATIC`; an explicit manual category/tag selection is `MANUAL`; clearing a category leaves no category provenance. Tags use unique explicit `TransactionCandidateTag` association rows, so preview/reevaluation is read-only and `FILL_EMPTY_ONLY` cannot downgrade manual tags or create duplicates. Confirm copies category/tags, not provenance, to the final transaction.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.

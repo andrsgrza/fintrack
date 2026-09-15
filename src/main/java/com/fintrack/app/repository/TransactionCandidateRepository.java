@@ -36,8 +36,9 @@ public interface TransactionCandidateRepository
             "financialTransaction",
             "financialTransaction.account",
             "financialTransaction.account.user",
-            "tags",
-            "tags.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
         }
     )
     @Query("select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id")
@@ -60,8 +61,9 @@ public interface TransactionCandidateRepository
             "financialTransaction",
             "financialTransaction.account",
             "financialTransaction.account.user",
-            "tags",
-            "tags.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
         }
     )
     @Query(
@@ -87,8 +89,9 @@ public interface TransactionCandidateRepository
             "financialTransaction",
             "financialTransaction.account",
             "financialTransaction.account.user",
-            "tags",
-            "tags.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
         }
     )
     @Query(
@@ -137,8 +140,9 @@ public interface TransactionCandidateRepository
             "financialTransaction",
             "financialTransaction.account",
             "financialTransaction.account.user",
-            "tags",
-            "tags.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
         }
     )
     @Query(
@@ -163,8 +167,9 @@ public interface TransactionCandidateRepository
             "financialTransaction",
             "financialTransaction.account",
             "financialTransaction.account.user",
-            "tags",
-            "tags.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
         }
     )
     @Query(
@@ -192,8 +197,9 @@ public interface TransactionCandidateRepository
             "financialTransaction",
             "financialTransaction.account",
             "financialTransaction.account.user",
-            "tags",
-            "tags.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
         }
     )
     @Query(
@@ -215,7 +221,7 @@ public interface TransactionCandidateRepository
     boolean existsByCategoryId(Long categoryId);
 
     @Query(
-        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate join transactionCandidate.tags tag where tag.id = :tagId"
+        "select case when count(transactionCandidateTag) > 0 then true else false end from TransactionCandidateTag transactionCandidateTag where transactionCandidateTag.tag.id = :tagId"
     )
     boolean existsByTagId(@Param("tagId") Long tagId);
 
@@ -226,13 +232,6 @@ public interface TransactionCandidateRepository
     boolean existsAccountCandidateOutsideWorkflowCleanup(@Param("accountId") Long accountId);
 
     boolean existsByAccountId(Long accountId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(
-        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id = :transactionCandidateId",
-        nativeQuery = true
-    )
-    void deleteTagLinksByTransactionCandidateId(@Param("transactionCandidateId") Long transactionCandidateId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
