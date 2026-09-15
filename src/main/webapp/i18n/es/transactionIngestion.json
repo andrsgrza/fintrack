@@ -118,10 +118,7 @@
           "originallyAutoNormalizedBy": "Originalmente normalizada por {{ruleName}}, después editada manualmente"
         },
         "classification": {
-          "title": "Revisar categorías y etiquetas",
-          "continue": "Continuar a categorías/etiquetas",
           "persistedNotice": "Las categorías y etiquetas se guardan en candidatos antes de confirmar la importación.",
-          "backToRows": "Volver a revisión de filas",
           "reviewedRows": "Revisadas",
           "notEvaluatedRows": "No evaluadas",
           "staleRows": "Desactualizadas",

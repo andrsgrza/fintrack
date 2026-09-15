@@ -210,13 +210,6 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       `2026-01-17,,${inDescription},100.00,MXN,${scenarioToken}-refund,e2e in row`,
     ].join('\n');
 
-    uploadCsvFromCreatePage(csv, 'uber-flow-classification.csv');
-
-    cy.url().should('match', /\/transaction-ingestion\/\d+$/);
-    cy.get('[data-cy="workflowReviewHeading"]').should('exist');
-    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
-    cy.get('[data-cy="workflowRows"]').should('contain', outDescription).and('contain', inDescription);
-
     let oldClassificationPreviewCalled = false;
     let financialTransactionRulePreviewCalled = false;
     cy.intercept('POST', '/api/transaction-ingestions/*/classification-preview', req => {
@@ -233,7 +226,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/*/confirm-no-suggestions').as('confirmNoSuggestionsRequest');
     cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
     cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
-    cy.get('[data-cy="workflowContinueClassification"]').click();
+
+    uploadCsvFromCreatePage(csv, 'uber-flow-classification.csv');
+
+    cy.url().should('match', /\/transaction-ingestion\/\d+$/);
+    cy.get('[data-cy="workflowReviewHeading"]').should('exist');
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="workflowRows"]').should('contain', outDescription).and('contain', inDescription);
     cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
     let outCandidateId: number;
@@ -257,9 +256,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
 
-    cy.get('[data-cy="workflowClassificationReview"]').should('exist');
-    cy.contains('[data-testid^="classificationRow-"]', outDescription).as('outClassificationRow');
-    cy.contains('[data-testid^="classificationRow-"]', inDescription).as('inClassificationRow');
+    cy.get('[data-cy="workflowClassificationControls"]').should('exist');
+    cy.get('[data-cy="workflowContinueClassification"]').should('not.exist');
+    cy.get('[data-cy="workflowClassificationReview"]').should('not.exist');
+    cy.contains('[data-cy="workflowRows"] tr', outDescription).as('outClassificationRow');
+    cy.contains('[data-cy="workflowRows"] tr', inDescription).as('inClassificationRow');
 
     cy.get('@outClassificationRow').within(() => {
       cy.contains(outDescription).should('be.visible');
@@ -287,15 +288,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.wait('@confirmNoSuggestionsRequest').its('response.statusCode').should('eq', 200);
 
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewAfterReloadRequest');
     cy.reload();
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
-    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesAfterReloadRequest');
-    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewAfterReloadRequest');
-    cy.get('[data-cy="workflowContinueClassification"]').click();
-    cy.wait('@prepareCandidatesAfterReloadRequest').its('response.statusCode').should('eq', 200);
-    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@candidateRulePreviewAfterReloadRequest').its('response.statusCode').should('eq', 200);
-    cy.contains('[data-testid^="classificationRow-"]', outDescription).within(() => {
+    cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
       cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', tag?.name as string);
     });
@@ -407,6 +404,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       `2026-01-17,,${disabledDescription},-40.00,MXN,,disabled row`,
     ].join('\n');
 
+    cy.intercept('POST', '**/api/transaction-ingestions/*/records/*/disable').as('disableRecordRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/apply-rules').as('applyCandidateRulesRequest');
+    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+
     uploadCsvFromCreatePage(csv, 'disable-one-before-confirm.csv');
 
     let currentIngestionId: number;
@@ -419,7 +423,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       disabledRecordId = disabledRow?.ingestionRecordId;
       expect(disabledRecordId).to.be.a('number');
     });
-    cy.intercept('POST', '**/api/transaction-ingestions/*/records/*/disable').as('disableRecordRequest');
+    cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
     cy.contains('[data-cy="workflowRows"] tr', disabledDescription).within(() => {
       cy.then(() => {
         expect(disabledRecordId).to.be.a('number');
@@ -429,27 +437,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.wait('@disableRecordRequest').its('response.statusCode').should('eq', 200);
     cy.contains('[data-cy="workflowRows"] tr', disabledDescription).within(() => {
-      cy.contains(/Disabled|Deshabilitada/i).should('be.visible');
-      cy.contains(/Enable|Habilitar/i).should('be.visible');
+      cy.contains(/Disabled|Deshabilitada/i).should('exist');
+      cy.contains(/Enable|Habilitar/i).should('exist');
     });
 
-    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
-    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
-    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/apply-rules').as('applyCandidateRulesRequest');
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
-    cy.get('[data-cy="workflowContinueClassification"]').click();
-    cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
-    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
-    cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
-      expect(response?.statusCode).to.equal(200);
-      const rows = response?.body.rows ?? [];
-      expect(rows).to.have.length(1);
-      expect(rows[0].candidate?.description).to.equal(enabledDescription);
-    });
-    cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
-    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
-    cy.contains('[data-testid^="classificationRow-"]', enabledDescription).within(() => {
+    cy.contains('[data-cy="workflowRows"] tr', enabledDescription).within(() => {
       cy.contains('button', /Apply suggestions|Aplicar sugerencias/i).click();
     });
     cy.wait('@applyCandidateRulesRequest').its('response.statusCode').should('eq', 200);

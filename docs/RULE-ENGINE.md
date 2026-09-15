@@ -119,7 +119,7 @@ Configured backend rule creation/update is also available through:
 
 The configured API accepts/returns a parent `TransactionRule` plus its ordered conditions. It preserves server-managed parent fields, server-assigns condition positions, and replaces the full condition set on configured PUT. The product create/edit UI uses this API and keeps condition edits in local frontend state until save.
 
-The old empty-draft product flow is no longer the active product UI path. Technical/debug generated surfaces remain temporarily for direct maintenance, and backend validation remains the source of truth while those surfaces exist. File ingestion category/tag review is now candidate-backed after Pantalla 1; UserPreference remains deferred.
+The old empty-draft product flow is no longer the active product UI path. Technical/debug generated surfaces remain temporarily for direct maintenance, and backend validation remains the source of truth while those surfaces exist. File ingestion category/tag review is candidate-backed and appears beside row review in one unified workflow screen; UserPreference remains deferred.
 
 Rules with a resulting EXPENSE or INCOME category are guarded before activation/configured persistence:
 
@@ -677,13 +677,13 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 CSV ingestion uses the category/tag Transaction Rule evaluator through candidate-backed review commands.
 
-TC-3C.2 migrates Pantalla 2 in the TransactionIngestion workflow UI to prepared `FILE_IMPORT` `TransactionCandidate`s:
+The current unified `TransactionIngestion` workflow review uses prepared `FILE_IMPORT` `TransactionCandidate`s for category/tag classification alongside the row review fields. The former separate classification screen is historical only:
 
-- `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs candidates for `VALID` rows after Pantalla 1.
+- `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs candidates for eligible `VALID` rows that are missing them; the unified page runs it automatically once for that missing-row set.
 - The UI reloads `GET /api/transaction-ingestions/{id}/workflow` and uses each row's `candidate` summary as the source of truth for selected category/tags and `classificationReviewStatus`.
 - `POST /api/transaction-ingestions/{id}/candidates/rule-preview` evaluates current candidate state read-only and returns transient suggestions, matched rules, conflicts, and skipped outputs keyed by candidate id.
 - Preview does not mutate candidate category/tags and does not write to `rawData`.
-- User edits in Pantalla 2 call candidate classification PATCH and are persisted on `TransactionCandidate`.
+- User category/tag edits in the unified row call candidate classification PATCH and are persisted on `TransactionCandidate`.
 - Browser refresh reloads persisted category/tag selections from the workflow row candidate summaries.
 - Before Confirm Import, the current UI reloads the workflow and validates that all `VALID` row candidates are ready/reviewed, then calls `/confirm` without legacy `records`/category/tag payload.
 - TC-3D.1 changes Confirm Import itself to read persisted `FILE_IMPORT` candidates as the source of truth. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body.

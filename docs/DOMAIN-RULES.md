@@ -92,7 +92,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## TransactionCandidate — central draft/review boundary
 
-**Status:** TC-3D.1 implemented. Manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion can now prepare `FILE_IMPORT` candidates after Pantalla 1, expose optional prepared candidate summaries in the workflow response, use candidate-backed Pantalla 2 category/tag review, and post reviewed `FILE_IMPORT` candidates during Confirm Import. API ingestion, bank sync, Pantalla 1 UI edits, re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
+**Status:** manual TransactionCandidate autosave UI exists, frontend candidate suggestions auto-refresh after saved rule-input changes, suggestions are applied/confirmed through candidate-specific endpoints, and `/financial-transaction/drafts` lists recoverable manual drafts through a product-safe backend query. CSV ingestion prepares `FILE_IMPORT` candidates from eligible valid rows, exposes optional prepared candidate summaries in the workflow response, and presents candidate-backed row review and category/tag classification together on one screen before posting reviewed candidates during Confirm Import. API ingestion, bank sync, separate re-evaluation buttons, and UserPreference still do not use `TransactionCandidate`.
 
 Domain boundary:
 
@@ -164,11 +164,11 @@ TC-2B.1 manual UI rules:
 
 FILE ingestion candidate preparation:
 
-- `POST /api/transaction-ingestions/{id}/candidates/prepare` is a backend-only workflow command that creates/syncs `FILE_IMPORT` candidates for `VALID` rows after Pantalla 1.
+- `POST /api/transaction-ingestions/{id}/candidates/prepare` is a workflow command that creates/syncs `FILE_IMPORT` candidates for eligible `VALID` rows. The unified review UI invokes it automatically when a `READY` workflow has valid rows without candidates.
 - Prepare uses `IngestionRecord.rawData.normalized` plus the parent account to populate candidate transaction fields, derives `amount`/`flow` from `signedAmount`, and maps description review metadata to candidate description review status.
 - Prepare skips non-`VALID` rows, is idempotent, preserves existing candidate category/tags, and marks classification `STALE` when rule-input fields change after a fresh classification.
 - Prepare does not create `FinancialTransaction` rows, does not mutate `rawData`, and does not store category/tags in `rawData`.
-- Pantalla 1 row review keeps prepared candidates consistent before Confirm Import: disabling a row removes its unposted `FILE_IMPORT` candidate and candidate tag joins; re-enabling the row does not restore the old candidate, and the next prepare creates a fresh candidate if the row is valid.
+- Unified row review keeps prepared candidates consistent before Confirm Import: disabling a row removes its unposted `FILE_IMPORT` candidate and candidate tag joins; re-enabling the row does not restore the old candidate, and the next automatic prepare creates a fresh candidate if the row is valid.
 - Editing a prepared row reprocesses `rawData.normalized` as the review source. If the edited row remains `VALID`, the existing unposted `FILE_IMPORT` candidate is synced immediately using prepare semantics, preserving candidate category/tags and marking fresh classification `STALE` when rule-input fields changed. Notes-only edits do not mark classification stale. Description provenance is separate: `rawData.review.description` changes to `USER_EDIT` only for an actual effective normalized-description change; unrelated normalized field edits preserve its rule/manual metadata. If the edited row becomes non-`VALID`, its unposted candidate is removed.
 - Posted/imported candidates or candidates linked to a `FinancialTransaction` are not silently deleted by row review actions.
 - Workflow-level `TransactionIngestion` delete remains the controlled cleanup path for an ingestion tree: it removes candidate tag joins and candidates before deleting linked imported `FinancialTransaction` rows. This is intentionally separate from direct FinancialTransaction delete.
@@ -184,7 +184,7 @@ FILE ingestion candidate preparation:
 - FILE candidate classification stores category/tags on `TransactionCandidate` only. It never stores category/tag selections or rule results in `IngestionRecord.rawData`.
 - FILE candidate preview/apply uses `TransactionOrigin.FILE_IMPORT` when evaluating category/tag TransactionRules.
 - FILE candidate classification endpoints do not create `FinancialTransaction` rows. Confirm Import is the separate posting command.
-- TC-3C.2 migrates Pantalla 2 frontend to candidate-backed state. The UI prepares candidates, reloads the workflow, previews rule suggestions through candidate endpoints, persists manual/apply/no-suggestion classification decisions on candidates, and reloads candidates before confirm.
+- The unified ingestion review uses candidate-backed state. The UI prepares candidates only when required, reloads the workflow, previews rule suggestions through candidate endpoints, persists manual/apply/no-suggestion classification decisions on candidates, and reloads candidates before confirm.
 - TC-3D.1 migrates Confirm Import backend internals to the existing `POST /api/transaction-ingestions/{id}/confirm` path using reviewed `FILE_IMPORT` candidates as the source of truth.
 - The current frontend does not send the legacy confirm request shape. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body; persisted candidate category/tags are the only classification source of truth.
 - Confirm requires every current `VALID` row to have exactly one reviewed candidate linked to the same ingestion, record, owner, and account with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`.
@@ -193,7 +193,7 @@ FILE ingestion candidate preparation:
 
 Deferred:
 
-- Moving Pantalla 1 edits from `rawData.normalized` to candidate fields.
+- Moving normalized-row edits from `rawData.normalized` to candidate fields.
 - Description/rule re-evaluation endpoints.
 
 ---
@@ -1432,7 +1432,7 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 | Origin                         | Imported transactions use `origin = FILE_IMPORT`                                                                                                                                                | **Done**    |
 | Row transitions                | Imported `VALID` rows become `IMPORTED` and link to the generated transaction; `DISABLED` rows remain skipped/read-only                                                                         | **Done**    |
 | Parent transition              | Successful CSV v1 confirm import is all-or-nothing and marks the parent `COMPLETED`; retrying `COMPLETED` is idempotent and creates nothing new                                                 | **Done**    |
-| Removed classification preview | `POST /api/transaction-ingestions/{id}/classification-preview` was removed in TC-4B. Active Pantalla 2 uses candidate-backed preview/apply endpoints.                                           | **Removed** |
+| Removed classification preview | `POST /api/transaction-ingestions/{id}/classification-preview` was removed in TC-4B. The active unified review uses candidate-backed preview/apply endpoints.                                   | **Removed** |
 | Explicit selections            | Confirm import requires reviewed candidate classification for each `VALID` row and applies candidate category/tags after ownership/flow validation; old request category/tag ids are not parsed | **Done**    |
 | Rule Engine                    | CSV v1 confirm import does not invoke the Rule Engine itself and does not persist evaluation results/selections into `rawData`                                                                  | **Done**    |
 | Evaluation persistence         | Do not persist Rule Engine evaluation results in CSV confirm import                                                                                                                             | **Done**    |

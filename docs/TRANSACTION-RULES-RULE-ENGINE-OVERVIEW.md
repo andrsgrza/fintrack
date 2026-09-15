@@ -588,7 +588,7 @@ Implemented:
 - Backend rule preview endpoint.
 - Manual TransactionCandidate autosave UI.
 - Candidate-specific manual rule preview/apply UI.
-- Candidate-backed CSV ingestion Pantalla 2.
+- Candidate-backed CSV ingestion classification in the unified workflow review.
 
 Not implemented:
 

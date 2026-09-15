@@ -118,10 +118,7 @@
           "originallyAutoNormalizedBy": "Originally auto-normalized by {{ruleName}}, then edited manually"
         },
         "classification": {
-          "title": "Review categories and tags",
-          "continue": "Continue to category/tags",
           "persistedNotice": "Categories and tags are saved on candidates before confirming the import.",
-          "backToRows": "Back to row review",
           "reviewedRows": "Reviewed",
           "notEvaluatedRows": "Not evaluated",
           "staleRows": "Stale",

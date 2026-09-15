@@ -377,6 +377,8 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
     expect(within(rowForRecord(302)).queryByRole('button', { name: /disable/i })).toBeNull();
     expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
+    expect(within(rowForRecord(301)).queryByTestId(/classificationCategory-/)).toBeNull();
+    expect(within(rowForRecord(302)).queryByTestId(/classificationTags-/)).toBeNull();
   });
 
   it('does not render TransactionIngestion workflow detail Edit action', async () => {
@@ -512,22 +514,34 @@ describe('TransactionIngestion file workflow', () => {
   });
 
   it('enable valid disabled row updates displayed batch status to ready', async () => {
-    mockAxiosGet.mockResolvedValue({
+    const disabledResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'PARTIALLY_READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
         rows: [{ ...persistedReviewResponse.data.rows[0], status: 'DISABLED' }],
       },
-    });
-    mockAxiosPost.mockResolvedValue({
+    };
+    const readyResponse = {
       data: {
-        transactionIngestionId: 100,
+        ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
-        row: persistedReviewResponse.data.rows[0],
+        rows: [persistedReviewResponse.data.rows[0]],
       },
-    });
+    };
+    mockAxiosGet.mockResolvedValueOnce(disabledResponse).mockResolvedValueOnce(withCandidates(readyResponse));
+    mockAxiosPost
+      .mockResolvedValueOnce({
+        data: {
+          transactionIngestionId: 100,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          row: persistedReviewResponse.data.rows[0],
+        },
+      })
+      .mockResolvedValueOnce(prepareCandidatesResponse)
+      .mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
     expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
@@ -851,22 +865,31 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(rowForRecord(300)).queryByText('Edited manually')).toBeNull();
   });
 
-  it('shows Continue to category/tags when review is ready with valid rows', async () => {
-    mockAxiosGet.mockResolvedValue({
+  it('automatically prepares candidate-backed classification in the same review table when review is ready', async () => {
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
         rows: [persistedReviewResponse.data.rows[0]],
       },
-    });
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
     expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
     expect(screen.queryByText(/translation-not-found/i)).toBeNull();
-    expect(screen.getByRole('button', { name: /continue to category\/tags/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/prepare'));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
+    expect(screen.getByRole('columnheader', { name: 'Category' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Tags' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Rule details' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /continue to category\/tags/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /back to row review/i })).toBeNull();
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/candidates/prepare')).toHaveLength(1);
   });
 
   it('does not allow confirm when review needs fixes', async () => {
@@ -932,12 +955,9 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/prepare'));
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
     expect(mockAxiosPost).not.toHaveBeenCalledWith('api/transaction-ingestions/100/classification-preview');
-    expect(await screen.findByText('Review categories and tags')).toBeTruthy();
     expect(screen.getByText('Categories and tags are saved on candidates before confirming the import.')).toBeTruthy();
     expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Salary');
     expect(screen.getByTestId('classificationSuggestedTags-400').textContent).toContain('Business');
@@ -1072,9 +1092,7 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-
-    expect(await screen.findByText('Review categories and tags')).toBeTruthy();
+    await screen.findByTestId('classificationSuggestedCategory-410');
     expect(screen.getByTestId('classificationSuggestedCategory-410').textContent).toContain('Transport');
     expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('');
     expect(screen.queryByTestId('classificationSuggestedCategory-411')).toBeNull();
@@ -1167,9 +1185,6 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-    await screen.findByText('Review categories and tags');
-
     expect(((await screen.findByTestId('classificationCategory-400')) as HTMLSelectElement).value).toBe('9');
     expect(
       Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
@@ -1189,10 +1204,7 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse);
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-
     expect(await screen.findByText('Could not prepare transaction candidates for classification.')).toBeTruthy();
-    expect(screen.queryByText('Review categories and tags')).toBeNull();
     expect(screen.getByText('Ingestion records')).toBeTruthy();
   });
 
@@ -1232,8 +1244,6 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-
     expect(await screen.findByText('Review every valid row before confirming import.')).toBeTruthy();
     expect((screen.getByRole('button', { name: /confirm import/i }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByTestId('classificationStatus-420').textContent).toContain('Not evaluated');
@@ -1271,7 +1281,6 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
@@ -1314,7 +1323,6 @@ describe('TransactionIngestion file workflow', () => {
       });
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
@@ -1393,14 +1401,13 @@ describe('TransactionIngestion file workflow', () => {
       .mockRejectedValueOnce(new Error('confirm failed'));
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
     expect(await screen.findByText('Could not confirm import. Check the review status and try again.')).toBeTruthy();
     expect(screen.queryByText('Import completed')).toBeNull();
     expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
-    expect(screen.getByText('Review categories and tags')).toBeTruthy();
+    expect(screen.getByText('Categories and tags are saved on candidates before confirming the import.')).toBeTruthy();
   });
 
   it('cancel leaves edited row unchanged', async () => {
