@@ -37,6 +37,7 @@ import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRulePreviewResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
+import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
 import com.fintrack.app.service.rules.CategorySuggestion;
 import com.fintrack.app.service.rules.RuleMatchResult;
@@ -86,6 +87,8 @@ public class TransactionCandidateService {
 
     private final TransactionCandidateMapper transactionCandidateMapper;
 
+    private final TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper;
+
     private final CurrentUserService currentUserService;
 
     private final FinancialAccountRepository financialAccountRepository;
@@ -107,6 +110,7 @@ public class TransactionCandidateService {
     public TransactionCandidateService(
         TransactionCandidateRepository transactionCandidateRepository,
         TransactionCandidateMapper transactionCandidateMapper,
+        TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper,
         CurrentUserService currentUserService,
         FinancialAccountRepository financialAccountRepository,
         FinancialTransactionRepository financialTransactionRepository,
@@ -119,6 +123,7 @@ public class TransactionCandidateService {
     ) {
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.transactionCandidateMapper = transactionCandidateMapper;
+        this.transactionCandidateFinancialTransactionMapper = transactionCandidateFinancialTransactionMapper;
         this.currentUserService = currentUserService;
         this.financialAccountRepository = financialAccountRepository;
         this.financialTransactionRepository = financialTransactionRepository;
@@ -222,21 +227,11 @@ public class TransactionCandidateService {
                 validateCandidate(existing, existing);
 
                 Instant now = Instant.now();
-                FinancialTransaction financialTransaction = new FinancialTransaction()
-                    .account(existing.getAccount())
-                    .transactionDate(existing.getTransactionDate())
-                    .postingDate(existing.getPostingDate())
-                    .description(existing.getDescription())
-                    .amount(existing.getAmount())
-                    .flow(existing.getFlow())
-                    .origin(TransactionOrigin.MANUAL)
-                    .externalReference(existing.getExternalReference())
-                    .notes(existing.getNotes())
-                    .category(existing.getCategory())
-                    .createdAt(now)
-                    .updatedAt(now);
-                existing.getTags().forEach(financialTransaction::addTags);
-
+                FinancialTransaction financialTransaction = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
+                    existing,
+                    TransactionOrigin.MANUAL,
+                    now
+                );
                 financialTransaction = financialTransactionRepository.save(financialTransaction);
                 existing.setFinancialTransaction(financialTransaction);
                 existing.setStatus(TransactionCandidateStatus.POSTED);

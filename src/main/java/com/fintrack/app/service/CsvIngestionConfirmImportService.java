@@ -29,6 +29,7 @@ import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
+import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper;
 import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.time.Instant;
@@ -55,6 +56,7 @@ public class CsvIngestionConfirmImportService {
     private final TransactionCandidateRepository transactionCandidateRepository;
     private final CurrentUserService currentUserService;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
+    private final TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper;
     private final TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper;
     private final ObjectMapper objectMapper;
 
@@ -66,6 +68,7 @@ public class CsvIngestionConfirmImportService {
         TransactionCandidateRepository transactionCandidateRepository,
         CurrentUserService currentUserService,
         CsvIngestionReadinessService csvIngestionReadinessService,
+        TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper,
         TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper,
         ObjectMapper objectMapper
     ) {
@@ -76,6 +79,7 @@ public class CsvIngestionConfirmImportService {
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.currentUserService = currentUserService;
         this.csvIngestionReadinessService = csvIngestionReadinessService;
+        this.transactionCandidateFinancialTransactionMapper = transactionCandidateFinancialTransactionMapper;
         this.transactionCandidateWorkflowSummaryMapper = transactionCandidateWorkflowSummaryMapper;
         this.objectMapper = objectMapper;
     }
@@ -108,7 +112,9 @@ public class CsvIngestionConfirmImportService {
             if (record.getStatus() == IngestionRecordStatus.VALID) {
                 TransactionCandidate candidate = candidatesByRecordId.get(record.getId());
                 FinancialTransaction financialTransaction = financialTransactionRepository.save(
-                    toFinancialTransaction(ingestion, candidate, now)
+                    transactionCandidateFinancialTransactionMapper
+                        .toFinancialTransaction(candidate, TransactionOrigin.FILE_IMPORT, now)
+                        .transactionIngestion(ingestion)
                 );
                 candidate.setFinancialTransaction(financialTransaction);
                 candidate.setStatus(TransactionCandidateStatus.POSTED);
@@ -367,30 +373,6 @@ public class CsvIngestionConfirmImportService {
         if (candidate.getFinancialTransaction() != null) {
             throw new IllegalArgumentException("Unposted transaction candidate cannot be linked to a financial transaction");
         }
-    }
-
-    private FinancialTransaction toFinancialTransaction(TransactionIngestion ingestion, TransactionCandidate candidate, Instant now) {
-        FinancialTransaction financialTransaction = new FinancialTransaction()
-            .transactionDate(candidate.getTransactionDate())
-            .postingDate(candidate.getPostingDate())
-            .description(candidate.getDescription())
-            .amount(candidate.getAmount())
-            .flow(candidate.getFlow())
-            .origin(TransactionOrigin.FILE_IMPORT)
-            .externalReference(candidate.getExternalReference())
-            .notes(candidate.getNotes())
-            .createdAt(now)
-            .updatedAt(now)
-            .account(candidate.getAccount())
-            .category(candidate.getCategory())
-            .financialSubscription(null)
-            .transactionIngestion(ingestion);
-
-        if (candidate.getTags() != null) {
-            candidate.getTags().forEach(financialTransaction::addTags);
-        }
-
-        return financialTransaction;
     }
 
     private CsvIngestionConfirmImportResponseDTO response(TransactionIngestion ingestion, List<IngestionRecord> records, int createdNow) {

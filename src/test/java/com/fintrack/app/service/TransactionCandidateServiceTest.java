@@ -42,6 +42,7 @@ import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
+import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
 import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationService;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
@@ -100,6 +101,7 @@ class TransactionCandidateServiceTest {
         transactionCandidateService = new TransactionCandidateService(
             transactionCandidateRepository,
             transactionCandidateMapper,
+            new TransactionCandidateFinancialTransactionMapper(),
             currentUserService,
             financialAccountRepository,
             financialTransactionRepository,
