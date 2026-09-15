@@ -43,6 +43,8 @@ import com.fintrack.app.service.rules.RuleMatchResult;
 import com.fintrack.app.service.rules.RuleOutputConflict;
 import com.fintrack.app.service.rules.SkippedRuleOutput;
 import com.fintrack.app.service.rules.TagSuggestion;
+import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationResult;
+import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationService;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
@@ -50,7 +52,6 @@ import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -101,6 +102,8 @@ public class TransactionCandidateService {
 
     private final TransactionRuleEvaluationService transactionRuleEvaluationService;
 
+    private final TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService;
+
     public TransactionCandidateService(
         TransactionCandidateRepository transactionCandidateRepository,
         TransactionCandidateMapper transactionCandidateMapper,
@@ -111,7 +114,8 @@ public class TransactionCandidateService {
         TagRepository tagRepository,
         TransactionIngestionRepository transactionIngestionRepository,
         IngestionRecordRepository ingestionRecordRepository,
-        TransactionRuleEvaluationService transactionRuleEvaluationService
+        TransactionRuleEvaluationService transactionRuleEvaluationService,
+        TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService
     ) {
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.transactionCandidateMapper = transactionCandidateMapper;
@@ -123,6 +127,7 @@ public class TransactionCandidateService {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
+        this.transactionCandidateRuleApplicationService = transactionCandidateRuleApplicationService;
     }
 
     /**
@@ -272,16 +277,21 @@ public class TransactionCandidateService {
             rejectManualRuleReviewCommand(candidate);
             TransactionRuleEvaluationResult evaluation = evaluateRules(candidate);
             boolean hadManualSelections = candidate.getCategory() != null || !candidate.getTags().isEmpty();
-            boolean categoryApplied = applySuggestedCategory(candidate, evaluation);
-            List<Long> tagIdsApplied = applySuggestedTags(candidate, evaluation);
+            TransactionCandidateRuleApplicationResult application = transactionCandidateRuleApplicationService.applyFillEmptyOnly(
+                candidate,
+                evaluation,
+                hadManualSelections,
+                categoryId ->
+                    categoryRepository
+                        .findOneWithToOneRelationshipsByIdAndUserLogin(categoryId, candidate.getUser().getLogin())
+                        .orElseThrow(() -> new IllegalArgumentException("Suggested category is not accessible")),
+                tagId ->
+                    tagRepository
+                        .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, candidate.getUser().getLogin())
+                        .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+            );
 
-            if (hadManualSelections) {
-                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
-            } else if (categoryApplied || !tagIdsApplied.isEmpty() || evaluation.hasSuggestions()) {
-                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
-            } else {
-                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
-            }
+            candidate.setClassificationReviewStatus(application.recommendedClassificationReviewStatus());
 
             candidate.setUpdatedAt(Instant.now());
             validateCandidate(candidate, candidate);
@@ -290,8 +300,8 @@ public class TransactionCandidateService {
             TransactionCandidateRuleApplyResponseDTO response = new TransactionCandidateRuleApplyResponseDTO();
             response.setCandidate(transactionCandidateMapper.toDto(saved));
             response.setEvaluation(toRulePreviewResponse(saved, evaluation));
-            response.setCategoryApplied(categoryApplied);
-            response.setTagIdsApplied(tagIdsApplied);
+            response.setCategoryApplied(application.categoryApplied());
+            response.setTagIdsApplied(application.tagIdsApplied());
             return response;
         });
     }
@@ -709,38 +719,6 @@ public class TransactionCandidateService {
         if (candidate.getAmount() == null || candidate.getAmount().compareTo(BigDecimal.ZERO) <= 0 || candidate.getFlow() == null) {
             throw new IllegalArgumentException("Signed amount is required for rule preview");
         }
-    }
-
-    private boolean applySuggestedCategory(TransactionCandidate candidate, TransactionRuleEvaluationResult evaluation) {
-        if (
-            candidate.getCategory() == null &&
-            evaluation.suggestedCategory() != null &&
-            !evaluation.suggestedCategory().conflictsWithCurrentValue()
-        ) {
-            Category suggestedCategory = categoryRepository
-                .findOneWithToOneRelationshipsByIdAndUserLogin(evaluation.suggestedCategory().categoryId(), candidate.getUser().getLogin())
-                .orElseThrow(() -> new IllegalArgumentException("Suggested category is not accessible"));
-            candidate.setCategory(suggestedCategory);
-            return true;
-        }
-        return false;
-    }
-
-    private List<Long> applySuggestedTags(TransactionCandidate candidate, TransactionRuleEvaluationResult evaluation) {
-        List<Long> tagIdsApplied = new ArrayList<>();
-        Set<Long> tagIds = currentTagIds(candidate);
-        for (TagSuggestion suggestedTag : evaluation.suggestedTags()) {
-            if (suggestedTag.alreadyPresent() || suggestedTag.duplicateOfEarlierSuggestion() || tagIds.contains(suggestedTag.tagId())) {
-                continue;
-            }
-            Tag tag = tagRepository
-                .findOneWithToOneRelationshipsByIdAndUserLogin(suggestedTag.tagId(), candidate.getUser().getLogin())
-                .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"));
-            candidate.addTags(tag);
-            tagIds.add(tag.getId());
-            tagIdsApplied.add(tag.getId());
-        }
-        return tagIdsApplied;
     }
 
     private Set<Long> currentTagIds(TransactionCandidate candidate) {

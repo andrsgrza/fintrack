@@ -34,6 +34,8 @@ import com.fintrack.app.service.rules.RuleMatchResult;
 import com.fintrack.app.service.rules.RuleOutputConflict;
 import com.fintrack.app.service.rules.SkippedRuleOutput;
 import com.fintrack.app.service.rules.TagSuggestion;
+import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationResult;
+import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationService;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
@@ -61,6 +63,7 @@ public class FileImportCandidateClassificationService {
     private final TagRepository tagRepository;
     private final CurrentUserService currentUserService;
     private final TransactionRuleEvaluationService transactionRuleEvaluationService;
+    private final TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService;
     private final TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper;
 
     public FileImportCandidateClassificationService(
@@ -70,6 +73,7 @@ public class FileImportCandidateClassificationService {
         TagRepository tagRepository,
         CurrentUserService currentUserService,
         TransactionRuleEvaluationService transactionRuleEvaluationService,
+        TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService,
         TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
@@ -78,6 +82,7 @@ public class FileImportCandidateClassificationService {
         this.tagRepository = tagRepository;
         this.currentUserService = currentUserService;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
+        this.transactionCandidateRuleApplicationService = transactionCandidateRuleApplicationService;
         this.transactionCandidateWorkflowSummaryMapper = transactionCandidateWorkflowSummaryMapper;
     }
 
@@ -178,24 +183,26 @@ public class FileImportCandidateClassificationService {
                 candidate.getClassificationReviewStatus() == TransactionCandidateClassificationReviewStatus.USER_SELECTED ||
                 candidate.getCategory() != null ||
                 (candidate.getTags() != null && !candidate.getTags().isEmpty());
-            boolean categoryApplied = applySuggestedCategory(candidate, evaluation, userLogin);
-            List<Long> tagIdsApplied = applySuggestedTags(candidate, evaluation, userLogin);
+            TransactionCandidateRuleApplicationResult application = transactionCandidateRuleApplicationService.applyFillEmptyOnly(
+                candidate,
+                evaluation,
+                hadManualClassification,
+                categoryId -> resolveCategory(categoryId, userLogin, candidate.getFlow()),
+                tagId ->
+                    tagRepository
+                        .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
+                        .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+            );
 
-            if (hadManualClassification) {
-                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
-            } else if (categoryApplied || !tagIdsApplied.isEmpty() || evaluation.hasSuggestions()) {
-                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
-            } else {
-                candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
-            }
+            candidate.setClassificationReviewStatus(application.recommendedClassificationReviewStatus());
 
             candidate.setUpdatedAt(Instant.now());
             TransactionCandidate saved = transactionCandidateRepository.save(candidate);
             populateEvaluation(row, evaluation);
-            row.setAction(categoryApplied || !tagIdsApplied.isEmpty() ? "APPLIED" : "UNCHANGED");
+            row.setAction(application.hasAppliedChanges() ? "APPLIED" : "UNCHANGED");
             row.setCandidate(transactionCandidateWorkflowSummaryMapper.toDto(saved));
-            row.setCategoryApplied(categoryApplied);
-            row.setTagIdsApplied(tagIdsApplied);
+            row.setCategoryApplied(application.categoryApplied());
+            row.setTagIdsApplied(application.tagIdsApplied());
         } catch (IllegalArgumentException e) {
             row.setAction("SKIPPED");
             row.setError(e.getMessage());
@@ -371,35 +378,6 @@ public class FileImportCandidateClassificationService {
         if (!CategoryFlowCompatibilityValidator.isCompatible(category.getCategoryType(), flow)) {
             throw new IllegalArgumentException("Category type is not compatible with transaction flow");
         }
-    }
-
-    private boolean applySuggestedCategory(TransactionCandidate candidate, TransactionRuleEvaluationResult evaluation, String userLogin) {
-        if (
-            candidate.getCategory() == null &&
-            evaluation.suggestedCategory() != null &&
-            !evaluation.suggestedCategory().conflictsWithCurrentValue()
-        ) {
-            candidate.setCategory(resolveCategory(evaluation.suggestedCategory().categoryId(), userLogin, candidate.getFlow()));
-            return true;
-        }
-        return false;
-    }
-
-    private List<Long> applySuggestedTags(TransactionCandidate candidate, TransactionRuleEvaluationResult evaluation, String userLogin) {
-        List<Long> tagIdsApplied = new java.util.ArrayList<>();
-        Set<Long> tagIds = currentTagIds(candidate);
-        for (TagSuggestion suggestedTag : evaluation.suggestedTags()) {
-            if (suggestedTag.alreadyPresent() || suggestedTag.duplicateOfEarlierSuggestion() || tagIds.contains(suggestedTag.tagId())) {
-                continue;
-            }
-            Tag tag = tagRepository
-                .findOneWithToOneRelationshipsByIdAndUserLogin(suggestedTag.tagId(), userLogin)
-                .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"));
-            candidate.addTags(tag);
-            tagIds.add(tag.getId());
-            tagIdsApplied.add(tag.getId());
-        }
-        return tagIdsApplied;
     }
 
     private FileImportCandidateRulePreviewRowDTO basePreviewRow(TransactionCandidate candidate) {
