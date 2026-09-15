@@ -210,6 +210,8 @@ public interface TransactionCandidateRepository
     )
     Optional<TransactionCandidate> findOneByIdAndUserLoginForPosting(@Param("id") Long id, @Param("login") String login);
 
+    Optional<TransactionCandidate> findFirstByFinancialTransactionId(Long financialTransactionId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
         value = "delete from rel_transaction_candidate__tags where transaction_candidate_id = :transactionCandidateId",

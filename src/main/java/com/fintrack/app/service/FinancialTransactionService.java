@@ -10,6 +10,7 @@ import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
@@ -18,6 +19,7 @@ import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.CategorySuggestionDTO;
@@ -92,6 +94,8 @@ public class FinancialTransactionService {
 
     private final IngestionRecordRepository ingestionRecordRepository;
 
+    private final TransactionCandidateRepository transactionCandidateRepository;
+
     private final CurrentUserService currentUserService;
 
     private final TransactionRuleEvaluationService transactionRuleEvaluationService;
@@ -106,6 +110,7 @@ public class FinancialTransactionService {
         TransactionIngestionRepository transactionIngestionRepository,
         InternalTransferRepository internalTransferRepository,
         IngestionRecordRepository ingestionRecordRepository,
+        TransactionCandidateRepository transactionCandidateRepository,
         CurrentUserService currentUserService,
         TransactionRuleEvaluationService transactionRuleEvaluationService
     ) {
@@ -118,6 +123,7 @@ public class FinancialTransactionService {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.internalTransferRepository = internalTransferRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
+        this.transactionCandidateRepository = transactionCandidateRepository;
         this.currentUserService = currentUserService;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
     }
@@ -383,6 +389,7 @@ public class FinancialTransactionService {
         if (financialTransaction.isEmpty()) {
             return false;
         }
+        assertNotLinkedToTransactionCandidate(id);
         ingestionRecordRepository.markFinancialTransactionDeleted(
             id,
             IngestionRecordStatus.REJECTED,
@@ -393,6 +400,21 @@ public class FinancialTransactionService {
         financialTransactionRepository.deleteTagLinksByFinancialTransactionId(id);
         financialTransactionRepository.deleteById(id);
         return true;
+    }
+
+    private void assertNotLinkedToTransactionCandidate(Long financialTransactionId) {
+        transactionCandidateRepository
+            .findFirstByFinancialTransactionId(financialTransactionId)
+            .ifPresent(candidate -> {
+                if (candidate.getStatus() == TransactionCandidateStatus.POSTED) {
+                    throw new IllegalArgumentException(
+                        "Financial transaction cannot be deleted because it was posted from a transaction candidate."
+                    );
+                }
+                throw new IllegalArgumentException(
+                    "Financial transaction cannot be deleted because it is linked to a transaction candidate."
+                );
+            });
     }
 
     /**

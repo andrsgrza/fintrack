@@ -115,6 +115,7 @@ Active candidate foundation rules:
 - `READY_TO_POST` requires account, transaction date, nonblank description, amount > 0, flow, and account-matching currency.
 - EXPENSE category requires OUT flow; INCOME category requires IN flow.
 - `POSTED` requires a linked `FinancialTransaction`; that link is set only by server-side posting/conversion commands and cannot be set through normal create/update/PATCH.
+- A posted `FinancialTransaction` linked from a `TransactionCandidate` cannot be deleted through the direct FinancialTransaction delete endpoint. The candidate link is provenance/audit trail and must not be silently unlinked. If a non-`POSTED` candidate is ever linked to a transaction, direct transaction delete also rejects that corrupt state.
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
 - There is no global `NEEDS_REVIEW` candidate lifecycle status. Review needs are represented by specific fields: `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`.
@@ -167,6 +168,7 @@ FILE ingestion candidate preparation:
 - Pantalla 1 row review keeps prepared candidates consistent before Confirm Import: disabling a row removes its unposted `FILE_IMPORT` candidate and candidate tag joins; re-enabling the row does not restore the old candidate, and the next prepare creates a fresh candidate if the row is valid.
 - Editing a prepared row reprocesses `rawData.normalized` as the review source. If the edited row remains `VALID`, the existing unposted `FILE_IMPORT` candidate is synced immediately using prepare semantics, preserving candidate category/tags and marking fresh classification `STALE` when rule-input fields changed. Notes-only edits do not mark classification stale. If the edited row becomes non-`VALID`, its unposted candidate is removed.
 - Posted/imported candidates or candidates linked to a `FinancialTransaction` are not silently deleted by row review actions.
+- Workflow-level `TransactionIngestion` delete remains the controlled cleanup path for an ingestion tree: it removes candidate tag joins and candidates before deleting linked imported `FinancialTransaction` rows. This is intentionally separate from direct FinancialTransaction delete.
 - `GET /api/transaction-ingestions/{id}/workflow` is read-only and may expose an optional lightweight prepared candidate summary per row after prepare has run.
 - Workflow GET never creates/syncs candidates; candidate summaries are absent for rows without prepared candidates.
 - TC-3C.1 adds ingestion-scoped candidate classification commands for prepared `FILE_IMPORT` candidates:

@@ -21,6 +21,7 @@ import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
@@ -29,11 +30,17 @@ import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialTransactionService;
 import com.fintrack.app.service.dto.CategoryDTO;
@@ -126,6 +133,9 @@ class FinancialTransactionResourceIT {
 
     @Autowired
     private FinancialAccountRepository financialAccountRepository;
+
+    @Autowired
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Mock
     private FinancialTransactionRepository financialTransactionRepositoryMock;
@@ -1478,6 +1488,40 @@ class FinancialTransactionResourceIT {
         return financialTransactionRepository.saveAndFlush(otherTransaction);
     }
 
+    private TransactionCandidate saveLinkedCandidate(
+        FinancialTransaction transaction,
+        TransactionCandidateSource source,
+        TransactionCandidateStatus status
+    ) {
+        TransactionCandidate candidate = new TransactionCandidate()
+            .source(source)
+            .status(status)
+            .validationStatus(
+                status == TransactionCandidateStatus.POSTED
+                    ? TransactionCandidateValidationStatus.VALID
+                    : TransactionCandidateValidationStatus.STALE
+            )
+            .descriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED)
+            .transactionDate(transaction.getTransactionDate())
+            .postingDate(transaction.getPostingDate())
+            .description(transaction.getDescription())
+            .signedAmount(transaction.getFlow() == TransactionFlow.OUT ? transaction.getAmount().negate() : transaction.getAmount())
+            .amount(transaction.getAmount())
+            .flow(transaction.getFlow())
+            .currencySnapshot(transaction.getAccount().getCurrency())
+            .externalReference(transaction.getExternalReference())
+            .notes(transaction.getNotes())
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .postedAt(status == TransactionCandidateStatus.POSTED ? Instant.now() : null)
+            .user(transaction.getAccount().getUser())
+            .account(transaction.getAccount())
+            .category(transaction.getCategory())
+            .financialTransaction(transaction);
+        return transactionCandidateRepository.saveAndFlush(candidate);
+    }
+
     @Test
     @Transactional
     void createFinancialTransactionOnInaccessibleAccountFails() throws Exception {
@@ -2220,6 +2264,101 @@ class FinancialTransactionResourceIT {
         assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.REJECTED);
         assertThat(persistedRecord.getErrorCode()).isEqualTo("FINANCIAL_TRANSACTION_DELETED");
         assertThat(persistedRecord.getErrorMessage()).isEqualTo("Financial transaction was deleted manually.");
+        insertedFinancialTransaction = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialTransactionLinkedToManualPostedCandidateRejected() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        TransactionCandidate candidate = saveLinkedCandidate(
+            insertedFinancialTransaction,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.POSTED
+        );
+
+        restFinancialTransactionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, insertedFinancialTransaction.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(
+                jsonPath("$.detail").value("Financial transaction cannot be deleted because it was posted from a transaction candidate.")
+            );
+
+        em.flush();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(insertedFinancialTransaction.getId())).isPresent();
+        TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(persistedCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
+        assertThat(persistedCandidate.getFinancialTransaction().getId()).isEqualTo(insertedFinancialTransaction.getId());
+        insertedFinancialTransaction = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialTransactionLinkedToFileImportPostedCandidateRejectedAndLeavesIngestionRecordUntouched() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        TransactionIngestion ingestion = TransactionIngestionResourceIT.createEntity(em);
+        ingestion.setAccount(insertedFinancialTransaction.getAccount());
+        em.persist(ingestion);
+        IngestionRecord ingestionRecord = new IngestionRecord()
+            .recordIndex(0)
+            .status(IngestionRecordStatus.IMPORTED)
+            .rawData("{}")
+            .createdAt(Instant.now())
+            .financialTransaction(insertedFinancialTransaction)
+            .transactionIngestion(ingestion);
+        em.persist(ingestionRecord);
+        em.flush();
+        TransactionCandidate candidate = saveLinkedCandidate(
+            insertedFinancialTransaction,
+            TransactionCandidateSource.FILE_IMPORT,
+            TransactionCandidateStatus.POSTED
+        );
+        candidate.setTransactionIngestion(ingestion);
+        candidate.setIngestionRecord(ingestionRecord);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        restFinancialTransactionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, insertedFinancialTransaction.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest());
+
+        em.flush();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(insertedFinancialTransaction.getId())).isPresent();
+        TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(persistedCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
+        assertThat(persistedCandidate.getFinancialTransaction().getId()).isEqualTo(insertedFinancialTransaction.getId());
+        IngestionRecord persistedRecord = em.find(IngestionRecord.class, ingestionRecord.getId());
+        assertThat(persistedRecord.getFinancialTransaction().getId()).isEqualTo(insertedFinancialTransaction.getId());
+        assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.IMPORTED);
+        assertThat(persistedRecord.getErrorCode()).isNull();
+        assertThat(persistedRecord.getErrorMessage()).isNull();
+        insertedFinancialTransaction = null;
+    }
+
+    @Test
+    @Transactional
+    void deleteFinancialTransactionLinkedToNonPostedCandidateRejectedAsInvalidState() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        TransactionCandidate candidate = saveLinkedCandidate(
+            insertedFinancialTransaction,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.READY_TO_POST
+        );
+
+        restFinancialTransactionMockMvc
+            .perform(delete(ENTITY_API_URL_ID, insertedFinancialTransaction.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(
+                jsonPath("$.detail").value("Financial transaction cannot be deleted because it is linked to a transaction candidate.")
+            );
+
+        em.flush();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(insertedFinancialTransaction.getId())).isPresent();
+        TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(persistedCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+        assertThat(persistedCandidate.getFinancialTransaction().getId()).isEqualTo(insertedFinancialTransaction.getId());
         insertedFinancialTransaction = null;
     }
 
