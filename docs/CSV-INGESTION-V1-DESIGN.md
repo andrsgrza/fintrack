@@ -697,6 +697,7 @@ FILE ingestion upload now has an optional pre-review description normalization s
 - `rawData.raw` remains immutable.
 - `rawData.review.description` stores metadata about rule/user modifications.
 - `rawData.review.description` does not duplicate `originalDescription`; the original remains only in `rawData.raw.description`.
+- `USER_EDIT` is written only when a row PATCH actually changes the effective normalized description. Editing dates, signed amount, currency, external reference, notes, or another non-description field preserves the existing description review metadata exactly.
 - `rawData.suggestions` is not used.
 - UserPreference-based behavior is deferred.
 - Workflow row responses expose a read-only `descriptionReview` projection for UI display. It is derived from `rawData.raw.description`, `rawData.normalized.description`, and `rawData.review.description`; it does not change persisted `rawData`.

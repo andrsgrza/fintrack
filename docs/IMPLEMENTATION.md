@@ -1416,4 +1416,6 @@ Both FILE upload paths pass through `CsvIngestionWorkflowService.persistWorkflow
 
 Workflow row DTOs expose `descriptionReview` as a read-only projection for the review UI. The projection reads the immutable original description from `rawData.raw.description`, the final importable description from `rawData.normalized.description`, and source/rule/edit metadata from `rawData.review.description`. It does not change persistence or the stored `rawData` shape.
 
+A persisted row PATCH updates `rawData.review.description` only when its effective normalized description changes. In that case it records `source=USER_EDIT` using the existing manual-edit metadata convention. A PATCH limited to dates, amount, currency, external reference, notes, or another non-description normalized field preserves the existing description provenance and metadata.
+
 Category/tag `TransactionRule` evaluation is not invoked during Confirm Import. By TC-3D.1, Confirm Import consumes reviewed `FILE_IMPORT` candidate fields, including the candidate description that was synced from `rawData.normalized.description` during candidate preparation. Pantalla 1 re-evaluation buttons and UserPreference-driven behavior remain deferred.

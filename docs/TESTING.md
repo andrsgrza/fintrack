@@ -655,6 +655,7 @@ Key TC-3A FILE import candidate prepare assertions:
 - prepare is idempotent, reports unchanged rows, and does not create duplicate candidates.
 - changed `rawData.normalized` values sync existing non-posted candidates.
 - changed rule-input fields mark fresh classification review `STALE`; notes-only changes do not.
+- row-edit regression coverage preserves `rawData.review.description` rule/manual provenance for unrelated edits and records `USER_EDIT` only when the effective normalized description changes.
 - existing candidate category/tags are preserved during sync.
 - `POSTED` candidates are not modified.
 - foreign, non-FILE, completed, and no-valid-row preparations are rejected.

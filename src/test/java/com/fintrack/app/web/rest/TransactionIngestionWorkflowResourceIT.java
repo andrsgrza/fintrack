@@ -294,6 +294,186 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void rowEditChangingDescriptionReplacesRuleProvenanceAndSyncsPreparedCandidate() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithRuleNormalizedUberDescription();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-17", "2026-01-18", "Manual Uber", "-158.33", "MXN", "abc-123", "quoted, note")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.description").value("Manual Uber"))
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("USER_EDIT"));
+
+        JsonNode rawData = rawDataFor(record);
+        assertThat(rawData.path("normalized").path("description").asText()).isEqualTo("Manual Uber");
+        assertThat(rawData.path("review").path("description").path("source").asText()).isEqualTo("USER_EDIT");
+
+        TransactionCandidate synced = candidateForRecord(record);
+        assertThat(synced.getDescription()).isEqualTo("Manual Uber");
+        assertThat(synced.getDescriptionReviewStatus()).isEqualTo(TransactionCandidateDescriptionReviewStatus.USER_EDITED);
+        assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.STALE);
+    }
+
+    @Test
+    @Transactional
+    void rowEditChangingAmountPreservesRuleDescriptionProvenanceAndCandidateDescriptionReview() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithRuleNormalizedUberDescription();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.SUGGESTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+        JsonNode descriptionReviewBefore = descriptionReviewFor(record);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-17", "2026-01-18", "Uber", "-200.00", "MXN", "abc-123", "quoted, note")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("DESCRIPTION_RULE"));
+
+        JsonNode rawData = rawDataFor(record);
+        assertThat(rawData.path("normalized").path("description").asText()).isEqualTo("Uber");
+        assertThat(rawData.path("normalized").path("signedAmount").asText()).isEqualTo("-200.00");
+        assertThat(rawData.path("review").path("description")).isEqualTo(descriptionReviewBefore);
+
+        TransactionCandidate synced = candidateForRecord(record);
+        assertThat(synced.getSignedAmount()).isEqualByComparingTo("-200.00");
+        assertThat(synced.getDescriptionReviewStatus()).isEqualTo(TransactionCandidateDescriptionReviewStatus.AUTO_APPLIED);
+        assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.STALE);
+    }
+
+    @Test
+    @Transactional
+    void rowEditChangingDatesPreservesRuleDescriptionProvenance() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithRuleNormalizedUberDescription();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        JsonNode descriptionReviewBefore = descriptionReviewFor(record);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-19", "2026-01-20", "Uber", "-158.33", "MXN", "abc-123", "quoted, note")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("DESCRIPTION_RULE"));
+
+        JsonNode rawData = rawDataFor(record);
+        assertThat(rawData.path("normalized").path("transactionDate").asText()).isEqualTo("2026-01-19");
+        assertThat(rawData.path("normalized").path("postingDate").asText()).isEqualTo("2026-01-20");
+        assertThat(rawData.path("review").path("description")).isEqualTo(descriptionReviewBefore);
+    }
+
+    @Test
+    @Transactional
+    void rowEditChangingNotesAndExternalReferencePreservesRuleDescriptionProvenance() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithRuleNormalizedUberDescription();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        JsonNode descriptionReviewBefore = descriptionReviewFor(record);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-17", "2026-01-18", "Uber", "-158.33", "MXN", "updated-ref", "updated notes")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("DESCRIPTION_RULE"));
+
+        JsonNode rawData = rawDataFor(record);
+        assertThat(rawData.path("normalized").path("externalReference").asText()).isEqualTo("updated-ref");
+        assertThat(rawData.path("normalized").path("notes").asText()).isEqualTo("updated notes");
+        assertThat(rawData.path("review").path("description")).isEqualTo(descriptionReviewBefore);
+    }
+
+    @Test
+    @Transactional
+    void rowEditWithSameEffectiveDescriptionPreservesRuleDescriptionProvenance() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithRuleNormalizedUberDescription();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        JsonNode descriptionReviewBefore = descriptionReviewFor(record);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-17", "2026-01-18", "  Uber  ", "-158.33", "MXN", "abc-123", "quoted, note")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.description").value("Uber"))
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("DESCRIPTION_RULE"));
+
+        assertThat(descriptionReviewFor(record)).isEqualTo(descriptionReviewBefore);
+    }
+
+    @Test
+    @Transactional
+    void rowEditOfUnrelatedFieldPreservesExistingUserEditDescriptionMetadata() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithRuleNormalizedUberDescription();
+        IngestionRecord record = recordsFor(ingestion).get(2);
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-17", "2026-01-18", "Manual Uber", "-158.33", "MXN", "abc-123", "quoted, note")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("USER_EDIT"));
+        JsonNode descriptionReviewBefore = descriptionReviewFor(record);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-17", "2026-01-18", "Manual Uber", "-200.00", "MXN", "abc-123", "quoted, note")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("USER_EDIT"));
+
+        assertThat(descriptionReviewFor(record)).isEqualTo(descriptionReviewBefore);
+    }
+
+    @Test
+    @Transactional
     void workflowRowDescriptionReviewIgnoresInvalidEditedAt() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithValidRows();
         IngestionRecord record = recordsFor(ingestion).get(2);
@@ -2989,6 +3169,12 @@ class TransactionIngestionWorkflowResourceIT {
         return transactionIngestionRepository.findAll().stream().max(Comparator.comparing(TransactionIngestion::getId)).orElseThrow();
     }
 
+    private TransactionIngestion createWorkflowWithRuleNormalizedUberDescription() throws Exception {
+        DescriptionNormalizationRule rule = persistDescriptionNormalizationRule("Normalize Uber", "Uber");
+        persistDescriptionNormalizationCondition(rule, "Uber");
+        return createWorkflowWithValidRows();
+    }
+
     private TransactionIngestion createWorkflowWithSingleValidRow() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
         String csv =
@@ -3135,6 +3321,14 @@ class TransactionIngestionWorkflowResourceIT {
         payload.put("flow", "IN");
         payload.put("status", "IMPORTED");
         return payload;
+    }
+
+    private JsonNode rawDataFor(IngestionRecord record) throws Exception {
+        return objectMapper.readTree(ingestionRecordRepository.findById(record.getId()).orElseThrow().getRawData());
+    }
+
+    private JsonNode descriptionReviewFor(IngestionRecord record) throws Exception {
+        return rawDataFor(record).path("review").path("description").deepCopy();
     }
 
     private IngestionRecord validRecordFor(TransactionIngestion ingestion, int recordIndex) throws Exception {

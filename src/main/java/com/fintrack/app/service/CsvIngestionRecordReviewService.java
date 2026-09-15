@@ -25,6 +25,7 @@ import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -194,6 +195,9 @@ public class CsvIngestionRecordReviewService {
 
     private String updateRawDataStatus(IngestionRecord record, CsvRowResult result, boolean edited) {
         ObjectNode root = rawData(record);
+        String previousNormalizedDescription = textOrNull(root.path("normalized"), "description");
+        boolean descriptionChanged =
+            result != null && !Objects.equals(previousNormalizedDescription, result.getNormalized().getDescription());
         if (result != null) {
             root.set("normalized", objectMapper.valueToTree(normalizedMap(result)));
             root.set("errors", objectMapper.valueToTree(result.getErrors()));
@@ -204,14 +208,16 @@ public class CsvIngestionRecordReviewService {
             review.put("edited", true);
             review.put("editedAt", Instant.now().toString());
             review.put("editedBy", currentUserService.getCurrentUserLogin());
-            ObjectNode descriptionReview = review.path("description").isObject()
-                ? (ObjectNode) review.path("description")
-                : objectMapper.createObjectNode();
-            descriptionReview.put("source", "USER_EDIT");
-            descriptionReview.put("resultingDescription", result == null ? null : result.getNormalized().getDescription());
-            descriptionReview.put("editedAt", Instant.now().toString());
-            descriptionReview.put("editedBy", currentUserService.getCurrentUserLogin());
-            review.set("description", descriptionReview);
+            if (descriptionChanged) {
+                ObjectNode descriptionReview = review.path("description").isObject()
+                    ? (ObjectNode) review.path("description")
+                    : objectMapper.createObjectNode();
+                descriptionReview.put("source", "USER_EDIT");
+                descriptionReview.put("resultingDescription", result.getNormalized().getDescription());
+                descriptionReview.put("editedAt", Instant.now().toString());
+                descriptionReview.put("editedBy", currentUserService.getCurrentUserLogin());
+                review.set("description", descriptionReview);
+            }
             root.set("review", review);
         }
         try {
