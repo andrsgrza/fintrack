@@ -831,6 +831,20 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
+    void expenseCategoryAcceptsFlowOut() {
+        Category expenseCategory = category(CategoryType.EXPENSE, user);
+
+        assertThat(saveCandidateWithCategoryAndFlow(expenseCategory, TransactionFlow.OUT).getFlow()).isEqualTo(TransactionFlow.OUT);
+    }
+
+    @Test
+    void incomeCategoryAcceptsFlowIn() {
+        Category incomeCategory = category(CategoryType.INCOME, user);
+
+        assertThat(saveCandidateWithCategoryAndFlow(incomeCategory, TransactionFlow.IN).getFlow()).isEqualTo(TransactionFlow.IN);
+    }
+
+    @Test
     void bothCategoryAcceptsInAndOut() {
         Category bothCategory = category(CategoryType.BOTH, user);
         assertThat(saveCandidateWithCategoryAndFlow(bothCategory, TransactionFlow.IN).getFlow()).isEqualTo(TransactionFlow.IN);

@@ -658,6 +658,33 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
+    void applyRulesDoesNotDuplicateSameSuggestedTagFromLaterMatchingRule() throws Exception {
+        User owner = currentUser();
+        FinancialAccount account = createAccount(owner);
+        Tag suggestedTag = createTag(owner);
+        createMatchingRule(owner, null, suggestedTag, "Coffee");
+        createMatchingRule("Later duplicate tag rule", owner, null, suggestedTag, "Coffee", 1, true);
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(owner, account, "Coffee shop", new BigDecimal("-20.00"));
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/apply-rules", candidate.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.categoryApplied").value(false))
+            .andExpect(jsonPath("$.tagIdsApplied.length()").value(1))
+            .andExpect(jsonPath("$.tagIdsApplied[0]").value(suggestedTag.getId()))
+            .andExpect(jsonPath("$.candidate.tags.length()").value(1))
+            .andExpect(jsonPath("$.candidate.tags[0].id").value(suggestedTag.getId()))
+            .andExpect(jsonPath("$.candidate.classificationReviewStatus").value("SUGGESTED"));
+
+        em.flush();
+        em.clear();
+
+        TransactionCandidate persisted = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(persisted.getTags()).extracting(Tag::getId).containsExactly(suggestedTag.getId());
+    }
+
+    @Test
+    @Transactional
     void applyRulesWithNoSuggestionsMarksNotApplicable() throws Exception {
         User owner = currentUser();
         FinancialAccount account = createAccount(owner);
@@ -1024,16 +1051,30 @@ class TransactionCandidateResourceIT {
     }
 
     private void createMatchingRule(User owner, Category resultingCategory, Tag resultingTag, String descriptionValue, boolean active) {
+        createMatchingRule("Candidate rule", owner, resultingCategory, resultingTag, descriptionValue, 0, active);
+    }
+
+    private void createMatchingRule(
+        String name,
+        User owner,
+        Category resultingCategory,
+        Tag resultingTag,
+        String descriptionValue,
+        int priority,
+        boolean active
+    ) {
         TransactionRule rule = new TransactionRule()
-            .name("Candidate rule")
-            .priority(0)
+            .name(name)
+            .priority(priority)
             .conditionLogic(RuleConditionLogic.ALL)
             .active(active)
             .createdAt(Instant.now())
             .updatedAt(Instant.now())
             .user(owner)
             .resultingCategory(resultingCategory);
-        rule.addResultingTags(resultingTag);
+        if (resultingTag != null) {
+            rule.addResultingTags(resultingTag);
+        }
         em.persist(rule);
 
         TransactionRuleCondition condition = new TransactionRuleCondition()

@@ -1787,6 +1787,69 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void fileImportCandidateClassificationPatchEnforcesCategoryFlowCompatibilityMatrix() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Category expenseCategory = persistCategory("Expense", CategoryType.EXPENSE, currentMockUser());
+        Category incomeCategory = persistCategory("Income", CategoryType.INCOME, currentMockUser());
+        Category bothCategory = persistCategory("Both", CategoryType.BOTH, currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(expenseCategory.getId(), List.of())))
+            )
+            .andExpect(status().isOk());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(bothCategory.getId(), List.of())))
+            )
+            .andExpect(status().isOk());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(incomeCategory.getId(), List.of())))
+            )
+            .andExpect(status().isBadRequest());
+
+        candidate = candidateForRecord(record);
+        candidate.setSignedAmount(new java.math.BigDecimal("274.00"));
+        candidate.setAmount(new java.math.BigDecimal("274.00"));
+        candidate.setFlow(TransactionFlow.IN);
+        candidate.setCategory(null);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(incomeCategory.getId(), List.of())))
+            )
+            .andExpect(status().isOk());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(bothCategory.getId(), List.of())))
+            )
+            .andExpect(status().isOk());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(expenseCategory.getId(), List.of())))
+            )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void fileImportCandidateClassificationPatchRejectsInvalidCategoryTagAndCandidateScope() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);

@@ -70,6 +70,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -1625,6 +1626,21 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
+    void createFinancialTransactionCategoryFlowCompatibilityMatrix() throws Exception {
+        Category expenseCategory = persistCategory("Expense", financialTransaction.getAccount().getUser(), CategoryType.EXPENSE);
+        Category incomeCategory = persistCategory("Income", financialTransaction.getAccount().getUser(), CategoryType.INCOME);
+        Category bothCategory = persistCategory("Both", financialTransaction.getAccount().getUser(), CategoryType.BOTH);
+
+        createTransactionWithCategoryAndFlow(expenseCategory, TransactionFlow.OUT).andExpect(status().isCreated());
+        createTransactionWithCategoryAndFlow(bothCategory, TransactionFlow.OUT).andExpect(status().isCreated());
+        createTransactionWithCategoryAndFlow(incomeCategory, TransactionFlow.IN).andExpect(status().isCreated());
+        createTransactionWithCategoryAndFlow(bothCategory, TransactionFlow.IN).andExpect(status().isCreated());
+        createTransactionWithCategoryAndFlow(expenseCategory, TransactionFlow.IN).andExpect(status().isBadRequest());
+        createTransactionWithCategoryAndFlow(incomeCategory, TransactionFlow.OUT).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void createFinancialTransactionWithoutCategoryAppliesSuggestedCategory() throws Exception {
         Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
         persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(), true, "Uber");
@@ -2710,6 +2726,17 @@ class FinancialTransactionResourceIT {
         );
     }
 
+    private ResultActions createTransactionWithCategoryAndFlow(Category category, TransactionFlow flow) throws Exception {
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setFlow(flow);
+        financialTransactionDTO.setCategory(categoryDTO(category));
+
+        return restFinancialTransactionMockMvc.perform(
+            post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO))
+        );
+    }
+
     private ObjectNode previewRequest(String description) {
         ObjectNode request = om.createObjectNode();
         request.put("accountId", financialTransaction.getAccount().getId());
@@ -2725,9 +2752,13 @@ class FinancialTransactionResourceIT {
     }
 
     private Category persistCategory(String name, User user) {
+        return persistCategory(name, user, CategoryType.BOTH);
+    }
+
+    private Category persistCategory(String name, User user, CategoryType categoryType) {
         Category category = CategoryResourceIT.createEntity(em);
         category.setName(name);
-        category.setCategoryType(CategoryType.BOTH);
+        category.setCategoryType(categoryType);
         category.setUser(user);
         em.persist(category);
         em.flush();
