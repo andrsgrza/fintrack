@@ -2699,6 +2699,37 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void confirmRejectsCandidateLinkedToRejectedFailedOrSkippedRowAndDoesNotImportOtherValidRows() throws Exception {
+        for (IngestionRecordStatus staleRowStatus : List.of(
+            IngestionRecordStatus.REJECTED,
+            IngestionRecordStatus.FAILED,
+            IngestionRecordStatus.SKIPPED_DUPLICATE
+        )) {
+            TransactionIngestion ingestion = createWorkflowWithValidRows();
+            prepareCandidatesForConfirm(ingestion, TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+            List<IngestionRecord> records = recordsFor(ingestion);
+            records.get(0).setStatus(staleRowStatus);
+            ingestionRecordRepository.saveAndFlush(records.get(0));
+
+            confirmImport(ingestion)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Transaction candidate is linked to a non-valid ingestion record"));
+
+            assertThat(financialTransactionRepository.count()).isZero();
+            assertThat(recordsFor(ingestion))
+                .extracting(IngestionRecord::getStatus)
+                .containsExactly(staleRowStatus, IngestionRecordStatus.VALID, IngestionRecordStatus.VALID);
+            assertThat(
+                transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user")
+            ).allSatisfy(candidate -> assertThat(candidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST));
+            assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+                IngestionStatus.READY
+            );
+        }
+    }
+
+    @Test
+    @Transactional
     void confirmRejectsCandidateRecordMismatchAcrossIngestions() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         TransactionCandidate candidate = preparedCandidateForConfirm(
@@ -2766,6 +2797,27 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
         assertThat(recordsFor(ingestion).get(0).getStatus()).isEqualTo(IngestionRecordStatus.VALID);
         assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
+    }
+
+    @Test
+    @Transactional
+    void confirmRejectsFileImportCandidateWithoutIngestionRecord() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        TransactionCandidate candidate = preparedCandidateForConfirm(
+            ingestion,
+            TransactionCandidateClassificationReviewStatus.USER_SELECTED
+        );
+        candidate.setIngestionRecord(null);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        confirmImport(ingestion)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Transaction candidate is missing its ingestion record"));
+
+        assertThat(financialTransactionRepository.count()).isZero();
+        TransactionCandidate orphanCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
+        assertThat(orphanCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+        assertThat(orphanCandidate.getFinancialTransaction()).isNull();
     }
 
     @Test
