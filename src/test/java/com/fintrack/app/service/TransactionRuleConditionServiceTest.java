@@ -27,7 +27,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -52,7 +51,6 @@ class TransactionRuleConditionServiceTest {
     @Mock
     private FinancialAccountRepository financialAccountRepository;
 
-    @InjectMocks
     private TransactionRuleConditionService transactionRuleConditionService;
 
     private User currentUser;
@@ -66,6 +64,21 @@ class TransactionRuleConditionServiceTest {
 
     @BeforeEach
     void setUp() {
+        TransactionRuleConditionValidator transactionRuleConditionValidator = new TransactionRuleConditionValidator(
+            transactionRuleConditionRepository,
+            financialAccountRepository
+        );
+        TransactionRuleFlowCategoryCompatibilityValidator transactionRuleFlowCategoryCompatibilityValidator =
+            new TransactionRuleFlowCategoryCompatibilityValidator(transactionRuleConditionValidator);
+        transactionRuleConditionService = new TransactionRuleConditionService(
+            transactionRuleConditionRepository,
+            transactionRuleConditionMapper,
+            currentUserService,
+            transactionRuleRepository,
+            transactionRuleConditionValidator,
+            transactionRuleFlowCategoryCompatibilityValidator
+        );
+
         currentUser = new User();
         currentUser.setId(2L);
         currentUser.setLogin(CURRENT_USER_LOGIN);

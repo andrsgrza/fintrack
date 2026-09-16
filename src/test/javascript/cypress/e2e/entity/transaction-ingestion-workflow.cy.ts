@@ -697,6 +697,19 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       contextualTransactionRules.push(response?.body);
     });
 
+    cy.get('[data-cy="workflowNewNormalizationRule"]').click();
+    cy.get('#contextual-description-rule-name').type(uniqueName('global-normalization-reevaluate-all'));
+    cy.get('#contextual-description-rule-result').type('Normalized after global reevaluation');
+    cy.get('[data-cy="contextualRuleSaveAndReevaluateAll"]').click();
+    cy.wait('@createConfiguredNormalizationRule').then(({ response }) => {
+      expect(response?.statusCode).to.equal(201);
+      contextualDescriptionRules.push(response?.body);
+    });
+    cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.deep.equal({ apply: false, protectManualChanges: true });
+    });
+
     cy.then(() => {
       candidatePreviewCalls = 0;
       descriptionReevaluationCalls = 0;
@@ -739,14 +752,22 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       'OUT',
     );
     cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="ACCOUNT"]').should('not.exist');
-    cy.get('#contextual-transaction-rule-name').clear().type(uniqueName('row-transaction'));
-    cy.get('[data-cy="contextualRuleSave"]').click();
+    const rowTransactionRuleName = uniqueName('row-transaction');
+    cy.get('#contextual-transaction-rule-name').clear().type(rowTransactionRuleName);
+    cy.get('[data-cy="contextualRuleSaveAndReevaluateRow"]').click();
     cy.wait('@createConfiguredTransactionRule').then(({ response }) => {
       expect(response?.statusCode).to.equal(201);
       contextualTransactionRules.push(response?.body);
     });
+    cy.wait('@candidateRulePreviewRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.include({ scope: 'ALL' });
+      expect(request.body.candidateIds).to.have.length(1);
+      const previewedRow = response?.body.rows.find(row => row.candidate?.description === outDescription);
+      expect(previewedRow?.matchedRules.map(rule => rule.ruleName)).to.include(rowTransactionRuleName);
+    });
     cy.then(() => {
-      expect(candidatePreviewCalls).to.equal(0);
+      expect(candidatePreviewCalls).to.equal(1);
       expect(descriptionReevaluationCalls).to.equal(1);
     });
   });
