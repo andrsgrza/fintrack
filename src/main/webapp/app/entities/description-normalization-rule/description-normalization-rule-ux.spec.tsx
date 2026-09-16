@@ -19,7 +19,6 @@ const mockDispatch = jest.fn();
 const mockGetEntities = jest.fn(params => ({ type: 'descriptionNormalizationRule/getEntities', payload: params }));
 const mockGetEntity = jest.fn(id => ({ type: 'descriptionNormalizationRule/getEntity', payload: id }));
 const mockReset = jest.fn(() => ({ type: 'descriptionNormalizationRule/reset' }));
-const mockCreateEntity = jest.fn(entity => ({ type: 'descriptionNormalizationRule/createEntity', payload: entity }));
 const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'descriptionNormalizationRule/partialUpdateEntity', payload: entity }));
 let mockState;
 
@@ -32,7 +31,6 @@ jest.mock('./description-normalization-rule.reducer', () => ({
   getEntities: params => mockGetEntities(params),
   getEntity: id => mockGetEntity(id),
   reset: () => mockReset(),
-  createEntity: entity => mockCreateEntity(entity),
   partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
 }));
 
@@ -104,7 +102,7 @@ describe('DescriptionNormalizationRule UX', () => {
     await waitFor(() => expect(mockAxiosPut).toHaveBeenCalledWith('api/description-normalization-rules/reorder', { orderedIds: [2, 1] }));
   });
 
-  it('create starts inactive and renders no priority input', async () => {
+  it('create starts inactive, omits priority, and atomically posts configured conditions', async () => {
     render(
       <MemoryRouter initialEntries={['/description-normalization-rule/new']}>
         <Routes>
@@ -116,11 +114,19 @@ describe('DescriptionNormalizationRule UX', () => {
     expect(screen.queryByLabelText(/priority/i)).toBeNull();
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Normalize Uber' } });
     fireEvent.change(screen.getByLabelText(/resulting description/i), { target: { value: 'Uber' } });
+    fireEvent.click(screen.getByRole('button', { name: /add condition/i }));
+    fireEvent.change(screen.getByLabelText(/^value$/i), { target: { value: 'UBER BV' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
     await waitFor(() =>
-      expect(mockCreateEntity).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'Normalize Uber', active: false, priority: undefined }),
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        'api/description-normalization-rules/configured',
+        expect.objectContaining({
+          name: 'Normalize Uber',
+          active: false,
+          resultingDescription: 'Uber',
+          conditions: [expect.objectContaining({ operator: 'CONTAINS', value: 'UBER BV', position: 0 })],
+        }),
       ),
     );
   });

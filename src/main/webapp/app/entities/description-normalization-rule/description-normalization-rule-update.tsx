@@ -5,6 +5,8 @@ import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
+import { IContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
+import DescriptionNormalizationRuleConfiguredForm from './components/description-normalization-rule-configured-form';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { createEntity, getEntity, partialUpdateEntity, reset } from './description-normalization-rule.reducer';
 
@@ -18,6 +20,10 @@ export const DescriptionNormalizationRuleUpdate = () => {
   const updating = useAppSelector(state => state.descriptionNormalizationRule.updating);
   const updateSuccess = useAppSelector(state => state.descriptionNormalizationRule.updateSuccess);
   const [conditionCount, setConditionCount] = useState<number | null>(null);
+
+  const standaloneSaveActions: IContextualRuleSaveAction[] = [
+    { action: 'SAVE', labelKey: 'entity.action.save', label: 'Save', dataCy: 'entityCreateSaveButton' },
+  ];
 
   useEffect(() => {
     if (isNew) {
@@ -66,6 +72,29 @@ export const DescriptionNormalizationRuleUpdate = () => {
       : {
           ...rule,
         };
+
+  if (isNew) {
+    return (
+      <div>
+        <Row className="justify-content-center">
+          <Col md="8">
+            <h2 data-cy="DescriptionNormalizationRuleCreateUpdateHeading">
+              <Translate contentKey="fintrackApp.descriptionNormalizationRule.createTitle">Create Description Normalization Rule</Translate>
+            </h2>
+          </Col>
+        </Row>
+        <Row className="justify-content-center">
+          <Col md="8">
+            <DescriptionNormalizationRuleConfiguredForm
+              saveActions={standaloneSaveActions}
+              onSaved={() => navigate('/description-normalization-rule')}
+              onCancel={() => navigate('/description-normalization-rule')}
+            />
+          </Col>
+        </Row>
+      </div>
+    );
+  }
 
   return (
     <div>

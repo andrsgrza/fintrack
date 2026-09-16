@@ -2128,4 +2128,153 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByText('Unsaved edit')).toBeNull();
     expect(mockAxiosPatch).not.toHaveBeenCalled();
   });
+
+  it('renders global contextual rule actions and opens a normalization editor without navigating away from the persisted review', async () => {
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [persistedReviewResponse.data.rows[0]],
+        },
+      },
+      { 300: { id: 400 } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation(url =>
+      url === 'api/transaction-ingestions/100/candidates/rule-preview'
+        ? Promise.resolve(classificationPreviewResponse)
+        : Promise.resolve({ data: {} }),
+    );
+    renderPersistedReview();
+
+    expect(await screen.findByRole('button', { name: /new transaction rule/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /new normalization rule/i }));
+    expect((await screen.findAllByText('New normalization rule')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('transactionIngestionRuleCreationModal')).toBeTruthy();
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('prefills a row normalization rule from raw and normalized descriptions, and save does not reevaluate the row', async () => {
+    const row = {
+      ...persistedReviewResponse.data.rows[0],
+      description: 'Uber',
+      descriptionReview: {
+        source: 'DESCRIPTION_RULE',
+        originalDescription: 'UBER *TRIP 123',
+        normalizedDescription: 'Uber',
+        resultingDescription: 'Uber',
+      },
+    };
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [row],
+        },
+      },
+      { 300: { id: 400, description: 'Uber' } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation(url => {
+      if (url === 'api/transaction-ingestions/100/candidates/rule-preview') {
+        return Promise.resolve(classificationPreviewResponse);
+      }
+      if (url === 'api/description-normalization-rules/configured') {
+        return Promise.resolve({ data: { id: 901, name: 'Normalize Uber', active: false, conditions: [] } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPersistedReview();
+
+    const workflowRow = await screen.findByTestId('workflowRow-300');
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    fireEvent.click(await screen.findByTestId('workflowRowCreateNormalization-300'));
+
+    expect((screen.getByTestId('contextualDescriptionRuleResult') as HTMLInputElement).value).toBe('Uber');
+    expect((screen.getByTestId('contextualDescriptionRuleConditionValue-0') as HTMLInputElement).value).toBe('UBER *TRIP 123');
+
+    fireEvent.click(within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        'api/description-normalization-rules/configured',
+        expect.objectContaining({
+          active: false,
+          resultingDescription: 'Uber',
+          conditions: [expect.objectContaining({ operator: 'CONTAINS', value: 'UBER *TRIP 123', position: 0 })],
+        }),
+      ),
+    );
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/descriptions/reevaluate')).toHaveLength(0);
+    expect((await screen.findByTestId('workflowRuleCreationFeedback')).textContent).toContain('Rule saved.');
+    expect(rowForRecord(300).textContent).toContain('Uber');
+  });
+
+  it('prefills a row transaction rule from the persisted candidate and reevaluates only that candidate on request', async () => {
+    const row = { ...persistedReviewResponse.data.rows[0], description: 'Uber', signedAmount: '-12.00', amount: '12.00', flow: 'OUT' };
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [row],
+        },
+      },
+      {
+        300: { id: 400, description: 'Uber', flow: 'OUT', categoryId: 7, categoryName: 'Transport', tagIds: [3], tagNames: ['Ride share'] },
+      },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation(url => {
+      if (url === 'api/transaction-ingestions/100/candidates/rule-preview') {
+        return Promise.resolve({ data: { ...classificationPreviewResponse.data, rows: [] } });
+      }
+      if (url === 'api/transaction-rules/configured') {
+        return Promise.resolve({ data: { id: 902, name: 'Rule for Uber', conditions: [] } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPersistedReview();
+
+    const workflowRow = await screen.findByTestId('workflowRow-300');
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
+
+    expect((screen.getByTestId('contextualTransactionRuleCategory') as HTMLSelectElement).value).toBe('7');
+    expect((screen.getByTestId('contextualTransactionRuleTags') as HTMLSelectElement).value).toBe('3');
+    fireEvent.click(
+      within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', {
+        name: /save and reevaluate this row/i,
+      }),
+    );
+
+    await waitFor(() => {
+      const configuredCall = mockAxiosPost.mock.calls.find(([url]) => url === 'api/transaction-rules/configured');
+      expect(configuredCall).toBeDefined();
+      expect(configuredCall?.[1]).toEqual(
+        expect.objectContaining({
+          resultingCategory: { id: 7 },
+          resultingTags: [{ id: '3' }],
+          conditions: expect.arrayContaining([
+            expect.objectContaining({ field: 'DESCRIPTION', operator: 'CONTAINS', value: 'Uber' }),
+            expect.objectContaining({ field: 'FLOW', operator: 'EQUALS', value: 'OUT' }),
+          ]),
+        }),
+      );
+    });
+    expect(
+      mockAxiosPost.mock.calls.some(
+        ([url, payload]) =>
+          url === 'api/transaction-ingestions/100/candidates/rule-preview' &&
+          payload?.candidateIds?.length === 1 &&
+          payload.candidateIds[0] === 400,
+      ),
+    ).toBe(true);
+    expect(mockAxiosPatch).not.toHaveBeenCalled();
+  });
 });

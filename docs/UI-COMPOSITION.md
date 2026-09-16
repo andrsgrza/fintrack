@@ -677,10 +677,9 @@ Canonical ingestion product writes should use the TransactionIngestion workflow 
 Description normalization rules follow the same parent-centered composition pattern as TransactionRule:
 
 - list page owns reorder controls;
-- create page saves inactive draft;
-- create does not manage conditions inline;
-- detail page embeds the conditions collection editor;
-- edit page edits scalar parent fields and links back to detail for conditions;
+- product create uses the configured parent + local conditions command and does not create an empty draft;
+- configured create keeps local conditions until one atomic save; legacy detail condition management remains technical/direct-maintenance compatibility;
+- edit page retains scalar parent editing and detail condition maintenance for existing rules;
 - condition forms have no field selector because every condition evaluates original imported description.
 
 The product route is:
@@ -690,6 +689,14 @@ The product route is:
 ```
 
 Standalone generated/debug condition screens are not the product flow for managing conditions.
+
+### Transaction Ingestion contextual rule editor
+
+The unified FILE-ingestion review opens the existing full configured rule editors inside a modal rather than navigating to generated entity screens. The global **New normalization rule** and **New transaction rule** actions start blank product forms. An eligible row's **Create rule** menu offers the same forms with editable review-only prefills.
+
+- Normalization-rule row prefill: condition value = immutable original description; result = current normalized/manual description.
+- Transaction-rule row prefill: `DESCRIPTION CONTAINS` current persisted candidate description and `FLOW EQUALS` current candidate flow; persisted candidate category/tags are outputs. Account context is informational and never becomes an automatic condition; transient suggestions are never persisted as outputs.
+- Save only writes the formal rule. Save + reevaluate this row/all runs the existing scoped reevaluation command only after save succeeds. None of these actions confirms import or writes category/tags to `rawData`.
 
 ## TransactionRule generated technical/debug surfaces
 

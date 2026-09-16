@@ -15,6 +15,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
   let tag: E2EEntity | undefined;
   let manualTag: E2EEntity | undefined;
   let rule: E2EEntity | undefined;
+  let contextualDescriptionRules: E2EEntity[] = [];
+  let contextualTransactionRules: E2EEntity[] = [];
   let transactionIngestionId: number | undefined;
   let scenarioToken: string;
   let outDescription: string;
@@ -195,6 +197,24 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       });
       rule = undefined;
     }
+
+    contextualDescriptionRules.forEach(contextualRule => {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/description-normalization-rules/${contextualRule.id}`,
+        failOnStatusCode: false,
+      });
+    });
+    contextualDescriptionRules = [];
+
+    contextualTransactionRules.forEach(contextualRule => {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/transaction-rules/${contextualRule.id}`,
+        failOnStatusCode: false,
+      });
+    });
+    contextualTransactionRules = [];
 
     if (tag?.id) {
       cy.authenticatedRequest({
@@ -612,6 +632,123 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-cy="workflowConfirmBlocked"]').should('exist');
     cy.get('[data-cy="workflowContinueClassification"]').should('not.exist');
     cy.get('[data-cy="workflowClassificationReview"]').should('not.exist');
+  });
+
+  it('creates global and row-contextual rules without mutating review state until an explicit reevaluation', () => {
+    const csv = [header, `2026-01-16,,${outDescription},-100.00,MXN,${scenarioToken}-context,contextual rule row`].join('\n');
+    let descriptionReevaluationCalls = 0;
+    let candidatePreviewCalls = 0;
+
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview', req => {
+      candidatePreviewCalls += 1;
+      req.continue();
+    }).as('candidateRulePreviewRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/apply-rules').as('applyCandidateRulesRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/descriptions/reevaluate', req => {
+      descriptionReevaluationCalls += 1;
+      req.continue();
+    }).as('reevaluateDescriptionsRequest');
+    cy.intercept('POST', '/api/description-normalization-rules/configured').as('createConfiguredNormalizationRule');
+    cy.intercept('POST', '/api/transaction-rules/configured').as('createConfiguredTransactionRule');
+    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+
+    uploadCsvFromCreatePage(csv, 'contextual-rule-creation.csv');
+
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
+
+    cy.get('[data-cy="workflowNewNormalizationRule"]').click();
+    cy.get('[data-cy="transactionIngestionRuleCreationModal"]').should('be.visible');
+    cy.get('#contextual-description-rule-name').type(uniqueName('global-normalization'));
+    cy.get('#contextual-description-rule-result').type('Normalized global description');
+    cy.contains('button', /Add condition|Agregar condición/i).click();
+    cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').type(scenarioToken);
+    cy.get('[data-cy="contextualRuleSave"]').click();
+    cy.wait('@createConfiguredNormalizationRule').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(201);
+      expect(request.body.conditions).to.deep.include({ operator: 'CONTAINS', value: scenarioToken, caseSensitive: false, position: 0 });
+      contextualDescriptionRules.push(response?.body);
+    });
+    cy.then(() => expect(descriptionReevaluationCalls).to.equal(0));
+
+    cy.get('[data-cy="workflowNewTransactionRule"]').click();
+    cy.get('#contextual-transaction-rule-name').type(uniqueName('global-transaction'));
+    cy.get('[data-cy="resultingTags"]').select(tag?.name as string);
+    cy.get('[data-cy="addConditionButton"]').click();
+    cy.get('[data-cy="embeddedConditionForm"]').within(() => {
+      cy.get('[data-cy="operator"]').select('CONTAINS');
+      cy.get('[data-cy="value"]').type(scenarioToken);
+      cy.get('[data-cy="conditionSaveButton"]').click();
+    });
+    cy.get('[data-cy="contextualRuleSave"]').click();
+    cy.wait('@createConfiguredTransactionRule').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(201);
+      expect(request.body.conditions).to.satisfy(conditions =>
+        conditions.some(
+          condition => condition.field === 'DESCRIPTION' && condition.operator === 'CONTAINS' && condition.value === scenarioToken,
+        ),
+      );
+      contextualTransactionRules.push(response?.body);
+    });
+
+    cy.then(() => {
+      candidatePreviewCalls = 0;
+      descriptionReevaluationCalls = 0;
+    });
+    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView().click();
+    cy.get('[data-testid^="workflowRowCreateNormalization-"]').click();
+    cy.get('#contextual-description-rule-result').should('have.value', outDescription);
+    cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').should('have.value', outDescription);
+    cy.get('#contextual-description-rule-name').clear().type(uniqueName('row-normalization'));
+    cy.get('[data-cy="contextualRuleSaveAndReevaluateRow"]').click();
+    cy.wait('@createConfiguredNormalizationRule').then(({ response }) => {
+      expect(response?.statusCode).to.equal(201);
+      contextualDescriptionRules.push(response?.body);
+    });
+    cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.include({ apply: false, protectManualChanges: true });
+      expect(request.body.recordIds).to.have.length(1);
+      expect(request.body.recordIds[0]).to.be.a('number');
+    });
+
+    cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
+      cy.contains('button', /Apply suggestions|Aplicar sugerencias/i).click();
+    });
+    cy.wait('@applyCandidateRulesRequest').its('response.statusCode').should('eq', 200);
+    cy.then(() => expect(candidatePreviewCalls).to.equal(0));
+
+    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView().click();
+    cy.get('[data-testid^="workflowRowCreateTransaction-"]').click();
+    cy.get('#contextual-transaction-rule-category').should('have.value', String(expenseCategory?.id));
+    cy.get('#contextual-transaction-rule-tags option:selected').should('contain', tag?.name as string);
+    cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="DESCRIPTION"]').should(
+      'have.attr',
+      'data-condition-value',
+      outDescription,
+    );
+    cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="FLOW"]').should(
+      'have.attr',
+      'data-condition-value',
+      'OUT',
+    );
+    cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="ACCOUNT"]').should('not.exist');
+    cy.get('#contextual-transaction-rule-name').clear().type(uniqueName('row-transaction'));
+    cy.get('[data-cy="contextualRuleSave"]').click();
+    cy.wait('@createConfiguredTransactionRule').then(({ response }) => {
+      expect(response?.statusCode).to.equal(201);
+      contextualTransactionRules.push(response?.body);
+    });
+    cy.then(() => {
+      expect(candidatePreviewCalls).to.equal(0);
+      expect(descriptionReevaluationCalls).to.equal(1);
+    });
   });
 
   it('imports only enabled valid rows when one row is disabled before confirm', () => {

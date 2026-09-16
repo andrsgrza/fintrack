@@ -1945,6 +1945,18 @@ The same spec covers the configured TransactionRule product create/edit flow:
 - user-authored incompatible FLOW blocks Save instead of being silently mutated;
 - configured payloads omit priority and removed/deferred outputs.
 
+### Transaction Ingestion contextual rule creation
+
+`transaction-ingestion-workflow-detail.spec.tsx` covers the rule-authoring controls in the unified review:
+
+- global normalization-rule creation opens the configured editor without navigating away from review;
+- row normalization-rule prefill uses original description as the condition and current normalized/manual description as the result;
+- row TransactionRule prefill uses persisted candidate description/flow and persisted category/tag outputs, without an implicit account condition;
+- plain Save creates only the formal rule; it does not reevaluate rows, mutate candidates or `rawData`, or confirm import;
+- contextual Save + reevaluate actions are the only path that invokes the relevant existing description/classification reevaluation command.
+
+`DescriptionNormalizationRuleResourceIT` covers configured create atomically creating ordered conditions with server-managed priority/positions and verifies invalid configured input rolls back without an orphan rule. It also verifies the saved active rule participates in the existing description-normalization evaluator.
+
 TR-3 technical/debug cleanup is covered by frontend specs:
 
 - TransactionRuleCondition list/detail/create/edit render the Technical/debug banner;

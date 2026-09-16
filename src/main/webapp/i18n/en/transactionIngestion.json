@@ -125,6 +125,22 @@
           "all": "Reevaluate all",
           "row": "Reevaluate this row"
         },
+        "ruleCreation": {
+          "newNormalization": "New normalization rule",
+          "newTransaction": "New transaction rule",
+          "createFromRow": "Create rule",
+          "createNormalizationFromRow": "Create normalization rule from this row",
+          "createTransactionFromRow": "Create transaction rule from this row",
+          "normalizationTitle": "New normalization rule",
+          "transactionTitle": "New transaction rule",
+          "save": "Save",
+          "saveAndReevaluateRow": "Save and reevaluate this row",
+          "saveAndReevaluateAll": "Save and reevaluate all",
+          "saved": "Rule saved.",
+          "savedReevaluationFailed": "Rule saved, but reevaluation could not be completed.",
+          "saveFailed": "Could not save the rule.",
+          "accountContext": "Candidate account"
+        },
         "automation": {
           "title": "Automatic review",
           "descriptions": "Auto-apply descriptions",

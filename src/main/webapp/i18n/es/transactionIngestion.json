@@ -125,6 +125,22 @@
           "all": "Reevaluar todo",
           "row": "Reevaluar esta fila"
         },
+        "ruleCreation": {
+          "newNormalization": "Nueva regla de normalización",
+          "newTransaction": "Nueva regla de transacción",
+          "createFromRow": "Crear regla",
+          "createNormalizationFromRow": "Crear regla de normalización desde esta fila",
+          "createTransactionFromRow": "Crear regla de transacción desde esta fila",
+          "normalizationTitle": "Nueva regla de normalización",
+          "transactionTitle": "Nueva regla de transacción",
+          "save": "Guardar",
+          "saveAndReevaluateRow": "Guardar y reevaluar esta fila",
+          "saveAndReevaluateAll": "Guardar y reevaluar todo",
+          "saved": "Regla guardada.",
+          "savedReevaluationFailed": "La regla se guardó, pero no se pudo completar la reevaluación.",
+          "saveFailed": "No se pudo guardar la regla.",
+          "accountContext": "Cuenta del candidato"
+        },
         "automation": {
           "title": "Revisión automática",
           "descriptions": "Autoaplicar descripciones",

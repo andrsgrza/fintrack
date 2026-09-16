@@ -1567,3 +1567,12 @@ Description normalization rules are separate from `TransactionRule`.
 - null/blank actual original description does not match any operator, including negative operators.
 
 During FILE ingestion upload, matched description normalization rules update `rawData.normalized.description` before row review. They do not create transactions and do not invoke category/tag `TransactionRule` evaluation. The same evaluator is available after upload through the ingestion-scoped description reevaluation command; it continues to use the immutable original description and preserves `USER_EDIT` values.
+
+### Transaction Ingestion contextual rule creation
+
+The single FILE-ingestion review can create both rule types without leaving the review. Global actions start a normal product rule form with no ingestion-derived values. Eligible-row actions start the same full form with a review-only prefill; creation is still a normal owner-scoped rule write, never a mutation of the ingestion row.
+
+- A row `DescriptionNormalizationRule` prefill uses immutable `rawData.raw.description` as its initial condition value and the current normalized/manual description as `resultingDescription`.
+- A row `TransactionRule` prefill uses the persisted `FILE_IMPORT` candidate description, its current `FLOW`, and only its persisted selected category/tags as outputs. It does **not** turn account context or transient suggestions into conditions or outputs.
+- Rule creation is atomic and server-managed: priority, condition positions, timestamps, ownership, normalization-rule validation, and rollback on invalid input are handled by `POST /api/description-normalization-rules/configured`. Transaction rules reuse `POST /api/transaction-rules/configured`.
+- Saving a contextual rule by itself changes neither `rawData`, `IngestionRecord`, nor `TransactionCandidate`, and does not create a `FinancialTransaction` or confirm the import. Re-evaluation is an explicit second action.

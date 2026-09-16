@@ -704,6 +704,15 @@ FILE ingestion upload now has an optional pre-review description normalization s
 - Workflow row responses expose a read-only `descriptionReview` projection for UI display. It is derived from `rawData.raw.description`, `rawData.normalized.description`, and `rawData.review.description`; it does not change persisted `rawData`.
 - `POST /api/transaction-ingestions/{id}/descriptions/reevaluate` reuses the same active-rule evaluator after upload. It operates on all rows or an optional `recordIds` subset, accepts only current-user FILE ingestions in `READY`/`PARTIALLY_READY`, and processes only `VALID` rows. It always evaluates immutable `rawData.raw.description`. Its optional `apply` and `protectManualChanges` flags distinguish preview from persisted application: preview returns a suggestion without mutation; apply updates automatic description review data, and an explicit unprotected apply may replace a `USER_EDIT` description. A no-match apply restores the original description and removes description-rule provenance.
 
+## Contextual rule creation from the unified review
+
+The review page contains global actions for a new description-normalization rule and a new category/tag TransactionRule, plus an eligible-row Create rule menu. The actions use the normal configured rule forms inside the current page; they do not navigate to generated CRUD screens.
+
+- Global actions begin with a blank rule form.
+- A row normalization rule begins with original `rawData.raw.description` in its first condition and the current normalized/manual description as its result.
+- A row TransactionRule begins with `DESCRIPTION CONTAINS` the persisted candidate description and `FLOW EQUALS` the persisted candidate flow. Its persisted category/tags are outputs. Account context and transient suggestions are deliberately not converted into conditions or outputs.
+- Plain Save only creates the rule. It never mutates `rawData`, candidates, row status, or transactions. Save + reevaluate this row/all performs a separate scoped reevaluation after successful save; its apply/protect behavior is governed by the page-local automation configuration.
+
 Rule-applied metadata shape:
 
 ```json

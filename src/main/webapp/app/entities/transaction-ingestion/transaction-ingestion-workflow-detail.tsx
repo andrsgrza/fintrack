@@ -1,7 +1,23 @@
 import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Badge, Button, Col, Form, FormGroup, Input, Label, Row, Spinner, Table } from 'reactstrap';
+import {
+  Alert,
+  Badge,
+  Button,
+  Col,
+  DropdownItem,
+  DropdownMenu,
+  DropdownToggle,
+  Form,
+  FormGroup,
+  Input,
+  Label,
+  Row,
+  Spinner,
+  Table,
+  UncontrolledDropdown,
+} from 'reactstrap';
 import { TextFormat, Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -27,6 +43,12 @@ import {
   updateFileImportCandidateClassification,
 } from './transaction-ingestion-candidate-classification.service';
 import { IDescriptionReevaluationResult, reevaluateIngestionDescriptions } from './transaction-ingestion-description-reevaluation.service';
+import TransactionIngestionRuleCreationModal, {
+  ITransactionIngestionRuleCreationContext,
+  ITransactionIngestionRuleCreationRowContext,
+  TransactionIngestionRuleCreationKind,
+} from './components/transaction-ingestion-rule-creation-modal';
+import { ContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
 
 interface ICsvIngestionWorkflowMessage {
   code?: string;
@@ -503,6 +525,8 @@ export const TransactionIngestionWorkflowDetail = () => {
   } | null>(null);
   const [automationConfig, setAutomationConfig] = useState<IIngestionAutomationConfig>(defaultIngestionAutomationConfig);
   const [automaticApplicationRequests, setAutomaticApplicationRequests] = useState<IAutomaticApplicationRequest[]>([]);
+  const [ruleCreationContext, setRuleCreationContext] = useState<ITransactionIngestionRuleCreationContext | null>(null);
+  const [ruleCreationFeedback, setRuleCreationFeedback] = useState<{ color: 'success' | 'warning'; message: string } | null>(null);
 
   const loadWorkflow = useCallback(async (workflowId: number | string) => {
     setLoadingReview(true);
@@ -1120,6 +1144,58 @@ export const TransactionIngestionWorkflowDetail = () => {
         );
       }
       setReevaluationInProgress(null);
+    }
+  };
+
+  const rowRuleCreationContext = (row: ICsvIngestionWorkflowRow): ITransactionIngestionRuleCreationRowContext => ({
+    ingestionRecordId: row.ingestionRecordId,
+    candidateId: row.candidate?.id,
+    originalDescription: row.descriptionReview?.originalDescription ?? row.description ?? null,
+    currentDescription: row.candidate?.description ?? row.description ?? null,
+    flow: row.candidate?.flow ?? row.flow ?? null,
+    accountName: row.candidate?.accountName ?? transactionIngestionEntity?.account?.name ?? null,
+    categoryId: row.candidate?.categoryId ?? null,
+    categoryName: row.candidate?.categoryName ?? null,
+    tagIds: row.candidate?.tagIds ?? [],
+    tagNames: row.candidate?.tagNames ?? [],
+  });
+
+  const openRuleCreation = (kind: TransactionIngestionRuleCreationKind, row?: ICsvIngestionWorkflowRow) => {
+    setRuleCreationFeedback(null);
+    setRuleCreationContext({ kind, ...(row ? { row: rowRuleCreationContext(row) } : {}) });
+  };
+
+  const handleRuleCreated = async (
+    kind: TransactionIngestionRuleCreationKind,
+    action: ContextualRuleSaveAction,
+    row?: ITransactionIngestionRuleCreationRowContext,
+  ) => {
+    const shouldReevaluate = action !== 'SAVE';
+    try {
+      if (shouldReevaluate && kind === 'NORMALIZATION') {
+        await reevaluateDescriptions(
+          action === 'REEVALUATE_ROW' && row?.ingestionRecordId ? [row.ingestionRecordId] : undefined,
+          automationConfig.autoApplyDescriptions,
+        );
+      }
+      if (shouldReevaluate && kind === 'TRANSACTION') {
+        if (action === 'REEVALUATE_ROW' && row?.candidateId !== undefined) {
+          await reevaluateAllClassificationWithAutomation([row.candidateId]);
+        } else {
+          await reevaluateAllClassificationWithAutomation();
+        }
+      }
+      setRuleCreationFeedback({
+        color: 'success',
+        message: translate('fintrackApp.transactionIngestion.workflow.ruleCreation.saved'),
+      });
+    } catch (error) {
+      setRuleCreationFeedback({
+        color: 'warning',
+        message: translate('fintrackApp.transactionIngestion.workflow.ruleCreation.savedReevaluationFailed'),
+      });
+    } finally {
+      setRuleCreationContext(null);
     }
   };
 
@@ -1825,6 +1901,41 @@ export const TransactionIngestionWorkflowDetail = () => {
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.row">Reevaluate this row</Translate>
           </Button>
         ) : null}{' '}
+        {!isEditing && row.status === 'VALID' && row.candidate?.id ? (
+          <UncontrolledDropdown
+            group
+            size="sm"
+            className="me-1"
+            data-testid={`workflowRowCreateRule-${row.ingestionRecordId ?? row.recordIndex}`}
+          >
+            <DropdownToggle
+              caret
+              color="secondary"
+              disabled={actionBusy}
+              data-cy={`workflowRowCreateRuleToggle-${row.ingestionRecordId ?? row.recordIndex}`}
+            >
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.createFromRow">Create rule</Translate>
+            </DropdownToggle>
+            <DropdownMenu>
+              <DropdownItem
+                onClick={() => openRuleCreation('NORMALIZATION', row)}
+                data-testid={`workflowRowCreateNormalization-${row.ingestionRecordId ?? row.recordIndex}`}
+              >
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.createNormalizationFromRow">
+                  Create normalization rule from this row
+                </Translate>
+              </DropdownItem>
+              <DropdownItem
+                onClick={() => openRuleCreation('TRANSACTION', row)}
+                data-testid={`workflowRowCreateTransaction-${row.ingestionRecordId ?? row.recordIndex}`}
+              >
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.createTransactionFromRow">
+                  Create transaction rule from this row
+                </Translate>
+              </DropdownItem>
+            </DropdownMenu>
+          </UncontrolledDropdown>
+        ) : null}{' '}
         {!isEditing && canEdit(row) ? (
           <Button
             size="sm"
@@ -1869,6 +1980,30 @@ export const TransactionIngestionWorkflowDetail = () => {
             Categories and tags are saved on candidates before confirming the import.
           </Translate>
         </Alert>
+        <div className="d-flex flex-wrap gap-2 mb-3" data-cy="workflowRuleCreationActions">
+          <Button
+            color="secondary"
+            size="sm"
+            disabled={classificationReevaluationRunning}
+            onClick={() => openRuleCreation('NORMALIZATION')}
+            data-cy="workflowNewNormalizationRule"
+            data-testid="workflowNewNormalizationRule"
+          >
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.newNormalization">
+              New normalization rule
+            </Translate>
+          </Button>
+          <Button
+            color="secondary"
+            size="sm"
+            disabled={classificationReevaluationRunning}
+            onClick={() => openRuleCreation('TRANSACTION')}
+            data-cy="workflowNewTransactionRule"
+            data-testid="workflowNewTransactionRule"
+          >
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.newTransaction">New transaction rule</Translate>
+          </Button>
+        </div>
         <div className="border rounded p-2 mb-3" data-cy="workflowAutomationConfig" data-testid="workflowAutomationConfig">
           <strong>
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.title">Automatic review</Translate>
@@ -2053,6 +2188,17 @@ export const TransactionIngestionWorkflowDetail = () => {
         <h2 data-cy="workflowReviewHeading">
           <Translate contentKey="fintrackApp.transactionIngestion.workflow.workflowTitle">Transaction ingestion workflow</Translate>
         </h2>
+
+        {ruleCreationFeedback ? (
+          <Alert
+            color={ruleCreationFeedback.color}
+            data-cy="workflowRuleCreationFeedback"
+            data-testid="workflowRuleCreationFeedback"
+            fade={false}
+          >
+            {ruleCreationFeedback.message}
+          </Alert>
+        ) : null}
 
         {showNoTransactionsCreatedBanner ? (
           <Alert color="info" fade={false}>
@@ -2398,6 +2544,11 @@ export const TransactionIngestionWorkflowDetail = () => {
             ) : null}
           </>
         ) : null}
+        <TransactionIngestionRuleCreationModal
+          context={ruleCreationContext}
+          onClose={() => setRuleCreationContext(null)}
+          onSaved={handleRuleCreated}
+        />
         {renderDetailActions()}
       </Col>
     </Row>
