@@ -128,6 +128,29 @@ interface ICsvIngestionWorkflowRowEditDraft {
   notes?: string;
 }
 
+type AutomaticApplicationScope = 'descriptions' | 'categories' | 'tags';
+
+interface IIngestionAutomationConfig {
+  autoApplyDescriptions: boolean;
+  autoApplyCategories: boolean;
+  autoApplyTags: boolean;
+  protectManualChanges: boolean;
+}
+
+interface IAutomaticApplicationRequest {
+  sequence: number;
+  descriptions: boolean;
+  categories: boolean;
+  tags: boolean;
+}
+
+const defaultIngestionAutomationConfig: IIngestionAutomationConfig = {
+  autoApplyDescriptions: false,
+  autoApplyCategories: false,
+  autoApplyTags: false,
+  protectManualChanges: true,
+};
+
 const createWorkflowApiUrl = 'api/transaction-ingestions/file';
 
 const flowLabel = (flow?: string) => {
@@ -186,7 +209,19 @@ const DescriptionReviewDisplay = ({
   const source = review?.source;
 
   if (source !== 'DESCRIPTION_RULE' && source !== 'USER_EDIT') {
-    return <>{row.description}</>;
+    return (
+      <div>
+        <div>{row.description}</div>
+        {reevaluation?.action === 'PREVIEWED' && reevaluation.suggestedDescription ? (
+          <small className="text-muted d-block mt-1" data-testid={descriptionReviewTestId(row, 'reevaluationSuggestion')}>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.reevaluationSuggestion">
+              Reevaluation suggestion
+            </Translate>
+            : {reevaluation.suggestedDescription}
+          </small>
+        ) : null}
+      </div>
+    );
   }
 
   const recordKey = row.ingestionRecordId ?? row.recordIndex;
@@ -437,6 +472,8 @@ export const TransactionIngestionWorkflowDetail = () => {
   const preparedCandidateKeyRef = useRef<string | null>(null);
   const previewedCandidateKeyRef = useRef<string | null>(null);
   const classificationOptionsLoadedForRef = useRef<number | null>(null);
+  const automaticApplicationRunRef = useRef(false);
+  const automaticApplicationSequenceRef = useRef(0);
 
   const [accountId, setAccountId] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -464,6 +501,8 @@ export const TransactionIngestionWorkflowDetail = () => {
     kind: 'DESCRIPTIONS' | 'CATEGORY' | 'TAGS' | 'ALL' | 'ROW';
     recordId?: number;
   } | null>(null);
+  const [automationConfig, setAutomationConfig] = useState<IIngestionAutomationConfig>(defaultIngestionAutomationConfig);
+  const [automaticApplicationRequests, setAutomaticApplicationRequests] = useState<IAutomaticApplicationRequest[]>([]);
 
   const loadWorkflow = useCallback(async (workflowId: number | string) => {
     setLoadingReview(true);
@@ -709,7 +748,10 @@ export const TransactionIngestionWorkflowDetail = () => {
     );
   };
 
-  const clearPersistedClassificationPreviews = (applyRows: IFileImportCandidateApplyRulesRow[] = []) => {
+  const clearPersistedClassificationPreviews = (
+    applyRows: IFileImportCandidateApplyRulesRow[] = [],
+    scope: FileImportCandidateRulePreviewScope = 'ALL',
+  ) => {
     const persistedCandidateIds = new Set(
       applyRows
         .filter(row => row.candidateId !== undefined && ['APPLIED', 'UNCHANGED'].includes(row.action ?? ''))
@@ -720,8 +762,82 @@ export const TransactionIngestionWorkflowDetail = () => {
     }
     setClassificationPreviewByCandidateId(currentPreviewById => {
       const remainingPreviewById = { ...currentPreviewById };
-      persistedCandidateIds.forEach(candidateId => delete remainingPreviewById[candidateId]);
+      persistedCandidateIds.forEach(candidateId => {
+        if (scope === 'ALL') {
+          delete remainingPreviewById[candidateId];
+          return;
+        }
+        const preview = remainingPreviewById[candidateId];
+        if (!preview) {
+          return;
+        }
+        const reconciled = scope === 'CATEGORY' ? { ...preview, suggestedCategory: null } : { ...preview, suggestedTags: [] };
+        remainingPreviewById[candidateId] = {
+          ...reconciled,
+          hasSuggestions: Boolean(reconciled.suggestedCategory) || (reconciled.suggestedTags ?? []).length > 0,
+        };
+      });
       return remainingPreviewById;
+    });
+  };
+
+  const reconcileAutomaticClassificationPreviews = (
+    applyRows: IFileImportCandidateApplyRulesRow[] = [],
+    scope: FileImportCandidateRulePreviewScope,
+    protectManualChanges: boolean,
+  ) => {
+    const persistedRows = applyRows.filter(
+      row => row.candidateId !== undefined && ['APPLIED', 'UNCHANGED'].includes(row.action ?? '') && row.candidate,
+    );
+    if (persistedRows.length === 0) {
+      return;
+    }
+
+    setClassificationPreviewByCandidateId(currentPreviewById => {
+      const nextPreviewById = { ...currentPreviewById };
+      persistedRows.forEach(row => {
+        const candidateId = row.candidateId;
+        const candidate = row.candidate;
+        const previous = nextPreviewById[candidateId];
+        const preserveCategorySuggestion =
+          protectManualChanges &&
+          (scope === 'ALL' || scope === 'CATEGORY') &&
+          candidate?.categorySource === 'MANUAL' &&
+          Boolean(row.suggestedCategory);
+        const preserveTagSuggestions =
+          protectManualChanges &&
+          (scope === 'ALL' || scope === 'TAGS') &&
+          (candidate?.selectedTags ?? []).some(tag => tag.source === 'MANUAL') &&
+          (row.suggestedTags ?? []).length > 0;
+
+        const suggestedCategory =
+          scope === 'TAGS' ? (previous?.suggestedCategory ?? null) : preserveCategorySuggestion ? row.suggestedCategory : null;
+        const suggestedTags =
+          scope === 'CATEGORY' ? (previous?.suggestedTags ?? []) : preserveTagSuggestions ? (row.suggestedTags ?? []) : [];
+        const hasSuggestions = Boolean(suggestedCategory) || suggestedTags.length > 0;
+
+        if (!hasSuggestions) {
+          if (scope === 'ALL') {
+            delete nextPreviewById[candidateId];
+          } else if (previous) {
+            const reconciled = scope === 'CATEGORY' ? { ...previous, suggestedCategory: null } : { ...previous, suggestedTags: [] };
+            nextPreviewById[candidateId] = {
+              ...reconciled,
+              hasSuggestions: Boolean(reconciled.suggestedCategory) || (reconciled.suggestedTags ?? []).length > 0,
+            };
+          }
+          return;
+        }
+
+        nextPreviewById[candidateId] = {
+          ...previous,
+          ...row,
+          suggestedCategory,
+          suggestedTags,
+          hasSuggestions,
+        };
+      });
+      return nextPreviewById;
     });
   };
 
@@ -830,11 +946,16 @@ export const TransactionIngestionWorkflowDetail = () => {
     })();
   }, [loadRulePreview, workflow]);
 
-  const reevaluateDescriptions = async (recordIds?: number[]) => {
+  const reevaluateDescriptions = async (recordIds?: number[], apply = false) => {
     if (!workflow?.transactionIngestionId) {
       return;
     }
-    const response = await reevaluateIngestionDescriptions(workflow.transactionIngestionId, recordIds);
+    const response = await reevaluateIngestionDescriptions(
+      workflow.transactionIngestionId,
+      recordIds,
+      apply,
+      automationConfig.protectManualChanges,
+    );
     const result = response.data;
     setDescriptionReevaluationByRecordId(current => ({
       ...current,
@@ -845,7 +966,9 @@ export const TransactionIngestionWorkflowDetail = () => {
         return rowsById;
       }, {}),
     }));
-    await loadWorkflow(workflow.transactionIngestionId);
+    if (apply) {
+      await loadWorkflow(workflow.transactionIngestionId);
+    }
   };
 
   const reevaluateRuleSuggestions = async (scope: FileImportCandidateRulePreviewScope, candidateIds?: number[]) => {
@@ -855,6 +978,54 @@ export const TransactionIngestionWorkflowDetail = () => {
     await loadRulePreview(workflow.transactionIngestionId, candidateIds, scope);
   };
 
+  const automaticallyApplyRuleSuggestions = async (scope: FileImportCandidateRulePreviewScope, candidateIds?: number[]) => {
+    if (!workflow?.transactionIngestionId) {
+      return;
+    }
+    const response = await applyFileImportCandidateRules(
+      workflow.transactionIngestionId,
+      candidateIds,
+      scope,
+      true,
+      automationConfig.protectManualChanges,
+    );
+    const applyRows = response.data.rows ?? [];
+    applyRows.forEach(row => updateCandidateInWorkflow(row.candidate));
+    reconcileAutomaticClassificationPreviews(applyRows, scope, automationConfig.protectManualChanges);
+    await reloadWorkflowAfterRuleApply(workflow.transactionIngestionId);
+  };
+
+  const reevaluateClassificationWithAutomation = async (
+    scope: Extract<FileImportCandidateRulePreviewScope, 'CATEGORY' | 'TAGS'>,
+    candidateIds?: number[],
+  ) => {
+    const enabled = scope === 'CATEGORY' ? automationConfig.autoApplyCategories : automationConfig.autoApplyTags;
+    if (enabled) {
+      await automaticallyApplyRuleSuggestions(scope, candidateIds);
+      return;
+    }
+    await reevaluateRuleSuggestions(scope, candidateIds);
+  };
+
+  const reevaluateAllClassificationWithAutomation = async (candidateIds?: number[]) => {
+    const { autoApplyCategories, autoApplyTags } = automationConfig;
+    if (autoApplyCategories && autoApplyTags) {
+      await automaticallyApplyRuleSuggestions('ALL', candidateIds);
+      return;
+    }
+    if (autoApplyCategories) {
+      await automaticallyApplyRuleSuggestions('CATEGORY', candidateIds);
+      await reevaluateRuleSuggestions('TAGS', candidateIds);
+      return;
+    }
+    if (autoApplyTags) {
+      await reevaluateRuleSuggestions('CATEGORY', candidateIds);
+      await automaticallyApplyRuleSuggestions('TAGS', candidateIds);
+      return;
+    }
+    await reevaluateRuleSuggestions('ALL', candidateIds);
+  };
+
   const reevaluateDescriptionsOnly = async () => {
     if (!hasEligibleDescriptionRows || reevaluationInProgress) {
       return;
@@ -862,7 +1033,7 @@ export const TransactionIngestionWorkflowDetail = () => {
     setBackendError(null);
     setReevaluationInProgress({ kind: 'DESCRIPTIONS' });
     try {
-      await reevaluateDescriptions();
+      await reevaluateDescriptions(undefined, automationConfig.autoApplyDescriptions);
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionReevaluationFailed'));
     } finally {
@@ -877,7 +1048,7 @@ export const TransactionIngestionWorkflowDetail = () => {
     setBackendError(null);
     setReevaluationInProgress({ kind: scope });
     try {
-      await reevaluateRuleSuggestions(scope);
+      await reevaluateClassificationWithAutomation(scope);
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationPreviewFailed'));
     } finally {
@@ -894,13 +1065,13 @@ export const TransactionIngestionWorkflowDetail = () => {
     let descriptionsSucceeded = false;
     let classificationSucceeded = false;
     try {
-      await reevaluateDescriptions();
+      await reevaluateDescriptions(undefined, automationConfig.autoApplyDescriptions);
       descriptionsSucceeded = true;
     } catch (error) {
       // Continue with the independent read-only candidate preview and report the combined outcome below.
     }
     try {
-      await reevaluateRuleSuggestions('ALL');
+      await reevaluateAllClassificationWithAutomation();
       classificationSucceeded = true;
     } catch (error) {
       // The first completed domain is retained; no suggestions are applied by either request.
@@ -928,13 +1099,13 @@ export const TransactionIngestionWorkflowDetail = () => {
     let descriptionsSucceeded = false;
     let classificationSucceeded = false;
     try {
-      await reevaluateDescriptions([row.ingestionRecordId]);
+      await reevaluateDescriptions([row.ingestionRecordId], automationConfig.autoApplyDescriptions);
       descriptionsSucceeded = true;
     } catch (error) {
       // A scoped preview is still independent and can provide current category/tag suggestions.
     }
     try {
-      await reevaluateRuleSuggestions('ALL', [candidateId]);
+      await reevaluateAllClassificationWithAutomation([candidateId]);
       classificationSucceeded = true;
     } catch (error) {
       // Report below without fabricating local preview success.
@@ -951,6 +1122,92 @@ export const TransactionIngestionWorkflowDetail = () => {
       setReevaluationInProgress(null);
     }
   };
+
+  const updateAutomationSetting = (setting: keyof IIngestionAutomationConfig, enabled: boolean) => {
+    const wasEnabled = automationConfig[setting];
+    setAutomationConfig(current => ({ ...current, [setting]: enabled }));
+    if (setting === 'protectManualChanges' || wasEnabled || !enabled) {
+      return;
+    }
+
+    const scopeBySetting: Record<Exclude<keyof IIngestionAutomationConfig, 'protectManualChanges'>, AutomaticApplicationScope> = {
+      autoApplyDescriptions: 'descriptions',
+      autoApplyCategories: 'categories',
+      autoApplyTags: 'tags',
+    };
+    const scope = scopeBySetting[setting];
+    setAutomaticApplicationRequests(current => [
+      ...current,
+      {
+        sequence: ++automaticApplicationSequenceRef.current,
+        descriptions: scope === 'descriptions',
+        categories: scope === 'categories',
+        tags: scope === 'tags',
+      },
+    ]);
+  };
+
+  useEffect(() => {
+    const request = automaticApplicationRequests[0];
+    const transactionIngestionId = workflow?.transactionIngestionId;
+    const validRows = (workflow?.rows ?? []).filter(row => row.status === 'VALID');
+    const candidatesPrepared = validRows.length > 0 && validRows.every(row => row.candidate?.id !== undefined);
+    const descriptions = Boolean(request?.descriptions && automationConfig.autoApplyDescriptions);
+    const categoriesEnabled = Boolean(request?.categories && automationConfig.autoApplyCategories);
+    const tagsEnabled = Boolean(request?.tags && automationConfig.autoApplyTags);
+
+    if (!request || !transactionIngestionId || workflow?.status !== 'READY' || !candidatesPrepared) {
+      return;
+    }
+    if (!descriptions && !categoriesEnabled && !tagsEnabled) {
+      setAutomaticApplicationRequests(current => current.filter(queuedRequest => queuedRequest.sequence !== request.sequence));
+      return;
+    }
+    if (automaticApplicationRunRef.current) {
+      return;
+    }
+
+    automaticApplicationRunRef.current = true;
+    setBackendError(null);
+    setReevaluationInProgress({ kind: 'ALL' });
+    void (async () => {
+      let descriptionsSucceeded = !descriptions;
+      let classificationSucceeded = !categoriesEnabled && !tagsEnabled;
+      try {
+        if (descriptions) {
+          await reevaluateDescriptions(undefined, true);
+          descriptionsSucceeded = true;
+        }
+      } catch (error) {
+        // Classification is independent. Preserve a successful scope rather than rolling it back.
+      }
+      try {
+        if (categoriesEnabled && tagsEnabled) {
+          await automaticallyApplyRuleSuggestions('ALL');
+        } else if (categoriesEnabled) {
+          await automaticallyApplyRuleSuggestions('CATEGORY');
+        } else if (tagsEnabled) {
+          await automaticallyApplyRuleSuggestions('TAGS');
+        }
+        classificationSucceeded = true;
+      } catch (error) {
+        // Report the partial outcome below. Persisted values from a completed scope remain valid.
+      } finally {
+        if (!descriptionsSucceeded || !classificationSucceeded) {
+          setBackendError(
+            translate(
+              descriptionsSucceeded || classificationSucceeded
+                ? 'fintrackApp.transactionIngestion.workflow.errors.reevaluationPartialFailed'
+                : 'fintrackApp.transactionIngestion.workflow.errors.reevaluationFailed',
+            ),
+          );
+        }
+        automaticApplicationRunRef.current = false;
+        setAutomaticApplicationRequests(current => current.filter(queuedRequest => queuedRequest.sequence !== request.sequence));
+        setReevaluationInProgress(null);
+      }
+    })();
+  }, [automaticApplicationRequests, automationConfig, workflow]);
 
   const updateClassificationCategory = async (candidateId: number, categoryId: string) => {
     if (!workflow?.transactionIngestionId) {
@@ -1612,6 +1869,78 @@ export const TransactionIngestionWorkflowDetail = () => {
             Categories and tags are saved on candidates before confirming the import.
           </Translate>
         </Alert>
+        <div className="border rounded p-2 mb-3" data-cy="workflowAutomationConfig" data-testid="workflowAutomationConfig">
+          <strong>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.title">Automatic review</Translate>
+          </strong>
+          <div className="d-flex flex-wrap gap-3 mt-2">
+            <FormGroup check>
+              <Input
+                id="workflowAutoApplyDescriptions"
+                type="checkbox"
+                checked={automationConfig.autoApplyDescriptions}
+                disabled={classificationReevaluationRunning}
+                onChange={event => updateAutomationSetting('autoApplyDescriptions', event.currentTarget.checked)}
+                data-cy="workflowAutoApplyDescriptions"
+                data-testid="workflowAutoApplyDescriptions"
+              />
+              <Label check htmlFor="workflowAutoApplyDescriptions">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.descriptions">
+                  Auto-apply descriptions
+                </Translate>
+              </Label>
+            </FormGroup>
+            <FormGroup check>
+              <Input
+                id="workflowAutoApplyCategories"
+                type="checkbox"
+                checked={automationConfig.autoApplyCategories}
+                disabled={classificationReevaluationRunning}
+                onChange={event => updateAutomationSetting('autoApplyCategories', event.currentTarget.checked)}
+                data-cy="workflowAutoApplyCategories"
+                data-testid="workflowAutoApplyCategories"
+              />
+              <Label check htmlFor="workflowAutoApplyCategories">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.categories">Auto-apply categories</Translate>
+              </Label>
+            </FormGroup>
+            <FormGroup check>
+              <Input
+                id="workflowAutoApplyTags"
+                type="checkbox"
+                checked={automationConfig.autoApplyTags}
+                disabled={classificationReevaluationRunning}
+                onChange={event => updateAutomationSetting('autoApplyTags', event.currentTarget.checked)}
+                data-cy="workflowAutoApplyTags"
+                data-testid="workflowAutoApplyTags"
+              />
+              <Label check htmlFor="workflowAutoApplyTags">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.tags">Auto-apply tags</Translate>
+              </Label>
+            </FormGroup>
+            <FormGroup check>
+              <Input
+                id="workflowProtectManualChanges"
+                type="checkbox"
+                checked={automationConfig.protectManualChanges}
+                disabled={classificationReevaluationRunning}
+                onChange={event => updateAutomationSetting('protectManualChanges', event.currentTarget.checked)}
+                data-cy="workflowProtectManualChanges"
+                data-testid="workflowProtectManualChanges"
+              />
+              <Label check htmlFor="workflowProtectManualChanges">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.protectManualChanges">
+                  Protect manual changes
+                </Translate>
+              </Label>
+            </FormGroup>
+          </div>
+          <small className="text-muted d-block mt-1">
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.protectManualHelp">
+              Prevent automation from replacing changes made manually.
+            </Translate>
+          </small>
+        </div>
         <Row className="mb-2" data-testid="classificationSummary">
           <Col md="2">
             <strong>

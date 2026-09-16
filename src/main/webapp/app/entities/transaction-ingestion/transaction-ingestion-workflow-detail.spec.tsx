@@ -916,6 +916,273 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByRole('button', { name: /refresh suggestions/i })).toBeNull();
   });
 
+  it('renders local automation defaults without automatically applying classification', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('workflowAutomationConfig');
+    expect((screen.getByTestId('workflowAutoApplyDescriptions') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('workflowAutoApplyCategories') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('workflowAutoApplyTags') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('workflowProtectManualChanges') as HTMLInputElement).checked).toBe(true);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/rule-preview'))).toHaveLength(1);
+  });
+
+  it('enabling category automation applies only the category scope once candidates are ready', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    const automaticallyAppliedCandidate = {
+      ...candidateResponse.data.rows[0].candidate,
+      categoryId: 9,
+      categoryName: 'Salary',
+      categorySource: 'AUTOMATIC',
+    };
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'APPLIED',
+            candidate: automaticallyAppliedCandidate,
+            suggestedCategory: { id: 9, name: 'Salary', categoryType: 'INCOME' },
+            suggestedTags: [{ id: 5, name: 'Business' }],
+            hasSuggestions: true,
+            categoryApplied: true,
+            tagIdsApplied: [],
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('workflowAutoApplyCategories'));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', {
+        scope: 'CATEGORY',
+        automatic: true,
+        protectManualChanges: true,
+      }),
+    );
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(1);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/descriptions/reevaluate'))).toHaveLength(0);
+
+    mockAxiosPost.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate categories/i }));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', {
+        scope: 'CATEGORY',
+        automatic: true,
+        protectManualChanges: true,
+      }),
+    );
+  });
+
+  it('queues consecutive automation changes so each newly enabled scope is applied once', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('workflowAutoApplyCategories');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'APPLIED',
+            candidate: candidateResponse.data.rows[0].candidate,
+            hasSuggestions: false,
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('workflowAutoApplyCategories'));
+    fireEvent.click(screen.getByTestId('workflowAutoApplyTags'));
+
+    await waitFor(() => {
+      const automaticCalls = mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'));
+      expect(automaticCalls).toHaveLength(2);
+      expect(automaticCalls[0]).toEqual([
+        'api/transaction-ingestions/100/candidates/apply-rules',
+        { scope: 'CATEGORY', automatic: true, protectManualChanges: true },
+      ]);
+      expect(automaticCalls[1]).toEqual([
+        'api/transaction-ingestions/100/candidates/apply-rules',
+        { scope: 'TAGS', automatic: true, protectManualChanges: true },
+      ]);
+    });
+  });
+
+  it('keeps category untouched when only tag automation is enabled and does not apply from the protection toggle alone', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    mockAxiosPost.mockClear();
+    fireEvent.click(screen.getByTestId('workflowProtectManualChanges'));
+    expect(mockAxiosPost).not.toHaveBeenCalled();
+
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'APPLIED',
+            candidate: {
+              ...candidateResponse.data.rows[0].candidate,
+              tagIds: [5],
+              tagNames: ['Business'],
+              selectedTags: [{ tagId: 5, tagName: 'Business', source: 'AUTOMATIC' }],
+            },
+            suggestedTags: [{ id: 5, name: 'Business' }],
+            hasSuggestions: true,
+            categoryApplied: false,
+            tagIdsApplied: [5],
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByTestId('workflowAutoApplyTags'));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', {
+        scope: 'TAGS',
+        automatic: true,
+        protectManualChanges: false,
+      }),
+    );
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/descriptions/reevaluate'))).toHaveLength(0);
+  });
+
+  it('reevaluates descriptions with apply only when description automation is enabled', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('workflowAutoApplyDescriptions');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({ data: { transactionIngestionId: 100, rows: [{ ingestionRecordId: 300, action: 'APPLIED' }] } });
+    fireEvent.click(screen.getByTestId('workflowAutoApplyDescriptions'));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        apply: true,
+        protectManualChanges: true,
+      }),
+    );
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
+  });
+
+  it('keeps a protected manual category visible while retaining the automatic recommendation', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        categorySource: 'MANUAL',
+      },
+    });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'UNCHANGED',
+            candidate: candidateResponse.data.rows[0].candidate,
+            suggestedCategory: { id: 7, name: 'Transport', categoryType: 'EXPENSE' },
+            suggestedTags: [],
+            hasSuggestions: true,
+            categoryApplied: false,
+            tagIdsApplied: [],
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('workflowAutoApplyCategories'));
+
+    await screen.findByTestId('classificationSuggestedCategory-400');
+    expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Transport');
+    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+  });
+
   it('applies all persisted classification suggestions without reevaluating, preserves manual selections, and reloads candidates', async () => {
     const manualRow = {
       ...persistedReviewResponse.data.rows[0],
@@ -1168,7 +1435,12 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValueOnce(descriptionResponse).mockResolvedValue(classificationPreviewResponse);
 
     fireEvent.click(screen.getByRole('button', { name: /reevaluate descriptions/i }));
-    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', undefined));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        apply: false,
+        protectManualChanges: true,
+      }),
+    );
     await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate categories/i }) as HTMLButtonElement).disabled).toBe(false));
 
     fireEvent.click(screen.getByRole('button', { name: /reevaluate categories/i }));
@@ -1184,7 +1456,12 @@ describe('TransactionIngestion file workflow', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate all/i }) as HTMLButtonElement).disabled).toBe(false));
 
     fireEvent.click(screen.getByRole('button', { name: /reevaluate all/i }));
-    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', undefined));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        apply: false,
+        protectManualChanges: true,
+      }),
+    );
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
     expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
     expect(
@@ -1250,7 +1527,11 @@ describe('TransactionIngestion file workflow', () => {
     fireEvent.click(screen.getByTestId('workflowRowReevaluate-300'));
 
     await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', { recordIds: [300] }),
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        recordIds: [300],
+        apply: false,
+        protectManualChanges: true,
+      }),
     );
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', {

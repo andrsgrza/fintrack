@@ -125,6 +125,14 @@
           "all": "Reevaluar todo",
           "row": "Reevaluar esta fila"
         },
+        "automation": {
+          "title": "Revisión automática",
+          "descriptions": "Autoaplicar descripciones",
+          "categories": "Autoaplicar categorías",
+          "tags": "Autoaplicar etiquetas",
+          "protectManualChanges": "Proteger cambios manuales",
+          "protectManualHelp": "Evita que la automatización reemplace cambios hechos manualmente."
+        },
         "classification": {
           "persistedNotice": "Las categorías y etiquetas se guardan en candidatos antes de confirmar la importación.",
           "reviewedRows": "Revisadas",

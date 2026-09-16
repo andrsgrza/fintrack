@@ -471,6 +471,64 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void descriptionReevaluationPreviewDoesNotOverwriteUntilApplyIsRequested() throws Exception {
+        DescriptionNormalizationRule rule = persistDescriptionNormalizationRule("Normalize OXXO", "OXXO Store");
+        persistDescriptionNormalizationCondition(rule, "OXXO");
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        String rawDataBefore = record.getRawData();
+        TransactionCandidate candidateBefore = candidateForRecord(record);
+
+        mockMvc
+            .perform(
+                post(descriptionReevaluationUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(descriptionReevaluationPayload(List.of(record.getId()), false, true)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].action").value("PREVIEWED"))
+            .andExpect(jsonPath("$.rows[0].suggestedDescription").value("OXXO Store"));
+
+        assertThat(ingestionRecordRepository.findById(record.getId()).orElseThrow().getRawData()).isEqualTo(rawDataBefore);
+        assertThat(candidateForRecord(record).getDescription()).isEqualTo(candidateBefore.getDescription());
+    }
+
+    @Test
+    @Transactional
+    void descriptionReevaluationCanReplaceUserEditOnlyWhenManualProtectionIsOff() throws Exception {
+        DescriptionNormalizationRule rule = persistDescriptionNormalizationRule("Normalize payroll", "Payroll");
+        persistDescriptionNormalizationCondition(rule, "NOMINA");
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, record, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(reviewPayload("2026-01-15", null, "Manual payroll", "33698.34", "MXN", null, null))
+                    )
+            )
+            .andExpect(status().isOk());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+
+        mockMvc
+            .perform(
+                post(descriptionReevaluationUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(descriptionReevaluationPayload(List.of(record.getId()), true, false)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].action").value("APPLIED"))
+            .andExpect(jsonPath("$.rows[0].descriptionReview.source").value("DESCRIPTION_RULE"))
+            .andExpect(jsonPath("$.rows[0].descriptionReview.normalizedDescription").value("Payroll"));
+
+        assertThat(rawDataFor(record).path("normalized").path("description").asText()).isEqualTo("Payroll");
+        assertThat(candidateForRecord(record).getDescription()).isEqualTo("Payroll");
+    }
+
+    @Test
+    @Transactional
     void reevaluateDescriptionsRejectsForeignIngestionAndRecordFromAnotherIngestion() throws Exception {
         TransactionIngestion accessibleIngestion = createWorkflowWithValidRows();
         TransactionIngestion otherIngestion = createWorkflowWithValidRows();
@@ -2660,6 +2718,85 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void automaticScopedApplySynchronizesProvenanceAndCanReplaceManualValuesWhenUnprotected() throws Exception {
+        Category oldCategory = persistCategory("Old automatic", CategoryType.EXPENSE, currentMockUser());
+        Category suggestedCategory = persistCategory("Suggested automatic", CategoryType.EXPENSE, currentMockUser());
+        Tag obsoleteAutomatic = persistTag("Obsolete automatic", currentMockUser());
+        Tag retainedAutomatic = persistTag("Retained automatic", currentMockUser());
+        Tag manualTag = persistTag("Manual tag", currentMockUser());
+        Tag suggestedTag = persistTag("Suggested automatic", currentMockUser());
+        TransactionRule rule = persistTransactionRule("OXXO automatic rule", suggestedCategory, List.of(retainedAutomatic, suggestedTag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "OXXO");
+        persistTransactionRuleCondition(rule, TransactionRuleField.ORIGIN, RuleOperator.EQUALS, "FILE_IMPORT");
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setCategory(oldCategory);
+        candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(obsoleteAutomatic, TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(retainedAutomatic, TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(manualTag, TransactionCandidateClassificationSource.MANUAL);
+        transactionCandidateRepository.saveAndFlush(candidate);
+        String rawDataBefore = record.getRawData();
+
+        mockMvc
+            .perform(
+                post(candidateApplyRulesUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(automaticCandidateApplyPayload(List.of(candidate.getId()), "ALL", true)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].action").value("APPLIED"))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(suggestedCategory.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categorySource").value("AUTOMATIC"));
+
+        TransactionCandidate protectedResult = candidateForRecord(record);
+        assertThat(protectedResult.getTags())
+            .extracting(Tag::getId)
+            .containsExactlyInAnyOrder(retainedAutomatic.getId(), manualTag.getId(), suggestedTag.getId());
+        assertThat(protectedResult.getTagSource(retainedAutomatic)).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+        assertThat(protectedResult.getTagSource(manualTag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(protectedResult.getTagSource(suggestedTag)).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+
+        mockMvc
+            .perform(
+                post(candidateApplyRulesUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(automaticCandidateApplyPayload(List.of(candidate.getId()), "TAGS", false)))
+            )
+            .andExpect(status().isOk());
+
+        TransactionCandidate unprotectedResult = candidateForRecord(record);
+        assertThat(unprotectedResult.getCategory().getId()).isEqualTo(suggestedCategory.getId());
+        assertThat(unprotectedResult.getTags())
+            .extracting(Tag::getId)
+            .containsExactlyInAnyOrder(retainedAutomatic.getId(), suggestedTag.getId());
+        assertThat(unprotectedResult.getTagAssociations()).allSatisfy(association ->
+            assertThat(association.getSource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC)
+        );
+
+        rule.setActive(false);
+        transactionRuleRepository.saveAndFlush(rule);
+        mockMvc
+            .perform(
+                post(candidateApplyRulesUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(automaticCandidateApplyPayload(List.of(candidate.getId()), "CATEGORY", true)))
+            )
+            .andExpect(status().isOk());
+
+        TransactionCandidate noSuggestionResult = candidateForRecord(record);
+        assertThat(noSuggestionResult.getCategory()).isNull();
+        assertThat(noSuggestionResult.getCategorySource()).isNull();
+        assertThat(noSuggestionResult.getTags())
+            .extracting(Tag::getId)
+            .containsExactlyInAnyOrder(retainedAutomatic.getId(), suggestedTag.getId());
+        assertThat(ingestionRecordRepository.findById(record.getId()).orElseThrow().getRawData()).isEqualTo(rawDataBefore);
+    }
+
+    @Test
+    @Transactional
     void fileImportCandidateBatchApplyWithoutCandidateIdsUsesFillEmptyOnlyAcrossTheIngestion() throws Exception {
         Category suggestedExpenseCategory = persistCategory("Suggested expense", CategoryType.EXPENSE, currentMockUser());
         Category manualIncomeCategory = persistCategory("Manual income", CategoryType.INCOME, currentMockUser());
@@ -3745,9 +3882,24 @@ class TransactionIngestionWorkflowResourceIT {
         return payload;
     }
 
+    private Map<String, Object> automaticCandidateApplyPayload(List<Long> candidateIds, String scope, boolean protectManualChanges) {
+        Map<String, Object> payload = candidateBatchPayload(candidateIds);
+        payload.put("scope", scope);
+        payload.put("automatic", true);
+        payload.put("protectManualChanges", protectManualChanges);
+        return payload;
+    }
+
     private Map<String, Object> descriptionReevaluationPayload(List<Long> recordIds) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("recordIds", recordIds);
+        return payload;
+    }
+
+    private Map<String, Object> descriptionReevaluationPayload(List<Long> recordIds, boolean apply, boolean protectManualChanges) {
+        Map<String, Object> payload = descriptionReevaluationPayload(recordIds);
+        payload.put("apply", apply);
+        payload.put("protectManualChanges", protectManualChanges);
         return payload;
     }
 

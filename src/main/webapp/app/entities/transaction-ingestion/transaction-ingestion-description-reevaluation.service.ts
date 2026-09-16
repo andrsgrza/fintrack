@@ -2,6 +2,8 @@ import axios from 'axios';
 
 export interface IDescriptionReevaluationRequest {
   recordIds?: number[];
+  apply?: boolean;
+  protectManualChanges?: boolean;
 }
 
 export interface IDescriptionReevaluationResult {
@@ -19,8 +21,20 @@ export interface IDescriptionReevaluationResponse {
 
 const ingestionApiUrl = 'api/transaction-ingestions';
 
-export const reevaluateIngestionDescriptions = (ingestionId: number, recordIds?: number[]) =>
-  axios.post<IDescriptionReevaluationResponse>(
-    `${ingestionApiUrl}/${ingestionId}/descriptions/reevaluate`,
-    recordIds?.length ? ({ recordIds } satisfies IDescriptionReevaluationRequest) : undefined,
-  );
+export const reevaluateIngestionDescriptions = (
+  ingestionId: number,
+  recordIds?: number[],
+  apply?: boolean,
+  protectManualChanges?: boolean,
+) => {
+  const request =
+    recordIds?.length || apply !== undefined || protectManualChanges !== undefined
+      ? ({
+          ...(recordIds?.length ? { recordIds } : {}),
+          ...(apply !== undefined ? { apply } : {}),
+          ...(protectManualChanges !== undefined ? { protectManualChanges } : {}),
+        } satisfies IDescriptionReevaluationRequest)
+      : undefined;
+
+  return axios.post<IDescriptionReevaluationResponse>(`${ingestionApiUrl}/${ingestionId}/descriptions/reevaluate`, request);
+};

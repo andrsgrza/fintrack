@@ -139,10 +139,15 @@ public class FileImportCandidateClassificationService {
         String userLogin = currentUserService.getCurrentUserLogin();
         TransactionIngestion ingestion = resolveAccessibleFileIngestion(transactionIngestionId, userLogin);
         List<TransactionCandidate> candidates = resolveBatchCandidates(ingestion, request, userLogin);
+        FileImportCandidateRulePreviewScope scope = previewScope(request);
+        boolean automatic = request != null && Boolean.TRUE.equals(request.getAutomatic());
+        boolean protectManualChanges = request == null || !Boolean.FALSE.equals(request.getProtectManualChanges());
 
         FileImportCandidateApplyRulesResponseDTO response = new FileImportCandidateApplyRulesResponseDTO();
         response.setTransactionIngestionId(ingestion.getId());
-        response.setRows(candidates.stream().map(candidate -> applyRulesRow(candidate, userLogin)).toList());
+        response.setRows(
+            candidates.stream().map(candidate -> applyRulesRow(candidate, userLogin, scope, automatic, protectManualChanges)).toList()
+        );
         return response;
     }
 
@@ -183,22 +188,44 @@ public class FileImportCandidateClassificationService {
         return row;
     }
 
-    private FileImportCandidateApplyRulesRowDTO applyRulesRow(TransactionCandidate candidate, String userLogin) {
+    private FileImportCandidateApplyRulesRowDTO applyRulesRow(
+        TransactionCandidate candidate,
+        String userLogin,
+        FileImportCandidateRulePreviewScope scope,
+        boolean automatic,
+        boolean protectManualChanges
+    ) {
         FileImportCandidateApplyRulesRowDTO row = baseApplyRow(candidate);
         try {
             validateMutableFileImportCandidate(candidate);
             TransactionRuleEvaluationResult evaluation = evaluate(candidate, userLogin);
-            boolean hadManualClassification = candidate.hasManualClassification();
-            TransactionCandidateRuleApplicationResult application = transactionCandidateRuleApplicationService.applyFillEmptyOnly(
-                candidate,
-                evaluation,
-                hadManualClassification,
-                categoryId -> resolveCategory(categoryId, userLogin, candidate.getFlow()),
-                tagId ->
-                    tagRepository
-                        .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
-                        .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
-            );
+            TransactionCandidateRuleApplicationResult application;
+            if (automatic) {
+                application = transactionCandidateRuleApplicationService.applyAutomatically(
+                    candidate,
+                    evaluation,
+                    scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.CATEGORY,
+                    scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.TAGS,
+                    protectManualChanges,
+                    categoryId -> resolveCategory(categoryId, userLogin, candidate.getFlow()),
+                    tagId ->
+                        tagRepository
+                            .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
+                            .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+                );
+            } else {
+                boolean hadManualClassification = candidate.hasManualClassification();
+                application = transactionCandidateRuleApplicationService.applyFillEmptyOnly(
+                    candidate,
+                    evaluation,
+                    hadManualClassification,
+                    categoryId -> resolveCategory(categoryId, userLogin, candidate.getFlow()),
+                    tagId ->
+                        tagRepository
+                            .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
+                            .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+                );
+            }
 
             candidate.setClassificationReviewStatus(application.recommendedClassificationReviewStatus());
 

@@ -125,6 +125,14 @@
           "all": "Reevaluate all",
           "row": "Reevaluate this row"
         },
+        "automation": {
+          "title": "Automatic review",
+          "descriptions": "Auto-apply descriptions",
+          "categories": "Auto-apply categories",
+          "tags": "Auto-apply tags",
+          "protectManualChanges": "Protect manual changes",
+          "protectManualHelp": "Prevent automation from replacing changes made manually."
+        },
         "classification": {
           "persistedNotice": "Categories and tags are saved on candidates before confirming the import.",
           "reviewedRows": "Reviewed",

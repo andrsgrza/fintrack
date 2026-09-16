@@ -161,6 +161,111 @@ class TransactionCandidateRuleApplicationServiceTest {
         assertThat(result.recommendedClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
     }
 
+    @Test
+    void automaticCategoryScopeReplacesAndClearsAutomaticValuesWithoutChangingTags() {
+        Tag manualTag = tag(9L);
+        TransactionCandidate candidate = new TransactionCandidate().category(category(1L));
+        candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(manualTag, TransactionCandidateClassificationSource.MANUAL);
+
+        TransactionCandidateRuleApplicationResult replaced = service.applyAutomatically(
+            candidate,
+            evaluation(categorySuggestion(2L, true), List.of(tagSuggestion(3L, false, false))),
+            true,
+            false,
+            true,
+            this::category,
+            this::tag
+        );
+
+        assertThat(replaced.categoryApplied()).isTrue();
+        assertThat(candidate.getCategory().getId()).isEqualTo(2L);
+        assertThat(candidate.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+        assertThat(candidate.getTags()).extracting(Tag::getId).containsExactly(9L);
+        assertThat(candidate.getTagSource(manualTag)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+
+        service.applyAutomatically(candidate, evaluation(null, List.of()), true, false, true, this::category, this::tag);
+
+        assertThat(candidate.getCategory()).isNull();
+        assertThat(candidate.getCategorySource()).isNull();
+        assertThat(candidate.getTags()).extracting(Tag::getId).containsExactly(9L);
+    }
+
+    @Test
+    void automaticCategoryScopeProtectsOrReplacesManualCategoryAccordingToTheRequest() {
+        TransactionCandidate protectedCandidate = new TransactionCandidate().category(category(1L));
+        protectedCandidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
+        TransactionRuleEvaluationResult suggestion = evaluation(categorySuggestion(2L, true), List.of());
+
+        service.applyAutomatically(protectedCandidate, suggestion, true, false, true, this::category, this::tag);
+
+        assertThat(protectedCandidate.getCategory().getId()).isEqualTo(1L);
+        assertThat(protectedCandidate.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+
+        service.applyAutomatically(protectedCandidate, suggestion, true, false, false, this::category, this::tag);
+
+        assertThat(protectedCandidate.getCategory().getId()).isEqualTo(2L);
+        assertThat(protectedCandidate.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+
+        TransactionCandidate manualWithoutSuggestion = new TransactionCandidate().category(category(3L));
+        manualWithoutSuggestion.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
+        service.applyAutomatically(manualWithoutSuggestion, evaluation(null, List.of()), true, false, false, this::category, this::tag);
+        assertThat(manualWithoutSuggestion.getCategory()).isNull();
+        assertThat(manualWithoutSuggestion.getCategorySource()).isNull();
+    }
+
+    @Test
+    void automaticTagScopeSynchronizesAutomaticTagsAndPreservesManualTagsWhenProtected() {
+        Tag automaticObsolete = tag(1L);
+        Tag automaticRetained = tag(2L);
+        Tag manualRetained = tag(3L);
+        TransactionCandidate candidate = new TransactionCandidate().category(category(7L));
+        candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
+        candidate.addTag(automaticObsolete, TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(automaticRetained, TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(manualRetained, TransactionCandidateClassificationSource.MANUAL);
+
+        service.applyAutomatically(
+            candidate,
+            evaluation(null, List.of(tagSuggestion(2L, true, false), tagSuggestion(4L, false, false))),
+            false,
+            true,
+            true,
+            this::category,
+            this::tag
+        );
+
+        assertThat(candidate.getCategory().getId()).isEqualTo(7L);
+        assertThat(candidate.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(candidate.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(2L, 3L, 4L);
+        assertThat(candidate.getTagSource(automaticRetained)).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+        assertThat(candidate.getTagSource(manualRetained)).isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(candidate.getTagSource(tag(4L))).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
+    }
+
+    @Test
+    void automaticTagScopeReplacesTheEntireTagSetWhenManualProtectionIsOff() {
+        TransactionCandidate candidate = new TransactionCandidate();
+        candidate.addTag(tag(1L), TransactionCandidateClassificationSource.AUTOMATIC);
+        candidate.addTag(tag(2L), TransactionCandidateClassificationSource.MANUAL);
+        candidate.addTag(tag(3L), TransactionCandidateClassificationSource.MANUAL);
+
+        service.applyAutomatically(
+            candidate,
+            evaluation(null, List.of(tagSuggestion(2L, true, false), tagSuggestion(4L, false, false))),
+            false,
+            true,
+            false,
+            this::category,
+            this::tag
+        );
+
+        assertThat(candidate.getTags()).extracting(Tag::getId).containsExactlyInAnyOrder(2L, 4L);
+        assertThat(candidate.getTagAssociations()).allSatisfy(association ->
+            assertThat(association.getSource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC)
+        );
+    }
+
     private TransactionRuleEvaluationResult evaluation(CategorySuggestion categorySuggestion, List<TagSuggestion> tagSuggestions) {
         return new TransactionRuleEvaluationResult(List.of(), categorySuggestion, tagSuggestions, List.of(), List.of());
     }

@@ -56,6 +56,8 @@ export interface IPrepareFileImportCandidatesResponse {
 export interface IFileImportCandidateBatchRequest {
   candidateIds?: number[];
   scope?: FileImportCandidateRulePreviewScope;
+  automatic?: boolean;
+  protectManualChanges?: boolean;
 }
 
 export type FileImportCandidateRulePreviewScope = 'CATEGORY' | 'TAGS' | 'ALL';
@@ -162,11 +164,24 @@ export const previewFileImportCandidateRules = (
   return axios.post<IFileImportCandidateRulePreviewResponse>(`${ingestionApiUrl}/${ingestionId}/candidates/rule-preview`, request);
 };
 
-export const applyFileImportCandidateRules = (ingestionId: number, candidateIds?: number[]) =>
-  axios.post<IFileImportCandidateApplyRulesResponse>(
-    `${ingestionApiUrl}/${ingestionId}/candidates/apply-rules`,
-    candidateIds?.length ? ({ candidateIds } satisfies IFileImportCandidateBatchRequest) : undefined,
-  );
+export const applyFileImportCandidateRules = (
+  ingestionId: number,
+  candidateIds?: number[],
+  scope: FileImportCandidateRulePreviewScope = 'ALL',
+  automatic = false,
+  protectManualChanges = true,
+) => {
+  const request =
+    candidateIds?.length || scope !== 'ALL' || automatic || !protectManualChanges
+      ? ({
+          ...(candidateIds?.length ? { candidateIds } : {}),
+          ...(scope !== 'ALL' ? { scope } : {}),
+          ...(automatic ? { automatic: true, protectManualChanges } : {}),
+        } satisfies IFileImportCandidateBatchRequest)
+      : undefined;
+
+  return axios.post<IFileImportCandidateApplyRulesResponse>(`${ingestionApiUrl}/${ingestionId}/candidates/apply-rules`, request);
+};
 
 export const updateFileImportCandidateClassification = (
   ingestionId: number,

@@ -27,8 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Re-evaluates description-normalization rules for persisted CSV review rows.
  *
- * Description rules always evaluate {@code rawData.raw.description}. A {@code USER_EDIT} description is never
- * overwritten: any new matching result is returned only as a transient response suggestion.
+ * Description rules always evaluate {@code rawData.raw.description}. The request can ask for a preview only, or for
+ * persisted application. A {@code USER_EDIT} description remains protected by default; an explicit apply request with
+ * manual-change protection disabled may replace it with the current rule result.
  */
 @Service
 @Transactional
@@ -64,14 +65,21 @@ public class CsvIngestionDescriptionReevaluationService {
         String userLogin = currentUserService.getCurrentUserLogin();
         TransactionIngestion ingestion = resolveAccessibleFileIngestion(transactionIngestionId, userLogin);
         List<IngestionRecord> records = selectRecords(ingestion, request);
+        boolean apply = request == null || !Boolean.FALSE.equals(request.getApply());
+        boolean protectManualChanges = request == null || !Boolean.FALSE.equals(request.getProtectManualChanges());
 
         CsvIngestionDescriptionReevaluationResponseDTO response = new CsvIngestionDescriptionReevaluationResponseDTO();
         response.setTransactionIngestionId(ingestion.getId());
-        response.setRows(records.stream().map(record -> reevaluateRecord(record, userLogin)).toList());
+        response.setRows(records.stream().map(record -> reevaluateRecord(record, userLogin, apply, protectManualChanges)).toList());
         return response;
     }
 
-    private CsvIngestionDescriptionReevaluationRowDTO reevaluateRecord(IngestionRecord record, String userLogin) {
+    private CsvIngestionDescriptionReevaluationRowDTO reevaluateRecord(
+        IngestionRecord record,
+        String userLogin,
+        boolean apply,
+        boolean protectManualChanges
+    ) {
         CsvIngestionDescriptionReevaluationRowDTO response = baseRow(record);
         if (record.getStatus() != IngestionRecordStatus.VALID) {
             response.setAction("SKIPPED");
@@ -93,8 +101,15 @@ public class CsvIngestionDescriptionReevaluationService {
             userLogin,
             originalDescription
         );
-        if (isUserEditedDescription(root)) {
+        if (isUserEditedDescription(root) && (!apply || protectManualChanges)) {
             response.setAction("MANUAL_PRESERVED");
+            response.setSuggestedDescription(result.matched() ? result.resultingDescription() : null);
+            response.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(root));
+            return response;
+        }
+
+        if (!apply) {
+            response.setAction(result.matched() ? "PREVIEWED" : "NO_MATCH");
             response.setSuggestedDescription(result.matched() ? result.resultingDescription() : null);
             response.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(root));
             return response;
