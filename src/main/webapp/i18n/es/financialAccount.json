@@ -59,6 +59,9 @@
       "statementDay": "Día de corte",
       "paymentDueDay": "Día límite de pago",
       "annualInterestRate": "Tasa anual",
+      "configured": {
+        "saveError": "No se pudo guardar la cuenta. Revisa los datos de la cuenta y de la tarjeta e inténtalo de nuevo."
+      },
       "inflowTotal": "Entradas totales",
       "outflowTotal": "Salidas totales",
       "asOfDate": "Fecha de corte",

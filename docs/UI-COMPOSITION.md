@@ -336,17 +336,18 @@ The embedded CreditAccountDetails section does not show or edit the `account` re
 
 The parent FinancialAccount is fixed by the containing FinancialAccount workflow.
 
-### Orchestration
+### Product write orchestration
 
-This is frontend orchestration today.
+FinancialAccount create/edit uses one atomic product command:
 
-FinancialAccount is saved first, then CreditAccountDetails is created or updated for the saved account.
+- `POST /api/financial-accounts/configured`;
+- `PUT /api/financial-accounts/{id}/configured`.
 
-Atomic backend command endpoint remains deferred.
+For `CREDIT_CARD`, the command receives the parent account and its embedded credit-card details together. The backend scopes the parent to the current user, validates the child against that parent, and persists both in one transaction. A child validation or persistence failure rolls back the parent write; the product UI never writes `CreditAccountDetails` in a second request.
 
 ### Standalone CRUD
 
-Standalone CreditAccountDetails CRUD remains available for admin/debug/direct maintenance.
+Standalone CreditAccountDetails CRUD remains available for admin/debug/direct maintenance. It is not the FinancialAccount product write path.
 
 ## TransactionRule + TransactionRuleCondition
 

@@ -40,6 +40,7 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.UserRepository;
@@ -143,6 +144,9 @@ class FinancialAccountResourceIT {
 
     @Autowired
     private FinancialAccountRepository financialAccountRepository;
+
+    @Autowired
+    private CreditAccountDetailsRepository creditAccountDetailsRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -2961,6 +2965,234 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
+    void configuredCreateDebitAccountCreatesOnlyTheParent() throws Exception {
+        long accountsBefore = getRepositoryCount();
+        long detailsBefore = creditAccountDetailsRepository.count();
+
+        restFinancialAccountMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/configured")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(configuredPayload("Configured debit", AccountType.DEBIT, CurrencyCode.MXN, null))
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.financialAccount.name").value("Configured debit"))
+            .andExpect(jsonPath("$.financialAccount.accountType").value("DEBIT"))
+            .andExpect(jsonPath("$.financialAccount.user").doesNotExist())
+            .andExpect(jsonPath("$.financialAccount.createdAt").doesNotExist())
+            .andExpect(jsonPath("$.creditAccountDetails").doesNotExist());
+
+        assertIncrementedRepositoryCount(accountsBefore);
+        assertThat(creditAccountDetailsRepository.count()).isEqualTo(detailsBefore);
+    }
+
+    @Test
+    @Transactional
+    void configuredCreateCreditCardCreatesParentAndDetailsAtomically() throws Exception {
+        long accountsBefore = getRepositoryCount();
+        long detailsBefore = creditAccountDetailsRepository.count();
+
+        restFinancialAccountMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/configured")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        configuredPayload(
+                            "Configured card",
+                            AccountType.CREDIT_CARD,
+                            CurrencyCode.MXN,
+                            creditDetailsPayload("5000.00", 15, 5, "65.00")
+                        )
+                    )
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.financialAccount.accountType").value("CREDIT_CARD"))
+            .andExpect(jsonPath("$.creditAccountDetails.creditLimit").value(sameNumber(new BigDecimal("5000.00"))))
+            .andExpect(jsonPath("$.creditAccountDetails.statementDay").value(15))
+            .andExpect(jsonPath("$.creditAccountDetails.paymentDueDay").value(5));
+
+        assertIncrementedRepositoryCount(accountsBefore);
+        assertThat(creditAccountDetailsRepository.count()).isEqualTo(detailsBefore + 1);
+    }
+
+    @Test
+    @Transactional
+    void configuredCreateInvalidCreditDetailsRollsBackTheParent() throws Exception {
+        long accountsBefore = getRepositoryCount();
+        long detailsBefore = creditAccountDetailsRepository.count();
+
+        restFinancialAccountMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/configured")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        configuredPayload(
+                            "Invalid configured card",
+                            AccountType.CREDIT_CARD,
+                            CurrencyCode.MXN,
+                            creditDetailsPayload("-1.00", 15, 5, null)
+                        )
+                    )
+            )
+            .andExpect(status().isBadRequest());
+
+        assertSameRepositoryCount(accountsBefore);
+        assertThat(creditAccountDetailsRepository.count()).isEqualTo(detailsBefore);
+    }
+
+    @Test
+    @Transactional
+    void configuredCreateRejectsCreditDetailsForNonCreditAccountWithoutCreatingAnything() throws Exception {
+        long accountsBefore = getRepositoryCount();
+        long detailsBefore = creditAccountDetailsRepository.count();
+
+        restFinancialAccountMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/configured")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        configuredPayload(
+                            "Invalid debit details",
+                            AccountType.DEBIT,
+                            CurrencyCode.MXN,
+                            creditDetailsPayload("5000.00", 15, 5, null)
+                        )
+                    )
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Credit card details are only allowed for credit card accounts"));
+
+        assertSameRepositoryCount(accountsBefore);
+        assertThat(creditAccountDetailsRepository.count()).isEqualTo(detailsBefore);
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateCreditCardUpdatesTheSingleExistingChild() throws Exception {
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        CreditAccountDetails existingDetails = createCreditAccountDetails(financialAccount, new BigDecimal("5000.00"));
+        long detailsBefore = creditAccountDetailsRepository.count();
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", financialAccount.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        configuredPayload(
+                            "Updated configured card",
+                            AccountType.CREDIT_CARD,
+                            CurrencyCode.MXN,
+                            creditDetailsPayload("6500.00", 16, 6, "70.00")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.financialAccount.name").value("Updated configured card"))
+            .andExpect(jsonPath("$.creditAccountDetails.id").value(existingDetails.getId()))
+            .andExpect(jsonPath("$.creditAccountDetails.creditLimit").value(sameNumber(new BigDecimal("6500.00"))));
+
+        em.flush();
+        em.clear();
+        assertThat(em.find(FinancialAccount.class, financialAccount.getId()).getName()).isEqualTo("Updated configured card");
+        assertThat(em.find(CreditAccountDetails.class, existingDetails.getId()).getStatementDay()).isEqualTo(16);
+        assertThat(creditAccountDetailsRepository.count()).isEqualTo(detailsBefore);
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateInvalidCreditDetailsRollsBackParentChanges() throws Exception {
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        financialAccount.setName("Original configured card");
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        createCreditAccountDetails(financialAccount, new BigDecimal("5000.00"));
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", financialAccount.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        configuredPayload(
+                            "Should not persist",
+                            AccountType.CREDIT_CARD,
+                            CurrencyCode.MXN,
+                            creditDetailsPayload("5000.00", 0, 5, null)
+                        )
+                    )
+            )
+            .andExpect(status().isBadRequest());
+
+        em.clear();
+        assertThat(em.find(FinancialAccount.class, financialAccount.getId()).getName()).isEqualTo("Original configured card");
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateRejectsImmutableAccountTypeAndCurrency() throws Exception {
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", financialAccount.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(configuredPayload("Type change", AccountType.CASH, CurrencyCode.MXN, null))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Account type cannot be changed"));
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", financialAccount.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(configuredPayload("Currency change", AccountType.DEBIT, CurrencyCode.USD, null))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Currency cannot be changed"));
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateCreatesMissingCreditCardDetails() throws Exception {
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        assertThat(creditAccountDetailsRepository.existsByAccountId(financialAccount.getId())).isFalse();
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", financialAccount.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        configuredPayload(
+                            "Historical card",
+                            AccountType.CREDIT_CARD,
+                            CurrencyCode.MXN,
+                            creditDetailsPayload("7500.00", 20, 10, null)
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.creditAccountDetails.creditLimit").value(sameNumber(new BigDecimal("7500.00"))));
+
+        assertThat(creditAccountDetailsRepository.existsByAccountId(financialAccount.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateRejectsAnotherUsersAccount() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", financialAccount.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(configuredPayload("Foreign account", AccountType.DEBIT, CurrencyCode.MXN, null))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Account not found"));
+    }
+
+    @Test
+    @Transactional
     void getOverviewReturnsAccessibleProductSummariesForEveryAccountType() throws Exception {
         FinancialAccount debit = createOverviewAccount("Overview debit", AccountType.DEBIT, new BigDecimal("100.00"), true);
         FinancialAccount cash = createOverviewAccount("Overview cash", AccountType.CASH, new BigDecimal("50.00"), true);
@@ -3063,6 +3295,34 @@ class FinancialAccountResourceIT {
         account.setInitialBalanceDate(LocalDate.now().minusDays(2));
         account.setActive(active);
         return financialAccountRepository.saveAndFlush(account);
+    }
+
+    private String configuredPayload(String name, AccountType accountType, CurrencyCode currency, ObjectNode creditDetails)
+        throws Exception {
+        ObjectNode request = om.createObjectNode();
+        ObjectNode account = request.putObject("financialAccount");
+        account.put("name", name);
+        account.put("institutionName", "Configured Bank");
+        account.put("accountType", accountType.name());
+        account.put("currency", currency.name());
+        account.put("initialBalance", "1000.00");
+        account.put("initialBalanceDate", "2026-01-01");
+        account.put("lastFourDigits", "1234");
+        account.put("description", "Configured account");
+        account.put("color", "#112233");
+        account.put("icon", "wallet");
+        account.put("active", true);
+        if (creditDetails != null) request.set("creditAccountDetails", creditDetails);
+        return om.writeValueAsString(request);
+    }
+
+    private ObjectNode creditDetailsPayload(String creditLimit, int statementDay, int paymentDueDay, String annualInterestRate) {
+        ObjectNode details = om.createObjectNode();
+        details.put("creditLimit", creditLimit);
+        details.put("statementDay", statementDay);
+        details.put("paymentDueDay", paymentDueDay);
+        if (annualInterestRate != null) details.put("annualInterestRate", annualInterestRate);
+        return details;
     }
 
     protected long getRepositoryCount() {

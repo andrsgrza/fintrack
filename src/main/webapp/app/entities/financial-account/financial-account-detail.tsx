@@ -190,7 +190,7 @@ export const FinancialAccountDetail = () => {
           </span>
         </Button>
         &nbsp;
-        <Button tag={Link} to={`/financial-account/${financialAccountEntity.id}/edit`} replace color="primary">
+        <Button tag={Link} to={`/financial-account/${financialAccountEntity.id}/edit`} replace color="primary" data-cy="entityEditButton">
           <FontAwesomeIcon icon="pencil-alt" />{' '}
           <span className="d-none d-md-inline">
             <Translate contentKey="entity.action.edit">Edit</Translate>

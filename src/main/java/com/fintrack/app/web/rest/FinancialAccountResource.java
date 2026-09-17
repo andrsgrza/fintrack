@@ -3,11 +3,14 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FinancialAccountBalanceService;
+import com.fintrack.app.service.FinancialAccountConfigurationService;
 import com.fintrack.app.service.FinancialAccountOverviewService;
 import com.fintrack.app.service.FinancialAccountQueryService;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.criteria.FinancialAccountCriteria;
 import com.fintrack.app.service.dto.FinancialAccountBalanceDTO;
+import com.fintrack.app.service.dto.FinancialAccountConfiguredRequestDTO;
+import com.fintrack.app.service.dto.FinancialAccountConfiguredResponseDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialAccountOverviewDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -47,6 +50,8 @@ public class FinancialAccountResource {
 
     private final FinancialAccountBalanceService financialAccountBalanceService;
 
+    private final FinancialAccountConfigurationService financialAccountConfigurationService;
+
     private final FinancialAccountOverviewService financialAccountOverviewService;
 
     private final ObjectMapper objectMapper;
@@ -55,14 +60,58 @@ public class FinancialAccountResource {
         FinancialAccountService financialAccountService,
         FinancialAccountQueryService financialAccountQueryService,
         FinancialAccountBalanceService financialAccountBalanceService,
+        FinancialAccountConfigurationService financialAccountConfigurationService,
         FinancialAccountOverviewService financialAccountOverviewService,
         ObjectMapper objectMapper
     ) {
         this.financialAccountService = financialAccountService;
         this.financialAccountQueryService = financialAccountQueryService;
         this.financialAccountBalanceService = financialAccountBalanceService;
+        this.financialAccountConfigurationService = financialAccountConfigurationService;
         this.financialAccountOverviewService = financialAccountOverviewService;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * {@code POST /financial-accounts/configured} : Create a FinancialAccount and, when applicable, its
+     * CreditAccountDetails atomically through the product workflow.
+     */
+    @PostMapping("/configured")
+    public ResponseEntity<FinancialAccountConfiguredResponseDTO> createConfiguredFinancialAccount(
+        @Valid @RequestBody FinancialAccountConfiguredRequestDTO request
+    ) throws URISyntaxException {
+        LOG.debug("REST request to create configured FinancialAccount");
+        FinancialAccountConfiguredResponseDTO result;
+        try {
+            result = financialAccountConfigurationService.create(request);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        Long id = result.getFinancialAccount().getId();
+        return ResponseEntity.created(new URI("/api/financial-accounts/" + id))
+            .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, id.toString()))
+            .body(result);
+    }
+
+    /**
+     * {@code PUT /financial-accounts/:id/configured} : Atomically update a FinancialAccount and its contextual
+     * CreditAccountDetails. Account type and currency remain immutable.
+     */
+    @PutMapping("/{id}/configured")
+    public ResponseEntity<FinancialAccountConfiguredResponseDTO> updateConfiguredFinancialAccount(
+        @PathVariable("id") Long id,
+        @Valid @RequestBody FinancialAccountConfiguredRequestDTO request
+    ) {
+        LOG.debug("REST request to update configured FinancialAccount : {}", id);
+        FinancialAccountConfiguredResponseDTO result;
+        try {
+            result = financialAccountConfigurationService.update(id, request);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseEntity.ok()
+            .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, id.toString()))
+            .body(result);
     }
 
     /**

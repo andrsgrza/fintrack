@@ -59,6 +59,9 @@
       "statementDay": "Statement closing day",
       "paymentDueDay": "Payment due day",
       "annualInterestRate": "Annual interest rate",
+      "configured": {
+        "saveError": "The account could not be saved. Review the account and credit-card details and try again."
+      },
       "inflowTotal": "Inflow total",
       "outflowTotal": "Outflow total",
       "asOfDate": "As of date",

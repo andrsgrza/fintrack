@@ -8,12 +8,15 @@ import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
 import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enCreditAccountDetails from 'app/../i18n/en/creditAccountDetails.json';
+import enGlobal from 'app/../i18n/en/global.json';
 import { FinancialAccountDetail } from './financial-account-detail';
 import { FinancialAccountUpdate } from './financial-account-update';
 
 jest.mock('axios');
 
 const mockAxiosGet = axios.get as jest.Mock;
+const mockAxiosPost = axios.post as jest.Mock;
+const mockAxiosPut = axios.put as jest.Mock;
 const mockDispatch = jest.fn();
 const mockCreateEntity = jest.fn(entity => ({ type: 'financialAccount/createEntity', payload: { data: { id: 99, ...entity } } }));
 const mockUpdateEntity = jest.fn(entity => ({ type: 'financialAccount/updateEntity', payload: { data: entity } }));
@@ -81,6 +84,7 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enFinancialTransaction);
   TranslatorContext.registerTranslations('en', enTransactionFlow);
   TranslatorContext.registerTranslations('en', enCreditAccountDetails);
+  TranslatorContext.registerTranslations('en', enGlobal);
   TranslatorContext.setLocale('en');
 };
 
@@ -101,6 +105,7 @@ const renderCreateForm = (creditAccountDetailsEntity = {}) => {
     <MemoryRouter initialEntries={['/financial-account/new']}>
       <Routes>
         <Route path="/financial-account/new" element={<FinancialAccountUpdate />} />
+        <Route path="/financial-account/:id" element={<div>Financial account detail</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -134,6 +139,7 @@ const renderEditForm = (accountType = 'CREDIT_CARD', creditAccountDetailsEntity 
     <MemoryRouter initialEntries={['/financial-account/1/edit']}>
       <Routes>
         <Route path="/financial-account/:id/edit" element={<FinancialAccountUpdate />} />
+        <Route path="/financial-account/:id" element={<div>Financial account detail</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -253,6 +259,8 @@ describe('FinancialAccount opening-position labels', () => {
     mockGetCreditAccountDetailsByAccountId.mockClear();
     mockResetCreditAccountDetails.mockClear();
     mockAxiosGet.mockReset();
+    mockAxiosPost.mockReset();
+    mockAxiosPut.mockReset();
   });
 
   it('shows DEBIT opening-position copy on initial create render', () => {
@@ -355,20 +363,24 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
   });
 
-  it('submits active=true in create mode while the active checkbox is hidden', async () => {
+  it('creates a debit account with one configured request while the active checkbox is hidden', async () => {
     renderCreateForm();
+    mockAxiosPost.mockResolvedValue({ data: { financialAccount: { id: 99 } } });
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New account' } });
     fireEvent.change(screen.getByLabelText('Initial balance'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockCreateEntity).toHaveBeenCalled());
-    expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ active: true }));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/financial-accounts/configured', expect.any(Object)));
+    expect(mockAxiosPost.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ financialAccount: expect.objectContaining({ active: true, accountType: 'DEBIT' }) }),
+    );
   });
 
-  it('creates credit account details after creating a CREDIT_CARD financial account', async () => {
+  it('creates a CREDIT_CARD and its details with one configured request', async () => {
     renderCreateForm();
+    mockAxiosPost.mockResolvedValue({ data: { financialAccount: { id: 99 } } });
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New card' } });
     fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
@@ -380,16 +392,18 @@ describe('FinancialAccount opening-position labels', () => {
     fireEvent.change(screen.getByLabelText('Annual interest rate'), { target: { value: '65' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockCreateCreditAccountDetails).toHaveBeenCalled());
-    expect(mockCreateCreditAccountDetails.mock.calls[0][0]).toEqual(
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/financial-accounts/configured', expect.any(Object)));
+    expect(mockAxiosPost.mock.calls[0][1]).toEqual(
       expect.objectContaining({
-        creditLimit: 50000,
-        statementDay: 15,
-        paymentDueDay: 5,
-        annualInterestRate: 65,
-        account: expect.objectContaining({ id: 99, name: 'New card' }),
+        creditAccountDetails: expect.objectContaining({
+          creditLimit: 50000,
+          statementDay: 15,
+          paymentDueDay: 5,
+          annualInterestRate: 65,
+        }),
       }),
     );
+    expect(mockCreateCreditAccountDetails).not.toHaveBeenCalled();
   });
 
   it('changes CREDIT_CARD back to DEBIT labels and resets initial balance', () => {
@@ -423,7 +437,7 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByText('Credit card details')).toBeNull();
   });
 
-  it('shows existing credit card details in CREDIT_CARD edit mode and updates them on save', async () => {
+  it('hydrates existing credit card details and updates parent and child with one configured request', async () => {
     renderEditForm('CREDIT_CARD', {
       id: 25,
       creditLimit: 50000,
@@ -440,37 +454,75 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByLabelText('Account')).toBeNull();
     expectNoMissingTranslations();
 
+    mockAxiosPut.mockResolvedValue({ data: { financialAccount: { id: 1 } } });
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Existing account edited' } });
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '60000' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockUpdateCreditAccountDetails).toHaveBeenCalled());
-    expect(mockUpdateCreditAccountDetails.mock.calls[0][0]).toEqual(
+    await waitFor(() => expect(mockAxiosPut).toHaveBeenCalledWith('api/financial-accounts/1/configured', expect.any(Object)));
+    expect(mockAxiosPut.mock.calls[0][1]).toEqual(
       expect.objectContaining({
-        id: 25,
-        creditLimit: 60000,
-        account: expect.objectContaining({ id: 1 }),
+        financialAccount: expect.objectContaining({ name: 'Existing account edited', accountType: 'CREDIT_CARD' }),
+        creditAccountDetails: expect.objectContaining({ creditLimit: 60000 }),
       }),
     );
+    expect(mockAxiosPut.mock.calls[0][1].creditAccountDetails).toEqual(
+      expect.objectContaining({ statementDay: 15, paymentDueDay: 5, annualInterestRate: 65 }),
+    );
+    expect(mockUpdateCreditAccountDetails).not.toHaveBeenCalled();
   });
 
-  it('creates missing credit account details for existing CREDIT_CARD account on save', async () => {
+  it('keeps an invalid credit-card form open and renders child validation errors without sending a request', async () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New card' } });
+    fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
+    fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
+    expect((screen.getByLabelText('Account Type') as HTMLSelectElement).value).toBe('CREDIT_CARD');
+    expect(screen.getByText('Credit card details')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getAllByText('This field is required.')).toHaveLength(3));
+    expect(mockAxiosPost).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Credit limit')).toBeTruthy();
+  });
+
+  it('keeps the form open and shows one contextual error when the configured command fails', async () => {
+    renderCreateForm();
+    mockAxiosPost.mockRejectedValue(new Error('configured save failed'));
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New card' } });
+    fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
+    fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
+    fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '50000' } });
+    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain(
+        'The account could not be saved. Review the account and credit-card details and try again.',
+      ),
+    );
+    expect(screen.getByLabelText('Name')).toBeTruthy();
+  });
+
+  it('uses configured update to create missing credit account details for an existing CREDIT_CARD account', async () => {
     renderEditForm('CREDIT_CARD');
+    mockAxiosPut.mockResolvedValue({ data: { financialAccount: { id: 1 } } });
 
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '40000' } });
     fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '12' } });
     fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '4' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockCreateCreditAccountDetails).toHaveBeenCalled());
-    expect(mockCreateCreditAccountDetails.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        creditLimit: 40000,
-        statementDay: 12,
-        paymentDueDay: 4,
-        account: expect.objectContaining({ id: 1 }),
-      }),
+    await waitFor(() => expect(mockAxiosPut).toHaveBeenCalledWith('api/financial-accounts/1/configured', expect.any(Object)));
+    expect(mockAxiosPut.mock.calls[0][1].creditAccountDetails).toEqual(
+      expect.objectContaining({ creditLimit: 40000, statementDay: 12, paymentDueDay: 4 }),
     );
+    expect(mockCreateCreditAccountDetails).not.toHaveBeenCalled();
   });
 
   it('shows CASH opening-position copy', () => {
