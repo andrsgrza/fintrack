@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 
 import enTransactionIngestion from 'app/../i18n/en/transactionIngestion.json';
 import enIngestionType from 'app/../i18n/en/ingestionType.json';
+import TransactionIngestionRoutes from './index';
 import { TransactionIngestionUpdate } from './transaction-ingestion-update';
 
 jest.mock('axios');
@@ -66,6 +67,15 @@ const renderCreateForm = () => {
     </MemoryRouter>,
   );
 };
+
+const renderRoute = (path: string) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/transaction-ingestion/*" element={<TransactionIngestionRoutes />} />
+      </Routes>
+    </MemoryRouter>,
+  );
 
 const selectAccount = () => {
   const account = screen.getByLabelText('Account') as HTMLSelectElement;
@@ -147,5 +157,13 @@ describe('TransactionIngestion create workflow form', () => {
     expect(screen.queryByText('Review route')).toBeNull();
     expect(screen.getByRole('button', { name: /Create workflow/ })).toBeTruthy();
     expect(input.value).toBe('');
+  });
+
+  it('renders generated edit route as unavailable instead of showing the edit form', () => {
+    renderRoute('/transaction-ingestion/100/edit');
+
+    expect(screen.getByText('Transaction Ingestion technical edit unavailable')).toBeTruthy();
+    expect(screen.queryByLabelText('Status')).toBeNull();
+    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
   });
 });

@@ -15,6 +15,9 @@
       "delete": {
         "question": "Are you sure you want to delete Transaction Ingestion {{ id }}?"
       },
+      "technicalView": "Transaction Ingestion is managed by workflow commands.",
+      "writeUnavailableTitle": "Transaction Ingestion technical edit unavailable",
+      "writeUnavailable": "Generated Transaction Ingestion edit is not a product action. Use the ingestion workflow instead.",
       "detail": {
         "title": "Transaction Ingestion"
       },
@@ -112,13 +115,48 @@
           "rule": "Rule",
           "editedAt": "Edited at",
           "editedBy": "Edited by",
-          "originallyAutoNormalizedBy": "Originally auto-normalized by {{ruleName}}, then edited manually"
+          "originallyAutoNormalizedBy": "Originally auto-normalized by {{ruleName}}, then edited manually",
+          "reevaluationSuggestion": "Reevaluation suggestion"
+        },
+        "reevaluation": {
+          "descriptions": "Reevaluate descriptions",
+          "categories": "Reevaluate categories",
+          "tags": "Reevaluate tags",
+          "all": "Reevaluate all",
+          "row": "Reevaluate this row"
+        },
+        "ruleCreation": {
+          "newNormalization": "New normalization rule",
+          "newTransaction": "New transaction rule",
+          "createFromRow": "Create rule",
+          "createNormalizationFromRow": "Create normalization rule from this row",
+          "createTransactionFromRow": "Create transaction rule from this row",
+          "normalizationTitle": "New normalization rule",
+          "transactionTitle": "New transaction rule",
+          "save": "Save",
+          "saveAndReevaluateRow": "Save and reevaluate this row",
+          "saveAndReevaluateAll": "Save and reevaluate all",
+          "saved": "Rule saved.",
+          "savedReevaluationFailed": "Rule saved, but reevaluation could not be completed.",
+          "saveFailed": "Could not save the rule.",
+          "accountContext": "Candidate account"
+        },
+        "automation": {
+          "title": "Automatic review",
+          "descriptions": "Auto-apply descriptions",
+          "categories": "Auto-apply categories",
+          "tags": "Auto-apply tags",
+          "protectManualChanges": "Protect manual changes",
+          "protectManualHelp": "Prevent automation from replacing changes made manually."
         },
         "classification": {
-          "title": "Review categories and tags",
-          "continue": "Continue to category/tags",
-          "unsavedNotice": "Category/tag selections are not saved until import is confirmed.",
-          "backToRows": "Back to row review",
+          "persistedNotice": "Categories and tags are saved on candidates before confirming the import.",
+          "reviewedRows": "Reviewed",
+          "notEvaluatedRows": "Not evaluated",
+          "staleRows": "Stale",
+          "suggestionsAvailable": "Suggestions",
+          "confirmBlocked": "Review every valid row before confirming import.",
+          "status": "Classification",
           "category": "Category",
           "tags": "Tags",
           "noCategory": "No category",
@@ -126,7 +164,19 @@
           "ruleDetails": "Rule details",
           "matchedRules": "Matched rules",
           "conflicts": "Conflicts",
-          "skippedOutputs": "Skipped"
+          "skippedOutputs": "Skipped",
+          "rowBlocked": "Candidate cannot be classified.",
+          "applySuggestions": "Apply suggestions",
+          "applyAllSuggestions": "Apply all classification suggestions",
+          "applyingAllSuggestions": "Applying classification suggestions...",
+          "confirmNoSuggestions": "Confirm no suggestions"
+        },
+        "classificationReviewStatus": {
+          "NOT_EVALUATED": "Not evaluated",
+          "SUGGESTED": "Suggested",
+          "USER_SELECTED": "User selected",
+          "STALE": "Stale",
+          "NOT_APPLICABLE": "Not applicable"
         },
         "ingestionStatus": {
           "READY": "Ready to import",
@@ -143,7 +193,16 @@
           "createFailed": "Could not create file workflow. Check the file and try again.",
           "workflowLoadFailed": "Could not load the persisted workflow.",
           "recordUpdateFailed": "Could not update the workflow row. Check the row and try again.",
+          "candidatePreparationFailed": "Could not prepare transaction candidates for classification.",
+          "classificationUpdateFailed": "Could not update category/tag classification. Try again.",
+          "classificationApplyAllFailed": "Could not apply all classification suggestions. Existing selections were preserved.",
+          "classificationApplyAllPartial": "Some classification suggestions could not be applied. Review the affected rows.",
           "classificationPreviewFailed": "Could not load category/tag suggestions. Return to row review and try again.",
+          "descriptionReevaluationFailed": "Could not reevaluate descriptions. Existing review values were preserved.",
+          "reevaluationFailed": "Could not reevaluate this review scope. Existing values were preserved.",
+          "reevaluationPartialFailed": "Some reevaluation results completed, but another review scope failed. Existing values were preserved.",
+          "classificationConfirmBlocked": "Review all valid rows before confirming import.",
+          "confirmNoSuggestionsFailed": "Could not confirm that this row has no suggestions.",
           "confirmFailed": "Could not confirm import. Check the review status and try again."
         }
       }

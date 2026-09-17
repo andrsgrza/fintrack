@@ -15,6 +15,8 @@
         "question": "¿Seguro que quiere eliminar Ingestion Record {{ id }}?"
       },
       "technicalView": "Vista técnica — las filas de ingestión se administran desde el flujo de Transaction Ingestion.",
+      "writeUnavailableTitle": "Vista técnica de Ingestion Record",
+      "writeUnavailable": "Crear, editar y eliminar Ingestion Record no son acciones de producto. Usa la revisión de filas del flujo de Transaction Ingestion.",
       "workflowLink": "Abrir flujo",
       "detail": {
         "title": "Ingestion Record"

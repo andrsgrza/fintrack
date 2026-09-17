@@ -1,0 +1,169 @@
+{
+  "annotations": {
+    "changelogDate": "20260728120000"
+  },
+  "applications": ["fintrack"],
+  "documentation": "A transaction in progress/review before it becomes posted ledger data.\\n\\nTransactionCandidate is intentionally separate from FinancialTransaction:\\ncandidates never affect balances, dashboards, budgets, or reports.",
+  "dto": "mapstruct",
+  "fields": [
+    {
+      "fieldName": "source",
+      "fieldType": "TransactionCandidateSource",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "MANUAL,FILE_IMPORT,API_IMPORT"
+    },
+    {
+      "fieldName": "status",
+      "fieldType": "TransactionCandidateStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "DRAFT,READY_TO_POST,POSTED,CANCELLED,FAILED"
+    },
+    {
+      "fieldName": "validationStatus",
+      "fieldType": "TransactionCandidateValidationStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "UNKNOWN,VALID,INVALID,STALE"
+    },
+    {
+      "fieldName": "descriptionReviewStatus",
+      "fieldType": "TransactionCandidateDescriptionReviewStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "NOT_EVALUATED,AUTO_APPLIED,USER_EDITED,STALE,NOT_APPLICABLE"
+    },
+    {
+      "fieldName": "classificationReviewStatus",
+      "fieldType": "TransactionCandidateClassificationReviewStatus",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "NOT_EVALUATED,SUGGESTED,USER_SELECTED,STALE,NOT_APPLICABLE"
+    },
+    {
+      "fieldName": "categorySource",
+      "fieldType": "TransactionCandidateClassificationSource",
+      "fieldValues": "AUTOMATIC,MANUAL"
+    },
+    {
+      "fieldName": "transactionDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "postingDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "description",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
+      "fieldName": "signedAmount",
+      "fieldType": "BigDecimal"
+    },
+    {
+      "fieldName": "amount",
+      "fieldType": "BigDecimal"
+    },
+    {
+      "fieldName": "flow",
+      "fieldType": "TransactionFlow",
+      "fieldValues": "IN,OUT"
+    },
+    {
+      "fieldName": "currencySnapshot",
+      "fieldType": "CurrencyCode",
+      "fieldValues": "MXN,USD,EUR"
+    },
+    {
+      "fieldName": "externalReference",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "150"
+    },
+    {
+      "fieldName": "notes",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "1000"
+    },
+    {
+      "fieldName": "failureReason",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "1000"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "postedAt",
+      "fieldType": "Instant"
+    },
+    {
+      "fieldName": "cancelledAt",
+      "fieldType": "Instant"
+    },
+    {
+      "fieldName": "failedAt",
+      "fieldType": "Instant"
+    }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "TransactionCandidate",
+  "pagination": "pagination",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityIsBuiltIn": true,
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "relationshipName": "account",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "category",
+      "relationshipName": "category",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionIngestion",
+      "relationshipName": "transactionIngestion",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "ingestionRecord",
+      "relationshipName": "ingestionRecord",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one"
+    },
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "financialTransaction",
+      "relationshipName": "financialTransaction",
+      "relationshipSide": "left",
+      "relationshipType": "one-to-one"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}

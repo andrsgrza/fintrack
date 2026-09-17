@@ -13,6 +13,7 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
 import java.time.Instant;
@@ -41,6 +42,9 @@ class CategoryServiceTest {
 
     @Mock
     private CategoryMapper categoryMapper;
+
+    @Mock
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Mock
     private CurrentUserService currentUserService;
@@ -349,6 +353,21 @@ class CategoryServiceTest {
         assertThatThrownBy(() -> categoryService.delete(10L))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Category with child categories cannot be deleted");
+        verify(categoryRepository, never()).clearFinancialTransactionCategoryReferences(any());
+        verify(categoryRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteShouldRejectWhenCategoryIsUsedByTransactionCandidate() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(categoryRepository.existsByParentCategoryId(10L)).thenReturn(false);
+        when(transactionCandidateRepository.existsByCategoryId(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> categoryService.delete(10L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Category cannot be deleted because it is used by transaction candidates.");
         verify(categoryRepository, never()).clearFinancialTransactionCategoryReferences(any());
         verify(categoryRepository, never()).deleteById(any());
     }

@@ -537,41 +537,43 @@ It handles:
 Main file:
 
 ```text
-src/main/webapp/app/entities/financial-transaction/financial-transaction-update.tsx
+src/main/webapp/app/entities/financial-transaction/financial-transaction-manual-draft.tsx
 ```
 
-The manual create UI uses a two-step flow:
+Current product manual create uses TC-2B.1 TransactionCandidate autosave:
 
 ```text
-Step 1: transaction details
-  -> Preview rules
-
-Step 2: category/tags confirmation
-  -> Save
+/financial-transaction/new
+  -> first meaningful change creates MANUAL TransactionCandidate
+  -> /financial-transaction/drafts/{id}
+  -> autosave draft
+  -> post candidate
+  -> FinancialTransaction detail
 ```
 
-The preview call goes to:
+The older FinancialTransaction two-step rule-preview UI is superseded as the product create route. `POST /api/financial-transactions/rule-preview` remains a backend preview endpoint, but candidate create/post does not call it. TC-2C candidate-specific rule preview/apply is implemented through `POST /api/transaction-candidates/{id}/rule-preview` and `POST /api/transaction-candidates/{id}/apply-rules`; applying suggestions is explicit and posting a candidate does not auto-run rules.
+
+The backend preview endpoint remains:
 
 ```text
 api/financial-transactions/rule-preview
 ```
 
-Preview behavior:
+Current candidate preview/apply behavior:
 
-- builds a transaction draft payload;
-- sends it to the backend preview endpoint;
-- displays matching rules/suggestions/conflicts;
-- pre-fills suggested category only if category is empty and there is no conflict;
-- adds suggested tags only if they are new;
-- lets the user adjust final category/tags before saving.
+- evaluates the persisted `MANUAL` candidate through `POST /api/transaction-candidates/{id}/rule-preview`;
+- displays matching rules/suggestions/conflicts without mutating the candidate;
+- applies suggestions only when the user explicitly chooses apply/confirm through candidate commands;
+- uses `FILL_EMPTY_ONLY`: category fills only if empty/no conflict, tags are additive, and manual selections are preserved;
+- requires reviewed classification before candidate post.
 
-Final save still calls:
+Final manual posting calls:
 
 ```text
-POST /api/financial-transactions
+POST /api/transaction-candidates/{id}/post
 ```
 
-The backend then applies the same rule engine protections using `FILL_EMPTY_ONLY`.
+Candidate post creates the final `FinancialTransaction` and does not auto-run rule preview/apply.
 
 ## Current implementation status
 
@@ -584,7 +586,9 @@ Implemented:
 - Pure backend evaluator.
 - Apply-on-create for FinancialTransaction.
 - Backend rule preview endpoint.
-- Two-step manual FinancialTransaction create preview UI.
+- Manual TransactionCandidate autosave UI.
+- Candidate-specific manual rule preview/apply UI.
+- Candidate-backed CSV ingestion classification in the unified workflow review.
 
 Not implemented:
 
@@ -594,7 +598,7 @@ Not implemented:
 - Manual reevaluate-one-transaction endpoint.
 - Persisted rule evaluation result.
 - Matched-rule audit log.
-- Rule engine integration into CSV ingestion confirm/import.
+- Rule engine execution during CSV confirm/import.
 - Description output.
 - FinancialSubscription output.
 - Override confirmation flow.

@@ -29,7 +29,7 @@ Recommendation:
 
 I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid review rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and review rows in one submit, then redirects to canonical workflow detail `/transaction-ingestion/{id}`, where the user can return later to inspect parent summary, read-only FileIngestion metadata, and review rows. `/file-ingestion/new` is not metadata CRUD; it is a parent-scoped CSV upload command that attaches server-derived file metadata and records to an existing pending FILE `TransactionIngestion`. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and review rows in one submit, then redirects to canonical workflow detail `/transaction-ingestion/{id}`, where the user can return later to inspect parent summary, read-only FileIngestion metadata, and review rows. TC-4D makes generated FileIngestion write routes unavailable in the UI; users do not manually create/edit/delete FileIngestion metadata from generated screens. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
 
 ## 2. Responsibility split using current entities
 
@@ -99,7 +99,9 @@ Recommended I1 values:
 
 ### ApiIngestion
 
-Untouched in this phase.
+ApiIngestion remains API metadata/debug only in CSV/file-ingestion phases. The API ingestion runtime/product workflow is deferred.
+
+Generated ApiIngestion list/detail pages may remain reachable for technical inspection, but ApiIngestion create/edit/delete are not product actions for the CSV workflow and should not be used as canonical ingestion commands. TC-4D applies the same frontend convention to FileIngestion and IngestionRecord: generated list/detail are read-only technical inspection surfaces, and direct generated write routes show an unavailable state instead of generated forms/modals.
 
 ## 3. `rawData` JSON contract
 
@@ -427,23 +429,39 @@ I2C:
 
 - Confirm import creates `FinancialTransaction` rows from valid `IngestionRecord` rows.
 - Imported transactions should use `origin = FILE_IMPORT`.
-- Confirm import uses `rawData.normalized` as the source of transaction fields.
+- TC-3D.1 migrates Confirm Import backend internals to use prepared `FILE_IMPORT` `TransactionCandidate`s as the source of final transaction fields and category/tag classification.
+- In the active candidate lifecycle, `FILE_IMPORT` candidates are prepared for `VALID` rows and normally move from `READY_TO_POST` to `POSTED` during Confirm Import. There is no global `NEEDS_REVIEW` candidate status; review needs are represented by `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`. `API_IMPORT` remains reserved/deferred and is not part of CSV v1 runtime behavior.
 - Confirm import does not run the Rule Engine itself.
-- Slice 2A adds backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` rows read-only through the category/tag Transaction Rule evaluator and returns per-row suggestions.
-- Slice 2B adds Pantalla 2 in the TransactionIngestion workflow UI for reviewing category/tag suggestions before confirm.
-- Confirm import accepts explicit per-`VALID`-row category/tag selections and applies those selections to the created `FinancialTransaction`s.
-- Category/tag selections are validated for current-user ownership, category flow compatibility, complete `VALID` record coverage, duplicate record ids, and duplicate tag ids.
+- Historical Slice 2A added the old backend category/tag review support: `POST /api/transaction-ingestions/{id}/classification-preview`. That endpoint/service/DTO path was removed because there is no active consumer; the unified product review uses candidate-backed preview/apply endpoints.
+- Historical Slice 2B introduced a separate category/tag review screen. It is no longer part of the product workflow.
+- The current unified review prepares/syncs `FILE_IMPORT` `TransactionCandidate`s when eligible, reloads the workflow, previews rules through candidate endpoints, and persists category/tag review choices on candidates.
+- TC-3D.2 removes the current frontend legacy confirm payload adapter. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body; Confirm Import reads persisted candidates as the source of truth.
+- Candidate category/tags are validated defensively for current-user ownership and category flow compatibility.
 - Category/tag suggestions also follow the category/tag TransactionRule evaluator semantics. A rule that targets an EXPENSE category should include an effective `FLOW = OUT` condition, and a rule that targets an INCOME category should include an effective `FLOW = IN` condition through the configured TransactionRule guard. For example, an Uber expense rule should suggest the expense category for an OUT row and not for an IN/refund row.
 - Confirm import does not persist category/tag selections or evaluation results back into `rawData`.
 - `FinancialSubscription` remains empty in CSV v1 confirm import.
-- Pantalla 2 selections live only in frontend state until confirm; browser refresh loses category/tag adjustments in v1.
-- Fase 3-B hardens QA without changing product behavior. Cypress now covers the real TransactionIngestion workflow for invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before Pantalla 2, completed read-only/reload behavior, and disabling one valid row before category/tag review so only enabled valid rows import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/debug smoke specs.
+- Category/tag selections persist on `TransactionCandidate`; browser refresh reloads reviewed category/tags from workflow row candidate summaries.
+- Current Cypress coverage includes invalid-header upload failure, `PARTIALLY_READY` rejected-row blocking before candidate preparation, completed read-only/reload behavior, and disabling one valid row so only enabled valid rows classify and import. The old generated `transaction-ingestion.cy.ts` is kept as a workflow smoke spec, while `file-ingestion.cy.ts` and `ingestion-record.cy.ts` are technical/read-only smoke specs.
+- `POST /api/transaction-ingestions/{id}/candidates/prepare` creates or syncs `FILE_IMPORT` `TransactionCandidate` rows for eligible `VALID` `IngestionRecord`s. The unified review invokes it automatically only when a `READY` workflow has valid rows without candidates. The command is idempotent, skips non-`VALID` rows, preserves existing candidate category/tags, marks fresh classification review `STALE` when rule-input fields change, does not mutate `rawData`, and does not create `FinancialTransaction` rows.
+- Unified row review keeps candidates synchronized. Disabling a pre-confirm row removes its unposted `FILE_IMPORT` candidate and candidate tag joins. Re-enabling revalidates the row but does not restore the old candidate; the next prepare creates a fresh candidate if the row is `VALID`. Editing a prepared row syncs an existing unposted candidate immediately when the row remains `VALID`, preserving category/tags and marking fresh classification `STALE` when rule-input fields changed; editing the row to non-`VALID` removes the unposted candidate. Posted/imported candidates are not silently deleted.
+- TC-5D.2 blocks direct `FinancialTransaction` delete when the transaction is linked to `TransactionCandidate` provenance. Completed ingestion workflow delete remains allowed because it removes candidate tag joins/candidates before imported `FinancialTransaction` rows in a controlled FK-safe cleanup path.
+- TC-5D.3 blocks direct Category/Tag delete when candidates reference them and blocks FinancialAccount delete when manual/non-workflow candidates reference the account. Controlled ingestion/account cleanup remains allowed for `FILE_IMPORT` candidates because the workflow deletes candidate tag joins and candidates before deleting imported transactions/account-owned ingestion data.
+- TC-5D.4 hardens Confirm Import against corrupt or orphaned pre-completed `FILE_IMPORT` candidate state. Confirm rejects all-or-nothing when candidates are tied to non-`VALID` rows, mismatched ingestion records, stale or mismatched `FinancialTransaction` links, or imported rows whose candidate was not posted. Completed retry remains idempotent.
+- `GET /api/transaction-ingestions/{id}/workflow` exposes an optional lightweight prepared candidate summary per row. The read model is strictly read-only: it does not create/sync candidates, mutate `rawData`, or create `FinancialTransaction` rows.
+- The single review page has a local, non-persisted automation configuration: auto-apply descriptions, categories, and tags default off; protect manual changes defaults on. With a scope off, its scoped reevaluation remains a preview. With it on, reevaluation also applies the current result to that scope. Automatic category/tag application is candidate-backed and never writes category/tags to `rawData`; automatic description application uses the existing normalized-description/review model. No review action creates a `FinancialTransaction`. The separate **Apply all classification suggestions** action remains the conservative `FILL_EMPTY_ONLY` command with no `candidateIds`; it does not apply description normalization suggestions and does not change semantics based on the configuration.
+- TC-3C.1 adds ingestion-scoped FILE_IMPORT candidate classification commands:
+  - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions`.
+- These candidate endpoints classify prepared `FILE_IMPORT` candidates only. They do not mutate `IngestionRecord.rawData` and do not create `FinancialTransaction` rows before Confirm Import.
+- Candidate rule preview/apply evaluates active owner TransactionRules with `TransactionOrigin.FILE_IMPORT`. Apply uses `FILL_EMPTY_ONLY`: empty category can be filled, existing category is preserved, and tags are additive/deduplicated.
+- Candidate classification PATCH stores category/tags on `TransactionCandidate`, not in `rawData`. It must include at least one of `categoryId` or `tagIds`; omitted fields preserve existing values. Category compatibility still follows row flow: OUT accepts EXPENSE/BOTH, IN accepts INCOME/BOTH. Category provenance is server-owned (`MANUAL` for an explicit set/replace, absent when cleared); tags use explicit candidate/tag association rows with server-owned `MANUAL`/`AUTOMATIC` provenance. A submitted tag multi-select is the final manual selection: retained/new rows become `MANUAL`, omitted rows are removed, and category provenance is untouched.
+- TC-3D.1 Confirm Import requires every current `VALID` row to have exactly one reviewed, valid, `READY_TO_POST` `FILE_IMPORT` candidate. Confirm creates `FinancialTransaction`s from candidates, marks candidates `POSTED`, links candidates and `IngestionRecord`s to the created transactions, marks rows `IMPORTED`, and marks the parent ingestion `COMPLETED` all-or-nothing.
 
 Future:
 
-- Recoverable/persisted category/tag review choices.
-- Optional bulk review before import.
-- Bulk reevaluation remains deferred.
+- Persisted/user-level reevaluation configuration and cross-ingestion/bulk reclassification remain deferred. Automatic configuration is local to the current review page in V1. Global explicit category/tag application is implemented only for the current ingestion and remains `FILL_EMPTY_ONLY`.
 
 ## 10. UI design
 
@@ -486,16 +504,17 @@ Future shortcut:
 FileIngestion:
 
 - Not the main create UX.
-- Generated pages remain available for technical/debug inspection.
-- List/detail/create/edit show technical/debug context markers where applicable.
-- List/detail hide Edit/Delete because file metadata is server-derived and parent-owned.
-- `/file-ingestion/new` remains available as the parent-scoped upload command for an existing pending FILE `TransactionIngestion`.
+- Generated list/detail remain available for technical/debug inspection.
+- List/detail show technical/read-only context markers.
+- List/detail hide Create/Edit/Delete because file metadata is server-derived and parent-owned.
+- Generated write routes (`/file-ingestion/new`, `/file-ingestion/{id}/edit`, `/file-ingestion/{id}/delete`) show the technical write-unavailable state. Users upload files through `/transaction-ingestion/new`.
 
 IngestionRecord:
 
 - Not the main create/edit UX.
-- Generated pages remain available for technical/debug inspection.
-- List/detail/create/edit show technical/debug context markers where applicable.
+- Generated list/detail remain available for technical/debug inspection.
+- List/detail show technical/read-only context markers.
+- Generated write routes (`/ingestion-record/new`, `/ingestion-record/{id}/edit`, `/ingestion-record/{id}/delete`) show the technical write-unavailable state. The unified TransactionIngestion review remains the canonical row review/edit workflow.
 - List/detail hide Create/Edit/Delete because review-row actions are managed from the TransactionIngestion workflow review page.
 
 ApiIngestion:
@@ -667,7 +686,7 @@ Already decided and not open for I1:
 - account comes through `TransactionIngestion`.
 - I1 does not run Rule Engine.
 - I1 does not create `FinancialTransaction` rows.
-- I2C confirm import does not run the Rule Engine; Slice 2A adds a separate read-only classification-preview endpoint for import-time category/tag suggestions.
+- I2C confirm import does not run the Rule Engine. Historical Slice 2A added a separate read-only `classification-preview` endpoint for the old import-time category/tag suggestion flow; that endpoint was removed. The active unified review uses candidate-backed preview/apply endpoints.
 
 ## Description normalization during upload
 
@@ -679,9 +698,20 @@ FILE ingestion upload now has an optional pre-review description normalization s
 - `rawData.raw` remains immutable.
 - `rawData.review.description` stores metadata about rule/user modifications.
 - `rawData.review.description` does not duplicate `originalDescription`; the original remains only in `rawData.raw.description`.
+- `USER_EDIT` is written only when a row PATCH actually changes the effective normalized description. Editing dates, signed amount, currency, external reference, notes, or another non-description field preserves the existing description review metadata exactly.
 - `rawData.suggestions` is not used.
 - UserPreference-based behavior is deferred.
 - Workflow row responses expose a read-only `descriptionReview` projection for UI display. It is derived from `rawData.raw.description`, `rawData.normalized.description`, and `rawData.review.description`; it does not change persisted `rawData`.
+- `POST /api/transaction-ingestions/{id}/descriptions/reevaluate` reuses the same active-rule evaluator after upload. It operates on all rows or an optional `recordIds` subset, accepts only current-user FILE ingestions in `READY`/`PARTIALLY_READY`, and processes only `VALID` rows. It always evaluates immutable `rawData.raw.description`. Its optional `apply` and `protectManualChanges` flags distinguish preview from persisted application: preview returns a suggestion without mutation; apply updates automatic description review data, and an explicit unprotected apply may replace a `USER_EDIT` description. A no-match apply restores the original description and removes description-rule provenance.
+
+## Contextual rule creation from the unified review
+
+The review page contains global actions for a new description-normalization rule and a new category/tag TransactionRule, plus an eligible-row Create rule menu. The actions use the normal configured rule forms inside the current page; they do not navigate to generated CRUD screens.
+
+- Global actions begin with a blank rule form.
+- A row normalization rule begins with original `rawData.raw.description` in its first condition and the current normalized/manual description as its result.
+- A row TransactionRule begins with `DESCRIPTION CONTAINS` the persisted candidate description and `FLOW EQUALS` the persisted candidate flow. Its persisted category/tags are outputs. Account context and transient suggestions are deliberately not converted into conditions or outputs.
+- Plain Save only creates the rule. It never mutates `rawData`, candidates, row status, or transactions. Save + reevaluate this row/all performs a separate scoped reevaluation after successful save; its apply/protect behavior is governed by the page-local automation configuration.
 
 Rule-applied metadata shape:
 
@@ -713,4 +743,4 @@ User-edit metadata shape:
 }
 ```
 
-No FinancialTransactions are created during upload/review. Category/tag classification preview is surfaced in Pantalla 2 and remains non-persistent until Confirm Import. UserPreference-driven rule behavior is deferred.
+No FinancialTransactions are created during upload/review. Candidate preparation also creates no FinancialTransactions and leaves `rawData` unchanged. Workflow GET exposes prepared candidates but remains read-only, including read-only category/tag provenance (`categorySource` and per-tag source). The unified review uses candidate-backed classification commands that persist category/tags on prepared `FILE_IMPORT` candidates, never in `rawData`. Local automatic category/tag scopes synchronize `AUTOMATIC` values to the current rule suggestions; protected `MANUAL` category/tag values remain, while unprotected automation may replace/remove them. The same local configuration can request description preview or apply through the existing description provenance model. Explicit Apply suggestions stays `FILL_EMPTY_ONLY`. Confirm Import posts category/tags into final `FinancialTransaction` rows but does not copy provenance. The frontend validates persisted candidates, then posts `/confirm` with no legacy `records`/category/tag payload; backend category/tags come from persisted candidates. The old `classification-preview` implementation and backend parsing of the old confirm `records/categoryId/tagIds` body are removed. UserPreference-driven rule behavior is deferred.

@@ -4,7 +4,7 @@
 
 This document defines the future design contract for the FINTRACK Transaction Rule Engine.
 
-Status: **Phase 3B manual create two-step preview UI implemented**.
+Status: **Phase 3A FinancialTransaction preview endpoint implemented; TC-2C.1d manual TransactionCandidate automatic suggestions preview implemented; TC-3D.1 FILE_IMPORT candidate-backed Confirm Import backend implemented.**
 
 Not implemented yet:
 
@@ -46,12 +46,30 @@ Subscription and description assignment are deliberately not outputs in the curr
   - does not save or mutate a transaction;
   - does not apply `FILL_EMPTY_ONLY`;
   - has no admin cross-user preview behavior.
-- Manual FinancialTransaction create two-step preview UI:
-  - Step 1 collects transaction details;
-  - the frontend calls `POST /api/financial-transactions/rule-preview`;
-  - Step 2 shows category/tags prepopulated from the preview response;
-  - the user can accept, change, remove, or add category/tags before saving;
-  - final save still uses normal FinancialTransaction create.
+- Manual FinancialTransaction product create UI now uses `TransactionCandidate`:
+  - `/financial-transaction/new` creates no backend row on page load;
+  - the first meaningful user change creates a recoverable manual candidate through `POST /api/transaction-candidates/manual`;
+  - the route is replaced with `/financial-transaction/drafts/{id}`;
+  - subsequent edits autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`;
+  - posting uses `POST /api/transaction-candidates/{id}/post`;
+  - candidate post creates the final `FinancialTransaction` and does not secretly re-run TransactionRules.
+- Backend-only candidate rule command endpoints:
+  - `POST /api/transaction-candidates/{id}/rule-preview`;
+  - `POST /api/transaction-candidates/{id}/apply-rules`;
+  - preview is transient and does not mutate;
+  - apply re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`.
+- Manual candidate create UI now exposes a candidate-specific suggestions section:
+  - saved rule-input changes automatically call candidate `rule-preview` and do not mutate category/tags;
+  - Apply suggestions / Confirm no suggestions flushes autosave, calls candidate `apply-rules`, and hydrates the returned category/tags/status;
+  - Post is blocked in the UI until classification is `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`.
+- Backend-only FILE_IMPORT candidate classification endpoints under TransactionIngestion:
+  - `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules`;
+  - `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions`;
+  - category/tags are stored on `TransactionCandidate`, not in `IngestionRecord.rawData`;
+  - these classification endpoints create no `FinancialTransaction` rows; TC-3D.1 Confirm Import separately posts reviewed `FILE_IMPORT` candidates.
+- Candidate classification provenance is server-owned: a rule-applied new category/tag is `AUTOMATIC`; an explicit manual category/tag selection is `MANUAL`; clearing a category leaves no category provenance. Tags use unique explicit `TransactionCandidateTag` association rows, so preview/reevaluation is read-only and `FILL_EMPTY_ONLY` cannot downgrade manual tags or create duplicates. Confirm copies category/tags, not provenance, to the final transaction.
 - TransactionRule v1 outputs:
   - `resultingCategory`;
   - `resultingTags`.
@@ -102,7 +120,7 @@ Configured backend rule creation/update is also available through:
 
 The configured API accepts/returns a parent `TransactionRule` plus its ordered conditions. It preserves server-managed parent fields, server-assigns condition positions, and replaces the full condition set on configured PUT. The product create/edit UI uses this API and keeps condition edits in local frontend state until save.
 
-The old empty-draft product flow is not the recommended UI path. Technical/debug generated surfaces remain temporarily for direct maintenance, and backend validation remains the source of truth while those surfaces exist. This branch does not add ingestion category/tag review behavior and does not implement UserPreference.
+The old empty-draft product flow is no longer the active product UI path. Technical/debug generated surfaces remain temporarily for direct maintenance, and backend validation remains the source of truth while those surfaces exist. File ingestion category/tag review is candidate-backed and appears beside row review in one unified workflow screen; UserPreference remains deferred.
 
 Rules with a resulting EXPENSE or INCOME category are guarded before activation/configured persistence:
 
@@ -440,7 +458,7 @@ The mutation uses `FILL_EMPTY_ONLY`.
 
 Phase 2 remains unchanged: create through the central `FinancialTransactionService.save(...)` path may receive `FILL_EMPTY_ONLY` rule application. It is not currently restricted to `MANUAL` origin only.
 
-Manual create UI calls the Phase 3A draft preview endpoint between a details step and a categorization step. Preview suggestions are UI assistance only; the final save still uses normal backend create. Category/tags sent by Step 2 are treated as explicit user choices, so backend create does not override the category. If UI/direct API creates without category/tags, Phase 2 may still fill empty category/tags.
+The active manual create UI uses `MANUAL` `TransactionCandidate` autosave. Candidate-specific preview/apply commands provide rule suggestions, and posting the candidate creates the final `FinancialTransaction`. The old two-step FinancialTransaction draft preview UI is superseded as product UI, though the backend `POST /api/financial-transactions/rule-preview` endpoint remains available for direct/compatibility use. Direct API creates through `POST /api/financial-transactions` still use Phase 2 `FILL_EMPTY_ONLY` behavior.
 
 ### Update
 
@@ -576,27 +594,52 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 - does not persist the evaluation result;
 - does not expose a UI.
 
-### Phase 3B — manual create two-step preview UI ✅
+### TC-2B.1 — manual TransactionCandidate autosave UI ✅
 
-- frontend-only custom manual create flow;
-- Step 1 collects transaction details:
-  - account;
-  - description;
-  - amount;
-  - flow;
-  - transaction date;
-  - posting date;
-  - external reference;
-  - notes and other non-categorization fields as applicable;
-- between Step 1 and Step 2, call `POST /api/financial-transactions/rule-preview`;
-- Step 2 shows categorization fields:
-  - category;
-  - tags;
-- prepopulate category/tags from preview suggestions;
-- show conflicts and matched rules as helpful context when present;
-- user has final control and can accept, change, remove, or add category/tags before save;
-- final save still calls normal FinancialTransaction create;
-- Phase 2 `FILL_EMPTY_ONLY` remains as backend safety behavior.
+- `/financial-transaction/new` is the product manual-create route.
+- Page load does not create an empty draft.
+- The first meaningful user change creates a `MANUAL` `TransactionCandidate`.
+- Meaningful first changes are account, transaction date, nonblank description, signed amount/amount entry, category, or tags.
+- Posting date, external reference, and notes alone do not create the first candidate.
+- After candidate creation, the UI replaces the URL with `/financial-transaction/drafts/{id}` so the user can resume by URL.
+- Subsequent changes debounce autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`.
+- The UI displays amount and flow, but submits only `signedAmount`; backend derives final `amount` and `flow`.
+- There is no explicit Save Draft button.
+- Post flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail.
+- Cancel before candidate creation just navigates away; cancel after candidate creation calls the candidate cancel command.
+- Candidate create/post does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not auto-apply TransactionRules. TC-2C candidate apply remains an explicit user action.
+
+### TC-2C.1a — backend TransactionCandidate rule preview/apply foundation ✅
+
+- `POST /api/transaction-candidates/{id}/rule-preview` evaluates active owner rules against the current persisted editable MANUAL candidate and returns transient suggestions, conflicts, skipped outputs, and matched rules. It does not mutate the candidate.
+- `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current candidate state and applies category/tags with `FILL_EMPTY_ONLY`.
+- Category fills only when the candidate has no category and the suggestion has no conflict.
+- Tags are additive; existing/manual tags are preserved and duplicates are not added.
+- Manual category/tags are not overwritten. If manual selections existed before apply, `classificationReviewStatus` remains `USER_SELECTED`.
+- If suggestions exist for an unclassified candidate, apply sets `classificationReviewStatus=SUGGESTED`; if no applicable suggestions exist, it sets `NOT_APPLICABLE`.
+- Manual category/tag PATCH sets `classificationReviewStatus=USER_SELECTED`.
+- Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not because TransactionRules do not use notes.
+- TC-2C.1c adds backend post gating so manual drafts cannot be posted while classification is `NOT_EVALUATED` or `STALE`. Backend post allows only `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE` classification states when the candidate is otherwise ready.
+- Candidate preview/apply does not call or reuse the public `POST /api/financial-transactions/rule-preview` endpoint.
+
+### TC-2C.1b/1d — frontend TransactionCandidate rule suggestions UI ✅
+
+- Manual candidate drafts show a compact Rule suggestions section after the candidate exists.
+- After a successful autosave of rule-input fields, the UI automatically calls `POST /api/transaction-candidates/{id}/rule-preview`, renders suggested category/tags, matched rules, conflicts, and skipped outputs, and does not mutate the candidate form.
+- Rule-input fields are account, transaction date, posting date, description, signed amount/amount/flow, and external reference. Notes-only and category/tag-only edits do not auto-refresh preview.
+- Apply suggestions / Confirm no suggestions flushes pending/in-flight autosave, calls `POST /api/transaction-candidates/{id}/apply-rules`, and replaces local form state from the returned candidate.
+- Preview is read-only; suggestions are never auto-applied.
+- The UI displays classification review statuses: `NOT_EVALUATED`, `STALE`, `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE`.
+- Post is disabled with a visible message while status is `NOT_EVALUATED` or `STALE`; Post is allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` if the candidate is otherwise `READY_TO_POST`.
+- Backend `POST /api/transaction-candidates/{id}/post` enforces the same classification gate and rejects direct API attempts to post `NOT_EVALUATED` or `STALE` manual candidates.
+- Manual category/tag changes continue to autosave through the manual-draft PATCH endpoint and are represented as `USER_SELECTED` by the backend response.
+- Candidate post still does not secretly preview/apply rules.
+- Candidate flow still does not call the public `POST /api/financial-transactions/rule-preview` endpoint.
+
+### Deferred after TC-2C.1b
+
+- Existing-transaction preview / reevaluation UI remains deferred.
+- Bulk reevaluation flow remains deferred.
 
 ### Phase 4 — reevaluate one transaction
 
@@ -633,16 +676,40 @@ The `TransactionRuleCondition` validation matrix is the source of truth for:
 
 ## CSV ingestion category/tag review
 
-CSV ingestion uses the category/tag Transaction Rule evaluator only through a read-only review path.
+CSV ingestion uses the category/tag Transaction Rule evaluator through candidate-backed review commands.
 
-- `POST /api/transaction-ingestions/{id}/classification-preview` evaluates `VALID` FILE ingestion rows and returns category/tag suggestions, matched rules, conflicts, and skipped outputs.
-- Pantalla 2 in the TransactionIngestion workflow UI prepopulates category/tag controls from that response.
-- User edits in Pantalla 2 live only in frontend state until Confirm Import.
-- Browser refresh loses category/tag edits in v1.
-- Confirm Import sends explicit per-row category/tag selections for every `VALID` row.
-- Confirm Import does not run the evaluator itself.
-- Confirm Import does not persist rule evaluation results or category/tag choices into `rawData`.
-- UserPreference and `AUTO_APPLY` behavior remain deferred.
+The current unified `TransactionIngestion` workflow review uses prepared `FILE_IMPORT` `TransactionCandidate`s for category/tag classification alongside the row review fields. The former separate classification screen is historical only:
+
+- `POST /api/transaction-ingestions/{id}/candidates/prepare` creates/syncs candidates for eligible `VALID` rows that are missing them; the unified page runs it automatically once for that missing-row set.
+- The UI reloads `GET /api/transaction-ingestions/{id}/workflow` and uses each row's `candidate` summary as the source of truth for selected category/tags and `classificationReviewStatus`.
+- `POST /api/transaction-ingestions/{id}/candidates/rule-preview` evaluates current candidate state read-only and returns transient suggestions, matched rules, conflicts, and skipped outputs keyed by candidate id. Its optional `scope` is `CATEGORY`, `TAGS`, or `ALL`; scope filters returned output only and never applies a selection.
+- Preview does not mutate candidate category/tags and does not write to `rawData`.
+- User category/tag edits in the unified row call candidate classification PATCH and are persisted on `TransactionCandidate`.
+- Browser refresh reloads persisted category/tag selections from the workflow row candidate summaries.
+- Before Confirm Import, the current UI reloads the workflow and validates that all `VALID` row candidates are ready/reviewed, then calls `/confirm` without legacy `records`/category/tag payload.
+- TC-3D.1 changes Confirm Import itself to read persisted `FILE_IMPORT` candidates as the source of truth. TC-4B removes backend parsing/validation of the old confirm `records/categoryId/tagIds` body.
+- Confirm Import does not run the evaluator and does not persist rule evaluation results or category/tag choices into `rawData`.
+- UserPreference remains deferred. Transaction Ingestion has a local V1 automation configuration; it is not a user preference and resets to defaults after a page reload.
+
+The older ingestion `POST /api/transaction-ingestions/{id}/classification-preview` endpoint was removed in TC-4B because the candidate-backed flow has no active dependency on it. New frontend/product code must use the candidate-backed prepare/rule-preview/apply/classification commands above.
+
+The ingestion-scoped candidate classification commands for prepared `FILE_IMPORT` `TransactionCandidate`s are:
+
+- `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification` writes user-selected category/tags to the candidate and marks `classificationReviewStatus=USER_SELECTED`; the request must include at least one of `categoryId` or `tagIds`.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/rule-preview` evaluates active owner TransactionRules against current candidate state with `TransactionOrigin.FILE_IMPORT` and returns transient suggestions/matches/conflicts/skips. `scope=CATEGORY`, `scope=TAGS`, and `scope=ALL` reuse the same evaluator and limit only the response surface.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/apply-rules` keeps `FILL_EMPTY_ONLY` when called without the new automatic request flag. With `automatic=true`, it re-evaluates the same current candidate state and synchronizes only the requested `CATEGORY`, `TAGS`, or `ALL` scope. `protectManualChanges` defaults true: it preserves manual category/tag provenance; false permits replacement/removal. Scope is `ALL` when omitted.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` marks `NOT_APPLICABLE` only when a fresh evaluation has no suggestions.
+- These FILE candidate classification endpoints do not create `FinancialTransaction` rows, do not mutate `IngestionRecord.rawData`, and do not call `/api/financial-transactions/rule-preview`.
+
+The single ingestion review also exposes **Apply all classification suggestions**. It reuses that same ingestion-scoped `apply-rules` command with the body omitted (therefore no `candidateIds`), so the backend evaluates and independently processes every eligible `FILE_IMPORT` candidate belonging to the current ingestion. It is not a reevaluation action and does not apply description-normalization output. Category fills only when empty and non-conflicting, tags remain additive/deduplicated, and existing manual category/tags keep `USER_SELECTED`. The UI reloads candidate summaries afterwards and clears only the transient previews for processed candidates. No `FinancialTransaction` is created until the separate Confirm Import command.
+
+The unified ingestion review exposes explicit scoped reevaluation controls and a local configuration panel: auto-apply descriptions, categories, tags, and protect manual changes. All three auto-apply controls default off and protection defaults on; this configuration is page-local and is not persisted. With a scope off, reevaluation returns only a suggestion. With it on, the matching reevaluation path persists that scope: category/tag automation synchronizes only its scoped outputs, and description automation uses the existing normalized-description provenance model. A protected manual current value remains selected while its rule recommendation can remain visible; unprotected automatic application may replace or clear it. No automatic review operation calls Confirm Import or creates a FinancialTransaction. Explicit per-row/global Apply suggestions remains `FILL_EMPTY_ONLY` and independent of the configuration.
+
+The review can also author a rule inline. A new rule has no retrospective effect merely by being saved: it joins normal owner-scoped evaluation order for future evaluations. A contextual **Save + reevaluate** action explicitly invokes the existing description or candidate rule command after the configured rule has been persisted. For a row TransactionRule, the generated `DESCRIPTION` and `FLOW` conditions derive only from persisted candidate state; the current account is context, not an implied rule condition, and transient preview suggestions are not rule outputs.
+
+Candidate-backed Confirm Import uses the existing `POST /api/transaction-ingestions/{id}/confirm` path. For non-completed imports, every current `VALID` row must have exactly one reviewed `FILE_IMPORT` candidate with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`. Confirm creates `FinancialTransaction` rows from candidate fields/category/tags, sets candidates to `POSTED`, links candidates and `IngestionRecord`s to the created transactions, preserves `rawData`, and completes the parent ingestion all-or-nothing. Completed retry remains idempotent and creates no duplicates.
+
+`classificationReviewStatus` is the category/tag review gate used by manual post and FILE confirm. It is separate from `descriptionReviewStatus`, which records description normalization/review state. There is no global `NEEDS_REVIEW` candidate status; review needs are represented by specific review/status fields. `API_IMPORT` and candidate failure-state expansion remain reserved/deferred until a later lifecycle slice formalizes them.
 
 Description normalization is not part of the category/tag Transaction Rule Engine.
 
@@ -653,6 +720,7 @@ Description normalization is not part of the category/tag Transaction Rule Engin
 - It outputs only `resultingDescription`.
 - First matching description normalization rule wins.
 - It runs during FILE upload/record creation before row review.
+- It can be rerun for a current FILE ingestion through `POST /api/transaction-ingestions/{id}/descriptions/reevaluate`, optionally scoped by `recordIds`. That command still evaluates `rawData.raw.description`; it preserves a `USER_EDIT` normalized value and returns any new match only as a transient suggestion.
 - It does not run on manual FinancialTransaction create/update/PATCH.
 - It does not run during Confirm Import.
 - It does not invoke category/tag TransactionRule evaluation.

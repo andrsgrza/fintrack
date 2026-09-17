@@ -2,6 +2,7 @@ import {
   entityCreateButtonSelector,
   entityCreateCancelButtonSelector,
   entityCreateSaveButtonSelector,
+  entityDeleteButtonSelector,
   entityDetailsBackButtonSelector,
   entityDetailsButtonSelector,
   entityEditButtonSelector,
@@ -111,6 +112,8 @@ describe('TransactionIngestion workflow smoke e2e test', () => {
     cy.visit(transactionIngestionPageUrl);
     cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);
 
+    cy.get(entityCreateButtonSelector).should('have.length', 1);
+    cy.contains(entityCreateButtonSelector, /new file import|nueva importación de archivo/i).should('exist');
     cy.get(entityCreateButtonSelector).click();
     cy.url().should('match', new RegExp('/transaction-ingestion/new$'));
     cy.getEntityCreateUpdateHeading('TransactionIngestion').should('exist');
@@ -149,6 +152,17 @@ describe('TransactionIngestion workflow smoke e2e test', () => {
     cy.contains(entityTableSelector, transactionIngestion?.sourceLabel as string).within(() => {
       cy.get(entityDetailsButtonSelector).should('exist');
       cy.get(entityEditButtonSelector).should('not.exist');
+      cy.get(entityDeleteButtonSelector).should('exist');
     });
+  });
+
+  it('generated edit route should be unavailable', () => {
+    cy.intercept('PUT', '/api/transaction-ingestions/*').as('updateTransactionIngestionRequest');
+
+    cy.visit(`/transaction-ingestion/${transactionIngestion?.id}/edit`);
+    cy.get('[data-cy="transactionIngestionWriteUnavailableHeading"]').should('exist');
+    cy.get('[data-cy="writeUnavailableBanner"]').should('be.visible');
+    cy.get('[data-cy="status"]').should('not.exist');
+    cy.get('@updateTransactionIngestionRequest.all').should('have.length', 0);
   });
 });

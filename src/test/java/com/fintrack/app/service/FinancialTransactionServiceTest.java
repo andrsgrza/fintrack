@@ -19,6 +19,7 @@ import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
@@ -65,6 +66,9 @@ class FinancialTransactionServiceTest {
 
     @Mock
     private TransactionIngestionRepository transactionIngestionRepository;
+
+    @Mock
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Mock
     private InternalTransferRepository internalTransferRepository;

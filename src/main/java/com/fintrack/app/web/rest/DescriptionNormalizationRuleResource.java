@@ -3,8 +3,11 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.DescriptionNormalizationRuleConditionService;
+import com.fintrack.app.service.DescriptionNormalizationRuleConfigurationService;
 import com.fintrack.app.service.DescriptionNormalizationRuleService;
 import com.fintrack.app.service.dto.DescriptionNormalizationRuleConditionDTO;
+import com.fintrack.app.service.dto.DescriptionNormalizationRuleConfiguredRequestDTO;
+import com.fintrack.app.service.dto.DescriptionNormalizationRuleConfiguredResponseDTO;
 import com.fintrack.app.service.dto.DescriptionNormalizationRuleDTO;
 import com.fintrack.app.service.dto.DescriptionNormalizationRuleReorderRequestDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -36,16 +39,37 @@ public class DescriptionNormalizationRuleResource {
 
     private final DescriptionNormalizationRuleService ruleService;
     private final DescriptionNormalizationRuleConditionService conditionService;
+    private final DescriptionNormalizationRuleConfigurationService configurationService;
     private final ObjectMapper objectMapper;
 
     public DescriptionNormalizationRuleResource(
         DescriptionNormalizationRuleService ruleService,
         DescriptionNormalizationRuleConditionService conditionService,
+        DescriptionNormalizationRuleConfigurationService configurationService,
         ObjectMapper objectMapper
     ) {
         this.ruleService = ruleService;
         this.conditionService = conditionService;
+        this.configurationService = configurationService;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * {@code POST /description-normalization-rules/configured} : Create a complete normalization rule atomically.
+     */
+    @PostMapping("/configured")
+    public ResponseEntity<DescriptionNormalizationRuleConfiguredResponseDTO> createConfiguredDescriptionNormalizationRule(
+        @RequestBody(required = false) DescriptionNormalizationRuleConfiguredRequestDTO request
+    ) throws URISyntaxException {
+        DescriptionNormalizationRuleConfiguredResponseDTO result;
+        try {
+            result = configurationService.create(request);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseEntity.created(new URI("/api/description-normalization-rules/" + result.getId() + "/configured"))
+            .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, result.getId().toString()))
+            .body(result);
     }
 
     @PostMapping("")

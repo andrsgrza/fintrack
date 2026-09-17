@@ -7,33 +7,34 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
-import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
-import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
-import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.CsvIngestionReadinessService.CsvIngestionReadinessSnapshot;
-import com.fintrack.app.service.dto.CsvIngestionConfirmImportRecordSelectionDTO;
-import com.fintrack.app.service.dto.CsvIngestionConfirmImportRequestDTO;
 import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
-import java.math.BigDecimal;
+import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
+import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper;
+import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,10 +53,11 @@ public class CsvIngestionConfirmImportService {
     private final FileIngestionRepository fileIngestionRepository;
     private final IngestionRecordRepository ingestionRecordRepository;
     private final FinancialTransactionRepository financialTransactionRepository;
-    private final CategoryRepository categoryRepository;
-    private final TagRepository tagRepository;
+    private final TransactionCandidateRepository transactionCandidateRepository;
     private final CurrentUserService currentUserService;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
+    private final TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper;
+    private final TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper;
     private final ObjectMapper objectMapper;
 
     public CsvIngestionConfirmImportService(
@@ -63,25 +65,27 @@ public class CsvIngestionConfirmImportService {
         FileIngestionRepository fileIngestionRepository,
         IngestionRecordRepository ingestionRecordRepository,
         FinancialTransactionRepository financialTransactionRepository,
-        CategoryRepository categoryRepository,
-        TagRepository tagRepository,
+        TransactionCandidateRepository transactionCandidateRepository,
         CurrentUserService currentUserService,
         CsvIngestionReadinessService csvIngestionReadinessService,
+        TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper,
+        TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper,
         ObjectMapper objectMapper
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.fileIngestionRepository = fileIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.financialTransactionRepository = financialTransactionRepository;
-        this.categoryRepository = categoryRepository;
-        this.tagRepository = tagRepository;
+        this.transactionCandidateRepository = transactionCandidateRepository;
         this.currentUserService = currentUserService;
         this.csvIngestionReadinessService = csvIngestionReadinessService;
+        this.transactionCandidateFinancialTransactionMapper = transactionCandidateFinancialTransactionMapper;
+        this.transactionCandidateWorkflowSummaryMapper = transactionCandidateWorkflowSummaryMapper;
         this.objectMapper = objectMapper;
     }
 
     @Transactional(noRollbackFor = IngestionNotReadyException.class)
-    public CsvIngestionConfirmImportResponseDTO confirm(Long transactionIngestionId, CsvIngestionConfirmImportRequestDTO request) {
+    public CsvIngestionConfirmImportResponseDTO confirm(Long transactionIngestionId) {
         TransactionIngestion ingestion = resolveAccessibleFileIngestion(transactionIngestionId);
         List<IngestionRecord> records = records(ingestion);
         validateNoCorruptFinancialTransactionLinks(records);
@@ -89,6 +93,7 @@ public class CsvIngestionConfirmImportService {
         if (ingestion.getStatus() == IngestionStatus.COMPLETED) {
             return response(ingestion, records, 0);
         }
+        validateNoCorruptPreCompletedCandidates(ingestion, records);
         if (!isConfirmPrecheckStatusAllowed(ingestion.getStatus())) {
             throw new IllegalArgumentException("Only ready file ingestions can be confirmed");
         }
@@ -99,15 +104,23 @@ public class CsvIngestionConfirmImportService {
             throw new IngestionNotReadyException(NOT_READY_MESSAGE);
         }
 
-        Map<Long, ResolvedRecordSelection> selections = validateAndResolveSelections(request, ingestion, records);
+        Map<Long, TransactionCandidate> candidatesByRecordId = validateAndResolveCandidates(ingestion, records);
 
         int createdNow = 0;
         Instant now = Instant.now();
         for (IngestionRecord record : records) {
             if (record.getStatus() == IngestionRecordStatus.VALID) {
+                TransactionCandidate candidate = candidatesByRecordId.get(record.getId());
                 FinancialTransaction financialTransaction = financialTransactionRepository.save(
-                    toFinancialTransaction(ingestion, record, now, selections.get(record.getId()))
+                    transactionCandidateFinancialTransactionMapper
+                        .toFinancialTransaction(candidate, TransactionOrigin.FILE_IMPORT, now)
+                        .transactionIngestion(ingestion)
                 );
+                candidate.setFinancialTransaction(financialTransaction);
+                candidate.setStatus(TransactionCandidateStatus.POSTED);
+                candidate.setPostedAt(now);
+                candidate.setUpdatedAt(now);
+                transactionCandidateRepository.save(candidate);
                 record.setStatus(IngestionRecordStatus.IMPORTED);
                 record.setFinancialTransaction(financialTransaction);
                 record.setErrorCode(null);
@@ -126,96 +139,139 @@ public class CsvIngestionConfirmImportService {
         return response(ingestion, records, createdNow);
     }
 
-    private Map<Long, ResolvedRecordSelection> validateAndResolveSelections(
-        CsvIngestionConfirmImportRequestDTO request,
-        TransactionIngestion ingestion,
-        List<IngestionRecord> records
-    ) {
-        if (request == null || request.getRecords() == null) {
-            throw new IllegalArgumentException("Confirm import requires category/tag selections for all valid records");
-        }
-
-        List<IngestionRecord> validRecords = records.stream().filter(record -> record.getStatus() == IngestionRecordStatus.VALID).toList();
-        Map<Long, IngestionRecord> validRecordById = new HashMap<>();
-        for (IngestionRecord record : validRecords) {
-            validRecordById.put(record.getId(), record);
-        }
-
-        if (request.getRecords().size() != validRecords.size()) {
-            throw new IllegalArgumentException("Confirm import must include exactly all valid ingestion records");
-        }
-
+    private Map<Long, TransactionCandidate> validateAndResolveCandidates(TransactionIngestion ingestion, List<IngestionRecord> records) {
         String userLogin = currentUserService.getCurrentUserLogin();
-        Map<Long, ResolvedRecordSelection> resolved = new HashMap<>();
-        Set<Long> seenRecordIds = new HashSet<>();
-
-        for (CsvIngestionConfirmImportRecordSelectionDTO selection : request.getRecords()) {
-            if (selection == null || selection.getRecordId() == null) {
-                throw new IllegalArgumentException("Confirm import record id is required");
+        List<IngestionRecord> validRecords = records.stream().filter(record -> record.getStatus() == IngestionRecordStatus.VALID).toList();
+        Map<Long, TransactionCandidate> candidatesByRecordId = new HashMap<>();
+        for (TransactionCandidate candidate : transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
+            ingestion.getId(),
+            userLogin
+        )) {
+            Long recordId = candidate.getIngestionRecord() == null ? null : candidate.getIngestionRecord().getId();
+            if (recordId != null && candidatesByRecordId.put(recordId, candidate) != null) {
+                throw new IllegalArgumentException("Exactly one transaction candidate is required for each valid ingestion record");
             }
-            if (!seenRecordIds.add(selection.getRecordId())) {
-                throw new IllegalArgumentException("Confirm import record ids must be unique");
-            }
-            IngestionRecord record = validRecordById.get(selection.getRecordId());
-            if (record == null) {
-                throw new IllegalArgumentException("Confirm import record does not belong to the valid record set");
-            }
-
-            TransactionFlow flow = requiredFlow(rawData(record).path("normalized"), "flow");
-            Category category = resolveCategory(selection.getCategoryId(), userLogin, flow);
-            Set<Tag> tags = resolveTags(selection.getTagIds(), userLogin);
-            resolved.put(record.getId(), new ResolvedRecordSelection(category, tags));
         }
-
-        if (!resolved.keySet().equals(validRecordById.keySet())) {
-            throw new IllegalArgumentException("Confirm import must include exactly all valid ingestion records");
+        for (IngestionRecord record : validRecords) {
+            TransactionCandidate candidate = candidatesByRecordId.get(record.getId());
+            if (candidate == null) {
+                throw new IllegalArgumentException("Transaction candidate is required for each valid ingestion record");
+            }
+            validateCandidateForConfirm(ingestion, record, candidate, userLogin);
         }
-
-        return resolved;
+        return candidatesByRecordId;
     }
 
-    private Category resolveCategory(Long categoryId, String userLogin, TransactionFlow flow) {
-        if (categoryId == null) {
-            return null;
+    private void validateCandidateForConfirm(
+        TransactionIngestion ingestion,
+        IngestionRecord record,
+        TransactionCandidate candidate,
+        String userLogin
+    ) {
+        if (candidate.getSource() != TransactionCandidateSource.FILE_IMPORT) {
+            throw new IllegalArgumentException("Only FILE_IMPORT transaction candidates can be confirmed from file ingestion");
         }
-        Category category = categoryRepository
-            .findOneWithToOneRelationshipsByIdAndUserLogin(categoryId, userLogin)
-            .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
-        validateCategoryCompatibility(category, flow);
-        return category;
+        if (candidate.getStatus() == TransactionCandidateStatus.POSTED || candidate.getFinancialTransaction() != null) {
+            throw new IllegalArgumentException("Transaction candidate is already posted before ingestion completed");
+        }
+        if (candidate.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
+            throw new IllegalArgumentException("Transaction candidate is not ready to post");
+        }
+        if (candidate.getValidationStatus() != TransactionCandidateValidationStatus.VALID) {
+            throw new IllegalArgumentException("Transaction candidate validation must be valid before confirm");
+        }
+        if (!isConfirmedClassificationStatus(candidate.getClassificationReviewStatus())) {
+            throw new IllegalArgumentException("Transaction candidate classification must be reviewed before confirm");
+        }
+        if (
+            candidate.getTransactionIngestion() == null ||
+            !Objects.equals(candidate.getTransactionIngestion().getId(), ingestion.getId()) ||
+            candidate.getIngestionRecord() == null ||
+            !Objects.equals(candidate.getIngestionRecord().getId(), record.getId())
+        ) {
+            throw new IllegalArgumentException("Transaction candidate does not belong to the valid ingestion record");
+        }
+        if (
+            candidate.getUser() == null ||
+            candidate.getUser().getLogin() == null ||
+            !Objects.equals(candidate.getUser().getLogin(), userLogin)
+        ) {
+            throw new IllegalArgumentException("Transaction candidate is not accessible");
+        }
+        if (
+            candidate.getAccount() == null ||
+            ingestion.getAccount() == null ||
+            !Objects.equals(candidate.getAccount().getId(), ingestion.getAccount().getId())
+        ) {
+            throw new IllegalArgumentException("Transaction candidate account must match the ingestion account");
+        }
+        validateCandidateFields(candidate);
+        validateCandidateOutputs(candidate, userLogin);
     }
 
-    private Set<Tag> resolveTags(List<Long> tagIds, String userLogin) {
-        if (tagIds == null || tagIds.isEmpty()) {
-            return Set.of();
+    private boolean isConfirmedClassificationStatus(TransactionCandidateClassificationReviewStatus status) {
+        return (
+            status == TransactionCandidateClassificationReviewStatus.SUGGESTED ||
+            status == TransactionCandidateClassificationReviewStatus.USER_SELECTED ||
+            status == TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE
+        );
+    }
+
+    private void validateCandidateFields(TransactionCandidate candidate) {
+        if (candidate.getAccount().getCurrency() == null || candidate.getCurrencySnapshot() == null) {
+            throw new IllegalArgumentException("Transaction candidate currency is required");
         }
-        Set<Long> seenTagIds = new HashSet<>();
-        Set<Tag> tags = new LinkedHashSet<>();
-        for (Long tagId : tagIds) {
-            if (tagId == null) {
-                throw new IllegalArgumentException("Tag id is required");
-            }
-            if (!seenTagIds.add(tagId)) {
-                throw new IllegalArgumentException("Confirm import tag ids must be unique per record");
-            }
-            tags.add(
-                tagRepository
-                    .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
-                    .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"))
-            );
+        if (candidate.getCurrencySnapshot() != candidate.getAccount().getCurrency()) {
+            throw new IllegalArgumentException("Transaction candidate currency must match the selected account currency");
         }
-        return tags;
+        if (candidate.getTransactionDate() == null) {
+            throw new IllegalArgumentException("Transaction candidate transaction date is required");
+        }
+        if (candidate.getDescription() == null || candidate.getDescription().isBlank()) {
+            throw new IllegalArgumentException("Transaction candidate description is required");
+        }
+        if (candidate.getAmount() == null || candidate.getAmount().signum() <= 0) {
+            throw new IllegalArgumentException("Transaction candidate amount must be greater than zero");
+        }
+        if (candidate.getFlow() == null) {
+            throw new IllegalArgumentException("Transaction candidate flow is required");
+        }
+        if (candidate.getSignedAmount() == null || candidate.getSignedAmount().signum() == 0) {
+            throw new IllegalArgumentException("Transaction candidate signed amount is required");
+        }
+        if (candidate.getSignedAmount().abs().compareTo(candidate.getAmount()) != 0) {
+            throw new IllegalArgumentException("Transaction candidate amount must match signed amount");
+        }
+        if (candidate.getSignedAmount().signum() > 0 && candidate.getFlow() != TransactionFlow.IN) {
+            throw new IllegalArgumentException("Transaction candidate flow must match signed amount");
+        }
+        if (candidate.getSignedAmount().signum() < 0 && candidate.getFlow() != TransactionFlow.OUT) {
+            throw new IllegalArgumentException("Transaction candidate flow must match signed amount");
+        }
+    }
+
+    private void validateCandidateOutputs(TransactionCandidate candidate, String userLogin) {
+        Category category = candidate.getCategory();
+        if (category != null) {
+            if (category.getUser() == null || !Objects.equals(category.getUser().getLogin(), userLogin)) {
+                throw new IllegalArgumentException("Transaction candidate category is not accessible");
+            }
+            validateCategoryCompatibility(category, candidate.getFlow());
+        }
+        if (candidate.getTags() != null) {
+            for (Tag tag : candidate.getTags()) {
+                if (tag.getUser() == null || !Objects.equals(tag.getUser().getLogin(), userLogin)) {
+                    throw new IllegalArgumentException("Transaction candidate tag is not accessible");
+                }
+            }
+        }
     }
 
     private void validateCategoryCompatibility(Category category, TransactionFlow flow) {
         if (category == null || flow == null) {
             return;
         }
-        CategoryType categoryType = category.getCategoryType();
-        if (flow == TransactionFlow.OUT && categoryType != CategoryType.EXPENSE && categoryType != CategoryType.BOTH) {
-            throw new IllegalArgumentException("Category type is not compatible with transaction flow");
-        }
-        if (flow == TransactionFlow.IN && categoryType != CategoryType.INCOME && categoryType != CategoryType.BOTH) {
+        if (!CategoryFlowCompatibilityValidator.isCompatible(category.getCategoryType(), flow)) {
             throw new IllegalArgumentException("Category type is not compatible with transaction flow");
         }
     }
@@ -259,43 +315,64 @@ public class CsvIngestionConfirmImportService {
         }
     }
 
-    private FinancialTransaction toFinancialTransaction(
-        TransactionIngestion ingestion,
-        IngestionRecord record,
-        Instant now,
-        ResolvedRecordSelection selection
-    ) {
-        JsonNode normalized = rawData(record).path("normalized");
-        CurrencyCode rowCurrency = requiredCurrency(normalized, "currency");
+    private void validateNoCorruptPreCompletedCandidates(TransactionIngestion ingestion, List<IngestionRecord> records) {
+        String userLogin = currentUserService.getCurrentUserLogin();
+        Map<Long, IngestionRecord> recordsById = new HashMap<>();
+        records.forEach(record -> recordsById.put(record.getId(), record));
+
+        for (TransactionCandidate candidate : transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
+            ingestion.getId(),
+            userLogin
+        )) {
+            if (candidate.getSource() != TransactionCandidateSource.FILE_IMPORT) {
+                throw new IllegalArgumentException("Only FILE_IMPORT transaction candidates can be confirmed from file ingestion");
+            }
+            IngestionRecord record = candidate.getIngestionRecord();
+            if (record == null || record.getId() == null) {
+                throw new IllegalArgumentException("Transaction candidate is missing its ingestion record");
+            }
+            if (
+                record.getTransactionIngestion() == null ||
+                !Objects.equals(record.getTransactionIngestion().getId(), ingestion.getId()) ||
+                !recordsById.containsKey(record.getId())
+            ) {
+                throw new IllegalArgumentException("Transaction candidate does not belong to this ingestion");
+            }
+
+            IngestionRecord persistedRecord = recordsById.get(record.getId());
+            if (candidate.getStatus() == TransactionCandidateStatus.POSTED) {
+                validatePostedCandidateMatchesImportedRecord(candidate, persistedRecord);
+            } else {
+                validateUnpostedCandidateMatchesPreImportRecord(candidate, persistedRecord);
+            }
+        }
+    }
+
+    private void validatePostedCandidateMatchesImportedRecord(TransactionCandidate candidate, IngestionRecord record) {
+        if (record.getStatus() != IngestionRecordStatus.IMPORTED) {
+            throw new IllegalArgumentException("Posted transaction candidate requires an imported ingestion record");
+        }
+        if (candidate.getFinancialTransaction() == null) {
+            throw new IllegalArgumentException("Posted transaction candidate is missing its financial transaction");
+        }
         if (
-            ingestion.getAccount() == null ||
-            ingestion.getAccount().getCurrency() == null ||
-            rowCurrency != ingestion.getAccount().getCurrency()
+            record.getFinancialTransaction() == null ||
+            !Objects.equals(candidate.getFinancialTransaction().getId(), record.getFinancialTransaction().getId())
         ) {
-            throw new IllegalArgumentException("CSV row currency must match the selected account currency");
+            throw new IllegalArgumentException("Posted transaction candidate financial transaction must match ingestion record");
         }
+    }
 
-        FinancialTransaction financialTransaction = new FinancialTransaction()
-            .transactionDate(requiredLocalDate(normalized, "transactionDate"))
-            .postingDate(optionalLocalDate(normalized, "postingDate"))
-            .description(requiredText(normalized, "description"))
-            .amount(requiredAmount(normalized, "amount"))
-            .flow(requiredFlow(normalized, "flow"))
-            .origin(TransactionOrigin.FILE_IMPORT)
-            .externalReference(optionalText(normalized, "externalReference"))
-            .notes(optionalText(normalized, "notes"))
-            .createdAt(now)
-            .updatedAt(now)
-            .account(ingestion.getAccount())
-            .category(selection == null ? null : selection.category())
-            .financialSubscription(null)
-            .transactionIngestion(ingestion);
-
-        if (selection != null) {
-            selection.tags().forEach(financialTransaction::addTags);
+    private void validateUnpostedCandidateMatchesPreImportRecord(TransactionCandidate candidate, IngestionRecord record) {
+        if (record.getStatus() == IngestionRecordStatus.IMPORTED) {
+            throw new IllegalArgumentException("Imported ingestion record requires a posted transaction candidate");
         }
-
-        return financialTransaction;
+        if (record.getStatus() != IngestionRecordStatus.VALID) {
+            throw new IllegalArgumentException("Transaction candidate is linked to a non-valid ingestion record");
+        }
+        if (candidate.getFinancialTransaction() != null) {
+            throw new IllegalArgumentException("Unposted transaction candidate cannot be linked to a financial transaction");
+        }
     }
 
     private CsvIngestionConfirmImportResponseDTO response(TransactionIngestion ingestion, List<IngestionRecord> records, int createdNow) {
@@ -309,15 +386,29 @@ public class CsvIngestionConfirmImportService {
         response.setRejected(count(records, IngestionRecordStatus.REJECTED));
         response.setFailed(count(records, IngestionRecordStatus.FAILED));
         response.setCounts(counts);
-        response.setRows(records.stream().map(this::toRowDto).toList());
+        Map<Long, TransactionCandidate> candidatesByRecordId = currentUserCandidateByRecordId(ingestion);
+        response.setRows(records.stream().map(record -> toRowDto(record, candidatesByRecordId.get(record.getId()))).toList());
         return response;
+    }
+
+    private Map<Long, TransactionCandidate> currentUserCandidateByRecordId(TransactionIngestion ingestion) {
+        Map<Long, TransactionCandidate> candidatesByRecordId = new HashMap<>();
+        for (TransactionCandidate candidate : transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
+            ingestion.getId(),
+            currentUserService.getCurrentUserLogin()
+        )) {
+            if (candidate.getIngestionRecord() != null && candidate.getIngestionRecord().getId() != null) {
+                candidatesByRecordId.put(candidate.getIngestionRecord().getId(), candidate);
+            }
+        }
+        return candidatesByRecordId;
     }
 
     private int count(List<IngestionRecord> records, IngestionRecordStatus status) {
         return (int) records.stream().filter(record -> record.getStatus() == status).count();
     }
 
-    private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record) {
+    private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record, TransactionCandidate candidate) {
         JsonNode rawData = rawData(record);
         JsonNode normalized = rawData.path("normalized");
         CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
@@ -337,6 +428,7 @@ public class CsvIngestionConfirmImportService {
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
         dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(rawData));
+        dto.setCandidate(transactionCandidateWorkflowSummaryMapper.toDto(candidate));
         return dto;
     }
 
@@ -348,22 +440,9 @@ public class CsvIngestionConfirmImportService {
         }
     }
 
-    private LocalDate requiredLocalDate(JsonNode node, String fieldName) {
-        String value = requiredText(node, fieldName);
-        return LocalDate.parse(value);
-    }
-
     private LocalDate optionalLocalDate(JsonNode node, String fieldName) {
         String value = optionalText(node, fieldName);
         return value == null ? null : LocalDate.parse(value);
-    }
-
-    private BigDecimal requiredAmount(JsonNode node, String fieldName) {
-        return new BigDecimal(requiredText(node, fieldName));
-    }
-
-    private TransactionFlow requiredFlow(JsonNode node, String fieldName) {
-        return TransactionFlow.valueOf(requiredText(node, fieldName));
     }
 
     private TransactionFlow optionalFlow(JsonNode node, String fieldName) {
@@ -371,21 +450,9 @@ public class CsvIngestionConfirmImportService {
         return value == null ? null : TransactionFlow.valueOf(value);
     }
 
-    private CurrencyCode requiredCurrency(JsonNode node, String fieldName) {
-        return CurrencyCode.valueOf(requiredText(node, fieldName));
-    }
-
     private CurrencyCode optionalCurrency(JsonNode node, String fieldName) {
         String value = optionalText(node, fieldName);
         return value == null ? null : CurrencyCode.valueOf(value);
-    }
-
-    private String requiredText(JsonNode node, String fieldName) {
-        String value = optionalText(node, fieldName);
-        if (value == null) {
-            throw new IllegalArgumentException("CSV row normalized " + fieldName + " is required");
-        }
-        return value;
     }
 
     private String optionalText(JsonNode node, String fieldName) {
@@ -401,12 +468,6 @@ public class CsvIngestionConfirmImportService {
 
         private IngestionNotReadyException(String message) {
             super(message);
-        }
-    }
-
-    private record ResolvedRecordSelection(Category category, Set<Tag> tags) {
-        private ResolvedRecordSelection {
-            tags = tags == null ? Set.of() : Set.copyOf(tags);
         }
     }
 }

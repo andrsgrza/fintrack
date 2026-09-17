@@ -111,6 +111,25 @@ class FinancialAccountBalanceServiceTest {
     }
 
     @Test
+    void transactionCandidatesDoNotAffectBalanceReadModel() {
+        FinancialAccount account = account(AccountType.DEBIT, "100.00");
+
+        when(financialAccountService.findAccessibleAccountEntity(1L)).thenReturn(Optional.of(account));
+        when(
+            financialTransactionRepository.findByAccountIdAndTransactionDateBetween(1L, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31))
+        ).thenReturn(List.of());
+
+        var result = financialAccountBalanceService.calculateBalance(1L, LocalDate.of(2026, 1, 31)).orElseThrow();
+
+        assertThat(result.getCurrentBalance()).isEqualByComparingTo("100.00");
+        verify(financialTransactionRepository).findByAccountIdAndTransactionDateBetween(
+            1L,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31)
+        );
+    }
+
+    @Test
     void loadsTransactionsFromInitialBalanceDateThroughAsOfDate() {
         FinancialAccount account = account(AccountType.DEBIT, "100.00");
 

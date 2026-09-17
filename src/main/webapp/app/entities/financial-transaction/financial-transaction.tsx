@@ -94,6 +94,11 @@ export const FinancialTransaction = () => {
       <h2 id="financial-transaction-heading" data-cy="FinancialTransactionHeading">
         <Translate contentKey="fintrackApp.financialTransaction.home.title">Financial Transactions</Translate>
         <div className="d-flex justify-content-end">
+          <Link to="/financial-transaction/drafts" className="btn btn-secondary me-2" data-cy="manualDraftsButton">
+            <FontAwesomeIcon icon="list" />
+            &nbsp;
+            <Translate contentKey="fintrackApp.financialTransaction.home.viewDraftsLabel">View drafts</Translate>
+          </Link>
           <Button className="me-2" color="info" onClick={handleSyncList} disabled={loading}>
             <FontAwesomeIcon icon="sync" spin={loading} />{' '}
             <Translate contentKey="fintrackApp.financialTransaction.home.refreshListLabel">Refresh List</Translate>

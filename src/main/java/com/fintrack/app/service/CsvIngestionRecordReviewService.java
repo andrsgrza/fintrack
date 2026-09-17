@@ -25,6 +25,7 @@ import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,7 @@ public class CsvIngestionRecordReviewService {
     private final CanonicalCsvIngestionParser parser;
     private final ObjectMapper objectMapper;
     private final CsvIngestionReadinessService csvIngestionReadinessService;
+    private final FileImportTransactionCandidatePreparationService fileImportTransactionCandidatePreparationService;
 
     public CsvIngestionRecordReviewService(
         TransactionIngestionRepository transactionIngestionRepository,
@@ -47,7 +49,8 @@ public class CsvIngestionRecordReviewService {
         CurrentUserService currentUserService,
         CanonicalCsvIngestionParser parser,
         ObjectMapper objectMapper,
-        CsvIngestionReadinessService csvIngestionReadinessService
+        CsvIngestionReadinessService csvIngestionReadinessService,
+        FileImportTransactionCandidatePreparationService fileImportTransactionCandidatePreparationService
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
@@ -55,6 +58,7 @@ public class CsvIngestionRecordReviewService {
         this.parser = parser;
         this.objectMapper = objectMapper;
         this.csvIngestionReadinessService = csvIngestionReadinessService;
+        this.fileImportTransactionCandidatePreparationService = fileImportTransactionCandidatePreparationService;
     }
 
     public CsvIngestionRecordReviewResponseDTO disable(Long ingestionId, Long recordId) {
@@ -63,6 +67,7 @@ public class CsvIngestionRecordReviewService {
             throw new IllegalArgumentException("Only valid or rejected workflow rows can be disabled");
         }
         rejectLinkedFinancialTransaction(record);
+        fileImportTransactionCandidatePreparationService.deleteUnpostedFileImportCandidateForRecord(record);
 
         record.setStatus(IngestionRecordStatus.DISABLED);
         record.setErrorCode(null);
@@ -119,6 +124,11 @@ public class CsvIngestionRecordReviewService {
         );
         applyValidationResult(record, result, true);
         ingestionRecordRepository.save(record);
+        if (record.getStatus() == IngestionRecordStatus.VALID) {
+            fileImportTransactionCandidatePreparationService.syncExistingFileImportCandidateForValidRecord(record);
+        } else {
+            fileImportTransactionCandidatePreparationService.deleteUnpostedFileImportCandidateForRecord(record);
+        }
 
         return response(record);
     }
@@ -185,6 +195,9 @@ public class CsvIngestionRecordReviewService {
 
     private String updateRawDataStatus(IngestionRecord record, CsvRowResult result, boolean edited) {
         ObjectNode root = rawData(record);
+        String previousNormalizedDescription = textOrNull(root.path("normalized"), "description");
+        boolean descriptionChanged =
+            result != null && !Objects.equals(previousNormalizedDescription, result.getNormalized().getDescription());
         if (result != null) {
             root.set("normalized", objectMapper.valueToTree(normalizedMap(result)));
             root.set("errors", objectMapper.valueToTree(result.getErrors()));
@@ -195,14 +208,16 @@ public class CsvIngestionRecordReviewService {
             review.put("edited", true);
             review.put("editedAt", Instant.now().toString());
             review.put("editedBy", currentUserService.getCurrentUserLogin());
-            ObjectNode descriptionReview = review.path("description").isObject()
-                ? (ObjectNode) review.path("description")
-                : objectMapper.createObjectNode();
-            descriptionReview.put("source", "USER_EDIT");
-            descriptionReview.put("resultingDescription", result == null ? null : result.getNormalized().getDescription());
-            descriptionReview.put("editedAt", Instant.now().toString());
-            descriptionReview.put("editedBy", currentUserService.getCurrentUserLogin());
-            review.set("description", descriptionReview);
+            if (descriptionChanged) {
+                ObjectNode descriptionReview = review.path("description").isObject()
+                    ? (ObjectNode) review.path("description")
+                    : objectMapper.createObjectNode();
+                descriptionReview.put("source", "USER_EDIT");
+                descriptionReview.put("resultingDescription", result.getNormalized().getDescription());
+                descriptionReview.put("editedAt", Instant.now().toString());
+                descriptionReview.put("editedBy", currentUserService.getCurrentUserLogin());
+                review.set("description", descriptionReview);
+            }
             root.set("review", review);
         }
         try {

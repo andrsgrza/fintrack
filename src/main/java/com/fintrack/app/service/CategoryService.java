@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
 import java.time.Instant;
@@ -29,11 +30,19 @@ public class CategoryService {
 
     private final CategoryMapper categoryMapper;
 
+    private final TransactionCandidateRepository transactionCandidateRepository;
+
     private final CurrentUserService currentUserService;
 
-    public CategoryService(CategoryRepository categoryRepository, CategoryMapper categoryMapper, CurrentUserService currentUserService) {
+    public CategoryService(
+        CategoryRepository categoryRepository,
+        CategoryMapper categoryMapper,
+        TransactionCandidateRepository transactionCandidateRepository,
+        CurrentUserService currentUserService
+    ) {
         this.categoryRepository = categoryRepository;
         this.categoryMapper = categoryMapper;
+        this.transactionCandidateRepository = transactionCandidateRepository;
         this.currentUserService = currentUserService;
     }
 
@@ -205,6 +214,9 @@ public class CategoryService {
         Long categoryId = category.orElseThrow().getId();
         if (categoryRepository.existsByParentCategoryId(categoryId)) {
             throw new IllegalArgumentException("Category with child categories cannot be deleted");
+        }
+        if (transactionCandidateRepository.existsByCategoryId(categoryId)) {
+            throw new IllegalArgumentException("Category cannot be deleted because it is used by transaction candidates.");
         }
         unlinkCategoryFromAllRelationships(categoryId);
         categoryRepository.deleteById(categoryId);

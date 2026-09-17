@@ -19,6 +19,7 @@ import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
 import java.math.BigDecimal;
@@ -71,6 +72,9 @@ class FinancialAccountServiceTest {
 
     @Mock
     private FinancialTransactionRepository financialTransactionRepository;
+
+    @Mock
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @InjectMocks
     private FinancialAccountService financialAccountService;
@@ -271,6 +275,40 @@ class FinancialAccountServiceTest {
         verify(financialSubscriptionRepository).clearAccountByAccountId(10L);
         verify(creditAccountDetailsRepository).deleteByAccountId(10L);
         verify(financialAccountRepository).deleteById(10L);
+    }
+
+    @Test
+    void deleteShouldRejectWhenAccountIsUsedByManualTransactionCandidate() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+        when(transactionCandidateRepository.existsAccountCandidateOutsideWorkflowCleanup(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> financialAccountService.delete(10L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Account cannot be deleted because it is used by transaction candidates.");
+        verify(transactionIngestionService, never()).deleteAllForAccount(any());
+        verify(financialAccountRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteShouldRejectIfCandidatesRemainAfterWorkflowCleanup() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+        when(transactionCandidateRepository.existsAccountCandidateOutsideWorkflowCleanup(10L)).thenReturn(false);
+        when(transactionCandidateRepository.existsByAccountId(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> financialAccountService.delete(10L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Account cannot be deleted because it is used by transaction candidates.");
+        verify(transactionIngestionService).deleteAllForAccount(financialAccount);
+        verify(financialTransactionService, never()).deleteAllForAccount(any());
+        verify(financialAccountRepository, never()).deleteById(any());
     }
 
     @Test

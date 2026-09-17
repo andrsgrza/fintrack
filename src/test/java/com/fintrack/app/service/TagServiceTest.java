@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.mapper.TagMapper;
 import java.time.Instant;
@@ -41,6 +42,9 @@ class TagServiceTest {
 
     @Mock
     private TagMapper tagMapper;
+
+    @Mock
+    private TransactionCandidateRepository transactionCandidateRepository;
 
     @Mock
     private CurrentUserService currentUserService;
@@ -311,6 +315,20 @@ class TagServiceTest {
         verify(tagRepository).deleteFinancialSubscriptionTagLinksByTagId(10L);
         verify(tagRepository).deleteBudgetTagLinksByTagId(10L);
         verify(tagRepository).deleteById(10L);
+    }
+
+    @Test
+    void deleteShouldRejectWhenTagIsUsedByTransactionCandidate() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+        when(transactionCandidateRepository.existsByTagId(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> tagService.delete(10L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Tag cannot be deleted because it is used by transaction candidates.");
+        verify(tagRepository, never()).deleteFinancialTransactionTagLinksByTagId(any());
+        verify(tagRepository, never()).deleteById(any());
     }
 
     @Test

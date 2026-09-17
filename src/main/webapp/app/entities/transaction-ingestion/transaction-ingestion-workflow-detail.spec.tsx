@@ -22,6 +22,8 @@ const mockGetCategories = jest.fn(params => ({ type: 'category/getEntities', pay
 const mockGetTags = jest.fn(params => ({ type: 'tag/getEntities', payload: params }));
 let mockState;
 
+const confirmImportCalls = () => mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/confirm');
+
 jest.mock('app/config/store', () => ({
   useAppDispatch: () => mockDispatch,
   useAppSelector: selector => selector(mockState),
@@ -210,8 +212,29 @@ const classificationPreviewResponse = {
     transactionIngestionId: 100,
     rows: [
       {
-        recordId: 300,
+        candidateId: 400,
+        ingestionRecordId: 300,
         recordIndex: 1,
+        action: 'PREVIEWED',
+        candidate: {
+          id: 400,
+          source: 'FILE_IMPORT',
+          status: 'READY_TO_POST',
+          validationStatus: 'VALID',
+          classificationReviewStatus: 'NOT_EVALUATED',
+          transactionDate: '2026-07-13',
+          description: 'Salary',
+          signedAmount: '100.00',
+          amount: '100.00',
+          flow: 'IN',
+          currencySnapshot: 'MXN',
+          accountId: 10,
+          accountName: 'Checking account',
+          categoryId: null,
+          categoryName: null,
+          tagIds: [],
+          tagNames: [],
+        },
         transactionDate: '2026-07-13',
         description: 'Salary',
         signedAmount: '100.00',
@@ -227,6 +250,56 @@ const classificationPreviewResponse = {
   },
 };
 
+const candidateForRow = (row, overrides = {}) => ({
+  id: (row.ingestionRecordId ?? row.recordIndex) + 100,
+  source: 'FILE_IMPORT',
+  status: 'READY_TO_POST',
+  validationStatus: 'VALID',
+  classificationReviewStatus: 'NOT_EVALUATED',
+  transactionDate: row.transactionDate,
+  postingDate: row.postingDate,
+  description: row.description,
+  signedAmount: row.signedAmount,
+  amount: row.amount,
+  flow: row.flow,
+  currencySnapshot: row.currency,
+  externalReference: row.externalReference,
+  notes: row.notes,
+  accountId: 10,
+  accountName: 'Checking account',
+  categoryId: null,
+  categoryName: null,
+  tagIds: [],
+  tagNames: [],
+  ...overrides,
+});
+
+const withCandidates = (response, candidateOverridesByRecordId = {}) => ({
+  data: {
+    ...response.data,
+    rows: response.data.rows.map(row =>
+      row.status === 'VALID'
+        ? {
+            ...row,
+            candidate: candidateForRow(row, candidateOverridesByRecordId[row.ingestionRecordId] ?? {}),
+          }
+        : row,
+    ),
+  },
+});
+
+const prepareCandidatesResponse = {
+  data: {
+    transactionIngestionId: 100,
+    created: 1,
+    updated: 0,
+    unchanged: 0,
+    skipped: 0,
+    errors: 0,
+    rows: [{ ingestionRecordId: 300, recordIndex: 1, candidateId: 400, action: 'CREATED' }],
+  },
+};
+
 describe('TransactionIngestion file workflow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -238,11 +311,13 @@ describe('TransactionIngestion file workflow', () => {
     registerTranslations();
   });
 
-  it('adds New File Import action on TransactionIngestion list', () => {
+  it('adds one clear New File Import action on TransactionIngestion list', () => {
     renderList();
 
     const newFileImport = screen.getByRole('link', { name: /new file import/i });
     expect(newFileImport.getAttribute('href')).toBe('/transaction-ingestion/new');
+    expect(screen.getAllByRole('link', { name: /new file import/i })).toHaveLength(1);
+    expect(screen.queryByRole('link', { name: /create new transaction ingestion/i })).toBeNull();
   });
 
   it('does not render TransactionIngestion list Edit action', () => {
@@ -302,6 +377,8 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
     expect(within(rowForRecord(302)).queryByRole('button', { name: /disable/i })).toBeNull();
     expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
+    expect(within(rowForRecord(301)).queryByTestId(/classificationCategory-/)).toBeNull();
+    expect(within(rowForRecord(302)).queryByTestId(/classificationTags-/)).toBeNull();
   });
 
   it('does not render TransactionIngestion workflow detail Edit action', async () => {
@@ -437,22 +514,34 @@ describe('TransactionIngestion file workflow', () => {
   });
 
   it('enable valid disabled row updates displayed batch status to ready', async () => {
-    mockAxiosGet.mockResolvedValue({
+    const disabledResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'PARTIALLY_READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
         rows: [{ ...persistedReviewResponse.data.rows[0], status: 'DISABLED' }],
       },
-    });
-    mockAxiosPost.mockResolvedValue({
+    };
+    const readyResponse = {
       data: {
-        transactionIngestionId: 100,
+        ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
-        row: persistedReviewResponse.data.rows[0],
+        rows: [persistedReviewResponse.data.rows[0]],
       },
-    });
+    };
+    mockAxiosGet.mockResolvedValueOnce(disabledResponse).mockResolvedValueOnce(withCandidates(readyResponse));
+    mockAxiosPost
+      .mockResolvedValueOnce({
+        data: {
+          transactionIngestionId: 100,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          row: persistedReviewResponse.data.rows[0],
+        },
+      })
+      .mockResolvedValueOnce(prepareCandidatesResponse)
+      .mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
     expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
@@ -776,22 +865,736 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(rowForRecord(300)).queryByText('Edited manually')).toBeNull();
   });
 
-  it('shows Continue to category/tags when review is ready with valid rows', async () => {
-    mockAxiosGet.mockResolvedValue({
+  it('automatically prepares candidate-backed classification in the same review table when review is ready', async () => {
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
         rows: [persistedReviewResponse.data.rows[0]],
       },
-    });
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
     expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
     expect(screen.queryByText(/translation-not-found/i)).toBeNull();
-    expect(screen.getByRole('button', { name: /continue to category\/tags/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/prepare'));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
+    expect(screen.getByRole('columnheader', { name: 'Category' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Tags' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Rule details' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /continue to category\/tags/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /back to row review/i })).toBeNull();
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/candidates/prepare')).toHaveLength(1);
+  });
+
+  it('renders explicit scoped reevaluation controls and removes the ambiguous refresh action', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    expect(screen.getByRole('button', { name: /reevaluate descriptions/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /reevaluate categories/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /reevaluate tags/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /reevaluate all/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /apply all classification suggestions/i })).toBeTruthy();
+    expect(screen.getByTestId('workflowRowReevaluate-300')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /refresh suggestions/i })).toBeNull();
+  });
+
+  it('renders local automation defaults without automatically applying classification', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('workflowAutomationConfig');
+    expect((screen.getByTestId('workflowAutoApplyDescriptions') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('workflowAutoApplyCategories') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('workflowAutoApplyTags') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('workflowProtectManualChanges') as HTMLInputElement).checked).toBe(true);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/rule-preview'))).toHaveLength(1);
+  });
+
+  it('enabling category automation applies only the category scope once candidates are ready', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    const automaticallyAppliedCandidate = {
+      ...candidateResponse.data.rows[0].candidate,
+      categoryId: 9,
+      categoryName: 'Salary',
+      categorySource: 'AUTOMATIC',
+    };
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'APPLIED',
+            candidate: automaticallyAppliedCandidate,
+            suggestedCategory: { id: 9, name: 'Salary', categoryType: 'INCOME' },
+            suggestedTags: [{ id: 5, name: 'Business' }],
+            hasSuggestions: true,
+            categoryApplied: true,
+            tagIdsApplied: [],
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('workflowAutoApplyCategories'));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', {
+        scope: 'CATEGORY',
+        automatic: true,
+        protectManualChanges: true,
+      }),
+    );
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(1);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/descriptions/reevaluate'))).toHaveLength(0);
+
+    mockAxiosPost.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate categories/i }));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', {
+        scope: 'CATEGORY',
+        automatic: true,
+        protectManualChanges: true,
+      }),
+    );
+  });
+
+  it('queues consecutive automation changes so each newly enabled scope is applied once', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('workflowAutoApplyCategories');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'APPLIED',
+            candidate: candidateResponse.data.rows[0].candidate,
+            hasSuggestions: false,
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('workflowAutoApplyCategories'));
+    fireEvent.click(screen.getByTestId('workflowAutoApplyTags'));
+
+    await waitFor(() => {
+      const automaticCalls = mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'));
+      expect(automaticCalls).toHaveLength(2);
+      expect(automaticCalls[0]).toEqual([
+        'api/transaction-ingestions/100/candidates/apply-rules',
+        { scope: 'CATEGORY', automatic: true, protectManualChanges: true },
+      ]);
+      expect(automaticCalls[1]).toEqual([
+        'api/transaction-ingestions/100/candidates/apply-rules',
+        { scope: 'TAGS', automatic: true, protectManualChanges: true },
+      ]);
+    });
+  });
+
+  it('keeps category untouched when only tag automation is enabled and does not apply from the protection toggle alone', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    mockAxiosPost.mockClear();
+    fireEvent.click(screen.getByTestId('workflowProtectManualChanges'));
+    expect(mockAxiosPost).not.toHaveBeenCalled();
+
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'APPLIED',
+            candidate: {
+              ...candidateResponse.data.rows[0].candidate,
+              tagIds: [5],
+              tagNames: ['Business'],
+              selectedTags: [{ tagId: 5, tagName: 'Business', source: 'AUTOMATIC' }],
+            },
+            suggestedTags: [{ id: 5, name: 'Business' }],
+            hasSuggestions: true,
+            categoryApplied: false,
+            tagIdsApplied: [5],
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByTestId('workflowAutoApplyTags'));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', {
+        scope: 'TAGS',
+        automatic: true,
+        protectManualChanges: false,
+      }),
+    );
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/descriptions/reevaluate'))).toHaveLength(0);
+  });
+
+  it('reevaluates descriptions with apply only when description automation is enabled', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('workflowAutoApplyDescriptions');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({ data: { transactionIngestionId: 100, rows: [{ ingestionRecordId: 300, action: 'APPLIED' }] } });
+    fireEvent.click(screen.getByTestId('workflowAutoApplyDescriptions'));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        apply: true,
+        protectManualChanges: true,
+      }),
+    );
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
+  });
+
+  it('keeps a protected manual category visible while retaining the automatic recommendation', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        categorySource: 'MANUAL',
+      },
+    });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'UNCHANGED',
+            candidate: candidateResponse.data.rows[0].candidate,
+            suggestedCategory: { id: 7, name: 'Transport', categoryType: 'EXPENSE' },
+            suggestedTags: [],
+            hasSuggestions: true,
+            categoryApplied: false,
+            tagIdsApplied: [],
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('workflowAutoApplyCategories'));
+
+    await screen.findByTestId('classificationSuggestedCategory-400');
+    expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Transport');
+    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+  });
+
+  it('applies all persisted classification suggestions without reevaluating, preserves manual selections, and reloads candidates', async () => {
+    const manualRow = {
+      ...persistedReviewResponse.data.rows[0],
+      ingestionRecordId: 310,
+      recordIndex: 1,
+      description: 'Manual salary',
+      signedAmount: '100.00',
+      amount: '100.00',
+      flow: 'IN',
+    };
+    const suggestedRow = {
+      ...persistedReviewResponse.data.rows[0],
+      ingestionRecordId: 311,
+      recordIndex: 2,
+      description: 'Uber trip',
+      signedAmount: '-100.00',
+      amount: '100.00',
+      flow: 'OUT',
+    };
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 2, invalidRows: 0 },
+        rows: [manualRow, suggestedRow],
+      },
+    };
+    const initialWorkflow = withCandidates(readyResponse, {
+      310: {
+        id: 410,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [5],
+        tagNames: ['Business'],
+      },
+      311: { id: 411, classificationReviewStatus: 'NOT_EVALUATED' },
+    });
+    const refreshedWorkflow = withCandidates(readyResponse, {
+      310: {
+        id: 410,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [5],
+        tagNames: ['Business'],
+      },
+      311: {
+        id: 411,
+        classificationReviewStatus: 'SUGGESTED',
+        categoryId: 7,
+        categoryName: 'Transport',
+        tagIds: [3],
+        tagNames: ['Ride share'],
+      },
+    });
+    const initialPreview = {
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 410,
+            ingestionRecordId: 310,
+            action: 'PREVIEWED',
+            candidate: initialWorkflow.data.rows[0].candidate,
+            suggestedCategory: null,
+            suggestedTags: [],
+            hasSuggestions: false,
+          },
+          {
+            candidateId: 411,
+            ingestionRecordId: 311,
+            action: 'PREVIEWED',
+            candidate: initialWorkflow.data.rows[1].candidate,
+            suggestedCategory: { id: 7, name: 'Transport', categoryType: 'EXPENSE' },
+            suggestedTags: [{ id: 3, name: 'Ride share' }],
+            matchedRules: [{ ruleId: 20, ruleName: 'Uber expense' }],
+            hasSuggestions: true,
+          },
+        ],
+      },
+    };
+    const batchApplyResponse = {
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 410,
+            ingestionRecordId: 310,
+            action: 'UNCHANGED',
+            candidate: refreshedWorkflow.data.rows[0].candidate,
+            hasSuggestions: false,
+            categoryApplied: false,
+            tagIdsApplied: [],
+          },
+          {
+            candidateId: 411,
+            ingestionRecordId: 311,
+            action: 'APPLIED',
+            candidate: refreshedWorkflow.data.rows[1].candidate,
+            hasSuggestions: true,
+            categoryApplied: true,
+            tagIdsApplied: [3],
+          },
+        ],
+      },
+    };
+    let resolveBatchApply: (value: typeof batchApplyResponse) => void = () => undefined;
+
+    mockAxiosGet.mockResolvedValueOnce(initialWorkflow).mockResolvedValueOnce(refreshedWorkflow);
+    mockAxiosPost.mockResolvedValueOnce(initialPreview).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveBatchApply = resolve;
+        }),
+    );
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationSuggestedCategory-411');
+    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('9');
+    expect((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).value).toBe('');
+
+    const applyAllButton = screen.getByRole('button', { name: /apply all classification suggestions/i });
+    fireEvent.click(applyAllButton);
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', undefined));
+    expect((applyAllButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /applying classification suggestions/i })).toBeTruthy();
+    fireEvent.click(applyAllButton);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/candidates/apply-rules')).toHaveLength(1);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/descriptions/reevaluate'))).toHaveLength(0);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/rule-preview'))).toHaveLength(1);
+    expect(confirmImportCalls()).toHaveLength(0);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/financial-transactions'))).toHaveLength(0);
+
+    resolveBatchApply(batchApplyResponse);
+
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).value).toBe('7'));
+    expect(
+      Array.from((screen.getByTestId('classificationTags-411') as HTMLSelectElement).selectedOptions).map(option => option.value),
+    ).toEqual(['3']);
+    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('9');
+    expect(
+      Array.from((screen.getByTestId('classificationTags-410') as HTMLSelectElement).selectedOptions).map(option => option.value),
+    ).toEqual(['5']);
+    expect(screen.queryByTestId('classificationSuggestedCategory-411')).toBeNull();
+  });
+
+  it('keeps current selections intact when applying all classification suggestions fails', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [5],
+        tagNames: ['Business'],
+      },
+    });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValueOnce(classificationPreviewResponse).mockRejectedValueOnce(new Error('apply failed'));
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    fireEvent.click(screen.getByRole('button', { name: /apply all classification suggestions/i }));
+
+    await screen.findByText('Could not apply all classification suggestions. Existing selections were preserved.');
+    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+    expect(
+      Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
+    ).toEqual(['5']);
+    expect(confirmImportCalls()).toHaveLength(0);
+  });
+
+  it('reports a partial batch result when the backend skips a classification candidate', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: { id: 400, classificationReviewStatus: 'NOT_EVALUATED' },
+    });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValueOnce(classificationPreviewResponse).mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 400,
+            ingestionRecordId: 300,
+            action: 'SKIPPED',
+            error: 'Transaction candidate must be linked to a valid ingestion record',
+            candidate: candidateResponse.data.rows[0].candidate,
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    fireEvent.click(screen.getByRole('button', { name: /apply all classification suggestions/i }));
+
+    await screen.findByTestId('workflowApplyAllWarning');
+    expect(screen.getByText('Some classification suggestions could not be applied. Review the affected rows.')).toBeTruthy();
+    expect(confirmImportCalls()).toHaveLength(0);
+  });
+
+  it('reevaluates each scope through preview-only endpoints without applying or confirming', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [5],
+        tagNames: ['Business'],
+      },
+    });
+    const descriptionResponse = {
+      data: {
+        transactionIngestionId: 100,
+        rows: [{ ingestionRecordId: 300, recordIndex: 1, action: 'NO_MATCH' }],
+      },
+    };
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationCategory-400');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValueOnce(descriptionResponse).mockResolvedValue(classificationPreviewResponse);
+
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate descriptions/i }));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        apply: false,
+        protectManualChanges: true,
+      }),
+    );
+    await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate categories/i }) as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate categories/i }));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', { scope: 'CATEGORY' }),
+    );
+    await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate tags/i }) as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate tags/i }));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', { scope: 'TAGS' }),
+    );
+    await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate all/i }) as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate all/i }));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        apply: false,
+        protectManualChanges: true,
+      }),
+    );
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
+    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+    expect(
+      Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
+    ).toEqual(['5']);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
+    expect(confirmImportCalls()).toHaveLength(0);
+  });
+
+  it('reevaluates one eligible row only and keeps invalid and disabled rows unavailable', async () => {
+    const readyRows = [
+      persistedReviewResponse.data.rows[0],
+      { ...persistedReviewResponse.data.rows[0], ingestionRecordId: 304, recordIndex: 5, description: 'Second valid row' },
+    ];
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 2, invalidRows: 0 },
+        rows: readyRows,
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: { id: 400, classificationReviewStatus: 'SUGGESTED' },
+      304: { id: 404, classificationReviewStatus: 'SUGGESTED' },
+    });
+    const twoRowPreviewResponse = {
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          { ...classificationPreviewResponse.data.rows[0], hasSuggestions: true },
+          {
+            ...classificationPreviewResponse.data.rows[0],
+            candidateId: 404,
+            ingestionRecordId: 304,
+            recordIndex: 5,
+            candidate: candidateResponse.data.rows[1].candidate,
+            description: 'Second valid row',
+            suggestedCategory: null,
+            suggestedTags: [],
+            matchedRules: [],
+            hasSuggestions: false,
+          },
+        ],
+      },
+    };
+    const selectedRowPreviewResponse = {
+      data: {
+        ...twoRowPreviewResponse.data,
+        rows: [twoRowPreviewResponse.data.rows[0]],
+      },
+    };
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(twoRowPreviewResponse);
+    const firstRender = renderPersistedReview();
+
+    await screen.findByTestId('workflowRowReevaluate-300');
+    await screen.findByTestId('classificationConfirmNoSuggestions-404');
+    mockAxiosPost.mockClear();
+    mockAxiosPost
+      .mockResolvedValueOnce({ data: { transactionIngestionId: 100, rows: [{ ingestionRecordId: 300, action: 'NO_MATCH' }] } })
+      .mockResolvedValue(selectedRowPreviewResponse);
+    fireEvent.click(screen.getByTestId('workflowRowReevaluate-300'));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+        recordIds: [300],
+        apply: false,
+        protectManualChanges: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', {
+        candidateIds: [400],
+        scope: 'ALL',
+      }),
+    );
+    expect(screen.getByTestId('classificationConfirmNoSuggestions-404')).toBeTruthy();
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
+    expect(confirmImportCalls()).toHaveLength(0);
+
+    firstRender.unmount();
+    const partialWithCandidates = withCandidates(persistedReviewResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(partialWithCandidates);
+    const secondRender = renderPersistedReview();
+    await screen.findByTestId('workflowRowStatus-300');
+    expect(screen.queryByTestId('workflowRowReevaluate-301')).toBeNull();
+    expect(screen.queryByTestId('workflowRowReevaluate-302')).toBeNull();
+    secondRender.unmount();
+  });
+
+  it('preserves a manual description and displays its transient reevaluation suggestion', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            description: 'Manual salary',
+            descriptionReview: {
+              source: 'USER_EDIT',
+              originalDescription: 'Salary raw',
+              normalizedDescription: 'Manual salary',
+              resultingDescription: 'Manual salary',
+              editedBy: 'user',
+            },
+          },
+        ],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('descriptionReview-badge-300');
+    mockAxiosPost.mockClear();
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        transactionIngestionId: 100,
+        rows: [{ ingestionRecordId: 300, action: 'MANUAL_PRESERVED', suggestedDescription: 'Salary normalized' }],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate descriptions/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('descriptionReview-reevaluationSuggestion-300').textContent).toContain('Salary normalized'),
+    );
+    expect(within(rowForRecord(300)).getAllByText('Manual salary').length).toBeGreaterThan(0);
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
+    expect(confirmImportCalls()).toHaveLength(0);
   });
 
   it('does not allow confirm when review needs fixes', async () => {
@@ -820,37 +1623,73 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
   });
 
-  it('classification review initializes suggestions and confirm sends selections for all preview rows', async () => {
-    mockAxiosGet.mockResolvedValue({
+  it('candidate-backed classification prepares candidates, previews suggestions, persists manual selections, and confirms from reloaded candidates', async () => {
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
         rows: [persistedReviewResponse.data.rows[0]],
       },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: { id: 400, classificationReviewStatus: 'NOT_EVALUATED' },
     });
-    mockAxiosPost.mockResolvedValueOnce(classificationPreviewResponse);
+    const selectedCandidateResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [3, 6],
+        tagNames: ['Ride share', 'Cash'],
+      },
+    });
+    mockAxiosGet
+      .mockResolvedValueOnce(readyResponse)
+      .mockResolvedValueOnce(candidateResponse)
+      .mockResolvedValueOnce(selectedCandidateResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
+    mockAxiosPatch.mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        ingestionRecordId: 300,
+        recordIndex: 1,
+        candidate: selectedCandidateResponse.data.rows[0].candidate,
+      },
+    });
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/prepare'));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
+    expect(mockAxiosPost).not.toHaveBeenCalledWith('api/transaction-ingestions/100/classification-preview');
+    expect(screen.getByText('Categories and tags are saved on candidates before confirming the import.')).toBeTruthy();
+    expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Salary');
+    expect(screen.getByTestId('classificationSuggestedTags-400').textContent).toContain('Business');
+    expect(screen.getByTestId('classificationMatchedRules-400').textContent).toContain('Salary rule');
+    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('');
 
-    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/classification-preview'));
-    expect(await screen.findByText('Review categories and tags')).toBeTruthy();
-    expect(screen.getByText('Category/tag selections are not saved until import is confirmed.')).toBeTruthy();
-    expect(screen.getByTestId('classificationSuggestedCategory-300').textContent).toContain('Salary');
-    expect(screen.getByTestId('classificationSuggestedTags-300').textContent).toContain('Business');
-    expect(screen.getByTestId('classificationMatchedRules-300').textContent).toContain('Salary rule');
-    expect((screen.getByTestId('classificationCategory-300') as HTMLSelectElement).value).toBe('9');
-    expect(
-      Array.from((screen.getByTestId('classificationTags-300') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['5']);
-
-    fireEvent.change(screen.getByTestId('classificationCategory-300'), { target: { value: '' } });
-    const tagSelect = screen.getByTestId('classificationTags-300') as HTMLSelectElement;
+    fireEvent.change(screen.getByTestId('classificationCategory-400'), { target: { value: '9' } });
+    await waitFor(() =>
+      expect(mockAxiosPatch).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/400/classification', { categoryId: 9 }),
+    );
+    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+    const tagSelect = screen.getByTestId('classificationTags-400') as HTMLSelectElement;
     Array.from(tagSelect.options).forEach(option => {
       option.selected = ['3', '6'].includes(option.value);
     });
+    mockAxiosPatch.mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        ingestionRecordId: 300,
+        recordIndex: 1,
+        candidate: selectedCandidateResponse.data.rows[0].candidate,
+      },
+    });
     fireEvent.change(tagSelect);
+    await waitFor(() =>
+      expect(mockAxiosPatch).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/400/classification', { tagIds: [3, 6] }),
+    );
 
     mockAxiosPost.mockResolvedValueOnce({
       data: {
@@ -867,14 +1706,10 @@ describe('TransactionIngestion file workflow', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
-    await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm', {
-        records: [{ recordId: 300, categoryId: null, tagIds: [3, 6] }],
-      }),
-    );
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
   });
 
-  it('classification review leaves IN rows unselected when only OUT rows have expense suggestions', async () => {
+  it('candidate-backed classification applies suggestions per row and confirms no-suggestion rows before import', async () => {
     const outRow = {
       ...persistedReviewResponse.data.rows[0],
       ingestionRecordId: 310,
@@ -893,21 +1728,40 @@ describe('TransactionIngestion file workflow', () => {
       amount: '100.00',
       flow: 'IN',
     };
-    mockAxiosGet.mockResolvedValue({
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 2, invalidRows: 0 },
         rows: [outRow, inRow],
       },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      310: { id: 410 },
+      311: { id: 411 },
     });
-    mockAxiosPost.mockResolvedValueOnce({
+    const reviewedResponse = withCandidates(readyResponse, {
+      310: {
+        id: 410,
+        classificationReviewStatus: 'SUGGESTED',
+        categoryId: 7,
+        categoryName: 'Transport',
+        tagIds: [3],
+        tagNames: ['Ride share'],
+      },
+      311: { id: 411, classificationReviewStatus: 'NOT_APPLICABLE' },
+    });
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse).mockResolvedValue(reviewedResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce({
       data: {
         transactionIngestionId: 100,
         rows: [
           {
-            recordId: 310,
+            candidateId: 410,
+            ingestionRecordId: 310,
             recordIndex: 1,
+            action: 'PREVIEWED',
+            candidate: candidateResponse.data.rows[0].candidate,
             transactionDate: '2026-07-13',
             description: 'Uber trip',
             signedAmount: '-100.00',
@@ -918,10 +1772,14 @@ describe('TransactionIngestion file workflow', () => {
             matchedRules: [{ ruleId: 20, ruleName: 'Uber gastos' }],
             conflicts: [],
             skippedOutputs: [],
+            hasSuggestions: true,
           },
           {
-            recordId: 311,
+            candidateId: 411,
+            ingestionRecordId: 311,
             recordIndex: 2,
+            action: 'PREVIEWED',
+            candidate: candidateResponse.data.rows[1].candidate,
             transactionDate: '2026-07-14',
             description: 'Uber refund',
             signedAmount: '100.00',
@@ -932,26 +1790,61 @@ describe('TransactionIngestion file workflow', () => {
             matchedRules: [],
             conflicts: [],
             skippedOutputs: [],
+            hasSuggestions: false,
           },
         ],
       },
     });
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-
-    expect(await screen.findByText('Review categories and tags')).toBeTruthy();
-    expect(screen.getByTestId('classificationSuggestedCategory-310').textContent).toContain('Transport');
-    expect((screen.getByTestId('classificationCategory-310') as HTMLSelectElement).value).toBe('7');
+    await screen.findByTestId('classificationSuggestedCategory-410');
+    expect(screen.getByTestId('classificationSuggestedCategory-410').textContent).toContain('Transport');
+    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('');
+    expect(screen.queryByTestId('classificationSuggestedCategory-411')).toBeNull();
+    expect(screen.queryByTestId('classificationMatchedRules-411')).toBeNull();
+    expect((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).value).toBe('');
     expect(
-      Array.from((screen.getByTestId('classificationTags-310') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['3']);
-    expect(screen.queryByTestId('classificationSuggestedCategory-311')).toBeNull();
-    expect(screen.queryByTestId('classificationMatchedRules-311')).toBeNull();
-    expect((screen.getByTestId('classificationCategory-311') as HTMLSelectElement).value).toBe('');
-    expect(
-      Array.from((screen.getByTestId('classificationCategory-311') as HTMLSelectElement).options).map(option => option.textContent),
+      Array.from((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).options).map(option => option.textContent),
     ).toEqual(['No category', 'Salary']);
+
+    mockAxiosPost.mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          {
+            candidateId: 410,
+            ingestionRecordId: 310,
+            recordIndex: 1,
+            action: 'APPLIED',
+            candidate: reviewedResponse.data.rows[0].candidate,
+            suggestedCategory: { id: 7, name: 'Transport', categoryType: 'EXPENSE' },
+            suggestedTags: [{ id: 3, name: 'Ride share' }],
+            matchedRules: [{ ruleId: 20, ruleName: 'Uber gastos' }],
+            conflicts: [],
+            skippedOutputs: [],
+            hasSuggestions: true,
+            categoryApplied: true,
+            tagIdsApplied: [3],
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByTestId('classificationApply-410'));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', { candidateIds: [410] }),
+    );
+    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('7');
+
+    mockAxiosPost.mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        ingestionRecordId: 311,
+        recordIndex: 2,
+        candidate: reviewedResponse.data.rows[1].candidate,
+      },
+    });
+    fireEvent.click(screen.getByTestId('classificationConfirmNoSuggestions-411'));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/411/confirm-no-suggestions'));
 
     mockAxiosPost.mockResolvedValueOnce({
       data: {
@@ -971,93 +1864,174 @@ describe('TransactionIngestion file workflow', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
-    await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm', {
-        records: [
-          { recordId: 310, categoryId: 7, tagIds: [3] },
-          { recordId: 311, categoryId: null, tagIds: [] },
-        ],
-      }),
-    );
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
   });
 
-  it('back to row review preserves current classification selections in memory', async () => {
-    mockAxiosGet.mockResolvedValue({
+  it('reload keeps persisted candidate category and tags as classification source of truth', async () => {
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
         rows: [persistedReviewResponse.data.rows[0]],
       },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [5],
+        tagNames: ['Business'],
+      },
     });
-    mockAxiosPost.mockResolvedValueOnce(classificationPreviewResponse);
+    mockAxiosGet.mockResolvedValueOnce(candidateResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-    await screen.findByText('Review categories and tags');
-    fireEvent.change(screen.getByTestId('classificationCategory-300'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: /back to row review/i }));
-    fireEvent.click(screen.getByRole('button', { name: /continue to category\/tags/i }));
-
-    expect(((await screen.findByTestId('classificationCategory-300')) as HTMLSelectElement).value).toBe('');
+    expect(((await screen.findByTestId('classificationCategory-400')) as HTMLSelectElement).value).toBe('9');
+    expect(
+      Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
+    ).toEqual(['5']);
   });
 
-  it('classification preview error keeps row review visible', async () => {
-    mockAxiosGet.mockResolvedValue({
+  it('candidate-backed classification blocks VALID rows without candidates', async () => {
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
         rows: [persistedReviewResponse.data.rows[0]],
       },
-    });
-    mockAxiosPost.mockRejectedValue(new Error('preview failed'));
+    };
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(readyResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse);
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
-
-    expect(await screen.findByText('Could not load category/tag suggestions. Return to row review and try again.')).toBeTruthy();
-    expect(screen.queryByText('Review categories and tags')).toBeNull();
+    expect(await screen.findByText('Could not prepare transaction candidates for classification.')).toBeTruthy();
     expect(screen.getByText('Ingestion records')).toBeTruthy();
+  });
+
+  it('candidate-backed classification blocks confirm for NOT_EVALUATED and STALE candidates', async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 2, invalidRows: 0 },
+        rows: [
+          { ...persistedReviewResponse.data.rows[0], ingestionRecordId: 320, recordIndex: 1 },
+          {
+            ...persistedReviewResponse.data.rows[0],
+            ingestionRecordId: 321,
+            recordIndex: 2,
+            description: 'Stale row',
+            signedAmount: '-20.00',
+            amount: '20.00',
+            flow: 'OUT',
+          },
+        ],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      320: { id: 420, classificationReviewStatus: 'NOT_EVALUATED' },
+      321: { id: 421, classificationReviewStatus: 'STALE' },
+    });
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        rows: [
+          { candidateId: 420, ingestionRecordId: 320, recordIndex: 1, action: 'PREVIEWED', hasSuggestions: false },
+          { candidateId: 421, ingestionRecordId: 321, recordIndex: 2, action: 'PREVIEWED', hasSuggestions: false },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('Review every valid row before confirming import.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /confirm import/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('classificationStatus-420').textContent).toContain('Not evaluated');
+    expect(screen.getByTestId('classificationStatus-421').textContent).toContain('Stale');
+  });
+
+  it.each([
+    ['non-FILE_IMPORT source', { source: 'MANUAL' }],
+    ['non-ready status', { status: 'DRAFT' }],
+    ['final status', { status: 'CANCELLED' }],
+  ])('candidate-backed confirm blocks %s from freshly reloaded candidates', async (_caseName, blockedOverrides) => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary', tagIds: [5], tagNames: ['Business'] },
+    });
+    const blockedReloadResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'SUGGESTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [5],
+        tagNames: ['Business'],
+        ...blockedOverrides,
+      },
+    });
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse).mockResolvedValueOnce(blockedReloadResponse);
+    mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
+    renderPersistedReview();
+
+    expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+
+    expect(await screen.findByText('Review every valid row before confirming import.')).toBeTruthy();
+    expect(confirmImportCalls()).toHaveLength(0);
   });
 
   it('confirm success marks imported rows, leaves disabled rows, and makes review read-only', async () => {
     const readyRows = [{ ...persistedReviewResponse.data.rows[0] }, { ...persistedReviewResponse.data.rows[2] }];
-    mockAxiosGet.mockResolvedValue({
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 1, invalidRows: 0 },
         rows: readyRows,
       },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary', tagIds: [5], tagNames: ['Business'] },
     });
-    mockAxiosPost.mockResolvedValueOnce(classificationPreviewResponse).mockResolvedValueOnce({
-      data: {
-        transactionIngestionId: 100,
-        status: 'COMPLETED',
-        createdNow: 1,
-        alreadyImported: 0,
-        skipped: 1,
-        rejected: 0,
-        failed: 0,
-        counts: { recordsReceived: 2, recordsCreated: 1, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
-        rows: [
-          { ...readyRows[0], status: 'IMPORTED', financialTransactionId: 9001 },
-          { ...readyRows[1], status: 'DISABLED' },
-        ],
-      },
-    });
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosPost
+      .mockResolvedValueOnce(prepareCandidatesResponse)
+      .mockResolvedValueOnce(classificationPreviewResponse)
+      .mockResolvedValueOnce({
+        data: {
+          transactionIngestionId: 100,
+          status: 'COMPLETED',
+          createdNow: 1,
+          alreadyImported: 0,
+          skipped: 1,
+          rejected: 0,
+          failed: 0,
+          counts: { recordsReceived: 2, recordsCreated: 1, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+          rows: [
+            { ...readyRows[0], status: 'IMPORTED', financialTransactionId: 9001 },
+            { ...readyRows[1], status: 'DISABLED' },
+          ],
+        },
+      });
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
-    await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm', {
-        records: [{ recordId: 300, categoryId: 9, tagIds: [5] }],
-      }),
-    );
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
     await waitFor(() => expect(screen.getAllByText('Import completed').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Imported');
     expectRowStatus(302, 'Disabled');
@@ -1114,25 +2088,31 @@ describe('TransactionIngestion file workflow', () => {
   });
 
   it('confirm API error displays review error', async () => {
-    mockAxiosGet.mockResolvedValue({
+    const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
         status: 'READY',
         counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
         rows: [persistedReviewResponse.data.rows[0]],
       },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary', tagIds: [5], tagNames: ['Business'] },
     });
-    mockAxiosPost.mockResolvedValueOnce(classificationPreviewResponse).mockRejectedValueOnce(new Error('confirm failed'));
+    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosPost
+      .mockResolvedValueOnce(prepareCandidatesResponse)
+      .mockResolvedValueOnce(classificationPreviewResponse)
+      .mockRejectedValueOnce(new Error('confirm failed'));
     renderPersistedReview();
 
-    fireEvent.click(await screen.findByRole('button', { name: /continue to category\/tags/i }));
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
 
     expect(await screen.findByText('Could not confirm import. Check the review status and try again.')).toBeTruthy();
     expect(screen.queryByText('Import completed')).toBeNull();
     expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
-    expect(screen.getByText('Review categories and tags')).toBeTruthy();
+    expect(screen.getByText('Categories and tags are saved on candidates before confirming the import.')).toBeTruthy();
   });
 
   it('cancel leaves edited row unchanged', async () => {
@@ -1146,6 +2126,155 @@ describe('TransactionIngestion file workflow', () => {
 
     expect(screen.getByText('Salary')).toBeTruthy();
     expect(screen.queryByText('Unsaved edit')).toBeNull();
+    expect(mockAxiosPatch).not.toHaveBeenCalled();
+  });
+
+  it('renders global contextual rule actions and opens a normalization editor without navigating away from the persisted review', async () => {
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [persistedReviewResponse.data.rows[0]],
+        },
+      },
+      { 300: { id: 400 } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation(url =>
+      url === 'api/transaction-ingestions/100/candidates/rule-preview'
+        ? Promise.resolve(classificationPreviewResponse)
+        : Promise.resolve({ data: {} }),
+    );
+    renderPersistedReview();
+
+    expect(await screen.findByRole('button', { name: /new transaction rule/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /new normalization rule/i }));
+    expect((await screen.findAllByText('New normalization rule')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('transactionIngestionRuleCreationModal')).toBeTruthy();
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('prefills a row normalization rule from raw and normalized descriptions, and save does not reevaluate the row', async () => {
+    const row = {
+      ...persistedReviewResponse.data.rows[0],
+      description: 'Uber',
+      descriptionReview: {
+        source: 'DESCRIPTION_RULE',
+        originalDescription: 'UBER *TRIP 123',
+        normalizedDescription: 'Uber',
+        resultingDescription: 'Uber',
+      },
+    };
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [row],
+        },
+      },
+      { 300: { id: 400, description: 'Uber' } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation(url => {
+      if (url === 'api/transaction-ingestions/100/candidates/rule-preview') {
+        return Promise.resolve(classificationPreviewResponse);
+      }
+      if (url === 'api/description-normalization-rules/configured') {
+        return Promise.resolve({ data: { id: 901, name: 'Normalize Uber', active: false, conditions: [] } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPersistedReview();
+
+    const workflowRow = await screen.findByTestId('workflowRow-300');
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    fireEvent.click(await screen.findByTestId('workflowRowCreateNormalization-300'));
+
+    expect((screen.getByTestId('contextualDescriptionRuleResult') as HTMLInputElement).value).toBe('Uber');
+    expect((screen.getByTestId('contextualDescriptionRuleConditionValue-0') as HTMLInputElement).value).toBe('UBER *TRIP 123');
+
+    fireEvent.click(within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        'api/description-normalization-rules/configured',
+        expect.objectContaining({
+          active: false,
+          resultingDescription: 'Uber',
+          conditions: [expect.objectContaining({ operator: 'CONTAINS', value: 'UBER *TRIP 123', position: 0 })],
+        }),
+      ),
+    );
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/descriptions/reevaluate')).toHaveLength(0);
+    expect((await screen.findByTestId('workflowRuleCreationFeedback')).textContent).toContain('Rule saved.');
+    expect(rowForRecord(300).textContent).toContain('Uber');
+  });
+
+  it('prefills a row transaction rule from the persisted candidate and reevaluates only that candidate on request', async () => {
+    const row = { ...persistedReviewResponse.data.rows[0], description: 'Uber', signedAmount: '-12.00', amount: '12.00', flow: 'OUT' };
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [row],
+        },
+      },
+      {
+        300: { id: 400, description: 'Uber', flow: 'OUT', categoryId: 7, categoryName: 'Transport', tagIds: [3], tagNames: ['Ride share'] },
+      },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation(url => {
+      if (url === 'api/transaction-ingestions/100/candidates/rule-preview') {
+        return Promise.resolve({ data: { ...classificationPreviewResponse.data, rows: [] } });
+      }
+      if (url === 'api/transaction-rules/configured') {
+        return Promise.resolve({ data: { id: 902, name: 'Rule for Uber', conditions: [] } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPersistedReview();
+
+    const workflowRow = await screen.findByTestId('workflowRow-300');
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
+
+    expect((screen.getByTestId('contextualTransactionRuleCategory') as HTMLSelectElement).value).toBe('7');
+    expect((screen.getByTestId('contextualTransactionRuleTags') as HTMLSelectElement).value).toBe('3');
+    fireEvent.click(
+      within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', {
+        name: /save and reevaluate this row/i,
+      }),
+    );
+
+    await waitFor(() => {
+      const configuredCall = mockAxiosPost.mock.calls.find(([url]) => url === 'api/transaction-rules/configured');
+      expect(configuredCall).toBeDefined();
+      expect(configuredCall?.[1]).toEqual(
+        expect.objectContaining({
+          resultingCategory: { id: 7 },
+          resultingTags: [{ id: '3' }],
+          conditions: expect.arrayContaining([
+            expect.objectContaining({ field: 'DESCRIPTION', operator: 'CONTAINS', value: 'Uber' }),
+            expect.objectContaining({ field: 'FLOW', operator: 'EQUALS', value: 'OUT' }),
+          ]),
+        }),
+      );
+    });
+    expect(
+      mockAxiosPost.mock.calls.some(
+        ([url, payload]) =>
+          url === 'api/transaction-ingestions/100/candidates/rule-preview' &&
+          payload?.candidateIds?.length === 1 &&
+          payload.candidateIds[0] === 400,
+      ),
+    ).toBe(true);
     expect(mockAxiosPatch).not.toHaveBeenCalled();
   });
 });

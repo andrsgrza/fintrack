@@ -571,39 +571,45 @@ Deferred for this workflow:
 - override confirmation UI;
 - atomic backend command endpoint.
 
-FinancialTransaction manual create owns the implemented Rule Engine workflow UI. Existing-transaction preview, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
+FinancialTransaction manual create now owns the TransactionCandidate autosave UI and candidate-specific rule suggestion actions. Existing-transaction preview UI, override confirmation, and bulk reevaluation remain deferred and are documented in [RULE-ENGINE.md](RULE-ENGINE.md).
 
-## FinancialTransaction manual create — two-step Rule Engine UX
+## FinancialTransaction manual create — TransactionCandidate autosave UX
 
-Status: implemented for manual create only. Phase 3A provides the backend workflow endpoint, and Phase 3B uses it from the FinancialTransaction create form.
+Status: implemented through TC-2D.2 for manual create, draft resume, and draft recovery.
 
-Phase 3B manual create composition:
+Manual create composition:
 
-1. Step 1 — Transaction details:
-   - account;
-   - description;
-   - amount;
-   - flow;
-   - transaction date;
-   - posting date;
-   - external reference;
-   - notes and other non-categorization fields as applicable.
-2. Between steps:
-   - call `POST /api/financial-transactions/rule-preview` with the unsaved draft;
-   - do not save or mutate anything;
-   - use the response as UI assistance only.
-3. Step 2 — Categorization:
-   - category;
-   - tags;
-   - prepopulate controls from suggested category/tags;
-   - show conflicts/skipped outputs/matched rules where useful;
-   - let the user accept, change, remove, or add category/tags before save.
+1. `/financial-transaction/new` renders a local unsaved manual draft form.
+2. Page load does not create a backend candidate.
+3. The first meaningful user change creates a `MANUAL` `TransactionCandidate` through `POST /api/transaction-candidates/manual`.
+4. Meaningful first changes are account, transaction date, nonblank description, signed amount/amount entry, category, or tags.
+5. Posting date, external reference, and notes alone do not create the first candidate.
+6. After creation, the UI replaces the URL with `/financial-transaction/drafts/{id}`.
+7. `/financial-transaction/drafts/{id}` accepts MANUAL candidates only. Non-MANUAL candidates and load failures show a safe error state with no editable form, autosave, Post, or manual Cancel action.
+8. Subsequent edits debounce autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`.
+9. The UI displays amount plus flow, but submits only `signedAmount`; backend derives `amount` and `flow`.
+10. The Rule suggestions section is available after a candidate exists. After successful autosave of rule-input fields, the UI automatically calls `POST /api/transaction-candidates/{id}/rule-preview` without mutating category/tags. Apply suggestions / Confirm no suggestions flushes autosave and calls `POST /api/transaction-candidates/{id}/apply-rules`, then hydrates category/tags/status from the returned candidate.
+11. Post flushes pending autosave, requires `classificationReviewStatus` to be `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted FinancialTransaction detail.
+12. Cancel before candidate creation navigates away; cancel after candidate creation calls the candidate cancel command.
 
-Step 2 should own category/tags. Step 1 should not duplicate those controls.
+There is intentionally no explicit Save Draft button. Recoverability comes from autosave plus the `/financial-transaction/drafts/{id}` route.
 
-Final Save still uses normal FinancialTransaction create. Backend Phase 2 `FILL_EMPTY_ONLY` remains a safety net: explicit category/tags sent by Step 2 are treated as user choices; if a direct API/UI create omits category/tags, backend create may still fill empty values.
+TC-2D.2 adds the manual draft recovery page:
 
-Edit mode remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
+- `/financial-transaction/drafts` loads `GET /api/transaction-candidates/manual-drafts`.
+- It shows current-user recoverable `MANUAL` draft summaries only.
+- It includes only `DRAFT` and `READY_TO_POST` and excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT`.
+- There is no global `NEEDS_REVIEW` candidate status; review needs are represented by specific review/status fields. `API_IMPORT` is reserved/deferred and must not appear as an active manual draft recovery/product UI state until a later lifecycle slice formalizes it.
+- It displays compact description/account/date/amount/status/classification/category/tags/updated-at metadata with fallback copy for incomplete drafts.
+- Resume links to `/financial-transaction/drafts/{id}`.
+- Cancel draft calls `POST /api/transaction-candidates/{id}/cancel`, then removes/reloads the row.
+- It does not post candidates from the list.
+- The FinancialTransaction list links to this page through a secondary "View drafts" action; draft rows are not mixed into the posted FinancialTransaction table.
+- Generic `TransactionCandidate` CRUD routes are not product UI.
+
+Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
+
+The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. It only calls candidate-specific preview/apply commands through `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`; preview is automatic/read-only after saved rule-input changes, while apply/confirm remains explicit.
 
 Do not extend this as:
 
@@ -627,47 +633,53 @@ Composition rules:
 - select the target FinancialAccount and upload the canonical CSV;
 - call `POST /api/transaction-ingestions/file`;
 - redirect to the persisted TransactionIngestion review page;
-- show persisted workflow summary, read-only file metadata, rows, review actions, and a category/tag review step when ready;
+- show one persisted workflow review with file metadata, rows, row-review actions, category/tag classification, rule suggestions, and Confirm Import together;
 - do not expose editable FileIngestion metadata fields as a product create flow;
 - do not embed full FileIngestion CRUD inside TransactionIngestion;
 - use contextual upload/review components;
 - review rows are high-volume, so use related-list/table style rather than inline editable child collection;
-- `READY` reviews with at least one valid row show "Continue to category/tags", not direct Confirm Import;
+- eligible `READY` reviews automatically prepare their valid-row candidates, then show category/tag controls and Confirm Import in the same review;
 - completed reviews are read-only;
 - later FinancialAccount shortcut should reuse the same flow with account preselected.
 
 The canonical creation route is `/transaction-ingestion/new`. In create mode it is a parent-centered FILE ingestion workflow: it renders only Account, Ingestion Type, and a CSV file input for `FILE`; API ingestion shows a TBD placeholder and cannot be submitted. It hides lifecycle/system-owned fields such as status, source label, started/completed timestamps, counters, error message, and created timestamp. A successful FILE submit posts multipart `accountId` + `file` to `POST /api/transaction-ingestions/file`, creates the parent `TransactionIngestion`, `FileIngestion` metadata, and `IngestionRecord` review rows in one backend workflow, then redirects to `/transaction-ingestion/{id}`.
 
-The standalone `/file-ingestion/new` route is also treated as a TransactionIngestion workflow command, not metadata CRUD. It renders only an eligible pending FILE `TransactionIngestion` selector and a CSV file input, posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`, derives all `FileIngestion` metadata server-side, creates `IngestionRecord` rows, updates the parent readiness/counters, and redirects to `/transaction-ingestion/{id}`. Future embedded usage from a parent page should hide the parent selector because the parent context is already known.
+The standalone `/file-ingestion/new` route is not a product upload flow. TC-4D routes it to the shared technical write-unavailable state. File upload starts from `/transaction-ingestion/new`; the backend parent-scoped attach endpoint can remain for command compatibility/debug use, but the generated FileIngestion UI does not expose it as a user-facing create action.
 
-The canonical workflow detail/review route is `/transaction-ingestion/{id}`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads workflow data through `GET /api/transaction-ingestions/{id}/workflow`, shows the parent summary, embeds read-only FileIngestion metadata for FILE ingestions, shows counts and rows, and supports row enable/disable plus normalized-row edit review actions. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`. API ingestion detail remains TBD.
+The canonical workflow detail/review route is `/transaction-ingestion/{id}`. It is a recoverable TransactionIngestion workflow page, not FileIngestion CRUD. It loads workflow data through `GET /api/transaction-ingestions/{id}/workflow`, shows the parent summary, embeds read-only FileIngestion metadata for FILE ingestions, and renders one combined row table. Each relevant row keeps its normalized-field edit/provenance and enable/disable actions alongside candidate-backed category, tags, suggestions, classification status, and compact matched-rule/conflict/skip details. `FileIngestion` remains metadata for the uploaded file. `IngestionRecord` rows are review rows. Valid rows use `VALID`, disabled rows use `DISABLED`, invalid rows use `REJECTED`, and the table renders translated user-facing statuses strictly from `row.status`. Workflow rows may include an optional lightweight prepared `TransactionCandidate` summary; category/tags are reviewed and persisted on `FILE_IMPORT` candidates, never in local-only row state or `rawData`. The read-only summary exposes `categorySource` and `selectedTags` with per-tag source; the same screen has local automation controls that use this server-owned provenance. API ingestion detail remains TBD.
 
 The parent status shown on the review page uses readiness language before import: `READY` means ready to import, and `PARTIALLY_READY` means the workflow needs review or has no valid rows to import. `COMPLETED` means confirm import finished and the review is read-only. `PARTIALLY_COMPLETED` is reserved and should not normally appear in CSV v1. Inline row edit is intentionally limited to normalized review fields: transaction date, posting date, description, signed amount, currency, external reference, and notes. Amount and flow stay read-only because they are derived server-side from signed amount. Edit controls render only for `VALID` and `REJECTED` rows while the parent is `READY` or `PARTIALLY_READY`. `DISABLED` rows render Enable only and must be enabled before editing. Imported/skipped/failed rows do not render edit controls.
 
-When a FILE workflow is `READY`, the review page transitions to Pantalla 2 in the same route. Pantalla 2 calls `POST /api/transaction-ingestions/{id}/classification-preview`, renders one classification row per `VALID` ingestion record, preselects suggested category/tags, and lets the user change, clear, or add category/tags in frontend state. Category options are loaded from the existing Category list API and filtered by row flow when practical; Tag options are loaded from the existing Tag list API. Matched rules, conflicts, and skipped outputs are shown compactly. Category/tag selections are not persisted until Confirm Import; browser refresh loses these edits in v1. Confirm Import sends explicit selections for every preview row to `POST /api/transaction-ingestions/{id}/confirm`, imports `VALID` rows, keeps `DISABLED` rows skipped, updates the review from the response, and does not persist category/tag choices into `rawData`.
+When a FILE workflow is `READY` with valid rows missing candidates, its single review page automatically calls `POST /api/transaction-ingestions/{id}/candidates/prepare` once for the current missing-row set, reloads the workflow read model, validates that every `VALID` row has a usable candidate, then calls `POST /api/transaction-ingestions/{id}/candidates/rule-preview`. It does not prepare candidates for invalid, rejected, or disabled rows, and it avoids preparation on every render. The preview response is transient and keyed by candidate id; it does not mutate candidate category/tags. User category/tag edits call the ingestion-scoped candidate classification PATCH endpoint, while per-row rule apply / confirm-no-suggestions actions persist review state on the candidate. The visibly separate **Apply all classification suggestions** toolbar action calls the same apply endpoint with no `candidateIds`, which means all eligible candidates in that ingestion; it persists only category/tag outputs with `FILL_EMPTY_ONLY`, preserves manual selections, reloads the workflow, and clears previews for candidates that were applied or unchanged so the table does not show them as still unapplied. It does not apply description suggestions. A returned `SKIPPED` row is an independently skipped batch result, not a successful application; the UI retains its preview and shows a warning to review affected rows. Category options are loaded from the existing Category list API and filtered by row flow when practical; Tag options are loaded from the existing Tag list API. Matched rules, conflicts, and skipped outputs are shown compactly in the same table. Browser refresh reloads persisted candidate category/tag selections through the workflow row `candidate` summary.
 
-Generated ingestion CRUD routes remain available for direct inspection and debugging, but they are not the product workflow. `FileIngestion` and `IngestionRecord` stay in the Entities menu with a compact Technical badge. Their list/detail/create/edit pages show technical/debug context banners where applicable. Product mutation actions that would compete with the parent workflow are hidden: TransactionIngestion list/workflow detail do not show Edit; FileIngestion list/detail do not show Edit/Delete; IngestionRecord list/detail do not show Create/Edit/Delete. Routes remain available for deep links and debugging; no redirects are used.
+The same toolbar exposes four scoped actions: **Reevaluate descriptions**, **Reevaluate categories**, **Reevaluate tags**, and **Reevaluate all**. A valid prepared row also exposes **Reevaluate this row**. Above it, four local V1 settings default to descriptions/categories/tags auto-apply off and protect manual changes on. They are intentionally not persisted: reloading the page restores defaults. Enabling a scope after candidates are ready runs that automatic scope once; a later global or row reevaluation applies only enabled scopes and otherwise remains preview-only. Description requests use `apply` and `protectManualChanges`; category/tag automatic requests use `automatic`, `protectManualChanges`, and `CATEGORY`/`TAGS`/`ALL` scope. Protected manual values stay selected while the fresh recommendation remains visible; unprotected automation can replace/remove manual values. Automatic category/tag reconciliation never writes `rawData`. If the independent description/classification parts of Reevaluate all do not both succeed, the UI retains the successful domain result and reports partial failure. **Apply all classification suggestions** and per-row **Apply suggestions** remain deliberate `FILL_EMPTY_ONLY` actions independent of these settings; Confirm Import also remains separate.
+
+Confirm Import calls `POST /api/transaction-ingestions/{id}/confirm`; before it does so, the UI reloads and validates persisted candidates, sends no legacy `records`/category/tag payload, and the backend reads persisted `FILE_IMPORT` candidates as source of truth. It creates `FinancialTransaction` rows from candidate fields/category/tags, keeps `DISABLED` rows skipped, updates the review from the response, and does not persist category/tag choices into `rawData`.
+
+The old `POST /api/transaction-ingestions/{id}/classification-preview` endpoint was removed in TC-4B, and Confirm Import no longer parses the old `records/categoryId/tagIds` request body. They are not part of the active TransactionIngestion workflow UI composition; UI code must use the candidate-backed commands and post `/confirm` without per-row classification payload.
+
+Generated ingestion CRUD inspection routes remain available for direct inspection and debugging, but they are not the product workflow. `FileIngestion`, `IngestionRecord`, and `ApiIngestion` stay in the Entities menu with a compact Technical badge. Their list/detail pages show technical/debug context banners where applicable. Product mutation actions that would compete with a workflow are hidden: TransactionIngestion list/workflow detail do not show Edit; FileIngestion list/detail show read-only metadata and hide Create/Edit/Delete; IngestionRecord list/detail show read-only row/audit data and hide Create/Edit/Delete; ApiIngestion list/detail show View/read-only metadata only and hide Create/Edit/Delete. Direct generated write routes (`/file-ingestion/new`, `/file-ingestion/:id/edit`, `/file-ingestion/:id/delete`, `/ingestion-record/new`, `/ingestion-record/:id/edit`, `/ingestion-record/:id/delete`, `/api-ingestion/new`, `/api-ingestion/:id/edit`, `/api-ingestion/:id/delete`, and `/transaction-ingestion/:id/edit`) do not render generated create/edit/delete forms; they show a safe unavailable technical state and link back to the corresponding list. Routes remain available for deep links and debugging; no redirects are used.
 
 ### Temporary generated ingestion write surfaces
 
-The following generated write surfaces are kept temporarily for generated/debug compatibility, but they are not canonical product workflow paths:
+The following generated backend write endpoints remain temporarily behavior-compatible, but the generated frontend write routes now show the technical write-unavailable state instead of mounting generated forms/modals:
 
 - `/transaction-ingestion/:id/edit` with `PUT /api/transaction-ingestions/{id}` and `PATCH /api/transaction-ingestions/{id}`;
 - generated `POST /api/transaction-ingestions`;
 - generated FileIngestion write routes with `POST /api/file-ingestions`, `PUT /api/file-ingestions/{id}`, and `PATCH /api/file-ingestions/{id}`;
-- generated IngestionRecord write routes with `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`.
+- generated IngestionRecord write routes with `POST /api/ingestion-records`, `PUT /api/ingestion-records/{id}`, and `PATCH /api/ingestion-records/{id}`;
+- generated ApiIngestion write routes with `POST /api/api-ingestions`, `PUT /api/api-ingestions/{id}`, and `PATCH /api/api-ingestions/{id}`.
 
-Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and tests may remain while these generated technical routes remain. A later backend hardening slice may reject or remove these generated write paths after their technical routes are removed.
+Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and endpoint tests may remain while backend compatibility remains. A later backend hardening slice may reject or remove these generated write paths after no active product/debug consumer exists.
 
 ## DescriptionNormalizationRule UI composition
 
 Description normalization rules follow the same parent-centered composition pattern as TransactionRule:
 
 - list page owns reorder controls;
-- create page saves inactive draft;
-- create does not manage conditions inline;
-- detail page embeds the conditions collection editor;
-- edit page edits scalar parent fields and links back to detail for conditions;
+- product create uses the configured parent + local conditions command and does not create an empty draft;
+- configured create keeps local conditions until one atomic save; legacy detail condition management remains technical/direct-maintenance compatibility;
+- edit page retains scalar parent editing and detail condition maintenance for existing rules;
 - condition forms have no field selector because every condition evaluates original imported description.
 
 The product route is:
@@ -677,6 +689,14 @@ The product route is:
 ```
 
 Standalone generated/debug condition screens are not the product flow for managing conditions.
+
+### Transaction Ingestion contextual rule editor
+
+The unified FILE-ingestion review opens the existing full configured rule editors inside a modal rather than navigating to generated entity screens. The global **New normalization rule** and **New transaction rule** actions start blank product forms. An eligible row's **Create rule** menu offers the same forms with editable review-only prefills.
+
+- Normalization-rule row prefill: condition value = immutable original description; result = current normalized/manual description.
+- Transaction-rule row prefill: `DESCRIPTION CONTAINS` current persisted candidate description and `FLOW EQUALS` current candidate flow; persisted candidate category/tags are outputs. Account context is informational and never becomes an automatic condition; transient suggestions are never persisted as outputs.
+- Save only writes the formal rule. Save + reevaluate this row/all runs the existing scoped reevaluation command only after save succeeds. None of these actions confirms import or writes category/tags to `rawData`.
 
 ## TransactionRule generated technical/debug surfaces
 

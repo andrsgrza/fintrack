@@ -1,0 +1,37 @@
+{
+  "annotations": { "changelogDate": "20260915160000" },
+  "applications": ["fintrack"],
+  "dto": "no",
+  "fields": [
+    {
+      "fieldName": "source",
+      "fieldType": "TransactionCandidateClassificationSource",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "AUTOMATIC,MANUAL"
+    }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "TransactionCandidateTag",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionCandidate",
+      "relationshipName": "transactionCandidate",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "tag",
+      "relationshipName": "tag",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

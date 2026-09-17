@@ -304,18 +304,18 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 ### Summary counts
 
-| Type                   | File                                                    | Tests   | Custom vs generated                                                                                                                                                            |
-| ---------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Integration IT         | `FinancialAccountResourceIT`                            | **145** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor + balance endpoint tests, plus JHipster CRUD/filters |
-| Unit — service         | `FinancialAccountServiceTest`                           | **24**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + date-floor guard)                                            |
-| Unit — balance service | `FinancialAccountBalanceServiceTest`                    | **8**   | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading)                                                                               |
-| Unit — calculators     | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                      |
-| Unit — foundation      | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                    |
-| Unit — domain          | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                      |
-| Unit — mapper          | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                      |
-| Unit — DTO             | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                      |
-| Unit — criteria        | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                      |
-| E2E                    | `financial-account.cy.ts`                               | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                                |
+| Type                   | File                                                    | Tests   | Custom vs generated                                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT         | `FinancialAccountResourceIT`                            | **147** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor + balance endpoint tests, plus JHipster CRUD/filters |
+| Unit — service         | `FinancialAccountServiceTest`                           | **26**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor guard)                                            |
+| Unit — balance service | `FinancialAccountBalanceServiceTest`                    | **9**   | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading)                                                                                                                    |
+| Unit — calculators     | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                                                           |
+| Unit — foundation      | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                                                         |
+| Unit — domain          | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                                                           |
+| Unit — mapper          | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                                                           |
+| Unit — DTO             | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                                                           |
+| Unit — criteria        | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                                                           |
+| E2E                    | `financial-account.cy.ts`                               | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                                                                     |
 
 ---
 
@@ -575,13 +575,13 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Ownership model:** indirect via `account` (required). Normal users see/edit/delete only transactions whose `account` they own. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules in service:** resolve `account` from DB (`findAccessibleAccountEntity`); validate optional `category` / `tags` / `subscription` against the transaction account owner; create/update/patch use presence-aware JSON semantics; `account`, `origin`, `transactionIngestion`, and server timestamps are immutable/server-owned; `amount > 0` with scale 2; category/subscription compatibility; delete cleanup for linked `IngestionRecord`, `InternalTransfer`, and tag joins.
+**Domain rules in service:** resolve `account` from DB (`findAccessibleAccountEntity`); validate optional `category` / `tags` / `subscription` against the transaction account owner; create/update/patch use presence-aware JSON semantics; `account`, `origin`, `transactionIngestion`, and server timestamps are immutable/server-owned; `amount > 0` with scale 2; category/subscription compatibility; delete cleanup for linked `IngestionRecord`, `InternalTransfer`, and tag joins. Direct delete is blocked when the transaction is linked to a `TransactionCandidate` provenance record; the guard runs before ingestion-record/internal-transfer/tag mutations.
 
 ### Summary counts
 
 | Type            | File                               | Tests   | Custom vs generated                        |
 | --------------- | ---------------------------------- | ------- | ------------------------------------------ |
-| Integration IT  | `FinancialTransactionResourceIT`   | **101** | 25 custom + 76 JHipster/generated baseline |
+| Integration IT  | `FinancialTransactionResourceIT`   | **135** | 59 custom + 76 JHipster/generated baseline |
 | Unit — service  | `FinancialTransactionServiceTest`  | **10**  | All custom (ownership + domain)            |
 | Unit — domain   | `FinancialTransactionTest`         | **9**   | Generated (JPA relations)                  |
 | Unit — mapper   | `FinancialTransactionMapperTest`   | **1**   | Generated                                  |
@@ -595,6 +595,153 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
   -Dtest=FinancialTransactionResourceIT,FinancialTransactionServiceTest test
 ```
+
+## TransactionCandidate
+
+**Ownership model:** direct `user` owner plus same-owner validations for optional account/category/tags/ingestion/financial-transaction links. TransactionCandidate intentionally does not grant special admin cross-user product behavior.
+
+**Scope:** manual draft recovery query/UI, backend candidate rule preview/apply commands, manual candidate suggestions UI for MANUAL candidates, FILE import candidate prepare/sync, optional prepared FILE candidate summaries in the TransactionIngestion workflow response, ingestion-scoped FILE candidate classification commands, single-screen scoped description/category/tag reevaluation with local automatic application configuration, unified frontend category/tag row review, and candidate-backed Confirm Import backend posting. UserPreference is not migrated to candidates.
+
+**Lifecycle enum alignment:** Active `TransactionCandidateStatus` values are `DRAFT`, `READY_TO_POST`, `POSTED`, `CANCELLED`, and `FAILED`. There is no global `NEEDS_REVIEW` candidate status; tests should model review needs through `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`. `FAILED` and `validationStatus=INVALID/STALE` are guarded/reserved/internal outside the normal happy path. `descriptionReviewStatus` covers description normalization/review and is intentionally separate from category/tag `classificationReviewStatus`.
+
+### Summary counts
+
+| Type           | File                              | Tests | Notes                                                                                                                                                                                     |
+| -------------- | --------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionCandidateResourceIT`  | 36    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked/idempotent post, no rule-on-post, manual draft recovery query, and final delete protection |
+| Unit — service | `TransactionCandidateServiceTest` | 64    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM.                            |
+
+**Run:**
+
+```bash
+JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvnw \
+  -Dskip.installnodenpm -Dskip.npm -Dskip.webpack \
+  -Dtest=TransactionCandidateResourceIT,TransactionCandidateServiceTest,FinancialAccountBalanceServiceTest test
+```
+
+Key TC-1/TC-2A assertions:
+
+- creating a DRAFT candidate succeeds with server/default lifecycle fields.
+- `signedAmount` derives positive `amount` and `flow`; direct client writes to `amount`/`flow` are rejected.
+- `READY_TO_POST` requires account, transaction date, nonblank description, derived amount > 0, derived flow, and account-matching currency.
+- account/category/tags/transaction ingestion/ingestion record must belong to the candidate owner.
+- direct client writes to `financialTransaction` are rejected because the link is server-controlled for a future posting command.
+- server-owned timestamps and review/lifecycle-derived fields are protected.
+- category type is compatible with flow, including INCOME/EXPENSE rejection and BOTH acceptance; TC-5E.2 also covers the shared internal category-flow validator directly while retaining public/service characterization tests.
+- admin has no cross-user product bypass.
+- `FAILED` requires a failure reason and cannot transition directly to `POSTED`.
+- `POSTED`/`CANCELLED` candidates cannot be mutated as drafts.
+- deleting a candidate clears candidate tag join rows.
+- candidates do not affect `FinancialAccountBalanceService`, which reads only posted `FinancialTransaction` rows.
+- `POST /api/transaction-candidates/manual` creates current-user MANUAL DRAFT candidates and rejects client-controlled status/server fields.
+- `PATCH /api/transaction-candidates/{id}/manual-draft` updates editable draft fields, derives amount/flow from signedAmount, and recalculates DRAFT vs READY_TO_POST.
+- `POST /api/transaction-candidates/{id}/cancel` marks non-final manual drafts CANCELLED and sets `cancelledAt`.
+- `POST /api/transaction-candidates/{id}/post` supports MANUAL only, uses a pessimistic write lock, recalculates current normalized/derived fields, rejects incomplete/cancelled/file/API candidates and stale description/classification review states, creates exactly one `FinancialTransaction` with `origin=MANUAL`, copies category/tags, links the candidate, and is idempotent on retry.
+- Generic `TransactionCandidate` writes are restricted: generic create cannot create file/API import candidates, attach ingestion links, set status, or set server-controlled fields; generic update/PATCH cannot change status, mutate workflow-linked/non-`MANUAL` candidates, or set workflow/server-controlled fields; generic delete is limited to unlinked `MANUAL` `DRAFT` candidates and rejects file/API import, posted/cancelled, workflow-linked, or transaction-linked candidates while allowed draft delete cleans candidate-tag joins.
+- Candidate post does not invoke TransactionRule evaluation; candidate rule preview/apply exists only through explicit candidate command endpoints.
+- TC-5E.3 covers the shared internal candidate FILL_EMPTY_ONLY application helper directly while retaining MANUAL and FILE_IMPORT public-flow characterization tests.
+- TC-5E.4 covers the shared internal candidate-to-`FinancialTransaction` mapper directly while retaining MANUAL post and FILE_IMPORT Confirm Import public-flow characterization tests.
+- Direct FinancialTransaction delete rejects MANUAL and FILE_IMPORT posted candidate links, leaves the transaction and candidate linked, leaves FILE_IMPORT ingestion records untouched, and also rejects corrupt non-POSTED candidate links.
+- TC-5D.3 reference guards reject Category/Tag delete when candidates reference them, reject FinancialAccount delete when manual/non-workflow candidates reference the account, and keep controlled FILE_IMPORT ingestion/account cleanup FK-safe by deleting candidate tag joins/candidates before imported transactions/account removal.
+
+Key TC-3A FILE import candidate prepare assertions:
+
+- `POST /api/transaction-ingestions/{id}/candidates/prepare` creates `FILE_IMPORT` candidates for `VALID` records only.
+- non-`VALID` records (`REJECTED`, `DISABLED`, `IMPORTED`, `SKIPPED_DUPLICATE`, `FAILED`) are skipped.
+- candidates link to the parent `TransactionIngestion`, source `IngestionRecord`, account, and owner.
+- `amount`/`flow` are derived from `signedAmount`; `currencySnapshot` matches the parent account.
+- new candidates default to `READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus=NOT_EVALUATED`.
+- description review metadata maps to candidate description review status.
+- prepare is idempotent, reports unchanged rows, and does not create duplicate candidates.
+- changed `rawData.normalized` values sync existing non-posted candidates.
+- changed rule-input fields mark fresh classification review `STALE`; notes-only changes do not.
+- row-edit regression coverage preserves `rawData.review.description` rule/manual provenance for unrelated edits and records `USER_EDIT` only when the effective normalized description changes.
+- existing candidate category/tags are preserved during sync.
+- `POSTED` candidates are not modified.
+- foreign, non-FILE, completed, and no-valid-row preparations are rejected.
+- prepare creates no `FinancialTransaction` rows and does not mutate `IngestionRecord.rawData`.
+- TC-5D.1 row-review cleanup/sync asserts disabling a prepared row deletes the unposted `FILE_IMPORT` candidate and candidate tag joins, workflow reload no longer exposes `row.candidate`, re-enable does not restore the old candidate, and a later prepare creates a fresh candidate when the row is valid.
+- TC-5D.1 edit coverage asserts editing a prepared `VALID` row syncs existing candidate fields immediately, preserves candidate category/tags, marks fresh classification `STALE` when rule-input fields changed, keeps notes-only edits fresh, and deletes the unposted candidate plus tag joins when the edited row becomes `REJECTED`.
+- Row review candidate cleanup/sync keeps `rawData` as the review source and does not store category/tags in `rawData`.
+
+Key TC-3B FILE import workflow summary assertions:
+
+- `GET /api/transaction-ingestions/{id}/workflow` includes an optional lightweight candidate summary for rows with prepared candidates.
+- Candidate summaries include source/status/review statuses, normalized transaction fields, account id/name, category id/name, tag ids/names, timestamps, and financial transaction id when present.
+- Rows without prepared candidates keep `candidate` absent/null.
+- Workflow GET is read-only: it does not create candidates, create `FinancialTransaction` rows, or mutate `rawData`.
+- Candidate summaries are scoped to the current-user owned workflow and do not expose foreign candidate rows.
+- Confirm Import now posts reviewed `FILE_IMPORT` candidates when prepared candidates exist.
+
+Key TC-3C.1/TC-3C.2 FILE import candidate classification assertions:
+
+- `PATCH /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/classification` updates category/tags on a prepared `FILE_IMPORT` candidate and sets `classificationReviewStatus=USER_SELECTED`.
+- PATCH requires at least one of `categoryId` or `tagIds`; absent-field semantics preserve existing category/tags; explicit `categoryId: null` clears category; explicit `tagIds: []` clears tags; provided tag ids replace the set.
+- PATCH rejects incompatible category flow, foreign category/tag ids, candidate ids outside the ingestion, non-`FILE_IMPORT` candidates, final candidates, and candidates linked to non-`VALID` records.
+- `POST /api/transaction-ingestions/{id}/candidates/rule-preview` evaluates current persisted candidate state with `TransactionOrigin.FILE_IMPORT`, returns suggestions/matched rules/conflicts/skips, and does not mutate candidate/rawData/transactions.
+- Rule preview also accepts `scope=CATEGORY`, `scope=TAGS`, or `scope=ALL`; these tests verify scope only filters transient category/tag suggestions and related output, never applies or persists them.
+- Batch preview/apply support optional `candidateIds`, validate duplicate/missing/out-of-ingestion ids, and return per-candidate skipped rows for non-evaluable candidates.
+- `POST /api/transaction-ingestions/{id}/candidates/apply-rules` preserves `FILL_EMPTY_ONLY` for explicit Apply actions: empty category fills from a non-conflicting suggestion, manual category is preserved, tags are additive, and duplicates are skipped. Its automatic request mode covers `CATEGORY`, `TAGS`, or `ALL`: it replaces/clears obsolete automatic values, protects manual values by default, and can replace/remove manual values only with explicit `protectManualChanges=false`.
+- Batch apply with the `apply-rules` body omitted covers all candidates in the current ingestion: characterization verifies multiple eligible candidates receive category/tag outputs, a manual `USER_SELECTED` candidate is preserved, `rawData` is unchanged, and no `FinancialTransaction` is created. Frontend coverage verifies the distinct global **Apply all classification suggestions** action uses that no-body request, disables duplicate clicks, reloads candidate summaries, clears applied previews, preserves manual selections, reports independently skipped rows, and does not call reevaluation or Confirm Import.
+- Apply keeps existing manual category/tag choices as `USER_SELECTED`, sets `SUGGESTED` when rule suggestions are available/applied for an unclassified candidate, and sets `NOT_APPLICABLE` when no suggestions exist.
+- `POST /api/transaction-ingestions/{ingestionId}/candidates/{candidateId}/confirm-no-suggestions` sets `NOT_APPLICABLE` only after fresh evaluation confirms no suggestions; it rejects if suggestions exist.
+- FILE candidate classification endpoints create no `FinancialTransaction` rows, do not mutate `IngestionRecord.rawData`, and do not call the public `/api/financial-transactions/rule-preview` endpoint. Confirm Import is the separate backend command that posts reviewed candidates.
+- Description reevaluation tests call `POST /api/transaction-ingestions/{id}/descriptions/reevaluate` for an ingestion or selected rows. They cover active-rule priority ordering, no-match behavior, owner/record scoping, non-VALID skip behavior, preview-only suggestions, protected `USER_EDIT`, explicit unprotected replacement, candidate synchronization when normalized description changes, and the absence of category/tag writes or FinancialTransaction creation.
+
+Key TC-2C.1a backend assertions:
+
+- `POST /api/transaction-candidates/{id}/rule-preview` returns TransactionRule category/tag suggestions for editable MANUAL candidates without mutating the candidate.
+- Preview rejects non-MANUAL, foreign, and final candidates.
+- `POST /api/transaction-candidates/{id}/apply-rules` re-evaluates current DB state and applies `FILL_EMPTY_ONLY`.
+- Apply fills empty category, adds suggested tags, preserves manual category/tags, and never removes existing tags.
+- Apply sets `classificationReviewStatus=SUGGESTED` for suggestions on an unclassified candidate and `NOT_APPLICABLE` when nothing applies.
+- Manual category/tag PATCH sets `classificationReviewStatus=USER_SELECTED`.
+- Rule-input PATCH after fresh classification sets `classificationReviewStatus=STALE`; notes-only changes do not.
+- Inactive and foreign rules are ignored.
+- Candidate preview/apply do not use the public `/api/financial-transactions/rule-preview` endpoint.
+- TC-2C.1c backend post also blocks manual post while classification is `NOT_EVALUATED` or `STALE`; `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` are allowed classification states for posting.
+
+Key TC-2D backend/UI recovery assertions:
+
+- `GET /api/transaction-candidates/manual-drafts` returns only current-user `MANUAL` candidates.
+- `DRAFT` and `READY_TO_POST` candidates are included.
+- `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT` candidates are excluded.
+- foreign user's manual drafts are not returned.
+- results are sorted by `updatedAt DESC, id DESC`.
+- the response uses the lightweight manual draft summary shape and does not expose full `TransactionCandidateDTO` fields such as `source`, `validationStatus`, or `financialTransaction`.
+- incomplete/null draft fields map safely for future UI fallback copy.
+- `/financial-transaction/drafts` loads the manual draft summary endpoint.
+- The posted FinancialTransaction list links to `/financial-transaction/drafts` with a "View drafts" action, but does not mix draft rows into the posted transaction table.
+- The recovery page renders compact summary fields and fallback copy for missing description/account/date/amount/category/tags.
+- Resume links to `/financial-transaction/drafts/{id}`.
+- Cancel draft calls `POST /api/transaction-candidates/{id}/cancel` and removes/reloads the row; the list does not delete or post candidates.
+- The recovery page does not expose generic TransactionCandidate CRUD UI.
+
+Key TC-2B.1 frontend assertions:
+
+- `/financial-transaction/new` renders the manual candidate form without creating a candidate on page load.
+- Posting date alone does not create the first candidate.
+- A meaningful first change creates a `MANUAL` candidate and redirects/replaces to `/financial-transaction/drafts/{id}`.
+- Rapid edits do not create multiple candidates.
+- Debounced autosave sends the latest draft and submits signed amount instead of client-controlled amount/flow.
+- Failed create/save states are visible and failed save prevents posting.
+- Posting flushes pending autosave, posts the candidate, and redirects to the posted FinancialTransaction detail.
+- Incomplete drafts cannot post.
+- Cancel before candidate creation does not call the backend; cancel after candidate creation calls the cancel command.
+- Draft URL resume hydrates existing candidate state.
+- Draft URL rejects non-MANUAL candidates and load failures with a safe no-form route error.
+- Cancelled drafts are read-only; posted drafts redirect to the posted transaction.
+- Candidate create flow does not call `/api/financial-transactions/rule-preview`.
+- Rule suggestions section renders for editable manual drafts.
+- Automatic preview runs after successful autosave of rule-input fields, calls the candidate-specific `rule-preview` endpoint, renders suggested category/tags, conflicts, and matched rules, and does not mutate category/tags.
+- Notes-only and category/tag-only edits autosave but do not auto-preview.
+- Stale preview responses are ignored so older suggestions cannot overwrite newer preview state.
+- Apply suggestions / Confirm no suggestions flushes pending autosave, calls the candidate-specific `apply-rules` endpoint, updates category/tags/status from the returned candidate, and keeps the status label synchronized.
+- Post is disabled and shows a blocking message for `NOT_EVALUATED` and `STALE`.
+- Post is allowed for `SUGGESTED`, `USER_SELECTED`, and `NOT_APPLICABLE` when the candidate is otherwise ready.
+- Backend post rejects direct API attempts to post `NOT_EVALUATED` or `STALE` manual candidates.
+- Manual category/tag changes returned by autosave as `USER_SELECTED` allow posting.
+- Candidate flow does not call candidate rule preview/apply from Post; preview/apply are explicit user actions only.
 
 ---
 
@@ -706,7 +853,7 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their tags. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules:** DELETE allowed when in use — unlink from `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags` (join rows only), then delete tag. Related entities survive. `active=false` keeps links. `createdAt` / `updatedAt` are server-owned: create ignores client timestamps; PUT/PATCH preserve `createdAt`, reject changed/null timestamp fields, and set `updatedAt = now`. See [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
+**Domain rules:** DELETE allowed when in use by posted/product relationships — unlink from `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags` (join rows only), then delete tag. Related entities survive. DELETE is blocked when `TransactionCandidate` tag joins reference the tag because candidate review state must not be silently unlinked. `active=false` keeps links. `createdAt` / `updatedAt` are server-owned: create ignores client timestamps; PUT/PATCH preserve `createdAt`, reject changed/null timestamp fields, and set `updatedAt = now`. See [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
 
 **Frontend UX:** Tag create/edit shows only `name`, `description`, `color`, `active`. It does not show/send `user`, `createdAt`, `updatedAt`, or relationship editors. Edit uses PATCH with editable fields only so existing relationships survive. Detail/list show clean catalog fields and do not show raw relationship IDs; related read-only lists are deferred.
 
@@ -714,16 +861,16 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 ### Summary counts
 
-| Type            | File              | Tests  | Custom vs generated                                                                               |
-| --------------- | ----------------- | ------ | ------------------------------------------------------------------------------------------------- |
-| Integration IT  | `TagResourceIT`   | **89** | 41 custom (ownership + uniqueness + timestamp lifecycle + delete domain) + generated CRUD/filters |
-| Unit — service  | `TagServiceTest`  | **22** | All custom (ownership + uniqueness + timestamp lifecycle)                                         |
-| Unit — domain   | `TagTest`         | **5**  | Generated                                                                                         |
-| Unit — mapper   | `TagMapperTest`   | **1**  | Generated                                                                                         |
-| Unit — DTO      | `TagDTOTest`      | **1**  | Generated                                                                                         |
-| Unit — criteria | `TagCriteriaTest` | **5**  | Generated                                                                                         |
-| Frontend unit   | `tag-ux.spec.tsx` | **6**  | Create/edit/detail/list UX cleanup                                                                |
-| E2E             | `tag.cy.ts`       | **10** | 3 ownership + 7 CRUD/navigation                                                                   |
+| Type            | File              | Tests  | Custom vs generated                                                                                                                    |
+| --------------- | ----------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TagResourceIT`   | **92** | Custom ownership + uniqueness + timestamp lifecycle + delete domain, including candidate reference guards, plus generated CRUD/filters |
+| Unit — service  | `TagServiceTest`  | **23** | All custom (ownership + uniqueness + timestamp lifecycle + candidate reference delete guard)                                           |
+| Unit — domain   | `TagTest`         | **5**  | Generated                                                                                                                              |
+| Unit — mapper   | `TagMapperTest`   | **1**  | Generated                                                                                                                              |
+| Unit — DTO      | `TagDTOTest`      | **1**  | Generated                                                                                                                              |
+| Unit — criteria | `TagCriteriaTest` | **5**  | Generated                                                                                                                              |
+| Frontend unit   | `tag-ux.spec.tsx` | **6**  | Create/edit/detail/list UX cleanup                                                                                                     |
+| E2E             | `tag.cy.ts`       | **10** | 3 ownership + 7 CRUD/navigation                                                                                                        |
 
 **Run:**
 
@@ -873,19 +1020,19 @@ Happy-path CRUD, required-field checks, criteria per field (`name`, `description
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their categories. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules:** block delete when direct children exist; leaf delete cleans references (FT/FS null, budget M2M, rule `resultingCategory` null + `active=false`); `parentCategory` immutable after create; `categoryType` mutable only when unused; child `categoryType` must match parent. Default categories on signup — **Deferred** (separate pass). See [`DOMAIN-RULES.md` §5](DOMAIN-RULES.md#5-category).
+**Domain rules:** block delete when direct children exist; leaf delete cleans posted/product references (FT/FS null, budget M2M, rule `resultingCategory` null + `active=false`); delete is blocked when `TransactionCandidate.category` references the category; `parentCategory` immutable after create; `categoryType` mutable only when unused; child `categoryType` must match parent. Default categories on signup — **Deferred** (separate pass). See [`DOMAIN-RULES.md` §5](DOMAIN-RULES.md#5-category).
 
 ### Summary counts
 
-| Type            | File                   | Tests   | Custom vs generated                                                                                     |
-| --------------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| Integration IT  | `CategoryResourceIT`   | **103** | 48 custom (16 ownership + 10 parent immutability + 9 uniqueness + 13 domain) + 55 JHipster CRUD/filters |
-| Unit — service  | `CategoryServiceTest`  | **16**  | All custom (ownership + delete cleanup + immutability + type guards)                                    |
-| Unit — domain   | `CategoryTest`         | **5**   | Generated                                                                                               |
-| Unit — mapper   | `CategoryMapperTest`   | **1**   | Generated                                                                                               |
-| Unit — DTO      | `CategoryDTOTest`      | **1**   | Generated                                                                                               |
-| Unit — criteria | `CategoryCriteriaTest` | **5**   | Generated                                                                                               |
-| E2E             | `category.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                         |
+| Type            | File                   | Tests   | Custom vs generated                                                                                                                   |
+| --------------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `CategoryResourceIT`   | **117** | Custom ownership + parent immutability + uniqueness + delete domain, including candidate reference guards, plus JHipster CRUD/filters |
+| Unit — service  | `CategoryServiceTest`  | **27**  | All custom (ownership + delete cleanup + candidate reference guard + immutability + type guards)                                      |
+| Unit — domain   | `CategoryTest`         | **5**   | Generated                                                                                                                             |
+| Unit — mapper   | `CategoryMapperTest`   | **1**   | Generated                                                                                                                             |
+| Unit — DTO      | `CategoryDTOTest`      | **1**   | Generated                                                                                                                             |
+| Unit — criteria | `CategoryCriteriaTest` | **5**   | Generated                                                                                                                             |
+| E2E             | `category.cy.ts`       | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                       |
 
 **Run:**
 
@@ -1597,27 +1744,26 @@ Implemented Phase 3A coverage:
 - no existing-transaction workflow endpoint is implemented at `/api/financial-transactions/{id}/rule-preview`;
 - response assertions cover DTO-shaped output rather than full entity graphs.
 
-### Rule Engine manual create workflow UI tests
+### Manual transaction creation UI tests
 
-Phase 3B frontend manual create behavior is covered in `financial-transaction-ux.spec.tsx`.
+TC-2B.1 frontend manual create behavior is covered in `financial-transaction-manual-draft.spec.tsx` and Cypress `financial-transaction.cy.ts`.
 
-Implemented Phase 3B coverage:
+Implemented TC-2B.1 coverage:
 
-- create mode starts on Step 1 with transaction details only;
-- Step 1 hides category/tags and Save;
-- Step 1 validates required preview fields before calling the workflow endpoint;
-- Next calls `POST /api/financial-transactions/rule-preview` with the unsaved draft and `origin=MANUAL`;
-- preview suggestions prepopulate Step 2 category/tags;
-- matched rule names are shown when returned;
-- user can change suggested category before save;
-- user can remove suggested tags before save;
-- explicit selected tags are preserved and new suggested tags are added without duplicates;
-- no suggestions shows empty manual categorization controls;
-- category conflicts show a non-blocking warning;
-- preview failure stays on Step 1 and does not create;
-- Back from Step 2 preserves Step 1 values;
-- Save from Step 2 calls normal create with final category/tags and `origin=MANUAL`;
-- edit mode remains one-step and does not call preview.
+- create page renders without creating a candidate on page load;
+- non-meaningful initial changes such as posting date alone do not create a candidate;
+- meaningful first changes create a `MANUAL` candidate and move the URL to `/financial-transaction/drafts/{id}`;
+- autosave debounces PATCH requests and sends derived `signedAmount`;
+- failed create/save states are visible;
+- pending autosave is flushed before post;
+- incomplete drafts cannot post;
+- ready drafts post through `POST /api/transaction-candidates/{id}/post` and redirect to the posted transaction detail;
+- cancel before/after candidate creation follows the command behavior;
+- resume by draft URL hydrates candidate state;
+- draft URL rejects non-MANUAL candidates and load failures with a safe no-form route error;
+- cancelled drafts are read-only and posted drafts redirect;
+- candidate create flow does not call `/api/financial-transactions/rule-preview`;
+- posted FinancialTransaction edit remains the existing one-step edit route.
 
 Future planned areas:
 
@@ -1798,6 +1944,18 @@ The same spec covers the configured TransactionRule product create/edit flow:
 - `ANY` is blocked for EXPENSE/INCOME outputs;
 - user-authored incompatible FLOW blocks Save instead of being silently mutated;
 - configured payloads omit priority and removed/deferred outputs.
+
+### Transaction Ingestion contextual rule creation
+
+`transaction-ingestion-workflow-detail.spec.tsx` covers the rule-authoring controls in the unified review:
+
+- global normalization-rule creation opens the configured editor without navigating away from review;
+- row normalization-rule prefill uses original description as the condition and current normalized/manual description as the result;
+- row TransactionRule prefill uses persisted candidate description/flow and persisted category/tag outputs, without an implicit account condition;
+- plain Save creates only the formal rule; it does not reevaluate rows, mutate candidates or `rawData`, or confirm import;
+- contextual Save + reevaluate actions are the only path that invokes the relevant existing description/classification reevaluation command.
+
+`DescriptionNormalizationRuleResourceIT` covers configured create atomically creating ordered conditions with server-managed priority/positions and verifies invalid configured input rolls back without an orphan rule. It also verifies the saved active rule participates in the existing description-normalization evaluator.
 
 TR-3 technical/debug cleanup is covered by frontend specs:
 
@@ -2424,12 +2582,16 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 **API shape:** POST uses `ApiIngestionCreateRequestDTO.apiAccessTokenId` as create-only input to copy snapshots. Read/list/update/PATCH use `ApiIngestionDTO` and must not expose or accept an `apiAccessToken` relation.
 
+**UI scope:** ApiIngestion is technical/debug metadata only until the API_IMPORT product workflow exists. The list/detail pages are read-only product surfaces with Technical marking: list keeps View and hides Create/Edit/Delete; detail hides Edit/Delete; direct `/api-ingestion/new`, `/api-ingestion/:id/edit`, and `/api-ingestion/:id/delete` routes show a safe unavailable state instead of generated write forms. Backend generic write tests remain because behavior was not changed in TC-4C.
+
 ### Summary counts
 
 | Type           | File                      | Tests  | Custom vs generated                                                             |
 | -------------- | ------------------------- | ------ | ------------------------------------------------------------------------------- |
 | Integration IT | `ApiIngestionResourceIT`  | **51** | 36 ownership/domain (incl. 11C + normalization/immutability) + 15 JHipster CRUD |
 | Unit — service | `ApiIngestionServiceTest` | **10** | All custom                                                                      |
+| Jest UI        | `api-ingestion`           | —      | Technical/read-only affordances + unavailable write-route state                 |
+| Cypress E2E    | `api-ingestion.cy.ts`     | —      | Technical/read-only smoke; no skipped generated CRUD tests                      |
 
 ```bash
 ./mvnw -Dskip.npm -Dskip.installnodenpm \
@@ -2547,7 +2709,7 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 ## CSV Ingestion v1 tests
 
-**Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. CSV v1 confirm import does not run the Rule Engine.
+**Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. FILE candidate preparation/sync exposes optional prepared candidate summaries in the workflow response. Ingestion-scoped candidate classification commands power unified category/tag review, and Confirm Import posts reviewed `FILE_IMPORT` candidates directly.
 
 ### I1A unit tests — parser/validator
 
@@ -2624,27 +2786,27 @@ Covered by `transaction-ingestion-workflow-detail.spec.tsx`.
 - Duplicate checksum warning renders as a non-blocking warning.
 - Row table renders statuses strictly from `row.status`, including `DISABLED`.
 
-`file-ingestion-update.spec.tsx` covers the cleaned `/file-ingestion/new` route:
+`file-ingestion-update.spec.tsx` covers the cleaned generated FileIngestion write routes:
 
-- create mode shows only the TransactionIngestion parent selector and CSV file input.
-- create mode is marked as a secondary/debug upload flow.
-- server-owned metadata fields such as original filename, file type, content type, file size, checksum, parser, storage key, and statement dates are not rendered on create.
-- submit posts multipart `file` to `POST /api/transaction-ingestions/{id}/file-ingestion`.
-- success redirects to `/transaction-ingestion/{id}`.
-- backend validation errors are shown and the file input is cleared after failure.
+- `/file-ingestion/new`, `/file-ingestion/{id}/edit`, and `/file-ingestion/{id}/delete` show the technical write-unavailable state.
+- the generated FileIngestion write routes do not render CSV upload inputs, metadata edit fields, Save, Upload, or Delete actions.
+- canonical CSV upload remains `/transaction-ingestion/new`.
 
 Generated/debug ingestion UI action cleanup is covered by targeted frontend specs:
 
-- TransactionIngestion list does not render an Edit action while keeping View/Delete and the New File Import workflow action.
+- TransactionIngestion list renders one clear New File Import workflow action, does not render an Edit action, and keeps View/Delete.
 - TransactionIngestion workflow detail does not render an Edit action.
-- FileIngestion list/detail/create/edit pages show technical/debug context markers where applicable.
-- FileIngestion list/detail keep View/context navigation but do not render Edit/Delete actions.
-- IngestionRecord list/detail/create/edit pages show technical/debug context markers where applicable.
+- `/transaction-ingestion/{id}/edit` shows the technical write-unavailable state.
+- FileIngestion list/detail show technical/read-only context markers.
+- FileIngestion list/detail keep View/context navigation but do not render Create/Edit/Delete actions.
+- FileIngestion generated write routes show the technical write-unavailable state.
+- IngestionRecord list/detail show technical/read-only context markers.
 - IngestionRecord list/detail keep View/context navigation but do not render Create/Edit/Delete actions.
+- IngestionRecord generated write routes show the technical write-unavailable state.
 - Entities menu still contains FileIngestion and IngestionRecord and marks each with a Technical badge.
 - Routes remain available; tests do not expect redirects or backend behavior changes.
 
-Temporary generated ingestion write surface marking is documentation/comment-only:
+Temporary generated ingestion write endpoint marking keeps backend behavior-compatible, while frontend generated write routes are unavailable:
 
 - Generated write endpoints for TransactionIngestion, FileIngestion, and IngestionRecord remain behavior-compatible.
 - ResourceIT tests for generated `POST`/`PUT`/`PATCH` write paths continue to assert existing response codes and validations.
@@ -2696,30 +2858,47 @@ CSV review row action tests continue to cover the canonical mutation flow:
 
 ### I2C resource/integration tests — confirm import
 
-- confirm import creates `FinancialTransaction` rows from valid review rows.
+- confirm import creates `FinancialTransaction` rows from reviewed `FILE_IMPORT` candidates linked to valid review rows.
 - imported transactions use `origin = FILE_IMPORT`.
 - `IngestionRecord` links to created `FinancialTransaction`.
-- confirm uses `rawData.normalized` transaction date, posting date, description, amount, flow, external reference, and notes.
-- imported transactions use the parent account and parent `TransactionIngestion`.
-- classification preview evaluates `VALID` rows read-only and returns category/tag suggestions without mutating records or creating transactions.
-- classification preview respects TransactionRule FLOW/category semantics; the regression case covers an Uber EXPENSE rule with `FLOW = OUT`, where an OUT row receives the category/tag suggestion and an IN refund row does not.
-- READY review UI shows "Continue to category/tags", calls classification-preview, and renders Pantalla 2 with suggested category/tags preselected.
-- Pantalla 2 preselects suggestions only for rows returned with suggestions, filters category options by row flow, and sends `null` category/empty tags for valid rows without selected suggestions.
-- Pantalla 2 edits are frontend-only until confirm; Back to row review preserves them in memory, but refresh persistence is not required.
+- confirm uses candidate transaction date, posting date, description, amount, flow, external reference, notes, category, and tags as the backend source of truth.
+- imported transactions use the candidate account and parent `TransactionIngestion`.
+- candidate-backed preview evaluates `VALID` row candidates read-only and returns category/tag suggestions without mutating records or creating transactions.
+- TI-CONFIG-1 coverage proves the same page renders the four local configuration controls with defaults description/category/tag auto-apply off and manual protection on. With all scopes off, reevaluation stays preview-only. Enabling a scope applies only that scope once candidates are ready and on subsequent matching reevaluations; toggling protection alone does not mutate data. Category/tag automatic scope requests carry `automatic=true`, requested scope, and protection; description requests carry `apply` and protection. Explicit Apply/Confirm Import remain separate.
+- candidate-backed preview respects TransactionRule FLOW/category semantics; the regression case covers an Uber EXPENSE rule with `FLOW = OUT`, where an OUT row receives the category/tag suggestion and an IN refund row does not.
+- direct FinancialTransaction delete is blocked for candidate-linked imported transactions; workflow-level TransactionIngestion delete remains the controlled cleanup path for deleting the whole workflow tree.
+- A READY review with valid rows missing candidates automatically prepares FILE_IMPORT candidates once for the missing-row set, reloads the workflow, calls candidate rule preview, and keeps row review plus classification in one table.
+- The unified table displays transient suggestions only for rows returned by candidate preview, filters category options by row flow, and persists user/apply/no-suggestion review decisions on `TransactionCandidate`.
+- Unified category/tag decisions survive refresh because workflow row candidate summaries reload persisted selections.
 - Cypress coverage for the real workflow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
   Run it with a dedicated clean user so existing manual TransactionRules cannot influence suggestions:
   `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
+- The workflow E2E also asserts all four global reevaluation controls and the eligible-row action are visible, sends their description/candidate-preview requests with the correct global or row scope, and proves no rule-apply or confirm-no-suggestions request occurs until the test explicitly uses Apply suggestions.
 - Cypress workflow hardening coverage also includes:
   - invalid CSV header stays on `/transaction-ingestion/new`, shows a backend error, and does not navigate to review;
-  - `PARTIALLY_READY` uploads render rejected row errors and do not expose Pantalla 2/category-tag review;
+  - `PARTIALLY_READY` uploads render rejected row errors, do not prepare candidates, and do not enable candidate classification controls;
   - completed workflows remain read-only after reload, hide Confirm Import, and hide row review actions;
-  - disabling one valid row before Pantalla 2 excludes it from classification preview and import while importing the remaining enabled valid row.
+  - disabling one valid row excludes it from candidate-backed classification preview and import while importing the remaining enabled valid row.
 - `src/test/javascript/cypress/e2e/entity/transaction-ingestion.cy.ts` is now a lightweight workflow smoke spec, not a generated CRUD spec. It checks list/menu load, `/transaction-ingestion/new`, workflow detail navigation, and absence of the old generated Edit product action.
 - `src/test/javascript/cypress/e2e/entity/file-ingestion.cy.ts` and `src/test/javascript/cypress/e2e/entity/ingestion-record.cy.ts` are technical/debug smoke specs. They verify the generated/debug pages remain reachable and marked technical without restoring old product CRUD expectations.
 - Run the current ingestion E2E pattern with:
   `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
-- confirm import accepts explicit category/tag selections for every `VALID` row and applies validated selections to created transactions.
+- confirm import requires every current `VALID` row to have exactly one reviewed, valid, `READY_TO_POST` `FILE_IMPORT` candidate. Confirm no longer parses the old `records/categoryId/tagIds` request body; persisted candidates win.
+- confirm import rejects corrupt pre-completed `FILE_IMPORT` candidate state all-or-nothing: posted candidate before imported row, imported row with unposted candidate, candidate linked to disabled/non-valid row, candidate/record ingestion mismatch, candidate/row financial transaction mismatch, unposted candidate with a transaction link, and valid row whose candidate is orphaned from the ingestion.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
+- Candidate-backed classification persists category/tags on prepared `FILE_IMPORT` candidates only; it does not persist category/tags into `rawData` and does not create transactions before Confirm Import.
+- TI-CONFIG-0A coverage proves server-owned classification provenance: manual category set/replace/clear maps to `MANUAL`/`MANUAL`/absent; category-only edits preserve tag sources; tag multi-select promotes every retained/new submitted association to `MANUAL`, removes omitted associations, and creates no duplicate candidate/tag row; rule application marks only newly applied values `AUTOMATIC` and preserves `MANUAL` values; prepare/sync and read-only preview/reevaluation preserve provenance; Confirm Import copies category/tags but not provenance.
+- `TransactionCandidateClassificationProvenanceMigrationIT` creates a pre-provenance PostgreSQL schema and runs the actual Liquibase changeset. It verifies conservative historical mapping (`USER_SELECTED` to `MANUAL`, all other historic classifications to `AUTOMATIC`, null category remains null), association id/unique/non-null-source constraints, and candidate/tag foreign-key integrity.
+- Candidate cleanup coverage verifies row invalidation removes unposted candidates with association rows, individual candidate deletion uses orphan removal, workflow/account bulk cleanup removes association rows before bulk candidate deletion, and Category/Tag delete guards detect candidate references.
+- TC-3C.2 candidate preview/apply uses `TransactionOrigin.FILE_IMPORT` and returns candidate-scoped suggestions without using `/api/financial-transactions/rule-preview` or the legacy ingestion `classification-preview` endpoint as the UI source of truth.
+- TC-3D.2 frontend confirm reloads and validates persisted candidates, then calls `/confirm` with no legacy `records`/category/tag payload.
+- TC-3D.1 marks confirmed candidates `POSTED`, sets `postedAt`, links candidate `financialTransaction`, marks rows `IMPORTED`, and keeps completed retry idempotent.
+
+TC-4B legacy removal coverage:
+
+- The old `POST /api/transaction-ingestions/{id}/classification-preview` endpoint/service/DTO tests were removed with the legacy implementation; active frontend tests assert the candidate-backed flow does not call that endpoint.
+- Confirm Import tests prove request-body category/tag values cannot override persisted `FILE_IMPORT` candidate category/tags.
+- The current frontend Confirm Import test coverage continues to assert `/confirm` is posted without legacy `records`/category/tag payload.
 - imported transactions do not get financial subscription from the Rule Engine.
 - disabled rows remain `DISABLED` and do not create transactions.
 - stale parent readiness is recalculated before confirm.
@@ -2774,48 +2953,56 @@ Copy this block when hardening the next entity:
 
 ## Changelog
 
-| Date       | Entity                                | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-07-08 | FinancialAccount                      | Initial catalog: 16 IT ownership, 9 service unit, 5 CurrentUser unit, 10 E2E                                                                                                                                                                                                                                                                                                                                                                                                       |
-| 2026-07-08 | FinancialTransaction                  | 15 IT custom (12 ownership + 3 domain), 10 service unit, 10 E2E; pattern B via `account`                                                                                                                                                                                                                                                                                                                                                                                           |
-| 2026-07-08 | Tag                                   | 16 IT ownership, 9 service unit, 10 E2E; pattern A clone of FA. DTO `user` sin `@NotNull`. Total ownership suites: ~289 backend tests.                                                                                                                                                                                                                                                                                                                                             |
-| 2026-07-11 | Tag domain rules ✅                   | DELETE with M2M unlink (4 join tables); 9 IT + service cleanup test. 78 IT + 12 service.                                                                                                                                                                                                                                                                                                                                                                                           |
-| 2026-07-11 | Category domain rules ✅              | Block delete with children; leaf cleanup delete; parent immutable; categoryType guards. 103 IT + 16 service.                                                                                                                                                                                                                                                                                                                                                                       |
-| 2026-07-11 | Grupo 1 delete dialogs ✅             | Domain-aware confirmation copy (UDP, AATP, Tag, Category); CAD explanation-only. E2E CAD updated.                                                                                                                                                                                                                                                                                                                                                                                  |
-| 2026-07-11 | FinancialSubscription domain rules ✅ | DELETE unlink FT + disable rules; owner-scoped links; dates; structural guards; delete dialog UX. 138 IT + 15 service. Grupo 1 complete.                                                                                                                                                                                                                                                                                                                                           |
-| 2026-07-09 | Category                              | 75 IT (16 ownership + 4 hierarchy + 55 generated), 11 service unit, 10 E2E; pattern A + parent validation. Total ownership suites: ~375 backend tests.                                                                                                                                                                                                                                                                                                                             |
-| 2026-07-09 | Budget                                | 99 IT (16 ownership + 4 M2M + 79 generated), 11 service unit, 10 E2E; pattern A + M2M link validation. Total ownership suites: ~485 backend tests.                                                                                                                                                                                                                                                                                                                                 |
-| 2026-07-09 | FinancialSubscription                 | 123 IT (16 ownership + 4 links + 103 generated), 12 service unit, 10 E2E; pattern A + link validation. Total ownership suites: ~620 backend tests.                                                                                                                                                                                                                                                                                                                                 |
-| 2026-07-09 | FinancialSubscription                 | +5 IT (PATCH preserve/clear links, PUT/PATCH foreign links); 128 IT (16 ownership + 9 links + 103 generated). PATCH uses `JsonNode` for field presence. Total ownership suites: ~625 backend tests.                                                                                                                                                                                                                                                                                |
-| 2026-07-09 | TransactionRule                       | 85 IT (16 ownership + 10 links + 1 owner-scoped admin + 58 generated), 12 service unit, 10 E2E; outputs validated against rule owner. Total ownership suites: ~722 backend tests.                                                                                                                                                                                                                                                                                                  |
-| 2026-07-12 | TransactionRule CRUD/domain baseline  | 104 IT, 14 service unit initially; strict server-owned timestamps, server-managed priority/order added later, PATCH JsonNode semantics, output/condition/name rules, delete cleanup. Rule engine deferred; manual Move up / Move down reorder added later.                                                                                                                                                                                                                         |
-| 2026-07-11 | TransactionRuleCondition              | Plan: parent immutable (reparent removed); field/operator/value validations; DELETE last condition → deactivate rule. Tests to remove reparent ITs and add ~25+ domain ITs.                                                                                                                                                                                                                                                                                                        |
-| 2026-07-09 | TransactionRuleCondition              | 36 IT (16 ownership + ~~reparent~~ + 20 generated), 10 service unit, 8 E2E; pattern C via parent. Total ownership suites: ~768 backend tests.                                                                                                                                                                                                                                                                                                                                      |
-| 2026-07-09 | CreditAccountDetails                  | 36 IT (16 ownership/domain + 20 generated), 9 service unit, 8 E2E; pattern B via account, immutable parent, CREDIT_CARD only. Total ownership suites: ~813 backend tests.                                                                                                                                                                                                                                                                                                          |
-| 2026-07-11 | CreditAccountDetails domain rules     | 41 IT (22 custom + 19 generated), 10 service unit; direct DELETE → `400` invalid; mutable credit fields; E2E delete shows explanation (no confirm).                                                                                                                                                                                                                                                                                                                                |
-| 2026-07-09 | ApiAccessToken                        | 38 IT (17 ownership/security + 21 generated), 7 service unit, 9 E2E; pattern A + token security baseline. Total ownership suites: ~858 backend tests.                                                                                                                                                                                                                                                                                                                              |
-| 2026-07-09 | ApiAccessTokenPermission              | 32 IT (16 ownership/domain + 16 generated), 11 service unit, 9 E2E; pattern C via token, immutable parent/grant. Total ownership suites: ~901 backend tests.                                                                                                                                                                                                                                                                                                                       |
-| 2026-07-11 | ApiAccessTokenPermission domain rules | 37 IT (21 custom + 16 generated); confirmatory DELETE/CREATE ITs; `READ_TRANSACTIONS` enum for sibling test data.                                                                                                                                                                                                                                                                                                                                                                  |
-| 2026-07-09 | UserDashboardPreference               | 33 IT (17 ownership/1:1 + 16 generated), 7 service unit, 9 E2E; pattern A + existsByUserId guard. Total ownership suites: ~941 backend tests.                                                                                                                                                                                                                                                                                                                                      |
-| 2026-07-11 | UserDashboardPreference domain rules  | 40 IT (24 custom + 16 generated), 13 service unit; `configuration` JSON validation.                                                                                                                                                                                                                                                                                                                                                                                                |
-| 2026-07-11 | InternalTransfer domain rules         | 47 IT (32 ownership/domain + 15 generated), 13 service unit, 5 candidate IT; origin unrestricted, notes normalization, server-owned `createdAt`, strict link PUT/PATCH, FT delete cleanup.                                                                                                                                                                                                                                                                                         |
-| 2026-07-09 | TransactionIngestion                  | Modelo refactor ✅ — 78 IT generated baseline, domain/mapper/criteria updated for `account`; ownership tests ⏳ (pattern B planned ~16 IT + service unit).                                                                                                                                                                                                                                                                                                                         |
-| 2026-07-09 | TransactionIngestion                  | 90 IT (20 ownership/domain + 70 generated), 8 service unit; pattern B via `account`, server defaults, scoped helpers. Total ownership suites: ~1090 backend tests.                                                                                                                                                                                                                                                                                                                 |
-| 2026-07-11 | FileIngestion domain rules            | 45 IT (30 ownership/domain + 15 generated), 9 service unit, +1 TransactionIngestion service cleanup; immutable file metadata, statement date range, direct delete blocked.                                                                                                                                                                                                                                                                                                         |
-| 2026-07-09 | ApiIngestion                          | 44 IT (29 ownership/domain + 15 generated), 9 service unit; pattern C + token + same-owner, parent API + 1:1 + `requestId` unique, server timestamps. Total ownership suites: ~1167 backend tests.                                                                                                                                                                                                                                                                                 |
-| 2026-07-09 | IngestionRecord                       | Superseded by 2026-07-12 domain pass; initial ownership baseline was 74 IT + 7 service.                                                                                                                                                                                                                                                                                                                                                                                            |
-| 2026-07-12 | IngestionRecord domain rules          | 87 IT, 7 service unit, +1 FT helper IT; status consistency, parent final freeze, externalRecordId parent-scoped uniqueness, rawData log safety, direct delete blocked.                                                                                                                                                                                                                                                                                                             |
-| 2026-07-12 | FinancialTransaction domain rules     | 101 IT, 10 service unit; JsonNode presence semantics, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup.                                                                                                                                                                                                                                                                    |
-| 2026-07-12 | FinancialAccount domain rules         | 118 IT, 12 service unit; delete orchestration for ingestion/transaction trees and account-level links, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                                                                                                                                                         |
-| 2026-07-13 | FinancialAccount balance read model   | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                                                                                                                                                                    |
-| 2026-07-17 | CSV Ingestion I1A/I1B backend         | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted workflow endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                                                                                                                                                                 |
-| 2026-07-17 | CSV Ingestion I1C frontend            | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart workflow submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                                                                                                                                                         |
-| 2026-07-17 | CSV Ingestion I2A status lifecycle    | `IngestionRecordStatus.CREATED` removed; review tests expect `VALID`; imported-record domain tests use `IMPORTED`; frontend review test renders translated `Valid`/`Rejected`; Liquibase migrates existing `CREATED` rows to `VALID`.                                                                                                                                                                                                                                              |
-| 2026-07-17 | CSV Ingestion I2B review flow         | Backend IT covers persisted GET review, FileIngestion metadata, enable/disable transitions, counters/status recalculation, imported-row guard and mismatched parent guard. Frontend tests cover redirect to review page, metadata/status rendering, enable/disable actions, and no confirm/import action.                                                                                                                                                                          |
-| 2026-07-18 | CSV Ingestion I2B.2 row edit          | Backend IT covers PATCH normalized row edit for `VALID`/`REJECTED`, `DISABLED` edit rejection, immutable imported/skipped/failed rows, rawData raw preservation, derived amount/flow, counters/status recalculation, and no `FinancialTransaction` creation. Frontend tests cover inline edit, disabled rows without Edit, save/cancel, derived-field read-only behavior, and no confirm/import action.                                                                            |
-| 2026-07-18 | CSV Ingestion I2C confirm import      | Backend IT covers ready confirm, normalized payload mapping, `FILE_IMPORT` origin, imported row links, disabled rows skipped, stale readiness recalculation, completed idempotent retry, corrupt link guards, completed review read-only, foreign rejection, and no Rule Engine/category/tag/subscription application. Frontend tests cover Confirm Import visibility, not-ready blocking, completed read-only review, imported/disabled row display, and confirm error rendering. |
-| 2026-07-11 | **Decision 11C — snapshot audit**     | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                                                                                                                                                                     |
-| 2026-07-11 | **Decision 11C implemented ✅**       | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal.                                                                                                                                          |
+| Date       | Entity                                                      | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-08 | FinancialAccount                                            | Initial catalog: 16 IT ownership, 9 service unit, 5 CurrentUser unit, 10 E2E                                                                                                                                                                                                                                                                                                                                                                                              |
+| 2026-07-08 | FinancialTransaction                                        | 15 IT custom (12 ownership + 3 domain), 10 service unit, 10 E2E; pattern B via `account`                                                                                                                                                                                                                                                                                                                                                                                  |
+| 2026-07-08 | Tag                                                         | 16 IT ownership, 9 service unit, 10 E2E; pattern A clone of FA. DTO `user` sin `@NotNull`. Total ownership suites: ~289 backend tests.                                                                                                                                                                                                                                                                                                                                    |
+| 2026-07-11 | Tag domain rules ✅                                         | DELETE with M2M unlink (4 join tables); 9 IT + service cleanup test. 78 IT + 12 service.                                                                                                                                                                                                                                                                                                                                                                                  |
+| 2026-07-11 | Category domain rules ✅                                    | Block delete with children; leaf cleanup delete; parent immutable; categoryType guards. 103 IT + 16 service.                                                                                                                                                                                                                                                                                                                                                              |
+| 2026-07-11 | Grupo 1 delete dialogs ✅                                   | Domain-aware confirmation copy (UDP, AATP, Tag, Category); CAD explanation-only. E2E CAD updated.                                                                                                                                                                                                                                                                                                                                                                         |
+| 2026-07-11 | FinancialSubscription domain rules ✅                       | DELETE unlink FT + disable rules; owner-scoped links; dates; structural guards; delete dialog UX. 138 IT + 15 service. Grupo 1 complete.                                                                                                                                                                                                                                                                                                                                  |
+| 2026-07-09 | Category                                                    | 75 IT (16 ownership + 4 hierarchy + 55 generated), 11 service unit, 10 E2E; pattern A + parent validation. Total ownership suites: ~375 backend tests.                                                                                                                                                                                                                                                                                                                    |
+| 2026-07-09 | Budget                                                      | 99 IT (16 ownership + 4 M2M + 79 generated), 11 service unit, 10 E2E; pattern A + M2M link validation. Total ownership suites: ~485 backend tests.                                                                                                                                                                                                                                                                                                                        |
+| 2026-07-09 | FinancialSubscription                                       | 123 IT (16 ownership + 4 links + 103 generated), 12 service unit, 10 E2E; pattern A + link validation. Total ownership suites: ~620 backend tests.                                                                                                                                                                                                                                                                                                                        |
+| 2026-07-09 | FinancialSubscription                                       | +5 IT (PATCH preserve/clear links, PUT/PATCH foreign links); 128 IT (16 ownership + 9 links + 103 generated). PATCH uses `JsonNode` for field presence. Total ownership suites: ~625 backend tests.                                                                                                                                                                                                                                                                       |
+| 2026-07-09 | TransactionRule                                             | 85 IT (16 ownership + 10 links + 1 owner-scoped admin + 58 generated), 12 service unit, 10 E2E; outputs validated against rule owner. Total ownership suites: ~722 backend tests.                                                                                                                                                                                                                                                                                         |
+| 2026-07-12 | TransactionRule CRUD/domain baseline                        | 104 IT, 14 service unit initially; strict server-owned timestamps, server-managed priority/order added later, PATCH JsonNode semantics, output/condition/name rules, delete cleanup. Rule engine deferred; manual Move up / Move down reorder added later.                                                                                                                                                                                                                |
+| 2026-07-11 | TransactionRuleCondition                                    | Plan: parent immutable (reparent removed); field/operator/value validations; DELETE last condition → deactivate rule. Tests to remove reparent ITs and add ~25+ domain ITs.                                                                                                                                                                                                                                                                                               |
+| 2026-07-09 | TransactionRuleCondition                                    | 36 IT (16 ownership + ~~reparent~~ + 20 generated), 10 service unit, 8 E2E; pattern C via parent. Total ownership suites: ~768 backend tests.                                                                                                                                                                                                                                                                                                                             |
+| 2026-07-09 | CreditAccountDetails                                        | 36 IT (16 ownership/domain + 20 generated), 9 service unit, 8 E2E; pattern B via account, immutable parent, CREDIT_CARD only. Total ownership suites: ~813 backend tests.                                                                                                                                                                                                                                                                                                 |
+| 2026-07-11 | CreditAccountDetails domain rules                           | 41 IT (22 custom + 19 generated), 10 service unit; direct DELETE → `400` invalid; mutable credit fields; E2E delete shows explanation (no confirm).                                                                                                                                                                                                                                                                                                                       |
+| 2026-07-09 | ApiAccessToken                                              | 38 IT (17 ownership/security + 21 generated), 7 service unit, 9 E2E; pattern A + token security baseline. Total ownership suites: ~858 backend tests.                                                                                                                                                                                                                                                                                                                     |
+| 2026-07-09 | ApiAccessTokenPermission                                    | 32 IT (16 ownership/domain + 16 generated), 11 service unit, 9 E2E; pattern C via token, immutable parent/grant. Total ownership suites: ~901 backend tests.                                                                                                                                                                                                                                                                                                              |
+| 2026-07-11 | ApiAccessTokenPermission domain rules                       | 37 IT (21 custom + 16 generated); confirmatory DELETE/CREATE ITs; `READ_TRANSACTIONS` enum for sibling test data.                                                                                                                                                                                                                                                                                                                                                         |
+| 2026-07-09 | UserDashboardPreference                                     | 33 IT (17 ownership/1:1 + 16 generated), 7 service unit, 9 E2E; pattern A + existsByUserId guard. Total ownership suites: ~941 backend tests.                                                                                                                                                                                                                                                                                                                             |
+| 2026-07-11 | UserDashboardPreference domain rules                        | 40 IT (24 custom + 16 generated), 13 service unit; `configuration` JSON validation.                                                                                                                                                                                                                                                                                                                                                                                       |
+| 2026-07-11 | InternalTransfer domain rules                               | 47 IT (32 ownership/domain + 15 generated), 13 service unit, 5 candidate IT; origin unrestricted, notes normalization, server-owned `createdAt`, strict link PUT/PATCH, FT delete cleanup.                                                                                                                                                                                                                                                                                |
+| 2026-07-09 | TransactionIngestion                                        | Modelo refactor ✅ — 78 IT generated baseline, domain/mapper/criteria updated for `account`; ownership tests ⏳ (pattern B planned ~16 IT + service unit).                                                                                                                                                                                                                                                                                                                |
+| 2026-07-09 | TransactionIngestion                                        | 90 IT (20 ownership/domain + 70 generated), 8 service unit; pattern B via `account`, server defaults, scoped helpers. Total ownership suites: ~1090 backend tests.                                                                                                                                                                                                                                                                                                        |
+| 2026-07-11 | FileIngestion domain rules                                  | 45 IT (30 ownership/domain + 15 generated), 9 service unit, +1 TransactionIngestion service cleanup; immutable file metadata, statement date range, direct delete blocked.                                                                                                                                                                                                                                                                                                |
+| 2026-07-09 | ApiIngestion                                                | 44 IT (29 ownership/domain + 15 generated), 9 service unit; pattern C + token + same-owner, parent API + 1:1 + `requestId` unique, server timestamps. Total ownership suites: ~1167 backend tests.                                                                                                                                                                                                                                                                        |
+| 2026-07-09 | IngestionRecord                                             | Superseded by 2026-07-12 domain pass; initial ownership baseline was 74 IT + 7 service.                                                                                                                                                                                                                                                                                                                                                                                   |
+| 2026-07-12 | IngestionRecord domain rules                                | 87 IT, 7 service unit, +1 FT helper IT; status consistency, parent final freeze, externalRecordId parent-scoped uniqueness, rawData log safety, direct delete blocked.                                                                                                                                                                                                                                                                                                    |
+| 2026-07-12 | FinancialTransaction domain rules                           | 135 IT, 10 service unit; JsonNode presence semantics, server timestamps, immutable account/origin/ingestion, owner-scoped links, category/subscription compatibility, internal-transfer guards, delete cleanup, and TC-5D.2 candidate-linked direct delete guard.                                                                                                                                                                                                         |
+| 2026-07-12 | FinancialAccount domain rules                               | 120 IT, 14 service unit; delete orchestration for ingestion/transaction trees, account-level links, and TransactionCandidate account-reference guards, `initialBalanceDate` floor, active no-side-effects.                                                                                                                                                                                                                                                                |
+| 2026-09-15 | TransactionCandidate TC-5D.3 dependency delete guards       | Category/Tag delete rejects MANUAL/FILE_IMPORT/POSTED candidate references; FinancialAccount delete rejects manual/non-workflow candidates and still allows controlled FILE_IMPORT ingestion/account cleanup to remove candidate joins/candidates first.                                                                                                                                                                                                                  |
+| 2026-07-13 | FinancialAccount balance read model                         | 145 IT, 24 service unit, 8 balance service unit, 18 calculator unit; backend-only `GET /api/financial-accounts/{id}/balance`, strategy calculators by account type, `transactionDate` range, credit-card debt/available credit.                                                                                                                                                                                                                                           |
+| 2026-07-17 | CSV Ingestion I1A/I1B backend                               | 23 parser unit + 9 resource IT; exact canonical header, row/file validation, persisted workflow endpoint, checksum warning-only, rawData JSON, no `FinancialTransaction` creation, no Rule Engine.                                                                                                                                                                                                                                                                        |
+| 2026-07-17 | CSV Ingestion I1C frontend                                  | 7 Jest/RTL tests for TransactionIngestion “New File Import” action, account/file required checks, multipart workflow submit, summary counts, duplicate checksum warning, rejected row error, and no confirm/import action.                                                                                                                                                                                                                                                |
+| 2026-07-17 | CSV Ingestion I2A status lifecycle                          | `IngestionRecordStatus.CREATED` removed; review tests expect `VALID`; imported-record domain tests use `IMPORTED`; frontend review test renders translated `Valid`/`Rejected`; Liquibase migrates existing `CREATED` rows to `VALID`.                                                                                                                                                                                                                                     |
+| 2026-07-17 | CSV Ingestion I2B review flow                               | Backend IT covers persisted GET review, FileIngestion metadata, enable/disable transitions, counters/status recalculation, imported-row guard and mismatched parent guard. Frontend tests cover redirect to review page, metadata/status rendering, enable/disable actions, and no confirm/import action.                                                                                                                                                                 |
+| 2026-07-18 | CSV Ingestion I2B.2 row edit                                | Backend IT covers PATCH normalized row edit for `VALID`/`REJECTED`, `DISABLED` edit rejection, immutable imported/skipped/failed rows, rawData raw preservation, derived amount/flow, counters/status recalculation, and no `FinancialTransaction` creation. Frontend tests cover inline edit, disabled rows without Edit, save/cancel, derived-field read-only behavior, and no confirm/import action.                                                                   |
+| 2026-07-18 | CSV Ingestion I2C confirm import                            | Backend IT covers ready confirm, `FILE_IMPORT` origin, imported row links, disabled rows skipped, stale readiness recalculation, completed idempotent retry, corrupt link guards, completed review read-only, foreign rejection, and no Rule Engine/subscription application. Frontend tests cover Confirm Import visibility, not-ready blocking, completed read-only review, imported/disabled row display, and confirm error rendering.                                 |
+| 2026-09-04 | CSV Ingestion TC-3A candidate prepare                       | Backend IT covers `POST /api/transaction-ingestions/{id}/candidates/prepare`, valid-only `FILE_IMPORT` candidate creation, non-valid row skips, idempotency, sync from `rawData.normalized`, stale classification marking, category/tag preservation, posted-candidate skip, guards, no `FinancialTransaction` creation, and rawData immutability.                                                                                                                        |
+| 2026-09-06 | CSV Ingestion TC-3B workflow summary                        | Backend IT covers optional prepared candidate summaries on `GET /api/transaction-ingestions/{id}/workflow`, category/tag summary fields, rows without candidates, read-only/no rawData mutation/no candidate creation, foreign candidate filtering, and unchanged Confirm Import behavior.                                                                                                                                                                                |
+| 2026-09-08 | CSV Ingestion TC-3C.1 FILE candidate classification backend | Backend IT covers ingestion-scoped FILE candidate category/tag PATCH, absent/null/empty preserve-clear-replace semantics, ownership and category-flow guards, batch candidate rule preview/apply with `TransactionOrigin.FILE_IMPORT`, skipped non-evaluable rows, `FILL_EMPTY_ONLY` apply, confirm-no-suggestions, no rawData mutation, no `FinancialTransaction` creation, no Confirm Import behavior change.                                                           |
+| 2026-09-08 | Historical CSV Ingestion TC-3C.2 two-step UI                | Jest covers candidate prepare/reload/preview, persisted candidate category/tag edits, per-row apply suggestions, confirm-no-suggestions, blocking missing/not-reviewed candidates, and no legacy `classification-preview` use. Cypress covers the real workflow with OUT vs IN rule behavior, candidate apply/no-suggestion decisions, persisted selections after reload, and absence of the old preview endpoints in the UI flow. Superseded visually by unified review. |
+| 2026-09-08 | CSV Ingestion TC-3D.2 frontend confirm cleanup              | Jest and Cypress cover frontend Confirm Import reloading/validating persisted candidates and calling `/confirm` with no legacy `records`/category/tag payload.                                                                                                                                                                                                                                                                                                            |
+| 2026-09-08 | CSV Ingestion TC-3D.1 candidate-backed Confirm Import       | Backend IT covers Confirm Import posting from reviewed `FILE_IMPORT` candidates, ignored legacy category/tag payload values, optional no-body confirm, candidate status/validation/classification guards, candidate/record/transaction links, all-or-nothing rollback, completed retry idempotency, rawData immutability, and TransactionIngestion delete cleanup for prepared/posted candidates and candidate tag joins.                                                 |
+| 2026-09-15 | CSV Ingestion TC-5D.4 corrupt/orphan confirm guards         | Backend IT covers corrupt pre-completed `FILE_IMPORT` candidate/row states: posted candidate before imported row, imported row with unposted candidate, candidate linked to disabled row, cross-ingestion record mismatch, financial transaction mismatch, unposted candidate transaction link, orphaned valid-row candidate, and all-or-nothing rollback with multiple valid rows.                                                                                       |
+| 2026-07-11 | **Decision 11C — snapshot audit**                           | Superseded by implementation entry below: removed `ApiIngestion`→`ApiAccessToken` FK; snapshot fields; token delete without ingestion cleanup.                                                                                                                                                                                                                                                                                                                            |
+| 2026-07-11 | **Decision 11C implemented ✅**                             | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal.                                                                                                                                 |
 
 ## Description normalization rule tests
 

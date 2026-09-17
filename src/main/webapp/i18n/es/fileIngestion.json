@@ -16,6 +16,8 @@
       },
       "technicalView": "Vista técnica — la metadata del archivo se administra desde el flujo de Transaction Ingestion.",
       "secondaryUploadFlow": "Flujo secundario/debug de carga — el flujo canónico de ingestión FILE empieza desde Transaction Ingestion.",
+      "writeUnavailableTitle": "Vista técnica de File Ingestion",
+      "writeUnavailable": "Crear, editar y eliminar File Ingestion no son acciones de producto. La metadata del archivo se crea y administra desde el flujo de Transaction Ingestion.",
       "workflowLink": "Abrir flujo",
       "upload": {
         "csvFile": "Archivo CSV",

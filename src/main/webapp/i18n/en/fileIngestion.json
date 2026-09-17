@@ -16,6 +16,8 @@
       },
       "technicalView": "Technical view — File metadata is managed by the Transaction Ingestion workflow.",
       "secondaryUploadFlow": "Secondary/debug upload flow — the canonical FILE ingestion flow starts from Transaction Ingestion.",
+      "writeUnavailableTitle": "File Ingestion technical view",
+      "writeUnavailable": "File Ingestion create, edit, and delete are not product actions. File metadata is created and managed by the Transaction Ingestion workflow.",
       "workflowLink": "Open workflow",
       "upload": {
         "csvFile": "CSV file",

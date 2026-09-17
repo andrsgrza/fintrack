@@ -1,0 +1,263 @@
+package com.fintrack.app.repository;
+
+import com.fintrack.app.domain.TransactionCandidate;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import jakarta.persistence.LockModeType;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+/**
+ * Spring Data JPA repository for the TransactionCandidate entity.
+ */
+@Repository
+public interface TransactionCandidateRepository
+    extends JpaRepository<TransactionCandidate, Long>, JpaSpecificationExecutor<TransactionCandidate> {
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+        }
+    )
+    @Query("select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id")
+    Optional<TransactionCandidate> findOneWithRelationships(@Param("id") Long id);
+
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+        }
+    )
+    @Query(
+        value = "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.user.login = :login",
+        countQuery = "select count(transactionCandidate) from TransactionCandidate transactionCandidate where transactionCandidate.user.login = :login"
+    )
+    Page<TransactionCandidate> findAllWithRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
+
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+        }
+    )
+    @Query(
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.user.login = :login"
+    )
+    List<TransactionCandidate> findAllWithRelationshipsByUserLogin(@Param("login") String login);
+
+    @EntityGraph(attributePaths = { "account", "category" })
+    @Query(
+        value = """
+        select distinct transactionCandidate
+        from TransactionCandidate transactionCandidate
+        where transactionCandidate.user.login = :login
+          and transactionCandidate.source = :source
+          and transactionCandidate.status in :statuses
+        """,
+        countQuery = """
+        select count(distinct transactionCandidate)
+        from TransactionCandidate transactionCandidate
+        where transactionCandidate.user.login = :login
+          and transactionCandidate.source = :source
+          and transactionCandidate.status in :statuses
+        """
+    )
+    Page<TransactionCandidate> findRecoverableManualDraftsByUserLogin(
+        @Param("login") String login,
+        @Param("source") TransactionCandidateSource source,
+        @Param("statuses") Collection<TransactionCandidateStatus> statuses,
+        Pageable pageable
+    );
+
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+        }
+    )
+    @Query(
+        "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
+    )
+    Optional<TransactionCandidate> findOneWithRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+        }
+    )
+    @Query(
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.ingestionRecord.id = :ingestionRecordId and transactionCandidate.user.login = :login"
+    )
+    Optional<TransactionCandidate> findOneWithRelationshipsByIngestionRecordIdAndUserLogin(
+        @Param("ingestionRecordId") Long ingestionRecordId,
+        @Param("login") String login
+    );
+
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "transactionIngestion.account.user",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.transactionIngestion.account.user",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.account.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+        }
+    )
+    @Query(
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id = :transactionIngestionId and transactionCandidate.user.login = :login"
+    )
+    List<TransactionCandidate> findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
+        @Param("transactionIngestionId") Long transactionIngestionId,
+        @Param("login") String login
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
+    )
+    Optional<TransactionCandidate> findOneByIdAndUserLoginForPosting(@Param("id") Long id, @Param("login") String login);
+
+    Optional<TransactionCandidate> findFirstByFinancialTransactionId(Long financialTransactionId);
+
+    boolean existsByCategoryId(Long categoryId);
+
+    @Query(
+        "select case when count(transactionCandidateTag) > 0 then true else false end from TransactionCandidateTag transactionCandidateTag where transactionCandidateTag.tag.id = :tagId"
+    )
+    boolean existsByTagId(@Param("tagId") Long tagId);
+
+    @Query(
+        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
+        "where transactionCandidate.account.id = :accountId and (transactionCandidate.source <> com.fintrack.app.domain.enumeration.TransactionCandidateSource.FILE_IMPORT or transactionCandidate.transactionIngestion is null)"
+    )
+    boolean existsAccountCandidateOutsideWorkflowCleanup(@Param("accountId") Long accountId);
+
+    boolean existsByAccountId(Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select id from transaction_candidate where transaction_ingestion_id = :transactionIngestionId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id = :transactionIngestionId"
+    )
+    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select tc.id from transaction_candidate tc join transaction_ingestion ti on tc.transaction_ingestion_id = ti.id where ti.account_id = :accountId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByTransactionIngestionAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id in (select transactionIngestion.id from TransactionIngestion transactionIngestion where transactionIngestion.account.id = :accountId)"
+    )
+    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
+
+    long countByUserLogin(String login);
+}

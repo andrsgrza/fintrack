@@ -20,6 +20,7 @@ import com.fintrack.app.repository.DescriptionNormalizationRuleRepository;
 import com.fintrack.app.service.dto.DescriptionNormalizationRuleDTO;
 import com.fintrack.app.service.dto.DescriptionNormalizationRuleReorderRequestDTO;
 import com.fintrack.app.service.mapper.DescriptionNormalizationRuleMapper;
+import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationService;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
@@ -56,6 +57,78 @@ class DescriptionNormalizationRuleResourceIT {
 
     @Autowired
     private DescriptionNormalizationRuleMapper ruleMapper;
+
+    @Autowired
+    private DescriptionNormalizationRuleEvaluationService evaluationService;
+
+    @Test
+    @Transactional
+    void configuredCreateAtomicallyCreatesAnActiveRuleWithOrderedConditionsAndCanBeEvaluated() throws Exception {
+        persistRule("Existing", 0);
+        Map<String, Object> request = Map.of(
+            "name",
+            "  Normalize Uber  ",
+            "description",
+            "  From the ingestion review  ",
+            "active",
+            true,
+            "conditionOperator",
+            "ALL",
+            "resultingDescription",
+            "  Uber  ",
+            "conditions",
+            List.of(
+                Map.of("operator", "CONTAINS", "value", "  Uber  ", "caseSensitive", false),
+                Map.of("operator", "CONTAINS", "value", "trip", "caseSensitive", false)
+            )
+        );
+
+        mockMvc
+            .perform(post(ENTITY_API_URL + "/configured").contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Normalize Uber"))
+            .andExpect(jsonPath("$.description").value("From the ingestion review"))
+            .andExpect(jsonPath("$.active").value(true))
+            .andExpect(jsonPath("$.priority").value(1))
+            .andExpect(jsonPath("$.resultingDescription").value("Uber"))
+            .andExpect(jsonPath("$.conditions[0].position").value(0))
+            .andExpect(jsonPath("$.conditions[1].position").value(1));
+
+        DescriptionNormalizationRule configured = ruleRepository.findByUserIdOrderByPriorityAscIdAsc(currentUser(em).getId()).get(1);
+        assertThat(conditionRepository.findByDescriptionNormalizationRuleIdOrderByPositionAscIdAsc(configured.getId()))
+            .extracting(DescriptionNormalizationRuleCondition::getValue)
+            .containsExactly("Uber", "trip");
+        em.flush();
+        em.clear();
+        assertThat(evaluationService.evaluate("user", "Uber trip").resultingDescription()).isEqualTo("Uber");
+    }
+
+    @Test
+    @Transactional
+    void configuredCreateRejectsInvalidActivePayloadWithoutPersistingAnOrphanRule() throws Exception {
+        long rulesBefore = ruleRepository.count();
+        Map<String, Object> invalidRequest = Map.of(
+            "name",
+            "Invalid configured rule",
+            "active",
+            true,
+            "conditionOperator",
+            "ALL",
+            "resultingDescription",
+            "Uber",
+            "conditions",
+            List.of(Map.of("operator", "CONTAINS", "value", "   ", "caseSensitive", false))
+        );
+
+        mockMvc
+            .perform(
+                post(ENTITY_API_URL + "/configured").contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(invalidRequest))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(ruleRepository.count()).isEqualTo(rulesBefore);
+        assertThat(conditionRepository.count()).isZero();
+    }
 
     @Test
     @Transactional

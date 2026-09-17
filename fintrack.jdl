@@ -68,6 +68,48 @@ enum TransactionOrigin {
   API
 }
 
+enum TransactionCandidateSource {
+  MANUAL,
+  FILE_IMPORT,
+  API_IMPORT
+}
+
+enum TransactionCandidateStatus {
+  DRAFT,
+  READY_TO_POST,
+  POSTED,
+  CANCELLED,
+  FAILED
+}
+
+enum TransactionCandidateValidationStatus {
+  UNKNOWN,
+  VALID,
+  INVALID,
+  STALE
+}
+
+enum TransactionCandidateDescriptionReviewStatus {
+  NOT_EVALUATED,
+  AUTO_APPLIED,
+  USER_EDITED,
+  STALE,
+  NOT_APPLICABLE
+}
+
+enum TransactionCandidateClassificationReviewStatus {
+  NOT_EVALUATED,
+  SUGGESTED,
+  USER_SELECTED,
+  STALE,
+  NOT_APPLICABLE
+}
+
+enum TransactionCandidateClassificationSource {
+  AUTOMATIC,
+  MANUAL
+}
+
 enum CategoryType {
   EXPENSE,
   INCOME,
@@ -248,6 +290,40 @@ entity FinancialTransaction {
   notes String maxlength(1000)
   createdAt Instant required
   updatedAt Instant required
+}
+
+/**
+ * A transaction in progress/review before it becomes posted ledger data.
+ *
+ * TransactionCandidate is intentionally separate from FinancialTransaction:
+ * candidates never affect balances, dashboards, budgets, or reports.
+ */
+entity TransactionCandidate {
+  source TransactionCandidateSource required
+  status TransactionCandidateStatus required
+  validationStatus TransactionCandidateValidationStatus required
+  descriptionReviewStatus TransactionCandidateDescriptionReviewStatus required
+  classificationReviewStatus TransactionCandidateClassificationReviewStatus required
+  categorySource TransactionCandidateClassificationSource
+  transactionDate LocalDate
+  postingDate LocalDate
+  description String maxlength(500)
+  signedAmount BigDecimal
+  amount BigDecimal
+  flow TransactionFlow
+  currencySnapshot CurrencyCode
+  externalReference String maxlength(150)
+  notes String maxlength(1000)
+  failureReason String maxlength(1000)
+  createdAt Instant required
+  updatedAt Instant required
+  postedAt Instant
+  cancelledAt Instant
+  failedAt Instant
+}
+
+entity TransactionCandidateTag {
+  source TransactionCandidateClassificationSource required
 }
 
 /**
@@ -471,6 +547,7 @@ relationship ManyToOne {
   Category{user(login) required} to User with builtInEntity
   Tag{user(login) required} to User with builtInEntity
   TransactionRule{user(login) required} to User with builtInEntity
+  TransactionCandidate{user(login) required} to User with builtInEntity
   FinancialSubscription{user(login) required} to User with builtInEntity
   Budget{user(login) required} to User with builtInEntity
   ApiAccessToken{user(login) required} to User with builtInEntity
@@ -489,10 +566,18 @@ relationship ManyToOne {
   FinancialTransaction{category(name)} to Category{financialTransactions}
   FinancialTransaction{financialSubscription(name)} to FinancialSubscription{financialTransactions}
   FinancialTransaction{transactionIngestion(id)} to TransactionIngestion{financialTransactions}
+  TransactionCandidate{account(name)} to FinancialAccount
+  TransactionCandidate{category(name)} to Category
+  TransactionCandidate{transactionIngestion(id)} to TransactionIngestion
 }
 
 relationship ManyToMany {
   FinancialTransaction{tags(name)} to Tag{financialTransactions}
+}
+
+relationship ManyToOne {
+  TransactionCandidateTag{transactionCandidate required} to TransactionCandidate
+  TransactionCandidateTag{tag required} to Tag
 }
 
 /**
@@ -557,6 +642,8 @@ relationship OneToOne {
   FileIngestion{transactionIngestion(id) required} to TransactionIngestion{fileIngestion}
   ApiIngestion{transactionIngestion(id) required} to TransactionIngestion{apiIngestion}
   IngestionRecord{financialTransaction(id)} to FinancialTransaction
+  TransactionCandidate{ingestionRecord(id)} to IngestionRecord
+  TransactionCandidate{financialTransaction(id)} to FinancialTransaction
 }
 
 relationship ManyToOne {
@@ -582,4 +669,4 @@ service * with serviceClass
 
 filter FinancialAccount, FinancialTransaction, Category, Tag, TransactionRule, FinancialSubscription, Budget, TransactionIngestion, IngestionRecord
 
-use pagination for FinancialTransaction, TransactionIngestion, IngestionRecord
+use pagination for FinancialTransaction, TransactionCandidate, TransactionIngestion, IngestionRecord

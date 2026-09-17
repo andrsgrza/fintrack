@@ -43,6 +43,8 @@ public class CsvIngestionWorkflowRecordDTO implements Serializable {
 
     private CsvIngestionDescriptionReviewDTO descriptionReview;
 
+    private TransactionCandidateWorkflowSummaryDTO candidate;
+
     private List<CsvIngestionValidationMessage> warnings = new ArrayList<>();
 
     public Long getIngestionRecordId() {
@@ -171,6 +173,14 @@ public class CsvIngestionWorkflowRecordDTO implements Serializable {
 
     public void setDescriptionReview(CsvIngestionDescriptionReviewDTO descriptionReview) {
         this.descriptionReview = descriptionReview;
+    }
+
+    public TransactionCandidateWorkflowSummaryDTO getCandidate() {
+        return candidate;
+    }
+
+    public void setCandidate(TransactionCandidateWorkflowSummaryDTO candidate) {
+        this.candidate = candidate;
     }
 
     public List<CsvIngestionValidationMessage> getWarnings() {
