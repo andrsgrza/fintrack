@@ -606,10 +606,10 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 ### Summary counts
 
-| Type           | File                              | Tests | Notes                                                                                                                                                                                     |
-| -------------- | --------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT | `TransactionCandidateResourceIT`  | 36    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked/idempotent post, no rule-on-post, manual draft recovery query, and final delete protection |
-| Unit — service | `TransactionCandidateServiceTest` | 64    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM.                            |
+| Type           | File                              | Tests | Notes                                                                                                                                                                                                                         |
+| -------------- | --------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT | `TransactionCandidateResourceIT`  | 48    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked/idempotent post, no rule-on-post, manual draft recovery query, final delete protection, and autosave classification freshness. |
+| Unit — service | `TransactionCandidateServiceTest` | 81    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM.                                                                |
 
 **Run:**
 

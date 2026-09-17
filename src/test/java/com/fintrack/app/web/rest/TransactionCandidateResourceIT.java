@@ -784,6 +784,39 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
+    void notesOnlySnapshotAutosaveKeepsFreshClassification() throws Exception {
+        FinancialAccount account = createAccount(currentUser());
+        TransactionCandidate candidate = createReadyCandidateWithoutOutputs(currentUser(), account, "Manual", new BigDecimal("-20.00"));
+        candidate.setExternalReference("unchanged-reference");
+        candidate.setNotes("previous notes");
+        candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        restTransactionCandidateMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID + "/manual-draft", candidate.getId())
+                    .contentType("application/merge-patch+json")
+                    .content(
+                        """
+                        {
+                          "account":{"id":%d},
+                          "transactionDate":"2026-01-15",
+                          "postingDate":null,
+                          "description":"Manual",
+                          "signedAmount":-20.00,
+                          "externalReference":"unchanged-reference",
+                          "notes":"updated notes"
+                        }
+                        """.formatted(account.getId())
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.notes").value("updated notes"))
+            .andExpect(jsonPath("$.classificationReviewStatus").value("USER_SELECTED"));
+    }
+
+    @Test
+    @Transactional
     void inactiveAndForeignRulesAreIgnoredForCandidatePreview() throws Exception {
         User owner = currentUser();
         User otherUser = createOtherUser();
