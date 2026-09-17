@@ -27,13 +27,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
   const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const uploadCsvFromCreatePage = (csv: string, filename: string, expectedStatusCode = 200) => {
-    cy.intercept('GET', '/api/financial-accounts+(?*|)').as('accountsRequest');
+    cy.intercept('GET', '/api/financial-accounts/selectable*').as('selectableAccountsRequest');
     cy.intercept('POST', '/api/transaction-ingestions/file').as('createWorkflowRequest');
     cy.intercept('GET', '/api/transaction-ingestions/*/workflow').as('workflowRequest');
     cy.visit('/transaction-ingestion/new');
-    cy.wait('@accountsRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@selectableAccountsRequest').its('response.statusCode').should('eq', 200);
 
-    cy.get('[data-cy="account"]').select(account?.name as string);
+    cy.get('[data-cy="account"]').select(String(account?.id));
     cy.get('[data-cy="ingestionType"]').select('FILE');
     cy.get('[data-cy="csvFile"]').selectFile({
       contents: Cypress.Buffer.from(csv),
@@ -544,6 +544,24 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
         });
       });
     });
+  });
+
+  it('excludes an inactive account from a new FILE ingestion', () => {
+    cy.then(() => {
+      expect(account?.id).to.be.a('number');
+    });
+    cy.authenticatedRequest({
+      method: 'PATCH',
+      url: `/api/financial-accounts/${account?.id}`,
+      body: { active: false },
+    })
+      .its('status')
+      .should('eq', 200);
+
+    cy.intercept('GET', '/api/financial-accounts/selectable*').as('selectableAccountsRequest');
+    cy.visit('/transaction-ingestion/new');
+    cy.wait('@selectableAccountsRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="account"] option').should('not.contain', account?.name);
   });
 
   it('uses local auto-apply configuration without overriding protected manual category or tags', () => {

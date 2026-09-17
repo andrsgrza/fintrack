@@ -82,7 +82,11 @@ public class TransactionRuleConditionService {
         enforceImmutablePosition(existingTransactionRuleCondition, transactionRuleConditionDTO.getPosition(), requestNode);
         transactionRuleCondition.setTransactionRule(existingTransactionRuleCondition.getTransactionRule());
         transactionRuleCondition.setPosition(existingTransactionRuleCondition.getPosition());
-        transactionRuleConditionValidator.validateCondition(transactionRuleCondition, existingTransactionRuleCondition.getId());
+        transactionRuleConditionValidator.validateCondition(
+            transactionRuleCondition,
+            existingTransactionRuleCondition.getId(),
+            existingTransactionRuleCondition
+        );
         validateActiveParentAfterConditionChange(
             existingTransactionRuleCondition.getTransactionRule(),
             transactionRuleCondition,
@@ -104,6 +108,7 @@ public class TransactionRuleConditionService {
 
         return findAccessibleEntity(transactionRuleConditionDTO.getId())
             .map(existingTransactionRuleCondition -> {
+                TransactionRuleCondition previousCondition = conditionSnapshot(existingTransactionRuleCondition);
                 if (patchNode != null && patchNode.has("transactionRule") && patchNode.get("transactionRule").isNull()) {
                     throw new IllegalArgumentException("Transaction rule cannot be null");
                 }
@@ -116,7 +121,8 @@ public class TransactionRuleConditionService {
                 applyTransactionRuleForPartialUpdate(existingTransactionRuleCondition, transactionRuleConditionDTO, patchNode);
                 transactionRuleConditionValidator.validateCondition(
                     existingTransactionRuleCondition,
-                    existingTransactionRuleCondition.getId()
+                    existingTransactionRuleCondition.getId(),
+                    previousCondition
                 );
                 validateActiveParentAfterConditionChange(
                     existingTransactionRuleCondition.getTransactionRule(),
@@ -315,6 +321,19 @@ public class TransactionRuleConditionService {
             return transactionRuleRepository.findOneWithToOneRelationships(id);
         }
         return transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private TransactionRuleCondition conditionSnapshot(TransactionRuleCondition source) {
+        TransactionRuleCondition snapshot = new TransactionRuleCondition();
+        snapshot.setId(source.getId());
+        snapshot.setField(source.getField());
+        snapshot.setOperator(source.getOperator());
+        snapshot.setValue(source.getValue());
+        snapshot.setSecondValue(source.getSecondValue());
+        snapshot.setCaseSensitive(source.getCaseSensitive());
+        snapshot.setPosition(source.getPosition());
+        snapshot.setTransactionRule(source.getTransactionRule());
+        return snapshot;
     }
 
     private void validateActiveParentAfterConditionChange(TransactionRule parentRule, TransactionRuleCondition changedCondition) {

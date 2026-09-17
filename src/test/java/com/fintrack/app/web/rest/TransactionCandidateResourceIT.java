@@ -148,6 +148,21 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
+    void createManualDraftRejectsInactiveAccountReference() throws Exception {
+        FinancialAccount inactiveAccount = createAccount(currentUser());
+        inactiveAccount.setActive(false);
+        financialAccountRepository.saveAndFlush(inactiveAccount);
+        TransactionCandidateDTO dto = new TransactionCandidateDTO();
+        dto.setAccount(refAccount(inactiveAccount.getId()));
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_MANUAL_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
     void createManualDraftEndpointRejectsClientStatus() throws Exception {
         TransactionCandidateDTO dto = new TransactionCandidateDTO();
         dto.setStatus(TransactionCandidateStatus.READY_TO_POST);
@@ -236,6 +251,48 @@ class TransactionCandidateResourceIT {
             .andExpect(jsonPath("$.amount").value(sameNumber(new BigDecimal("25.00"))))
             .andExpect(jsonPath("$.flow").value("OUT"))
             .andExpect(jsonPath("$.currencySnapshot").value("MXN"));
+    }
+
+    @Test
+    @Transactional
+    void patchManualDraftRejectsReassignmentToInactiveAccount() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        FinancialAccount inactiveAccount = createAccount(currentUser());
+        inactiveAccount.setActive(false);
+        financialAccountRepository.saveAndFlush(inactiveAccount);
+
+        restTransactionCandidateMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID + "/manual-draft", candidate.getId())
+                    .contentType("application/merge-patch+json")
+                    .content("{\"account\":{\"id\":%d}}".formatted(inactiveAccount.getId()))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
+    void inactiveHistoricalManualDraftAccountCanBeAutosavedAndPosted() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        FinancialAccount account = candidate.getAccount();
+        account.setActive(false);
+        financialAccountRepository.saveAndFlush(account);
+
+        restTransactionCandidateMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID + "/manual-draft", candidate.getId())
+                    .contentType("application/merge-patch+json")
+                    .content("{\"account\":{\"id\":%d},\"notes\":\"still editing\"}".formatted(account.getId()))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.id").value(account.getId()))
+            .andExpect(jsonPath("$.notes").value("still editing"));
+
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/post", candidate.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("POSTED"));
     }
 
     @Test
@@ -1152,6 +1209,7 @@ class TransactionCandidateResourceIT {
     private FinancialAccount createAccount(User owner) {
         FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
         account.setUser(owner);
+        account.setActive(true);
         return financialAccountRepository.saveAndFlush(account);
     }
 

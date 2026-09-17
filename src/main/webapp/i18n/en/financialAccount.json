@@ -14,10 +14,17 @@
       "updated": "A Financial Account is updated with identifier {{ param }}",
       "deleted": "A Financial Account is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Financial Account {{ id }}?"
+        "title": "Delete account",
+        "question": "Are you sure you want to permanently delete {{ accountName }}?",
+        "consequences": "Related imported or workflow data is removed only when it can be cleaned up safely. Deletion can be blocked by protected transaction data.",
+        "protectedReferences": "This account cannot be deleted because it is still referenced by protected transaction data. Resolve those references first.",
+        "failed": "This account could not be deleted. Try again."
       },
       "detail": {
-        "title": "Financial Account"
+        "title": "Account details",
+        "account": "Account",
+        "status": "Status",
+        "creditDetails": "Credit details"
       },
       "id": "ID",
       "name": "Name",
@@ -43,15 +50,31 @@
       "color": "Color",
       "icon": "Icon",
       "active": "Active",
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive",
+        "inactiveExplanation": "This account is inactive. Its history and balance remain available, and existing work can finish, but it cannot be selected for new transactions, imports, or rules until it is reactivated."
+      },
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "balanceSnapshot": "Balance snapshot",
       "loadingBalance": "Loading balance...",
+      "loading": "Loading...",
       "balanceUnavailable": "Balance is not available.",
       "currentBalance": "Current balance",
       "currentDebt": "Current debt",
       "creditLimit": "Credit limit",
+      "creditLimitHelp": "Maximum approved credit line for this card.",
       "availableCredit": "Available credit",
+      "statementDay": "Statement closing day",
+      "statementDayHelp": "Day of the month when the statement period closes.",
+      "paymentDueDay": "Payment due day",
+      "paymentDueDayHelp": "Day of the month when payment is due.",
+      "annualInterestRate": "Annual interest rate",
+      "annualInterestRateHelp": "Annual percentage interest rate. Used later for interest calculations.",
+      "configured": {
+        "saveError": "The account could not be saved. Review the account and credit-card details and try again."
+      },
       "inflowTotal": "Inflow total",
       "outflowTotal": "Outflow total",
       "asOfDate": "As of date",
@@ -61,8 +84,16 @@
       "noTransactionsYet": "No transactions yet.",
       "transactionsUnavailable": "Transactions are not available.",
       "viewAllTransactions": "View all transactions",
+      "overview": {
+        "loading": "Loading accounts...",
+        "loadError": "Accounts could not be loaded.",
+        "retry": "Try again",
+        "emptyTitle": "No accounts yet",
+        "emptyDescription": "Create an account to start tracking your finances.",
+        "endsIn": "Ends in"
+      },
       "user": "User",
-      "creditAccountDetails": "Credit Account Details",
+      "creditAccountDetails": "Credit card details",
       "financialTransactions": "Financial Transactions",
       "subscriptions": "Subscriptions",
       "budgets": "Budgets",

@@ -2,39 +2,37 @@
   "fintrackApp": {
     "creditAccountDetails": {
       "home": {
-        "title": "Credit Account Details",
+        "title": "Technical credit card details",
         "refreshListLabel": "Refresh list",
-        "createLabel": "Create a new Credit Account Details",
-        "createOrEditLabel": "Create or edit a Credit Account Details",
-        "createTitle": "Create Credit Account Details",
-        "editTitle": "Edit Credit Account Details",
-        "notFound": "No Credit Account Details found"
+        "notFound": "No technical credit card details found"
       },
-      "created": "A new Credit Account Details is created with identifier {{ param }}",
-      "updated": "A Credit Account Details is updated with identifier {{ param }}",
-      "deleted": "A Credit Account Details is deleted with identifier {{ param }}",
+      "created": "Technical credit card details created with identifier {{ param }}",
+      "updated": "Technical credit card details updated with identifier {{ param }}",
+      "deleted": "Technical credit card details deleted with identifier {{ param }}",
       "delete": {
-        "title": "Cannot delete credit card details",
-        "message": "Credit card details cannot be deleted directly. These details are required for credit card accounts. To remove them, you must delete the financial account itself."
+        "title": "Direct deletion unavailable",
+        "message": "Credit card details cannot be deleted independently. Manage the parent account instead."
       },
       "detail": {
-        "title": "Credit card details"
+        "title": "Technical credit card details"
       },
-      "id": "ID",
       "creditLimit": "Credit limit",
-      "creditLimitHelp": "Maximum approved credit line for this card.",
-      "statementDay": "Statement day",
-      "statementDayHelp": "Day of the month when the statement period closes.",
+      "statementDay": "Statement closing day",
       "paymentDueDay": "Payment due day",
-      "paymentDueDayHelp": "Day of the month when payment is due.",
       "annualInterestRate": "Annual interest rate",
-      "annualInterestRateHelp": "Annual percentage interest rate. Used later for interest calculations.",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
-      "account": "Account",
+      "account": "Parent account",
+      "technical": {
+        "badge": "Technical",
+        "description": "Credit card details are normally managed from the parent account.",
+        "writeUnavailable": "Direct creation and editing are unavailable. Manage the parent credit card account instead.",
+        "writeUnavailableTitle": "Direct editing unavailable",
+        "manageFromAccount": "Create or edit the parent credit card account to manage these details.",
+        "goToAccounts": "Go to accounts",
+        "backToAccounts": "Back to accounts",
+        "manageParentAccount": "Edit parent account"
+      },
       "composition": {
-        "notConfigured": "Credit card details have not been configured yet.",
-        "saveError": "The financial account was saved, but credit card details could not be saved. Please edit the account and try again."
+        "notConfigured": "Credit card details have not been configured yet."
       }
     }
   }

@@ -292,6 +292,24 @@ For example, TransactionRuleCondition may store `FLOW = IN` or `FLOW = OUT`, but
 
 ## FinancialAccount + CreditAccountDetails
 
+### Product overview
+
+`/financial-account` is a product overview, not a generated CRUD table. It renders one concise card per accessible account with its name, translated type, currency, active/inactive state, optional last four digits, and a calculated balance summary.
+
+- `DEBIT`, `CASH`, and `INVESTMENT` cards show **Current balance / Saldo actual**.
+- `CREDIT_CARD` cards show **Current debt / Deuda actual** and, when `CreditAccountDetails` exists, credit limit, available credit, statement day, payment due day, and APR.
+- A historical card with no `CreditAccountDetails` remains visible with its calculated debt and an incomplete-card warning; the overview never creates details as a side effect.
+
+The overview does not display database ids, audit timestamps, ownership fields, or generated relationship dumps. View, Edit, and Delete remain available as secondary actions.
+
+### Product detail and delete
+
+`/financial-account/:id` is the canonical product detail view. It groups useful information into **Account**, **Balance**, optional **Credit details**, **Recent activity**, and **Status**. It shows the translated account type, currency, useful institution/last-four/description data, calculated balance data, and a read-only recent-transaction list. It intentionally hides database ids, audit timestamps, owner data, and raw Budget or TransactionIngestion relationship dumps.
+
+An inactive account shows a clear status badge and a concise historical-only explanation: history and balances remain available, existing work may finish, and the account becomes selectable for new transactions, imports, and rules only after reactivation. Credit-card details stay inline; a missing detail record offers the parent Account edit route rather than a child CRUD route.
+
+The account delete dialog identifies the account by name and explains the real behavior in product terms. The existing backend orchestration may clean eligible workflow/import data, while protected candidate/provenance references block deletion. A blocked response is rendered as contextual product copy, never as the raw server exception; successful delete returns to the account overview.
+
 ### Relationship type
 
 `FinancialAccount` to `CreditAccountDetails` is a 1:1 child-style relationship for credit card accounts.
@@ -326,17 +344,20 @@ The embedded CreditAccountDetails section does not show or edit the `account` re
 
 The parent FinancialAccount is fixed by the containing FinancialAccount workflow.
 
-### Orchestration
+### Product write orchestration
 
-This is frontend orchestration today.
+FinancialAccount create/edit uses one atomic product command:
 
-FinancialAccount is saved first, then CreditAccountDetails is created or updated for the saved account.
+- `POST /api/financial-accounts/configured`;
+- `PUT /api/financial-accounts/{id}/configured`.
 
-Atomic backend command endpoint remains deferred.
+For `CREDIT_CARD`, the command receives the parent account and its embedded credit-card details together. The backend scopes the parent to the current user, validates the child against that parent, and persists both in one transaction. A child validation or persistence failure rolls back the parent write; the product UI never writes `CreditAccountDetails` in a second request.
 
-### Standalone CRUD
+### Technical compatibility routes
 
-Standalone CreditAccountDetails CRUD remains available for admin/debug/direct maintenance.
+`/credit-account-details` and its direct detail/create/edit/delete URLs remain routable only for compatibility and technical inspection. They are not listed in the normal entity menu. The list and detail render a **Technical / Técnico** notice and remain read-only; they link to the meaningful parent account rather than treating the child as an independent product record.
+
+The direct `/new` and `/:id/edit` URLs render guidance only: product users must create or edit the parent `FinancialAccount`. The technical child UI offers no Create, Save, Edit, or Delete action, so there is no second browser write path around the configured parent commands. Backend generic endpoints remain technically compatible; this UI demotion does not remove or redirect them.
 
 ## TransactionRule + TransactionRuleCondition
 
@@ -709,3 +730,7 @@ TR-3 clarifies the TransactionRule UI split:
 - No UI text should recommend the old “create empty parent, then add conditions later” product flow.
 - No ingestion category/tag review work was added as part of this TransactionRule branch.
 - UserPreference remains deferred.
+
+### Inactive account selection policy (ACC-UX-3A)
+
+Manual transaction drafts, new file ingestions, and TransactionRule `ACCOUNT` condition forms use the shared selectable-account read model, not the generic account entity list. New choices are active and current-owner scoped. When editing an existing historical reference, its inactive account remains shown as `… · Inactive`; it is not a general inactive-account picker. Budget UI remains deferred to BUD-1 and FinancialSubscription is intentionally unchanged.

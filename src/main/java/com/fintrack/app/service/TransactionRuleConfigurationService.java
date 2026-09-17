@@ -69,7 +69,8 @@ public class TransactionRuleConfigurationService {
         rule.setUpdatedAt(now);
         applyRequest(rule, request, rule.getUser().getLogin());
         List<TransactionRuleCondition> conditions = toConditions(request, rule);
-        validateConfiguredRule(rule, conditions, null);
+        validateConfiguredRule(rule, conditions, null, List.of());
+        conditions.forEach(condition -> condition.setId(null));
 
         rule = transactionRuleRepository.save(rule);
         for (TransactionRuleCondition condition : conditions) {
@@ -88,10 +89,16 @@ public class TransactionRuleConfigurationService {
 
     public TransactionRuleConfiguredResponseDTO update(Long id, TransactionRuleConfiguredRequestDTO request) {
         TransactionRule rule = findAccessibleEntity(id).orElseThrow(() -> new IllegalArgumentException("Entity not found"));
+        List<TransactionRuleCondition> existingConditions =
+            transactionRuleConditionRepository.findByTransactionRuleIdOrderByPositionAscIdAsc(rule.getId());
         applyRequest(rule, request, rule.getUser().getLogin());
         rule.setUpdatedAt(Instant.now());
         List<TransactionRuleCondition> conditions = toConditions(request, rule);
-        validateConfiguredRule(rule, conditions, rule.getId());
+        validateConfiguredRule(rule, conditions, rule.getId(), existingConditions);
+
+        // Configured updates replace the condition collection atomically. Ids are retained only during validation so an
+        // unchanged historical inactive ACCOUNT condition can be distinguished from a newly introduced reference.
+        conditions.forEach(condition -> condition.setId(null));
 
         transactionRuleRepository.save(rule);
         transactionRuleConditionRepository.deleteByTransactionRuleId(rule.getId());
@@ -127,7 +134,7 @@ public class TransactionRuleConfigurationService {
         for (int index = 0; index < request.getConditions().size(); index++) {
             TransactionRuleConfiguredConditionDTO conditionDTO = request.getConditions().get(index);
             TransactionRuleCondition condition = new TransactionRuleCondition();
-            condition.setId(null);
+            condition.setId(conditionDTO.getId());
             condition.setField(conditionDTO.getField());
             condition.setOperator(conditionDTO.getOperator());
             condition.setValue(trimToNull(conditionDTO.getValue()));
@@ -140,14 +147,19 @@ public class TransactionRuleConfigurationService {
         return conditions;
     }
 
-    private void validateConfiguredRule(TransactionRule rule, List<TransactionRuleCondition> conditions, Long excludeId) {
+    private void validateConfiguredRule(
+        TransactionRule rule,
+        List<TransactionRuleCondition> conditions,
+        Long excludeId,
+        List<TransactionRuleCondition> existingConditions
+    ) {
         validateRequiredFields(rule);
         validateUniqueName(rule, excludeId);
         validateHasOutput(rule);
         if (conditions == null || conditions.isEmpty()) {
             throw new IllegalArgumentException("Transaction rule must have at least one condition");
         }
-        transactionRuleConditionValidator.validateConditionSet(conditions);
+        transactionRuleConditionValidator.validateConditionSet(conditions, existingConditions);
         transactionRuleFlowCategoryCompatibilityValidator.validate(rule, conditions);
     }
 

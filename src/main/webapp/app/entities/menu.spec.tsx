@@ -21,6 +21,16 @@ describe('Entities menu technical markers', () => {
 
     expect(screen.getByRole('menuitem', { name: /file ingestion technical/i }).getAttribute('href')).toBe('/file-ingestion');
     expect(screen.getByRole('menuitem', { name: /ingestion record technical/i }).getAttribute('href')).toBe('/ingestion-record');
-    expect(screen.getAllByText('Technical')).toHaveLength(2);
+  });
+
+  it('keeps Financial Accounts as the product entry and hides CreditAccountDetails from the normal menu', () => {
+    render(
+      <MemoryRouter>
+        <EntitiesMenu />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('menuitem', { name: /financial account/i }).getAttribute('href')).toBe('/financial-account');
+    expect(screen.queryByRole('menuitem', { name: /credit card details/i })).toBeNull();
   });
 });

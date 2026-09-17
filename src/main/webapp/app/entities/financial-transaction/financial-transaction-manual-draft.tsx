@@ -5,9 +5,11 @@ import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { useAppDispatch, useAppSelector } from 'app/config/store';
-import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
+import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
+import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
@@ -335,12 +337,12 @@ export const FinancialTransactionManualDraft = () => {
   const navigate = useNavigate();
   const { draftId } = useParams<'draftId'>();
 
-  const financialAccounts = useAppSelector(state => state.financialAccount.entities);
   const categories = useAppSelector(state => state.category.entities);
   const tags = useAppSelector(state => state.tag.entities);
 
   const [draft, setDraft] = useState<ManualDraftFormState>(emptyDraft);
   const [candidate, setCandidate] = useState<ITransactionCandidate | null>(null);
+  const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
   const [classificationReviewStatus, setClassificationReviewStatus] = useState<
     keyof typeof TransactionCandidateClassificationReviewStatus | null
   >(null);
@@ -380,15 +382,33 @@ export const FinancialTransactionManualDraft = () => {
     !isClassificationReadyToPost(effectiveClassificationReviewStatus);
 
   const selectedAccount = useMemo(
-    () => financialAccounts.find(account => account.id?.toString() === draft.account),
-    [financialAccounts, draft.account],
+    () => selectableAccounts.find(account => account.id?.toString() === draft.account) ?? candidate?.account,
+    [candidate?.account, draft.account, selectableAccounts],
   );
 
   useEffect(() => {
-    dispatch(getFinancialAccounts({}));
     dispatch(getCategories({}));
     dispatch(getTags({}));
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const includeId = candidate?.account?.id;
+    getSelectableFinancialAccounts(includeId)
+      .then(accounts => {
+        if (mounted) {
+          setSelectableAccounts(accounts);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSelectableAccounts([]);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [candidate?.account?.id]);
 
   useEffect(() => {
     latestDraftRef.current = draft;
@@ -806,13 +826,13 @@ export const FinancialTransactionManualDraft = () => {
               disabled={readOnly}
             >
               <option value="" key="0" />
-              {financialAccounts?.map(account => (
+              {selectableAccounts.map(account => (
                 <option value={account.id} key={account.id}>
-                  {account.name}
+                  {formatFinancialAccountLabel(account)}
                 </option>
               ))}
             </Input>
-            {selectedAccount?.currency ? <FormText>{selectedAccount.currency}</FormText> : null}
+            {selectedAccount ? <FormText>{formatFinancialAccountLabel(selectedAccount)}</FormText> : null}
           </FormGroup>
           <FormGroup>
             <Label for="financial-transaction-transactionDate">

@@ -1,6 +1,7 @@
 package com.fintrack.app.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -199,6 +200,43 @@ class FinancialAccountBalanceServiceTest {
         assertThat(result.getCreditLimit()).isEqualByComparingTo("5000.00");
         assertThat(result.getAvailableCredit()).isEqualByComparingTo("3500.00");
         assertThat(result.getMissingCreditDetails()).isFalse();
+    }
+
+    @Test
+    void calculateBalancesUsesOneBatchReadForTransactionsAndCreditDetails() {
+        FinancialAccount debit = account(AccountType.DEBIT, "100.00");
+        debit.setId(1L);
+        FinancialAccount creditCard = account(AccountType.CREDIT_CARD, "1000.00");
+        creditCard.setId(2L);
+
+        FinancialTransaction debitInflow = transaction(TransactionFlow.IN, "25.00");
+        debitInflow.setAccount(debit);
+        debitInflow.setTransactionDate(LocalDate.of(2026, 1, 10));
+        FinancialTransaction creditOutflow = transaction(TransactionFlow.OUT, "500.00");
+        creditOutflow.setAccount(creditCard);
+        creditOutflow.setTransactionDate(LocalDate.of(2026, 1, 10));
+        CreditAccountDetails details = new CreditAccountDetails();
+        details.setAccount(creditCard);
+        details.setCreditLimit(new BigDecimal("5000.00"));
+
+        when(
+            financialTransactionRepository.findByAccountIdInAndTransactionDateLessThanEqual(List.of(1L, 2L), LocalDate.of(2026, 1, 31))
+        ).thenReturn(List.of(debitInflow, creditOutflow));
+        when(creditAccountDetailsRepository.findAllByAccount_IdIn(List.of(1L, 2L))).thenReturn(List.of(details));
+
+        var result = financialAccountBalanceService.calculateBalances(List.of(debit, creditCard), LocalDate.of(2026, 1, 31));
+
+        assertThat(result.get(1L).getCurrentBalance()).isEqualByComparingTo("125.00");
+        assertThat(result.get(2L).getCurrentDebt()).isEqualByComparingTo("1500.00");
+        assertThat(result.get(2L).getAvailableCredit()).isEqualByComparingTo("3500.00");
+        verify(financialTransactionRepository).findByAccountIdInAndTransactionDateLessThanEqual(List.of(1L, 2L), LocalDate.of(2026, 1, 31));
+        verify(creditAccountDetailsRepository).findAllByAccount_IdIn(List.of(1L, 2L));
+        verify(financialTransactionRepository, never()).findByAccountIdAndTransactionDateBetween(
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
+        verify(creditAccountDetailsRepository, never()).findOneWithEagerRelationshipsByAccountId(org.mockito.ArgumentMatchers.anyLong());
     }
 
     private FinancialAccount account(AccountType accountType, String initialBalance) {

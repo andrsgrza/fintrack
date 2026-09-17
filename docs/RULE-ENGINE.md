@@ -733,3 +733,7 @@ Description normalization is not part of the category/tag Transaction Rule Engin
 `TextConditionMatcher` is not yet a drop-in replacement for `TransactionRuleEvaluationService` because it uses `DescriptionNormalizationRuleOperator` rather than `RuleOperator`, does not cover `IN` / `NOT_IN`, returns `false` for invalid regex where TransactionRule evaluation currently throws for invalid stored regex, and uses different case-insensitive regex flags.
 
 A future behavior-preserving refactor may introduce a shared lower-level text matcher or adapter once semantics are unified. `ConditionGroupEvaluator` may also be adopted later by `TransactionRuleEvaluationService`, but that is deferred because it is not needed for `DescriptionNormalizationRule` v1.
+
+### ACCOUNT conditions and inactive accounts
+
+An existing `ACCOUNT` condition continues to evaluate by account ID after that account becomes inactive. Creating a new condition or changing one to another account requires an active, owner-scoped account. Configured rule edits preserve an unchanged historical inactive `ACCOUNT` value; the selector displays it as inactive while offering only active replacements.

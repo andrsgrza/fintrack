@@ -2,28 +2,35 @@
   "fintrackApp": {
     "financialAccount": {
       "home": {
-        "title": "Financial Accounts",
+        "title": "Cuentas",
         "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nuevo Financial Account",
-        "createOrEditLabel": "Crear o editar Financial Account",
+        "createLabel": "Crear cuenta",
+        "createOrEditLabel": "Crear o editar cuenta",
         "createTitle": "Crear cuenta financiera",
         "editTitle": "Editar cuenta financiera",
-        "notFound": "Ningún Financial Accounts encontrado"
+        "notFound": "No se encontraron cuentas"
       },
-      "created": "Un nuevo Financial Account ha sido creado con el identificador {{ param }}",
-      "updated": "Un Financial Account ha sido actualizado con el identificador {{ param }}",
-      "deleted": "Un Financial Account ha sido eliminado con el identificador {{ param }}",
+      "created": "Se creó una cuenta con el identificador {{ param }}",
+      "updated": "Se actualizó la cuenta con el identificador {{ param }}",
+      "deleted": "Se eliminó la cuenta con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Financial Account {{ id }}?"
+        "title": "Eliminar cuenta",
+        "question": "¿Seguro que quieres eliminar permanentemente {{ accountName }}?",
+        "consequences": "Los datos importados o de flujos relacionados se eliminan sólo cuando se pueden limpiar de forma segura. La eliminación puede bloquearse por datos de transacciones protegidos.",
+        "protectedReferences": "Esta cuenta no se puede eliminar porque todavía está referenciada por datos de transacciones protegidos. Resuelve esas referencias primero.",
+        "failed": "No se pudo eliminar esta cuenta. Inténtalo de nuevo."
       },
       "detail": {
-        "title": "Financial Account"
+        "title": "Detalles de la cuenta",
+        "account": "Cuenta",
+        "status": "Estado",
+        "creditDetails": "Detalles de crédito"
       },
       "id": "ID",
-      "name": "Name",
-      "institutionName": "Institution Name",
-      "accountType": "Account Type",
-      "currency": "Currency",
+      "name": "Nombre",
+      "institutionName": "Institución",
+      "accountType": "Tipo de cuenta",
+      "currency": "Moneda",
       "initialBalance": "Posición inicial",
       "initialBalanceByAccountType": {
         "DEBIT": "Saldo inicial",
@@ -38,20 +45,36 @@
         "INVESTMENT": "Valor de la cuenta cuando empezaste a registrar. La valuación detallada de inversiones queda pendiente."
       },
       "initialBalanceDate": "Fecha inicial de seguimiento",
-      "lastFourDigits": "Last Four Digits",
-      "description": "Description",
+      "lastFourDigits": "Últimos cuatro dígitos",
+      "description": "Descripción",
       "color": "Color",
-      "icon": "Icon",
-      "active": "Active",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
+      "icon": "Ícono",
+      "active": "Activa",
+      "status": {
+        "active": "Activa",
+        "inactive": "Inactiva",
+        "inactiveExplanation": "Esta cuenta está inactiva. Su historial y saldo permanecen disponibles, y los flujos existentes pueden terminar, pero no se puede seleccionar para nuevas transacciones, importaciones o reglas hasta que se reactive."
+      },
+      "createdAt": "Creada en",
+      "updatedAt": "Actualizada en",
       "balanceSnapshot": "Resumen de balance",
       "loadingBalance": "Cargando balance...",
+      "loading": "Cargando...",
       "balanceUnavailable": "El balance no está disponible.",
       "currentBalance": "Saldo actual",
       "currentDebt": "Deuda actual",
       "creditLimit": "Límite de crédito",
+      "creditLimitHelp": "Línea máxima de crédito aprobada para esta tarjeta.",
       "availableCredit": "Crédito disponible",
+      "statementDay": "Día de corte",
+      "statementDayHelp": "Día del mes en que cierra el periodo de corte.",
+      "paymentDueDay": "Día límite de pago",
+      "paymentDueDayHelp": "Día del mes en que vence el pago.",
+      "annualInterestRate": "Tasa de interés anual",
+      "annualInterestRateHelp": "Porcentaje anual de interés. Se usará después para cálculos de intereses.",
+      "configured": {
+        "saveError": "No se pudo guardar la cuenta. Revisa los datos de la cuenta y de la tarjeta e inténtalo de nuevo."
+      },
       "inflowTotal": "Entradas totales",
       "outflowTotal": "Salidas totales",
       "asOfDate": "Fecha de corte",
@@ -61,12 +84,20 @@
       "noTransactionsYet": "Todavía no hay movimientos.",
       "transactionsUnavailable": "Los movimientos no están disponibles.",
       "viewAllTransactions": "Ver todos los movimientos",
-      "user": "User",
+      "overview": {
+        "loading": "Cargando cuentas...",
+        "loadError": "No se pudieron cargar las cuentas.",
+        "retry": "Intentar de nuevo",
+        "emptyTitle": "Todavía no hay cuentas",
+        "emptyDescription": "Crea una cuenta para empezar a registrar tus finanzas.",
+        "endsIn": "Termina en"
+      },
+      "user": "Usuario",
       "creditAccountDetails": "Detalles de tarjeta de crédito",
-      "financialTransactions": "Financial Transactions",
-      "subscriptions": "Subscriptions",
-      "budgets": "Budgets",
-      "transactionIngestions": "Transaction Ingestions"
+      "financialTransactions": "Transacciones",
+      "subscriptions": "Suscripciones",
+      "budgets": "Presupuestos",
+      "transactionIngestions": "Importaciones de transacciones"
     }
   }
 }

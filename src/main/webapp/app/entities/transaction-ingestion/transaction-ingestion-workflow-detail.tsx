@@ -24,9 +24,11 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { APP_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { getEntities as getCategories } from 'app/entities/category/category.reducer';
-import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
+import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
 import { ICategory } from 'app/shared/model/category.model';
+import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { getEntity } from './transaction-ingestion.reducer';
 import {
@@ -531,8 +533,6 @@ export const TransactionIngestionWorkflowDetail = () => {
   const { id } = useParams<'id'>();
   const isReviewPage = Boolean(id);
 
-  const financialAccounts = useAppSelector(state => state.financialAccount.entities);
-  const financialAccountsLoading = useAppSelector(state => state.financialAccount.loading);
   const transactionIngestionEntity = useAppSelector(state => state.transactionIngestion.entity);
   const transactionIngestionLoading = useAppSelector(state => state.transactionIngestion.loading);
   const categories = useAppSelector(state => state.category.entities);
@@ -545,6 +545,8 @@ export const TransactionIngestionWorkflowDetail = () => {
   const automaticApplicationSequenceRef = useRef(0);
 
   const [accountId, setAccountId] = useState('');
+  const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
+  const [selectableAccountsLoading, setSelectableAccountsLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -595,8 +597,29 @@ export const TransactionIngestionWorkflowDetail = () => {
 
   useEffect(() => {
     if (!isReviewPage) {
-      dispatch(getFinancialAccounts({ sort: 'name,asc' }));
+      let mounted = true;
+      setSelectableAccountsLoading(true);
+      getSelectableFinancialAccounts()
+        .then(accounts => {
+          if (mounted) {
+            setSelectableAccounts(accounts);
+          }
+        })
+        .catch(() => {
+          if (mounted) {
+            setSelectableAccounts([]);
+          }
+        })
+        .finally(() => {
+          if (mounted) {
+            setSelectableAccountsLoading(false);
+          }
+        });
+      return () => {
+        mounted = false;
+      };
     }
+    return undefined;
   }, [isReviewPage]);
 
   useEffect(() => {
@@ -1576,14 +1599,13 @@ export const TransactionIngestionWorkflowDetail = () => {
               data-cy="workflowAccount"
               type="select"
               value={accountId}
-              disabled={submitting || financialAccountsLoading}
+              disabled={submitting || selectableAccountsLoading}
               onChange={event => setAccountId(event.target.value)}
             >
               <option value="" />
-              {financialAccounts.map(account => (
+              {selectableAccounts.map(account => (
                 <option value={account.id} key={account.id}>
-                  {account.name}
-                  {account.currency ? ` (${account.currency})` : ''}
+                  {formatFinancialAccountLabel(account)}
                 </option>
               ))}
             </Input>

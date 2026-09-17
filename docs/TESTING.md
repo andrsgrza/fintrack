@@ -300,22 +300,35 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 **Validation/domain rules in service:** `currency` and `accountType` **immutable** after create; `createdAt` and `updatedAt` are server-owned. Create ignores client timestamps and sets both to `now`; successful update/patch preserves `createdAt` and sets `updatedAt = now`; explicit null or changed timestamp on PUT/PATCH → `400 invalid`; same timestamp is accepted as a no-op. `initialBalance`, `initialBalanceDate`, `active` mutable. `initialBalance` is required and is the opening position (`posición inicial`) at the beginning of tracking; positive, zero, and negative values are allowed, with sign semantics depending on `accountType` (including `CREDIT_CARD` saldo a favor). There is no non-negative validation. `initialBalance` must have monetary `scale <= 2`; values with more decimals are rejected, not rounded. `initialBalanceDate` must be `<=` earliest transaction `transactionDate` when transactions exist. `active=false` has no side effects. DELETE is orchestrated through TransactionIngestion and FinancialTransaction delegates before account-level link cleanup. PATCH uses **JsonNode** — absent field preserves; explicit `currency`/`accountType`/timestamp null or different → `400 invalid`.
 
-**Balance calculation status:** backend-only read model is implemented at `GET /api/financial-accounts/{id}/balance`. It is calculated on demand, not persisted, and uses `transactionDate` from `initialBalanceDate` through `asOfDate`. UI display, charts, dashboard aggregation, interest, statement cycles, and persisted balance recalculation remain deferred/open.
+**Balance calculation status:** calculated balance read models are implemented at `GET /api/financial-accounts/{id}/balance` and batch `GET /api/financial-accounts/overview`. They are calculated on demand, not persisted, and use `transactionDate` from `initialBalanceDate` through `asOfDate` (today for the overview). FinancialAccount detail and overview UI display the results. Charts, dashboard aggregation, interest, statement cycles, and persisted balance recalculation remain deferred/open.
 
 ### Summary counts
 
-| Type                   | File                                                    | Tests   | Custom vs generated                                                                                                                                                                                                 |
-| ---------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT         | `FinancialAccountResourceIT`                            | **147** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor + balance endpoint tests, plus JHipster CRUD/filters |
-| Unit — service         | `FinancialAccountServiceTest`                           | **26**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor guard)                                            |
-| Unit — balance service | `FinancialAccountBalanceServiceTest`                    | **9**   | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading)                                                                                                                    |
-| Unit — calculators     | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                                                           |
-| Unit — foundation      | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                                                         |
-| Unit — domain          | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                                                           |
-| Unit — mapper          | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                                                           |
-| Unit — DTO             | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                                                           |
-| Unit — criteria        | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                                                           |
-| E2E                    | `financial-account.cy.ts`                               | **10**  | 3 ownership + 7 CRUD/navigation                                                                                                                                                                                     |
+| Type                    | File                                                    | Tests   | Custom vs generated                                                                                                                                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Integration IT          | `FinancialAccountResourceIT`                            | **161** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor + balance/overview endpoint tests + configured account/card atomic-command coverage, plus JHipster CRUD/filters |
+| Unit — service          | `FinancialAccountServiceTest`                           | **26**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor guard)                                                                                                       |
+| Unit — balance service  | `FinancialAccountBalanceServiceTest`                    | **10**  | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading, batch overview reads)                                                                                                                                                         |
+| Unit — overview service | `FinancialAccountOverviewServiceTest`                   | **2**   | Product summary mapping, inactive/missing-card handling, and read-only behavior                                                                                                                                                                                                |
+| Unit — calculators      | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                                                                                                                      |
+| Unit — foundation       | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                                                                                                                    |
+| Unit — domain           | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                                                                                                                      |
+| Unit — mapper           | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                                                                                                                      |
+| Unit — DTO              | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                                                                                                                      |
+| Unit — criteria         | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                                                                                                                      |
+| E2E                     | `financial-account.cy.ts`                               | **14**  | Product overview/detail/navigation, configured debit/card create and atomic card edit, invalid-card rollback, inactive explanation, delete, and 3 ownership checks                                                                                                             |
+
+### Configured account/card product command
+
+`FinancialAccountResourceIT` characterizes the product-only configured endpoints:
+
+- debit creation persists only the scoped account;
+- credit-card creation persists the account and exactly one details row in one transaction;
+- invalid card details and a non-card payload with card details leave no parent or child write behind;
+- configured update changes the existing child, creates a missing historical child only for a credit-card account, preserves account type/currency immutability, and rolls back the parent when child validation fails;
+- a current user cannot update another user's account through the configured endpoint.
+
+The FinancialAccount Jest/Cypress product tests assert one configured request per save and no product-form `POST`/`PUT`/`PATCH` request to `CreditAccountDetails`.
 
 ---
 
@@ -504,7 +517,7 @@ Mocks: `FinancialAccountService`, `FinancialTransactionRepository`, `CreditAccou
 
 ### 3. Frontend tests — `financial-account-opening-position.spec.tsx`
 
-The FinancialAccount UI spec covers dynamic opening-position labels/help text for create/detail views, account-type change reset behavior, preservation of unrelated create-form fields, hidden `createdAt` / `updatedAt` inputs, and disabled `accountType` / `currency` selects in edit mode.
+The FinancialAccount UI specs cover the product overview (calculated balances/debt, translated types, status, incomplete cards, empty/error states, and action links) plus dynamic opening-position labels/help text for create/detail views, account-type change reset behavior, preservation of unrelated create-form fields, hidden `createdAt` / `updatedAt` inputs, and disabled `accountType` / `currency` selects in edit mode.
 
 #### 2.2 `CurrentUserServiceTest` (5) — ✅ custom (shared foundation)
 
@@ -537,17 +550,21 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 **Prerequisite:** Backend on `8080`, frontend dev server on `9000` (or CI e2e profile).
 
-#### 4.1 Navigation & CRUD UI (7) — 🟡 / ✅
+#### 4.1 Product overview, account commands, and navigation (11) — ✅
 
-| Test                                                                   | What it checks                                                       |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `FinancialAccounts menu should load FinancialAccounts page`            | Menu → list route loads                                              |
-| `should load create FinancialAccount page`                             | Create button → form → cancel                                        |
-| `detail button click should load details FinancialAccount page`        | Detail view (needs existing row)                                     |
-| `edit button click should load edit FinancialAccount page and go back` | Edit form opens and cancels                                          |
-| `edit button click should load edit FinancialAccount page and save`    | Edit save returns to list                                            |
-| `last delete button click should delete instance of FinancialAccount`  | Delete dialog → `204`                                                |
-| `should create an instance of FinancialAccount`                        | Full form submit → `201`; `user.login = user`; no `[data-cy="user"]` |
+| Test                                                                       | What it checks                                               |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `FinancialAccounts menu should load FinancialAccounts page`                | Menu → product overview route loads                          |
+| `should load create FinancialAccount page`                                 | Create button → parent-account form → cancel                 |
+| `detail button click should load details FinancialAccount page`            | Canonical product detail (needs an existing row)             |
+| `renders the product overview card without the generated CRUD table`       | Product overview cards, not the generated relationship table |
+| `edit button click should load edit FinancialAccount page and go back`     | Parent edit opens and cancels                                |
+| `edit button click should load edit FinancialAccount page and save`        | Parent edit saves and returns to the overview                |
+| `last delete button click should delete instance of FinancialAccount`      | Product delete dialog → successful `204` redirect            |
+| `shows the historical-only explanation for an inactive account`            | Inactive status and explanation are rendered                 |
+| `creates a debit account through one configured product request`           | Configured parent debit create                               |
+| `creates and edits a credit card with its contextual details atomically`   | Atomic configured card create/update                         |
+| `rejects an invalid credit-card command without leaving a partial account` | Invalid configured card command rolls back                   |
 
 #### 4.2 Ownership smoke (3) — ✅ custom
 
@@ -561,13 +578,13 @@ The FinancialAccount UI spec covers dynamic opening-position labels/help text fo
 
 ### 5. FinancialAccount — gaps & planned tests
 
-| Priority | Layer | Test                                                                    | Status                           |
-| -------- | ----- | ----------------------------------------------------------------------- | -------------------------------- |
-| Medium   | IT    | `FinancialAccountQueryService` ownership filter in isolation            | ⏳                               |
-| Medium   | IT    | Delete guard: account with transactions → `400`                         | ⏳ (domain rule not implemented) |
-| Low      | Unit  | `FinancialAccountMapper` ignores `user` on `toEntity` / `partialUpdate` | ⏳                               |
-| Low      | E2E   | UI list isolation: user A cannot see user B row in table (not just API) | ⏳                               |
-| Low      | E2E   | Admin sees all rows in UI table                                         | ⏳                               |
+| Priority | Layer | Test                                                                    | Status |
+| -------- | ----- | ----------------------------------------------------------------------- | ------ |
+| Medium   | IT    | `FinancialAccountQueryService` ownership filter in isolation            | ⏳     |
+| Low      | E2E   | Product-friendly blocked-delete feedback with a protected fixture       | ⏳     |
+| Low      | Unit  | `FinancialAccountMapper` ignores `user` on `toEntity` / `partialUpdate` | ⏳     |
+| Low      | E2E   | UI list isolation: user A cannot see user B row in table (not just API) | ⏳     |
+| Low      | E2E   | Admin sees all rows in UI table                                         | ⏳     |
 
 ---
 
@@ -1999,7 +2016,7 @@ Technical/debug generated-surface smoke:
 | Unit — domain  | `CreditAccountDetailsTest`        | **6**  | Generated                                                                               |
 | Unit — mapper  | `CreditAccountDetailsMapperTest`  | **1**  | Generated                                                                               |
 | Unit — DTO     | `CreditAccountDetailsDTOTest`     | **1**  | Generated                                                                               |
-| E2E            | `credit-account-details.cy.ts`    | **8**  | CRUD/navigation (create rehabilitated via API credit card seed)                         |
+| E2E            | `credit-account-details.cy.ts`    | **3**  | Technical compatibility smoke: read-only list/detail and parent-account guidance        |
 
 **Run:**
 
@@ -2070,7 +2087,7 @@ CREDIT_CARD validation, duplicate guard, immutable account, server-owned timesta
 
 ### E2E — `credit-account-details.cy.ts`
 
-Create rehabilitated; direct DELETE expects `400`; UI account picker filtered to `CREDIT_CARD`; create/edit hide timestamp fields and create payload does not inject fake timestamps.
+The retained direct routes are technical compatibility surfaces, not a product CRUD flow: the Cypress smoke covers the read-only technical list, the direct detail's parent-account link, and direct create/edit URL guidance without issuing child writes.
 
 ### Gaps
 
@@ -3030,3 +3047,15 @@ JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvn
 ```bash
 npm run webapp:build:dev -- --env stats=minimal
 ```
+
+## ACC-UX-3A — inactive FinancialAccount historical-only policy
+
+Focused coverage lives in `FinancialAccountResourceIT` (owner-scoped selectable endpoint, inactive exclusion/include, reactivation, and no admin cross-user product leakage), `TransactionCandidateResourceIT` (new/reassigned inactive rejection and historical draft autosave/post), `TransactionIngestionWorkflowResourceIT` (new FILE rejection and completion after deactivation), `TransactionRuleConditionResourceIT` / `TransactionRuleResourceIT` (new or changed inactive account conditions rejected while historical conditions remain editable), and `FinancialTransactionResourceIT` (direct create rejection). Jest covers the shared product selector in manual draft, new ingestion, and rule-condition forms.
+
+## ACC-UX-3B — account product detail and delete UX
+
+`npm run jest -- financial-account` covers the canonical detail: technical metadata and raw relationships are absent, active/inactive status and the historical-only explanation render correctly, debit/credit balance data and contextual credit details render safely, recent activity is read-only, and the parent edit action remains available. `financial-account-delete-dialog.spec.tsx` verifies account-name confirmation, protected-reference error copy without raw backend text, and successful-delete redirect behavior. Cypress `financial-account.cy.ts` covers active detail, inactive explanation, inline credit-card detail/balance, and a safe successful-delete redirect.
+
+## ACC-UX-4 — CreditAccountDetails technical UI demotion
+
+`npm run jest -- credit-account-details` covers the retained direct child routes: list/detail show the technical notice and meaningful parent-account links, while direct create/edit routes still resolve but offer no child write form or Save control. `menu.spec.tsx` verifies FinancialAccount remains in the normal entity menu and CreditAccountDetails is absent. FinancialAccount Jest/Cypress coverage continues to verify that credit-card create/edit occurs only through the configured parent request. The focused `credit-account-details.cy.ts` smoke test covers the technical list, direct detail parent navigation, and direct write-route guidance without exercising generic child writes.

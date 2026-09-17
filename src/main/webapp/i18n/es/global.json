@@ -8,8 +8,8 @@
       "entities": {
         "main": "Entidades",
         "jhipster-needle-menu-add-entry": "JHipster will add additional entities here (do not translate!)",
-        "financialAccount": "Financial Account",
-        "creditAccountDetails": "Credit Account Details",
+        "financialAccount": "Cuentas",
+        "creditAccountDetails": "Detalles técnicos de tarjeta de crédito",
         "financialTransaction": "Financial Transaction",
         "category": "Category",
         "tag": "Tag",

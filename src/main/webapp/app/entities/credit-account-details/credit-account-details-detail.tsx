@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button, Col, Row } from 'reactstrap';
-import { TextFormat, Translate } from 'react-jhipster';
+import { Translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { APP_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntity } from './credit-account-details.reducer';
+import CreditAccountDetailsTechnicalNotice from './credit-account-details-technical-notice';
 
 export const CreditAccountDetailsDetail = () => {
   const dispatch = useAppDispatch();
@@ -22,16 +22,11 @@ export const CreditAccountDetailsDetail = () => {
   return (
     <Row>
       <Col md="8">
+        <CreditAccountDetailsTechnicalNotice />
         <h2 data-cy="creditAccountDetailsDetailsHeading">
-          <Translate contentKey="fintrackApp.creditAccountDetails.detail.title">CreditAccountDetails</Translate>
+          <Translate contentKey="fintrackApp.creditAccountDetails.detail.title">Technical credit card details</Translate>
         </h2>
         <dl className="jh-entity-details">
-          <dt>
-            <span id="id">
-              <Translate contentKey="global.field.id">ID</Translate>
-            </span>
-          </dt>
-          <dd>{creditAccountDetailsEntity.id}</dd>
           <dt>
             <span id="creditLimit">
               <Translate contentKey="fintrackApp.creditAccountDetails.creditLimit">Credit Limit</Translate>
@@ -57,43 +52,38 @@ export const CreditAccountDetailsDetail = () => {
           </dt>
           <dd>{creditAccountDetailsEntity.annualInterestRate}</dd>
           <dt>
-            <span id="createdAt">
-              <Translate contentKey="fintrackApp.creditAccountDetails.createdAt">Created At</Translate>
-            </span>
-          </dt>
-          <dd>
-            {creditAccountDetailsEntity.createdAt ? (
-              <TextFormat value={creditAccountDetailsEntity.createdAt} type="date" format={APP_DATE_FORMAT} />
-            ) : null}
-          </dd>
-          <dt>
-            <span id="updatedAt">
-              <Translate contentKey="fintrackApp.creditAccountDetails.updatedAt">Updated At</Translate>
-            </span>
-          </dt>
-          <dd>
-            {creditAccountDetailsEntity.updatedAt ? (
-              <TextFormat value={creditAccountDetailsEntity.updatedAt} type="date" format={APP_DATE_FORMAT} />
-            ) : null}
-          </dd>
-          <dt>
             <Translate contentKey="fintrackApp.creditAccountDetails.account">Account</Translate>
           </dt>
-          <dd>{creditAccountDetailsEntity.account ? creditAccountDetailsEntity.account.name : ''}</dd>
+          <dd>
+            {creditAccountDetailsEntity.account ? (
+              <Link to={`/financial-account/${creditAccountDetailsEntity.account.id}`}>{creditAccountDetailsEntity.account.name}</Link>
+            ) : null}
+          </dd>
         </dl>
-        <Button tag={Link} to="/credit-account-details" replace color="info" data-cy="entityDetailsBackButton">
+        <Button tag={Link} to="/financial-account" replace color="info" data-cy="entityDetailsBackButton">
           <FontAwesomeIcon icon="arrow-left" />{' '}
           <span className="d-none d-md-inline">
-            <Translate contentKey="entity.action.back">Back</Translate>
+            <Translate contentKey="fintrackApp.creditAccountDetails.technical.backToAccounts">Back to accounts</Translate>
           </span>
         </Button>
-        &nbsp;
-        <Button tag={Link} to={`/credit-account-details/${creditAccountDetailsEntity.id}/edit`} replace color="primary">
-          <FontAwesomeIcon icon="pencil-alt" />{' '}
-          <span className="d-none d-md-inline">
-            <Translate contentKey="entity.action.edit">Edit</Translate>
-          </span>
-        </Button>
+        {creditAccountDetailsEntity.account?.id ? (
+          <>
+            &nbsp;
+            <Button
+              tag={Link}
+              to={`/financial-account/${creditAccountDetailsEntity.account.id}/edit`}
+              replace
+              color="primary"
+              data-cy="creditAccountDetailsManageParentAccountButton"
+              data-testid="creditAccountDetailsManageParentAccountButton"
+            >
+              <FontAwesomeIcon icon="pencil-alt" />{' '}
+              <span className="d-none d-md-inline">
+                <Translate contentKey="fintrackApp.creditAccountDetails.technical.manageParentAccount">Edit parent account</Translate>
+              </span>
+            </Button>
+          </>
+        ) : null}
       </Col>
     </Row>
   );

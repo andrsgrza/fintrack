@@ -146,6 +146,7 @@ public class TransactionCandidateService {
         LOG.debug("Request to create manual TransactionCandidate draft");
         rejectManualCommandControlledFieldsOnCreate(transactionCandidateDTO);
         transactionCandidateDTO.setSource(TransactionCandidateSource.MANUAL);
+        validateActiveAccountForNewManualReference(transactionCandidateDTO.getAccount());
         return save(transactionCandidateDTO);
     }
 
@@ -167,6 +168,7 @@ public class TransactionCandidateService {
             .map(existing -> {
                 rejectManualCommandMutation(existing);
                 rejectManualCommandControlledFieldsOnUpdate(transactionCandidateDTO, patchNode);
+                validateActiveAccountForManualAccountPatch(existing, transactionCandidateDTO, patchNode);
 
                 TransactionCandidateClassificationReviewStatus previousClassificationReviewStatus =
                     existing.getClassificationReviewStatus();
@@ -316,6 +318,9 @@ public class TransactionCandidateService {
         TransactionCandidate transactionCandidate = transactionCandidateMapper.toEntity(transactionCandidateDTO);
         transactionCandidate.setUser(currentUserService.getCurrentUser());
         applyDefaults(transactionCandidate);
+        if (transactionCandidate.getSource() == TransactionCandidateSource.MANUAL) {
+            validateActiveAccountForNewManualReference(transactionCandidateDTO.getAccount());
+        }
         applyRelationships(transactionCandidate, transactionCandidateDTO);
         normalizeFields(transactionCandidate);
         deriveAmountAndFlow(transactionCandidate);
@@ -350,6 +355,9 @@ public class TransactionCandidateService {
         rejectServerTimestampChanges(existing, transactionCandidateDTO, updateNode);
         rejectClientControlledFieldsOnUpdate(transactionCandidateDTO, updateNode);
         rejectGenericWorkflowLinkMutation(transactionCandidateDTO, updateNode);
+        if (existing.getSource() == TransactionCandidateSource.MANUAL) {
+            validateActiveAccountForManualAccountPatch(existing, transactionCandidateDTO, updateNode);
+        }
 
         TransactionCandidate candidate = transactionCandidateMapper.toEntity(transactionCandidateDTO);
         candidate.setUser(existing.getUser());
@@ -390,6 +398,9 @@ public class TransactionCandidateService {
                 rejectServerTimestampChanges(existing, transactionCandidateDTO, patchNode);
                 rejectClientControlledFieldsOnUpdate(transactionCandidateDTO, patchNode);
                 rejectGenericWorkflowLinkMutation(transactionCandidateDTO, patchNode);
+                if (existing.getSource() == TransactionCandidateSource.MANUAL) {
+                    validateActiveAccountForManualAccountPatch(existing, transactionCandidateDTO, patchNode);
+                }
 
                 TransactionCandidateStatus previousStatus = existing.getStatus();
                 transactionCandidateMapper.partialUpdate(existing, transactionCandidateDTO);
@@ -588,6 +599,30 @@ public class TransactionCandidateService {
         return financialAccountRepository
             .findOneWithToOneRelationshipsByIdAndUserLogin(accountDTO.getId(), ownerLogin)
             .orElseThrow(() -> new IllegalArgumentException("Financial account is not accessible"));
+    }
+
+    private void validateActiveAccountForNewManualReference(FinancialAccountDTO accountDTO) {
+        FinancialAccount account = resolveOptionalAccount(accountDTO, currentUserService.getCurrentUserLogin());
+        if (account != null) {
+            FinancialAccountReferenceValidator.validateActiveForNewReference(account);
+        }
+    }
+
+    private void validateActiveAccountForManualAccountPatch(
+        TransactionCandidate existing,
+        TransactionCandidateDTO dto,
+        JsonNode patchNode
+    ) {
+        if (!fieldPresent(patchNode, "account")) {
+            return;
+        }
+        FinancialAccount requestedAccount = resolveOptionalAccount(dto.getAccount(), currentUserService.getCurrentUserLogin());
+        if (
+            requestedAccount != null &&
+            (existing.getAccount() == null || !Objects.equals(existing.getAccount().getId(), requestedAccount.getId()))
+        ) {
+            FinancialAccountReferenceValidator.validateActiveForNewReference(requestedAccount);
+        }
     }
 
     private Category resolveOptionalCategory(CategoryDTO categoryDTO, String ownerLogin) {

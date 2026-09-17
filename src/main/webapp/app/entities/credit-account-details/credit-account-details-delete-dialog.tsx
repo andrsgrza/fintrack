@@ -1,20 +1,13 @@
-import React, { useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'reactstrap';
 import { Translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { useAppDispatch } from 'app/config/store';
-import { getEntity } from './credit-account-details.reducer';
+import CreditAccountDetailsTechnicalNotice from './credit-account-details-technical-notice';
 
 export const CreditAccountDetailsDeleteDialog = () => {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const { id } = useParams<'id'>();
-
-  useEffect(() => {
-    dispatch(getEntity(id));
-  }, []);
 
   const handleClose = () => {
     navigate('/credit-account-details');
@@ -26,9 +19,9 @@ export const CreditAccountDetailsDeleteDialog = () => {
         <Translate contentKey="fintrackApp.creditAccountDetails.delete.title">Cannot delete credit card details</Translate>
       </ModalHeader>
       <ModalBody id="fintrackApp.creditAccountDetails.delete.message" data-cy="creditAccountDetailsDeleteExplanation">
+        <CreditAccountDetailsTechnicalNotice />
         <Translate contentKey="fintrackApp.creditAccountDetails.delete.message">
-          Credit card details cannot be deleted directly. These details are required for credit card accounts. To remove them, you must
-          delete the financial account itself.
+          Credit card details cannot be deleted independently. Manage the parent account instead.
         </Translate>
       </ModalBody>
       <ModalFooter>

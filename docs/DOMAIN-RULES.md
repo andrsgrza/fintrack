@@ -68,25 +68,25 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## Master summary
 
-| #   | Entity                   | DELETE                                | UPDATE guards                                                                     | Product rules                                         | Overall                                   |
-| --- | ------------------------ | ------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------- |
-| 1   | UserDashboardPreference  | Simple                                | 1:1 + JSON parse                                                                  | Schema, /me, upsert                                   | **Done**                                  |
-| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                                     | Runtime enforcement                                   | **Done**                                  |
-| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                                     | FA UI composition ✅; atomic backend command deferred | **Done**                                  |
-| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                                     | `active` soft-off                                     | **Done**                                  |
-| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                                                   | Default cats on signup                                | **Done**                                  |
-| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                                     | Import matching                                       | **Done**                                  |
-| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                                            | Empty-set matching, spend                             | **Done**                                  |
-| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                                                    | Motor eval                                            | **Done**                                  |
-| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅                                   | Motor on FT create                                    | **Done**                                  |
-| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                                          | Revocation runtime / expiry enforcement (fase 6)      | **Done** (11C)                            |
-| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                                                 | Balances, atomic create                               | **Done**                                  |
-| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                                             | Rule motor, balances                                  | **Done**                                  |
-| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                                                      | Runtime pipeline/idempotency                          | **Done**                                  |
-| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked                         | Upload / parser (fase 6)                              | **Done** (metadata lifecycle)             |
-| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked                         | API runtime handler + idempotency (fase 6)            | **Done** (11C lifecycle; runtime pending) |
-| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                                             | Pipeline/count reconciliation                         | **Done**                                  |
-| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor + balance read model | UI/dashboard balance display                          | **Done**                                  |
+| #   | Entity                   | DELETE                                | UPDATE guards                                                                     | Product rules                                    | Overall                                   |
+| --- | ------------------------ | ------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------- |
+| 1   | UserDashboardPreference  | Simple                                | 1:1 + JSON parse                                                                  | Schema, /me, upsert                              | **Done**                                  |
+| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                                     | Runtime enforcement                              | **Done**                                  |
+| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                                     | FA configured product command ✅                 | **Done**                                  |
+| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                                     | `active` soft-off                                | **Done**                                  |
+| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                                                   | Default cats on signup                           | **Done**                                  |
+| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                                     | Import matching                                  | **Done**                                  |
+| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                                            | Empty-set matching, spend                        | **Done**                                  |
+| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                                                    | Motor eval                                       | **Done**                                  |
+| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅                                   | Motor on FT create                               | **Done**                                  |
+| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                                          | Revocation runtime / expiry enforcement (fase 6) | **Done** (11C)                            |
+| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                                                 | Balances, atomic create                          | **Done**                                  |
+| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                                             | Rule motor, balances                             | **Done**                                  |
+| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                                                      | Runtime pipeline/idempotency                     | **Done**                                  |
+| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked                         | Upload / parser (fase 6)                         | **Done** (metadata lifecycle)             |
+| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked                         | API runtime handler + idempotency (fase 6)       | **Done** (11C lifecycle; runtime pending) |
+| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                                             | Pipeline/count reconciliation                    | **Done**                                  |
+| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor + balance read model | UI/dashboard balance display                     | **Done**                                  |
 
 ---
 
@@ -119,6 +119,7 @@ Active candidate foundation rules:
 - Category delete is blocked while any `TransactionCandidate.category` references the category. The service must not silently clear candidate categories, because candidate category is part of draft/provenance/review state.
 - Tag delete is blocked while any `TransactionCandidate` tag join references the tag. The service must not silently remove candidate tags.
 - FinancialAccount delete is blocked while a `MANUAL` or otherwise non-workflow-cleaned `TransactionCandidate` references the account. Controlled workflow cleanup may delete `FILE_IMPORT` candidates first as part of deleting an ingestion/account workflow tree; any candidate that would survive the account delete must reject the delete.
+- FinancialAccount product delete explains this orchestration without exposing persistence details: eligible related workflow/import data may be cleaned up, while protected candidate/provenance references block the deletion. The account detail remains available for inactive accounts and presents their history-only status; this UI does not alter the underlying delete or inactive-account rules.
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
 - There is no global `NEEDS_REVIEW` candidate lifecycle status. Review needs are represented by specific fields: `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`.
@@ -350,15 +351,15 @@ Grupo 1 #2 domain rules **Done**.
 
 ### CREATE
 
-| Rule                                                               | Decision                                                                                              | Applies to admin | Error         | Status         |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------------- | ------------- | -------------- |
-| Parent `account` required                                          | Resolved via accessible account                                                                       | Yes              | `400` invalid | **Done**       |
-| Only `CREDIT_CARD` accounts                                        | On create                                                                                             | Yes              | `400` invalid | **Done**       |
-| One details per account                                            | `existsByAccountId()` on create                                                                       | Yes              | `400` invalid | **Done**       |
-| `createdAt` / `updatedAt` server-owned                             | Ignore client values; set both to `Instant.now()`                                                     | Yes              | —             | **Done**       |
-| `CREDIT_CARD` expected to have details for full card functionality | Future/full-functionality expectation; separate CRUD today; not enforced by `FinancialAccountService` | Yes              | —             | **Documented** |
+| Rule                                                    | Decision                                                                                                        | Applies to admin | Error         | Status   |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------- | ------------- | -------- |
+| Parent `account` required                               | Resolved via accessible account                                                                                 | Yes              | `400` invalid | **Done** |
+| Only `CREDIT_CARD` accounts                             | On create                                                                                                       | Yes              | `400` invalid | **Done** |
+| One details per account                                 | `existsByAccountId()` on create                                                                                 | Yes              | `400` invalid | **Done** |
+| `createdAt` / `updatedAt` server-owned                  | Ignore client values; set both to `Instant.now()`                                                               | Yes              | —             | **Done** |
+| `CREDIT_CARD` configured product write requires details | `POST`/`PUT /api/financial-accounts[/id]/configured` creates or updates the parent and its one child atomically | Yes              | `400` invalid | **Done** |
 
-**Future:** atomic endpoint may create `FinancialAccount` + `CreditAccountDetails` together for `CREDIT_CARD`, or a later guard may require details before enabling full credit-card features. Do not break standalone FA create in this pass.
+The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints remain technically compatible. The product FinancialAccount form uses only the configured parent command; no migration or change to the generic endpoints is implied. The direct `CreditAccountDetails` UI is therefore a technical compatibility surface, not an independent normal-user lifecycle: it is hidden from the product menu and does not offer child writes.
 
 ### UPDATE / PATCH
 
@@ -1541,7 +1542,7 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 
 ---
 
-_Last updated: 2026-07-13 — FinancialAccount backend-only balance read model marked complete; UI/dashboard display, persisted balances, statement cycles, and investment valuation remain deferred._
+_Last updated: 2026-09-17 — FinancialAccount calculated balance read models are complete in the account detail and product overview UI. Persisted balances, charts/dashboard aggregation, statement cycles, and investment valuation remain deferred._
 
 ## DescriptionNormalizationRule
 
@@ -1576,3 +1577,7 @@ The single FILE-ingestion review can create both rule types without leaving the 
 - A row `TransactionRule` prefill uses the persisted `FILE_IMPORT` candidate description, its current `FLOW`, and only its persisted selected category/tags as outputs. It does **not** turn account context or transient suggestions into conditions or outputs.
 - Rule creation is atomic and server-managed: priority, condition positions, timestamps, ownership, normalization-rule validation, and rollback on invalid input are handled by `POST /api/description-normalization-rules/configured`. Transaction rules reuse `POST /api/transaction-rules/configured`.
 - Saving a contextual rule by itself changes neither `rawData`, `IngestionRecord`, nor `TransactionCandidate`, and does not create a `FinancialTransaction` or confirm the import. Re-evaluation is an explicit second action.
+
+### FinancialAccount inactive eligibility (ACC-UX-3A)
+
+`FinancialAccount.active=false` is a historical-only state: the account, balances, existing references, and workflows already linked to it remain readable and valid. It does not cancel drafts or ingestions, disable rules, alter balances, or unlink data. New or reassigned product references must target an active account. Reactivating an account restores that eligibility immediately. Budget adoption is deferred to BUD-1; FinancialSubscription is intentionally outside this policy slice.

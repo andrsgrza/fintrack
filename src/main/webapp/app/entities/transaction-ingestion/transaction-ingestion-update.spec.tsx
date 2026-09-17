@@ -8,12 +8,12 @@ import enTransactionIngestion from 'app/../i18n/en/transactionIngestion.json';
 import enIngestionType from 'app/../i18n/en/ingestionType.json';
 import TransactionIngestionRoutes from './index';
 import { TransactionIngestionUpdate } from './transaction-ingestion-update';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 
 jest.mock('axios');
 
 const mockAxiosPost = axios.post as jest.Mock;
 const mockDispatch = jest.fn();
-const mockGetFinancialAccounts = jest.fn(params => ({ type: 'financialAccount/getEntities', payload: params }));
 const mockGetEntity = jest.fn(id => ({ type: 'transactionIngestion/getEntity', payload: id }));
 const mockReset = jest.fn(() => ({ type: 'transactionIngestion/reset' }));
 const mockUpdateEntity = jest.fn(entity => ({ type: 'transactionIngestion/updateEntity', payload: entity }));
@@ -24,8 +24,8 @@ jest.mock('app/config/store', () => ({
   useAppSelector: selector => selector(mockState),
 }));
 
-jest.mock('app/entities/financial-account/financial-account.reducer', () => ({
-  getEntities: params => mockGetFinancialAccounts(params),
+jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
+  getSelectableFinancialAccounts: jest.fn(),
 }));
 
 jest.mock('./transaction-ingestion.reducer', () => ({
@@ -48,6 +48,11 @@ const baseState = {
     updateSuccess: false,
   },
 };
+
+const selectableAccounts = [
+  { id: 10, name: 'Checking account', accountType: 'DEBIT', currency: 'MXN', lastFourDigits: '1234', active: true },
+];
+const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
 
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enTransactionIngestion);
@@ -77,8 +82,9 @@ const renderRoute = (path: string) =>
     </MemoryRouter>,
   );
 
-const selectAccount = () => {
-  const account = screen.getByLabelText('Account') as HTMLSelectElement;
+const selectAccount = async () => {
+  const account = (await screen.findByLabelText('Account')) as HTMLSelectElement;
+  await waitFor(() => expect(account.options.length).toBeGreaterThan(1));
   fireEvent.change(account, { target: { value: '10' } });
   return account;
 };
@@ -95,11 +101,14 @@ const uploadFile = () => {
 describe('TransactionIngestion create workflow form', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSelectableFinancialAccounts.mockResolvedValue(selectableAccounts);
     registerTranslations();
   });
 
-  it('shows only Account and Ingestion Type parent fields in create mode', () => {
+  it('shows only Account and Ingestion Type parent fields in create mode', async () => {
     renderCreateForm();
+
+    await screen.findByRole('option', { name: /Checking account/ });
 
     expect(screen.getByLabelText('Account')).not.toBeNull();
     expect(screen.getByLabelText('Ingestion Type')).not.toBeNull();
@@ -117,8 +126,10 @@ describe('TransactionIngestion create workflow form', () => {
     expect(screen.queryByLabelText('Created At')).toBeNull();
   });
 
-  it('shows API TBD placeholder and does not submit unsupported API flow', () => {
+  it('shows API TBD placeholder and does not submit unsupported API flow', async () => {
     renderCreateForm();
+
+    await screen.findByRole('option', { name: /Checking account/ });
 
     fireEvent.change(screen.getByLabelText('Ingestion Type'), { target: { value: 'API' } });
 
@@ -131,7 +142,7 @@ describe('TransactionIngestion create workflow form', () => {
     mockAxiosPost.mockResolvedValue({ data: { transactionIngestionId: 100 } });
     renderCreateForm();
 
-    selectAccount();
+    await selectAccount();
     uploadFile();
     fireEvent.click(screen.getByRole('button', { name: /Create workflow/ }));
 
@@ -149,7 +160,7 @@ describe('TransactionIngestion create workflow form', () => {
     mockAxiosPost.mockRejectedValue({ response: { data: { detail: 'Invalid CSV header' } } });
     renderCreateForm();
 
-    selectAccount();
+    await selectAccount();
     const input = uploadFile();
     fireEvent.click(screen.getByRole('button', { name: /Create workflow/ }));
 
@@ -165,5 +176,13 @@ describe('TransactionIngestion create workflow form', () => {
     expect(screen.getByText('Transaction Ingestion technical edit unavailable')).toBeTruthy();
     expect(screen.queryByLabelText('Status')).toBeNull();
     expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
+  });
+
+  it('uses the selectable account model so inactive accounts are absent from new ingestion', async () => {
+    renderCreateForm();
+
+    expect(await screen.findByRole('option', { name: /Checking account/ })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Closed account/ })).toBeNull();
+    expect(mockGetSelectableFinancialAccounts).toHaveBeenCalledWith();
   });
 });

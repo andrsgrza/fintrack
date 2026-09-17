@@ -5,15 +5,19 @@ import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
+import enAccountType from 'app/../i18n/en/accountType.json';
 import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enCreditAccountDetails from 'app/../i18n/en/creditAccountDetails.json';
+import enGlobal from 'app/../i18n/en/global.json';
 import { FinancialAccountDetail } from './financial-account-detail';
 import { FinancialAccountUpdate } from './financial-account-update';
 
 jest.mock('axios');
 
 const mockAxiosGet = axios.get as jest.Mock;
+const mockAxiosPost = axios.post as jest.Mock;
+const mockAxiosPut = axios.put as jest.Mock;
 const mockDispatch = jest.fn();
 const mockCreateEntity = jest.fn(entity => ({ type: 'financialAccount/createEntity', payload: { data: { id: 99, ...entity } } }));
 const mockUpdateEntity = jest.fn(entity => ({ type: 'financialAccount/updateEntity', payload: { data: entity } }));
@@ -78,9 +82,11 @@ const baseState = {
 
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enFinancialAccount);
+  TranslatorContext.registerTranslations('en', enAccountType);
   TranslatorContext.registerTranslations('en', enFinancialTransaction);
   TranslatorContext.registerTranslations('en', enTransactionFlow);
   TranslatorContext.registerTranslations('en', enCreditAccountDetails);
+  TranslatorContext.registerTranslations('en', enGlobal);
   TranslatorContext.setLocale('en');
 };
 
@@ -101,6 +107,7 @@ const renderCreateForm = (creditAccountDetailsEntity = {}) => {
     <MemoryRouter initialEntries={['/financial-account/new']}>
       <Routes>
         <Route path="/financial-account/new" element={<FinancialAccountUpdate />} />
+        <Route path="/financial-account/:id" element={<div>Financial account detail</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -134,6 +141,7 @@ const renderEditForm = (accountType = 'CREDIT_CARD', creditAccountDetailsEntity 
     <MemoryRouter initialEntries={['/financial-account/1/edit']}>
       <Routes>
         <Route path="/financial-account/:id/edit" element={<FinancialAccountUpdate />} />
+        <Route path="/financial-account/:id" element={<div>Financial account detail</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -193,11 +201,13 @@ const renderDetail = (accountType, creditAccountDetailsEntity = {}, detailOption
     const options =
       detailOptions === undefined ||
       Object.prototype.hasOwnProperty.call(detailOptions, 'balance') ||
-      Object.prototype.hasOwnProperty.call(detailOptions, 'transactions')
+      Object.prototype.hasOwnProperty.call(detailOptions, 'transactions') ||
+      Object.prototype.hasOwnProperty.call(detailOptions, 'account')
         ? detailOptions
         : { balance: detailOptions };
     setupDetailAxiosMocks(accountType, options);
   }
+  const accountOverrides = detailOptions?.account ?? {};
   mockState = {
     ...baseState,
     financialAccount: {
@@ -207,8 +217,16 @@ const renderDetail = (accountType, creditAccountDetailsEntity = {}, detailOption
         name: 'Test account',
         accountType,
         currency: 'MXN',
+        active: true,
+        institutionName: 'Test bank',
+        lastFourDigits: '1234',
         initialBalance: 123,
         initialBalanceDate: '2026-01-10',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        budgets: [{ id: 21 }],
+        transactionIngestions: [{ id: 22 }],
+        ...accountOverrides,
       },
     },
     creditAccountDetails: {
@@ -253,6 +271,8 @@ describe('FinancialAccount opening-position labels', () => {
     mockGetCreditAccountDetailsByAccountId.mockClear();
     mockResetCreditAccountDetails.mockClear();
     mockAxiosGet.mockReset();
+    mockAxiosPost.mockReset();
+    mockAxiosPut.mockReset();
   });
 
   it('shows DEBIT opening-position copy on initial create render', () => {
@@ -276,7 +296,18 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Budgets')).toBeNull();
     expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
+  });
+
+  it('renders a translated label for every supported account type', () => {
+    renderCreateForm();
+
+    const optionLabels = Array.from((screen.getByLabelText('Account Type') as HTMLSelectElement).options).map(option => option.textContent);
+
+    expect(optionLabels).toEqual(['Debit account', 'Cash', 'Credit card', 'Investment account']);
+    expect(optionLabels).not.toContain('DEBIT');
+    expect(optionLabels).not.toContain('CREDIT_CARD');
+    expect(optionLabels).not.toContain('INVESTMENT');
   });
 
   it('renders secondary account fields before account type in create mode', () => {
@@ -314,9 +345,9 @@ describe('FinancialAccount opening-position labels', () => {
     ).toBeNull();
     expect((screen.getByLabelText('Opening card balance') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Tracking start date') as HTMLInputElement).value).toBe('');
-    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit details')).toBeTruthy();
     expect(screen.getByLabelText('Credit limit')).toBeTruthy();
-    expect(screen.getByLabelText('Statement day')).toBeTruthy();
+    expect(screen.getByLabelText('Statement closing day')).toBeTruthy();
     expect(screen.getByLabelText('Payment due day')).toBeTruthy();
     expect(screen.getByLabelText('Annual interest rate')).toBeTruthy();
     expect(screen.queryByLabelText('Account')).toBeNull();
@@ -355,41 +386,47 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
   });
 
-  it('submits active=true in create mode while the active checkbox is hidden', async () => {
+  it('creates a debit account with one configured request while the active checkbox is hidden', async () => {
     renderCreateForm();
+    mockAxiosPost.mockResolvedValue({ data: { financialAccount: { id: 99 } } });
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New account' } });
     fireEvent.change(screen.getByLabelText('Initial balance'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockCreateEntity).toHaveBeenCalled());
-    expect(mockCreateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ active: true }));
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/financial-accounts/configured', expect.any(Object)));
+    expect(mockAxiosPost.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ financialAccount: expect.objectContaining({ active: true, accountType: 'DEBIT' }) }),
+    );
   });
 
-  it('creates credit account details after creating a CREDIT_CARD financial account', async () => {
+  it('creates a CREDIT_CARD and its details with one configured request', async () => {
     renderCreateForm();
+    mockAxiosPost.mockResolvedValue({ data: { financialAccount: { id: 99 } } });
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New card' } });
     fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
     fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
     fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '50000' } });
-    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Statement closing day'), { target: { value: '15' } });
     fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '5' } });
     fireEvent.change(screen.getByLabelText('Annual interest rate'), { target: { value: '65' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockCreateCreditAccountDetails).toHaveBeenCalled());
-    expect(mockCreateCreditAccountDetails.mock.calls[0][0]).toEqual(
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/financial-accounts/configured', expect.any(Object)));
+    expect(mockAxiosPost.mock.calls[0][1]).toEqual(
       expect.objectContaining({
-        creditLimit: 50000,
-        statementDay: 15,
-        paymentDueDay: 5,
-        annualInterestRate: 65,
-        account: expect.objectContaining({ id: 99, name: 'New card' }),
+        creditAccountDetails: expect.objectContaining({
+          creditLimit: 50000,
+          statementDay: 15,
+          paymentDueDay: 5,
+          annualInterestRate: 65,
+        }),
       }),
     );
+    expect(mockCreateCreditAccountDetails).not.toHaveBeenCalled();
   });
 
   it('changes CREDIT_CARD back to DEBIT labels and resets initial balance', () => {
@@ -413,17 +450,17 @@ describe('FinancialAccount opening-position labels', () => {
       ),
     ).toBeNull();
     expect((screen.getByLabelText('Initial balance') as HTMLInputElement).value).toBe('');
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
     expectNoMissingTranslations();
   });
 
   it('does not show credit card details in DEBIT edit mode', () => {
     renderEditForm('DEBIT');
 
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
   });
 
-  it('shows existing credit card details in CREDIT_CARD edit mode and updates them on save', async () => {
+  it('hydrates existing credit card details and updates parent and child with one configured request', async () => {
     renderEditForm('CREDIT_CARD', {
       id: 25,
       creditLimit: 50000,
@@ -435,42 +472,80 @@ describe('FinancialAccount opening-position labels', () => {
       account: { id: 1, name: 'Existing account' },
     });
 
-    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit details')).toBeTruthy();
     expect((screen.getByLabelText('Credit limit') as HTMLInputElement).value).toBe('50000');
     expect(screen.queryByLabelText('Account')).toBeNull();
     expectNoMissingTranslations();
 
+    mockAxiosPut.mockResolvedValue({ data: { financialAccount: { id: 1 } } });
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Existing account edited' } });
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '60000' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockUpdateCreditAccountDetails).toHaveBeenCalled());
-    expect(mockUpdateCreditAccountDetails.mock.calls[0][0]).toEqual(
+    await waitFor(() => expect(mockAxiosPut).toHaveBeenCalledWith('api/financial-accounts/1/configured', expect.any(Object)));
+    expect(mockAxiosPut.mock.calls[0][1]).toEqual(
       expect.objectContaining({
-        id: 25,
-        creditLimit: 60000,
-        account: expect.objectContaining({ id: 1 }),
+        financialAccount: expect.objectContaining({ name: 'Existing account edited', accountType: 'CREDIT_CARD' }),
+        creditAccountDetails: expect.objectContaining({ creditLimit: 60000 }),
       }),
     );
+    expect(mockAxiosPut.mock.calls[0][1].creditAccountDetails).toEqual(
+      expect.objectContaining({ statementDay: 15, paymentDueDay: 5, annualInterestRate: 65 }),
+    );
+    expect(mockUpdateCreditAccountDetails).not.toHaveBeenCalled();
   });
 
-  it('creates missing credit account details for existing CREDIT_CARD account on save', async () => {
+  it('keeps an invalid credit-card form open and renders child validation errors without sending a request', async () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New card' } });
+    fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
+    fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
+    expect((screen.getByLabelText('Account Type') as HTMLSelectElement).value).toBe('CREDIT_CARD');
+    expect(screen.getByText('Credit details')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getAllByText('This field is required.')).toHaveLength(3));
+    expect(mockAxiosPost).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Credit limit')).toBeTruthy();
+  });
+
+  it('keeps the form open and shows one contextual error when the configured command fails', async () => {
+    renderCreateForm();
+    mockAxiosPost.mockRejectedValue(new Error('configured save failed'));
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New card' } });
+    fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
+    fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
+    fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '50000' } });
+    fireEvent.change(screen.getByLabelText('Statement closing day'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain(
+        'The account could not be saved. Review the account and credit-card details and try again.',
+      ),
+    );
+    expect(screen.getByLabelText('Name')).toBeTruthy();
+  });
+
+  it('uses configured update to create missing credit account details for an existing CREDIT_CARD account', async () => {
     renderEditForm('CREDIT_CARD');
+    mockAxiosPut.mockResolvedValue({ data: { financialAccount: { id: 1 } } });
 
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '40000' } });
-    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('Statement closing day'), { target: { value: '12' } });
     fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '4' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    await waitFor(() => expect(mockCreateCreditAccountDetails).toHaveBeenCalled());
-    expect(mockCreateCreditAccountDetails.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        creditLimit: 40000,
-        statementDay: 12,
-        paymentDueDay: 4,
-        account: expect.objectContaining({ id: 1 }),
-      }),
+    await waitFor(() => expect(mockAxiosPut).toHaveBeenCalledWith('api/financial-accounts/1/configured', expect.any(Object)));
+    expect(mockAxiosPut.mock.calls[0][1].creditAccountDetails).toEqual(
+      expect.objectContaining({ creditLimit: 40000, statementDay: 12, paymentDueDay: 4 }),
     );
+    expect(mockCreateCreditAccountDetails).not.toHaveBeenCalled();
   });
 
   it('shows CASH opening-position copy', () => {
@@ -506,7 +581,34 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.getByText('Tracking start date')).toBeTruthy();
     expect(screen.getByText('123')).toBeTruthy();
     expect(screen.queryByText('Opening card balance')).toBeNull();
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
+  });
+
+  it('renders a product account detail without technical metadata or relationship dumps', () => {
+    renderDetail('DEBIT');
+
+    expect(screen.getByText('Account details')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountDetailAccountSection')).toBeTruthy();
+    expect(screen.getByText('Test bank')).toBeTruthy();
+    expect(screen.getByText('Debit account')).toBeTruthy();
+    expect(screen.getByText('••••1234')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountDetailStatusSection').textContent).toContain('Active');
+    expect(screen.queryByText('ID')).toBeNull();
+    expect(screen.queryByText('Created At')).toBeNull();
+    expect(screen.queryByText('Updated At')).toBeNull();
+    expect(screen.queryByText('Budgets')).toBeNull();
+    expect(screen.queryByText('Transaction Ingestions')).toBeNull();
+    expect(screen.queryByText('true')).toBeNull();
+    expect(screen.getByRole('link', { name: /edit/i }).getAttribute('href')).toBe('/financial-account/1/edit');
+  });
+
+  it('explains the historical-only meaning of an inactive account', () => {
+    renderDetail('DEBIT', {}, { account: { active: false } });
+
+    expect(screen.getByTestId('financialAccountStatus').textContent).toContain('Inactive');
+    expect(screen.getByTestId('financialAccountInactiveExplanation').textContent).toContain(
+      'cannot be selected for new transactions, imports, or rules until it is reactivated',
+    );
   });
 
   it('shows DEBIT balance snapshot with current balance and hides credit-card-only fields', async () => {
@@ -538,10 +640,10 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.getByText('Opening card balance')).toBeTruthy();
     expect(screen.getByText('Tracking start date')).toBeTruthy();
     expect(screen.getByText('123')).toBeTruthy();
-    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit details')).toBeTruthy();
     expect(screen.getByText('Credit limit')).toBeTruthy();
-    expect(screen.getByText('50000')).toBeTruthy();
-    expect(screen.queryByText('Account')).toBeNull();
+    expect(screen.getByText('50000 MXN')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Account' })).toBeNull();
     expectNoMissingTranslations();
   });
 
@@ -634,6 +736,7 @@ describe('FinancialAccount opening-position labels', () => {
             description: 'Bus fare',
             flow: 'OUT',
             amount: 3,
+            category: { name: 'Transport' },
           },
           {
             id: 2502,
@@ -650,11 +753,12 @@ describe('FinancialAccount opening-position labels', () => {
 
     expect(within(section).getByText('13/07/2026')).toBeTruthy();
     expect(within(section).getByText('Bus fare')).toBeTruthy();
-    expect(within(section).getByText('OUT')).toBeTruthy();
+    expect(within(section).getByText('Expense')).toBeTruthy();
     expect(within(section).getByText('3 MXN')).toBeTruthy();
+    expect(within(section).getByText('Transport')).toBeTruthy();
     expect(within(section).getByText('06/07/2026')).toBeTruthy();
     expect(within(section).getByText('Refund')).toBeTruthy();
-    expect(within(section).getByText('IN')).toBeTruthy();
+    expect(within(section).getByText('Income')).toBeTruthy();
     expect(within(section).getByText('5 MXN')).toBeTruthy();
     expect(within(section).queryByRole('link', { name: /edit/i })).toBeNull();
     expect(within(section).queryByRole('button', { name: /delete/i })).toBeNull();

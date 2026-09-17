@@ -11,9 +11,6 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/financial-account">
         <Translate contentKey="global.menu.entities.financialAccount" />
       </MenuItem>
-      <MenuItem icon="asterisk" to="/credit-account-details">
-        <Translate contentKey="global.menu.entities.creditAccountDetails" />
-      </MenuItem>
       <MenuItem icon="asterisk" to="/financial-transaction">
         <Translate contentKey="global.menu.entities.financialTransaction" />
       </MenuItem>
