@@ -210,6 +210,9 @@ const recordStatusLabel = (status?: string) => {
 const descriptionReviewTestId = (row: ICsvIngestionWorkflowRow, suffix: string) =>
   `descriptionReview-${suffix}-${row.ingestionRecordId ?? row.recordIndex}`;
 
+const hasTransientDescriptionSuggestion = (reevaluation?: IDescriptionReevaluationResult) =>
+  Boolean(reevaluation?.suggestedDescription && (reevaluation.action === 'PREVIEWED' || reevaluation.action === 'MANUAL_PRESERVED'));
+
 const renderDescriptionReviewDetail = (labelKey: string, fallbackLabel: string, value?: React.ReactNode) =>
   value ? (
     <div>
@@ -223,25 +226,51 @@ const renderDescriptionReviewDetail = (labelKey: string, fallbackLabel: string, 
 const DescriptionReviewDisplay = ({
   row,
   reevaluation,
+  onApplySuggestion,
+  applyingSuggestion = false,
 }: {
   row: ICsvIngestionWorkflowRow;
   reevaluation?: IDescriptionReevaluationResult;
+  onApplySuggestion?: (row: ICsvIngestionWorkflowRow) => void;
+  applyingSuggestion?: boolean;
 }) => {
   const review = row.descriptionReview;
   const source = review?.source;
+  const hasSuggestion = hasTransientDescriptionSuggestion(reevaluation);
+
+  const renderReevaluationSuggestion = () =>
+    hasSuggestion ? (
+      <div className="mt-1">
+        <small className="text-muted d-block" data-testid={descriptionReviewTestId(row, 'reevaluationSuggestion')}>
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.reevaluationSuggestion">
+            Reevaluation suggestion
+          </Translate>
+          : {reevaluation?.suggestedDescription}
+        </small>
+        {onApplySuggestion ? (
+          <Button
+            color="primary"
+            size="sm"
+            className="mt-1"
+            disabled={applyingSuggestion}
+            onClick={() => onApplySuggestion(row)}
+            data-cy={`workflowApplyDescriptionSuggestion-${row.ingestionRecordId ?? row.recordIndex}`}
+            data-testid={`workflowApplyDescriptionSuggestion-${row.ingestionRecordId ?? row.recordIndex}`}
+          >
+            {applyingSuggestion ? <Spinner size="sm" /> : null}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.applySuggestion">
+              Apply suggested description
+            </Translate>
+          </Button>
+        ) : null}
+      </div>
+    ) : null;
 
   if (source !== 'DESCRIPTION_RULE' && source !== 'USER_EDIT') {
     return (
       <div>
-        <div>{row.description}</div>
-        {reevaluation?.action === 'PREVIEWED' && reevaluation.suggestedDescription ? (
-          <small className="text-muted d-block mt-1" data-testid={descriptionReviewTestId(row, 'reevaluationSuggestion')}>
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.reevaluationSuggestion">
-              Reevaluation suggestion
-            </Translate>
-            : {reevaluation.suggestedDescription}
-          </small>
-        ) : null}
+        <div data-testid={descriptionReviewTestId(row, 'current')}>{row.description}</div>
+        {renderReevaluationSuggestion()}
       </div>
     );
   }
@@ -251,7 +280,7 @@ const DescriptionReviewDisplay = ({
 
   return (
     <div>
-      <div>{row.description}</div>
+      <div data-testid={descriptionReviewTestId(row, 'current')}>{row.description}</div>
       <div className="mt-1" data-testid={descriptionReviewTestId(row, 'metadata')}>
         <Badge color={isRuleSource ? 'info' : 'secondary'} pill data-testid={descriptionReviewTestId(row, 'badge')}>
           <Translate
@@ -276,14 +305,7 @@ const DescriptionReviewDisplay = ({
             })}
           </small>
         ) : null}
-        {!isRuleSource && reevaluation?.action === 'MANUAL_PRESERVED' && reevaluation.suggestedDescription ? (
-          <small className="text-muted d-block mt-1" data-testid={descriptionReviewTestId(row, 'reevaluationSuggestion')}>
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.reevaluationSuggestion">
-              Reevaluation suggestion
-            </Translate>
-            : {reevaluation.suggestedDescription}
-          </small>
-        ) : null}
+        {renderReevaluationSuggestion()}
         <details className="small mt-1" data-testid={descriptionReviewTestId(row, 'details')}>
           <summary>
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.details">Details</Translate>
@@ -519,6 +541,7 @@ export const TransactionIngestionWorkflowDetail = () => {
   const [descriptionReevaluationByRecordId, setDescriptionReevaluationByRecordId] = useState<
     Record<number, IDescriptionReevaluationResult>
   >({});
+  const [descriptionApplicationInProgress, setDescriptionApplicationInProgress] = useState<number | 'ALL' | null>(null);
   const [reevaluationInProgress, setReevaluationInProgress] = useState<{
     kind: 'DESCRIPTIONS' | 'CATEGORY' | 'TAGS' | 'ALL' | 'ROW';
     recordId?: number;
@@ -746,13 +769,18 @@ export const TransactionIngestionWorkflowDetail = () => {
     const candidateId = row.candidate?.id;
     return candidateId !== undefined && classificationPreviewByCandidateId[candidateId]?.hasSuggestions;
   }).length;
+  const descriptionSuggestionRecordIds = rows
+    .filter(row => row.status === 'VALID' && row.ingestionRecordId !== undefined)
+    .map(row => row.ingestionRecordId)
+    .filter(recordId => hasTransientDescriptionSuggestion(descriptionReevaluationByRecordId[recordId]));
   const classificationConfirmBlocked = Boolean(
     classificationRows.find(row => candidateBlocksClassification(row) || !candidateHasReviewedClassification(row.candidate)),
   );
   const showClassificationColumns = reviewActionsEnabled || rows.some(row => row.candidate?.id);
   const classificationReevaluationAvailable =
     workflow?.status === 'READY' && classificationRows.length > 0 && !validateCandidateBackedWorkflow(workflow);
-  const classificationReevaluationRunning = Boolean(reevaluationInProgress) || loadingClassification || applyingAllSuggestions;
+  const classificationReevaluationRunning =
+    Boolean(reevaluationInProgress) || loadingClassification || applyingAllSuggestions || descriptionApplicationInProgress !== null;
 
   const canDisable = (row: ICsvIngestionWorkflowRow) => reviewActionsEnabled && ['VALID', 'REJECTED'].includes(row.status ?? '');
   const canEnable = (row: ICsvIngestionWorkflowRow) => reviewActionsEnabled && row.status === 'DISABLED';
@@ -970,29 +998,34 @@ export const TransactionIngestionWorkflowDetail = () => {
     })();
   }, [loadRulePreview, workflow]);
 
-  const reevaluateDescriptions = async (recordIds?: number[], apply = false) => {
+  const reevaluateDescriptions = async (
+    recordIds?: number[],
+    apply = false,
+    protectManualChanges = automationConfig.protectManualChanges,
+  ) => {
     if (!workflow?.transactionIngestionId) {
       return;
     }
-    const response = await reevaluateIngestionDescriptions(
-      workflow.transactionIngestionId,
-      recordIds,
-      apply,
-      automationConfig.protectManualChanges,
-    );
+    const response = await reevaluateIngestionDescriptions(workflow.transactionIngestionId, recordIds, apply, protectManualChanges);
     const result = response.data;
-    setDescriptionReevaluationByRecordId(current => ({
-      ...current,
-      ...(result.rows ?? []).reduce<Record<number, IDescriptionReevaluationResult>>((rowsById, row) => {
-        if (row.ingestionRecordId !== undefined) {
-          rowsById[row.ingestionRecordId] = row;
+    setDescriptionReevaluationByRecordId(current => {
+      const next = { ...current };
+      (result.rows ?? []).forEach(row => {
+        if (row.ingestionRecordId === undefined) {
+          return;
         }
-        return rowsById;
-      }, {}),
-    }));
+        if (apply && (row.action === 'APPLIED' || row.action === 'NO_MATCH')) {
+          delete next[row.ingestionRecordId];
+          return;
+        }
+        next[row.ingestionRecordId] = row;
+      });
+      return next;
+    });
     if (apply) {
       await loadWorkflow(workflow.transactionIngestionId);
     }
+    return result;
   };
 
   const reevaluateRuleSuggestions = async (scope: FileImportCandidateRulePreviewScope, candidateIds?: number[]) => {
@@ -1062,6 +1095,42 @@ export const TransactionIngestionWorkflowDetail = () => {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionReevaluationFailed'));
     } finally {
       setReevaluationInProgress(null);
+    }
+  };
+
+  const applyDescriptionSuggestion = async (row: ICsvIngestionWorkflowRow) => {
+    if (!workflow?.transactionIngestionId || !row.ingestionRecordId || descriptionApplicationInProgress !== null) {
+      return;
+    }
+    setBackendError(null);
+    setDescriptionApplicationInProgress(row.ingestionRecordId);
+    try {
+      // A per-row click is explicit consent to replace a USER_EDIT value with the currently reevaluated rule result.
+      await reevaluateDescriptions([row.ingestionRecordId], true, false);
+    } catch (error) {
+      setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionApplyFailed'));
+    } finally {
+      setDescriptionApplicationInProgress(null);
+    }
+  };
+
+  const applyAllDescriptionSuggestions = async () => {
+    if (!workflow?.transactionIngestionId || descriptionApplicationInProgress !== null) {
+      return;
+    }
+    if (descriptionSuggestionRecordIds.length === 0) {
+      return;
+    }
+
+    setBackendError(null);
+    setDescriptionApplicationInProgress('ALL');
+    try {
+      // Batch application remains subject to the page's manual-change protection setting.
+      await reevaluateDescriptions(descriptionSuggestionRecordIds, true, automationConfig.protectManualChanges);
+    } catch (error) {
+      setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionApplyAllFailed'));
+    } finally {
+      setDescriptionApplicationInProgress(null);
     }
   };
 
@@ -2121,6 +2190,19 @@ export const TransactionIngestionWorkflowDetail = () => {
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.descriptions">Reevaluate descriptions</Translate>
           </Button>
           <Button
+            color="primary"
+            size="sm"
+            disabled={descriptionSuggestionRecordIds.length === 0 || classificationReevaluationRunning}
+            onClick={applyAllDescriptionSuggestions}
+            data-cy="workflowApplyAllDescriptionSuggestions"
+            data-testid="workflowApplyAllDescriptionSuggestions"
+          >
+            {descriptionApplicationInProgress === 'ALL' ? <Spinner size="sm" /> : null}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.applyAllSuggestions">
+              Apply all suggested descriptions
+            </Translate>
+          </Button>
+          <Button
             color="secondary"
             size="sm"
             disabled={!classificationReevaluationAvailable || classificationReevaluationRunning}
@@ -2454,6 +2536,8 @@ export const TransactionIngestionWorkflowDetail = () => {
                             <DescriptionReviewDisplay
                               row={row}
                               reevaluation={descriptionReevaluationByRecordId[row.ingestionRecordId ?? -1]}
+                              onApplySuggestion={reviewActionsEnabled && row.status === 'VALID' ? applyDescriptionSuggestion : undefined}
+                              applyingSuggestion={descriptionApplicationInProgress === row.ingestionRecordId}
                             />
                           )}
                         </td>

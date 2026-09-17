@@ -116,7 +116,9 @@
           "editedAt": "Edited at",
           "editedBy": "Edited by",
           "originallyAutoNormalizedBy": "Originally auto-normalized by {{ruleName}}, then edited manually",
-          "reevaluationSuggestion": "Reevaluation suggestion"
+          "reevaluationSuggestion": "Reevaluation suggestion",
+          "applySuggestion": "Apply suggested description",
+          "applyAllSuggestions": "Apply all suggested descriptions"
         },
         "reevaluation": {
           "descriptions": "Reevaluate descriptions",
@@ -199,6 +201,8 @@
           "classificationApplyAllPartial": "Some classification suggestions could not be applied. Review the affected rows.",
           "classificationPreviewFailed": "Could not load category/tag suggestions. Return to row review and try again.",
           "descriptionReevaluationFailed": "Could not reevaluate descriptions. Existing review values were preserved.",
+          "descriptionApplyFailed": "Could not apply the suggested description. Existing review values were preserved.",
+          "descriptionApplyAllFailed": "Could not apply all suggested descriptions. Existing review values were preserved.",
           "reevaluationFailed": "Could not reevaluate this review scope. Existing values were preserved.",
           "reevaluationPartialFailed": "Some reevaluation results completed, but another review scope failed. Existing values were preserved.",
           "classificationConfirmBlocked": "Review all valid rows before confirming import.",

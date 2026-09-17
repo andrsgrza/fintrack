@@ -598,6 +598,110 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-cy="workflowCompleted"]').should('exist');
   });
 
+  it('applies previewed description suggestions explicitly without applying classification or confirming import', () => {
+    const firstDescription = `${scenarioToken} explicit description one`;
+    const secondDescription = `${scenarioToken} explicit description two`;
+    const firstExternalReference = `${scenarioToken}-description-one`;
+    const secondExternalReference = `${scenarioToken}-description-two`;
+    const normalizedDescription = `Normalized ${scenarioToken}`;
+    const csv = [
+      header,
+      `2026-01-16,,${firstDescription},-100.00,MXN,${firstExternalReference},first description row`,
+      `2026-01-17,,${secondDescription},-50.00,MXN,${secondExternalReference},second description row`,
+    ].join('\n');
+    let classificationApplyCalled = false;
+    let confirmCalled = false;
+    const workflowRowFor = (externalReference: string) => cy.contains('[data-testid^="workflowRow-"]', externalReference);
+
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/apply-rules', req => {
+      classificationApplyCalled = true;
+      req.continue();
+    }).as('applyCandidateRulesRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/descriptions/reevaluate').as('reevaluateDescriptionsRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/confirm', req => {
+      confirmCalled = true;
+      req.continue();
+    }).as('confirmImportRequest');
+    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+
+    uploadCsvFromCreatePage(csv, 'explicit-description-apply.csv');
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
+
+    cy.authenticatedRequest({
+      method: 'POST',
+      url: '/api/description-normalization-rules/configured',
+      body: {
+        name: uniqueName('explicit-description-normalization'),
+        active: true,
+        conditionOperator: 'ALL',
+        resultingDescription: normalizedDescription,
+        conditions: [{ operator: 'CONTAINS', value: scenarioToken, caseSensitive: false, position: 0 }],
+      },
+    }).then(({ body }) => {
+      contextualDescriptionRules.push(body);
+    });
+
+    cy.get('[data-cy="workflowAutoApplyDescriptions"]').should('not.be.checked');
+    cy.get('[data-cy="workflowReevaluateDescriptions"]').click();
+    cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.deep.equal({ apply: false, protectManualChanges: true });
+    });
+    workflowRowFor(firstExternalReference).within(() => {
+      cy.get('[data-testid^="descriptionReview-current-"]').should('contain', firstDescription).and('not.contain', normalizedDescription);
+      cy.get('[data-testid^="descriptionReview-badge-"]').should('not.exist');
+      cy.get('[data-testid^="descriptionReview-reevaluationSuggestion-"]').should('contain', normalizedDescription);
+      cy.get('[data-testid^="workflowApplyDescriptionSuggestion-"]').should('be.visible');
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
+      cy.get('[data-testid^="classificationTags-"] option:selected').should('have.length', 0);
+    });
+    workflowRowFor(firstExternalReference).within(() => {
+      cy.get('[data-testid^="workflowApplyDescriptionSuggestion-"]').click();
+    });
+    cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.include({ apply: true, protectManualChanges: false });
+      expect(request.body.recordIds).to.have.length(1);
+      expect(request.body.recordIds[0]).to.be.a('number');
+    });
+    workflowRowFor(firstExternalReference)
+      .should('contain', normalizedDescription)
+      .within(() => {
+        cy.get('[data-testid^="descriptionReview-badge-"]')
+          .invoke('text')
+          .should('match', /Auto-normalized|Normalizada automáticamente/);
+        cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
+        cy.get('[data-testid^="classificationTags-"] option:selected').should('have.length', 0);
+      });
+
+    cy.get('[data-cy="workflowApplyAllDescriptionSuggestions"]').should('be.enabled').click();
+    cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.include({ apply: true, protectManualChanges: true });
+      expect(request.body.recordIds).to.have.length(1);
+      expect(request.body.recordIds[0]).to.be.a('number');
+    });
+    workflowRowFor(secondExternalReference)
+      .should('contain', normalizedDescription)
+      .within(() => {
+        cy.get('[data-testid^="descriptionReview-badge-"]')
+          .invoke('text')
+          .should('match', /Auto-normalized|Normalizada automáticamente/);
+      });
+    cy.then(() => {
+      expect(classificationApplyCalled).to.equal(false);
+      expect(confirmCalled).to.equal(false);
+    });
+  });
+
   it('shows an error and stays on create when the CSV header is invalid', () => {
     const invalidHeaderCsv = [
       'transactiondate,postingDate,description,signedAmount,currency,externalReference,notes',

@@ -116,7 +116,9 @@
           "editedAt": "Editada el",
           "editedBy": "Editada por",
           "originallyAutoNormalizedBy": "Originalmente normalizada por {{ruleName}}, después editada manualmente",
-          "reevaluationSuggestion": "Sugerencia de reevaluación"
+          "reevaluationSuggestion": "Sugerencia de reevaluación",
+          "applySuggestion": "Aplicar descripción sugerida",
+          "applyAllSuggestions": "Aplicar todas las descripciones sugeridas"
         },
         "reevaluation": {
           "descriptions": "Reevaluar descripciones",
@@ -199,6 +201,8 @@
           "classificationApplyAllPartial": "No se pudieron aplicar algunas sugerencias de clasificación. Revisa las filas afectadas.",
           "classificationPreviewFailed": "No se pudieron cargar las sugerencias de categorías/etiquetas. Vuelve a la revisión de filas e inténtalo de nuevo.",
           "descriptionReevaluationFailed": "No se pudieron reevaluar las descripciones. Se conservaron los valores actuales de revisión.",
+          "descriptionApplyFailed": "No se pudo aplicar la descripción sugerida. Se conservaron los valores actuales de revisión.",
+          "descriptionApplyAllFailed": "No se pudieron aplicar todas las descripciones sugeridas. Se conservaron los valores actuales de revisión.",
           "reevaluationFailed": "No se pudo reevaluar este alcance de revisión. Se conservaron los valores actuales.",
           "reevaluationPartialFailed": "Algunas reevaluaciones terminaron, pero otro alcance de revisión falló. Se conservaron los valores actuales.",
           "classificationConfirmBlocked": "Revisa todas las filas válidas antes de confirmar la importación.",
