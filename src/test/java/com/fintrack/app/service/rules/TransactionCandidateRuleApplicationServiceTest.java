@@ -72,6 +72,43 @@ class TransactionCandidateRuleApplicationServiceTest {
     }
 
     @Test
+    void scopedExplicitApplyChangesOnlyItsRequestedDomain() {
+        TransactionRuleEvaluationResult evaluation = evaluation(categorySuggestion(10L, false), List.of(tagSuggestion(20L, false, false)));
+
+        TransactionCandidate categoryCandidate = new TransactionCandidate();
+        TransactionCandidateRuleApplicationResult categoryResult = service.applyFillEmptyOnly(
+            categoryCandidate,
+            evaluation,
+            false,
+            true,
+            false,
+            this::category,
+            this::tag
+        );
+
+        assertThat(categoryCandidate.getCategory().getId()).isEqualTo(10L);
+        assertThat(categoryCandidate.getTags()).isEmpty();
+        assertThat(categoryResult.categoryApplied()).isTrue();
+        assertThat(categoryResult.tagIdsApplied()).isEmpty();
+
+        TransactionCandidate tagsCandidate = new TransactionCandidate();
+        TransactionCandidateRuleApplicationResult tagsResult = service.applyFillEmptyOnly(
+            tagsCandidate,
+            evaluation,
+            false,
+            false,
+            true,
+            this::category,
+            this::tag
+        );
+
+        assertThat(tagsCandidate.getCategory()).isNull();
+        assertThat(tagsCandidate.getTags()).extracting(Tag::getId).containsExactly(20L);
+        assertThat(tagsResult.categoryApplied()).isFalse();
+        assertThat(tagsResult.tagIdsApplied()).containsExactly(20L);
+    }
+
+    @Test
     void existingTagsArePreservedAndNewSuggestedTagsAreAddedOnlyOnce() {
         Tag existingTag = tag(1L);
         TransactionCandidate candidate = new TransactionCandidate();

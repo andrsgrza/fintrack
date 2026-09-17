@@ -219,6 +219,8 @@ public class FileImportCandidateClassificationService {
                     candidate,
                     evaluation,
                     hadManualClassification,
+                    scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.CATEGORY,
+                    scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.TAGS,
                     categoryId -> resolveCategory(categoryId, userLogin, candidate.getFlow()),
                     tagId ->
                         tagRepository

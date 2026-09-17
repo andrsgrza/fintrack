@@ -529,6 +529,84 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void batchDescriptionApplyPersistsRuleResultsPreservesProtectedManualEditsAndSkipsDisabledRows() throws Exception {
+        DescriptionNormalizationRule oxxoRule = persistDescriptionNormalizationRule("Normalize OXXO", "OXXO Store");
+        persistDescriptionNormalizationCondition(oxxoRule, "OXXO");
+        DescriptionNormalizationRule uberRule = persistDescriptionNormalizationRule("Normalize Uber", "Uber");
+        persistDescriptionNormalizationCondition(uberRule, "Uber");
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        List<IngestionRecord> records = recordsFor(ingestion);
+        IngestionRecord disabledRecord = records.get(0);
+        IngestionRecord oxxoRecord = records.get(1);
+        IngestionRecord uberRecord = records.get(2);
+        String disabledRawDataBefore = disabledRecord.getRawData();
+        disabledRecord.setStatus(IngestionRecordStatus.DISABLED);
+        ingestionRecordRepository.saveAndFlush(disabledRecord);
+
+        Category manualCategory = persistCategory("Manual transport", CategoryType.EXPENSE, currentMockUser());
+        Tag manualTag = persistTag("Manual tag", currentMockUser());
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
+        TransactionCandidate oxxoCandidate = candidateForRecord(oxxoRecord);
+        oxxoCandidate.setCategory(manualCategory);
+        oxxoCandidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
+        oxxoCandidate.setTags(new HashSet<>(Set.of(manualTag)));
+        oxxoCandidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        transactionCandidateRepository.saveAndFlush(oxxoCandidate);
+
+        mockMvc
+            .perform(
+                patch(reviewUrl(ingestion, uberRecord, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            reviewPayload("2026-01-17", "2026-01-18", "Manual Uber", "-158.33", "MXN", "abc-123", "quoted, note")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.row.descriptionReview.source").value("USER_EDIT"));
+        long transactionCountBefore = financialTransactionRepository.count();
+
+        mockMvc
+            .perform(
+                post(descriptionReevaluationUrl(ingestion))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            descriptionReevaluationPayload(
+                                List.of(disabledRecord.getId(), oxxoRecord.getId(), uberRecord.getId()),
+                                true,
+                                true
+                            )
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows.length()").value(3))
+            .andExpect(jsonPath("$.rows[0].action").value("SKIPPED"))
+            .andExpect(jsonPath("$.rows[1].action").value("APPLIED"))
+            .andExpect(jsonPath("$.rows[1].descriptionReview.source").value("DESCRIPTION_RULE"))
+            .andExpect(jsonPath("$.rows[1].descriptionReview.normalizedDescription").value("OXXO Store"))
+            .andExpect(jsonPath("$.rows[2].action").value("MANUAL_PRESERVED"))
+            .andExpect(jsonPath("$.rows[2].suggestedDescription").value("Uber"));
+
+        assertThat(ingestionRecordRepository.findById(disabledRecord.getId()).orElseThrow().getRawData()).isEqualTo(disabledRawDataBefore);
+        JsonNode oxxoRawData = rawDataFor(oxxoRecord);
+        assertThat(oxxoRawData.path("normalized").path("description").asText()).isEqualTo("OXXO Store");
+        assertThat(oxxoRawData.path("normalized").has("category")).isFalse();
+        assertThat(oxxoRawData.path("normalized").has("tags")).isFalse();
+        assertThat(rawDataFor(uberRecord).path("normalized").path("description").asText()).isEqualTo("Manual Uber");
+
+        TransactionCandidate updatedOxxoCandidate = candidateForRecord(oxxoRecord);
+        assertThat(updatedOxxoCandidate.getDescription()).isEqualTo("OXXO Store");
+        assertThat(updatedOxxoCandidate.getCategory().getId()).isEqualTo(manualCategory.getId());
+        assertThat(updatedOxxoCandidate.getTags()).extracting(Tag::getId).containsExactly(manualTag.getId());
+        assertThat(candidateForRecord(uberRecord).getDescription()).isEqualTo("Manual Uber");
+        assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
     void reevaluateDescriptionsRejectsForeignIngestionAndRecordFromAnotherIngestion() throws Exception {
         TransactionIngestion accessibleIngestion = createWorkflowWithValidRows();
         TransactionIngestion otherIngestion = createWorkflowWithValidRows();
@@ -2677,6 +2755,46 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(updated.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
         assertThat(recordsFor(ingestion).get(0).getRawData()).isEqualTo(rawDataBefore);
         assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
+    }
+
+    @Test
+    @Transactional
+    void fileImportCandidateApplyRulesHonorsExplicitCategoryAndTagScopes() throws Exception {
+        Category category = persistCategory("Scoped transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Scoped ride share", currentMockUser());
+        TransactionRule rule = persistTransactionRule("Scoped OXXO rule", category, List.of(tag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "OXXO");
+        persistTransactionRuleCondition(rule, TransactionRuleField.ORIGIN, RuleOperator.EQUALS, "FILE_IMPORT");
+
+        TransactionIngestion categoryIngestion = createWorkflowWithSingleValidRow();
+        IngestionRecord categoryRecord = recordsFor(categoryIngestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(categoryIngestion))).andExpect(status().isOk());
+        TransactionCandidate categoryCandidate = candidateForRecord(categoryRecord);
+
+        mockMvc
+            .perform(
+                post(candidateApplyRulesUrl(categoryIngestion)).contentType(MediaType.APPLICATION_JSON).content("{\"scope\":\"CATEGORY\"}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].candidateId").value(categoryCandidate.getId()))
+            .andExpect(jsonPath("$.rows[0].categoryApplied").value(true))
+            .andExpect(jsonPath("$.rows[0].tagIdsApplied.length()").value(0))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds.length()").value(0));
+
+        TransactionIngestion tagsIngestion = createWorkflowWithSingleValidRow();
+        IngestionRecord tagsRecord = recordsFor(tagsIngestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(tagsIngestion))).andExpect(status().isOk());
+        TransactionCandidate tagsCandidate = candidateForRecord(tagsRecord);
+
+        mockMvc
+            .perform(post(candidateApplyRulesUrl(tagsIngestion)).contentType(MediaType.APPLICATION_JSON).content("{\"scope\":\"TAGS\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].candidateId").value(tagsCandidate.getId()))
+            .andExpect(jsonPath("$.rows[0].categoryApplied").value(false))
+            .andExpect(jsonPath("$.rows[0].tagIdsApplied[0]").value(tag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds[0]").value(tag.getId()));
     }
 
     @Test
