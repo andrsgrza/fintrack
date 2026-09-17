@@ -231,6 +231,18 @@ public class FinancialAccountService {
     }
 
     /**
+     * Returns the accounts visible to the current user for product read models.
+     * Normal users receive only their accounts; administrators retain the existing global visibility convention.
+     */
+    @Transactional(readOnly = true)
+    public List<FinancialAccount> findAllAccessibleAccountEntities() {
+        if (currentUserService.isAdmin()) {
+            return financialAccountRepository.findAllWithToOneRelationships();
+        }
+        return financialAccountRepository.findAllWithToOneRelationshipsByUserLogin(currentUserService.getCurrentUserLogin());
+    }
+
+    /**
      * Delete the financialAccount by id.
      *
      * @param id the id of the entity.

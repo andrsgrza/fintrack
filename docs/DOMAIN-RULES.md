@@ -1541,7 +1541,7 @@ For `CREDIT_CARD`, `initialBalance` is not `creditLimit` and is not available cr
 
 ---
 
-_Last updated: 2026-07-13 — FinancialAccount backend-only balance read model marked complete; UI/dashboard display, persisted balances, statement cycles, and investment valuation remain deferred._
+_Last updated: 2026-09-17 — FinancialAccount calculated balance read models are complete in the account detail and product overview UI. Persisted balances, charts/dashboard aggregation, statement cycles, and investment valuation remain deferred._
 
 ## DescriptionNormalizationRule
 

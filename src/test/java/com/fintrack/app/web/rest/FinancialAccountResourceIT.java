@@ -10,6 +10,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
@@ -45,6 +46,7 @@ import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.FinancialAccountOverviewDTO;
 import com.fintrack.app.service.dto.UserDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
 import jakarta.persistence.EntityManager;
@@ -54,6 +56,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
@@ -2954,6 +2957,112 @@ class FinancialAccountResourceIT {
             .andExpect(jsonPath("$.inflowTotal").value(sameNumber(BigDecimal.ZERO)))
             .andExpect(jsonPath("$.outflowTotal").value(sameNumber(BigDecimal.ZERO)))
             .andExpect(jsonPath("$.currentBalance").value(sameNumber(new BigDecimal("-25.00"))));
+    }
+
+    @Test
+    @Transactional
+    void getOverviewReturnsAccessibleProductSummariesForEveryAccountType() throws Exception {
+        FinancialAccount debit = createOverviewAccount("Overview debit", AccountType.DEBIT, new BigDecimal("100.00"), true);
+        FinancialAccount cash = createOverviewAccount("Overview cash", AccountType.CASH, new BigDecimal("50.00"), true);
+        FinancialAccount investment = createOverviewAccount("Overview investment", AccountType.INVESTMENT, new BigDecimal("700.00"), true);
+        FinancialAccount creditCard = createOverviewAccount("Overview card", AccountType.CREDIT_CARD, new BigDecimal("1000.00"), false);
+        FinancialAccount incompleteCard = createOverviewAccount(
+            "Overview incomplete card",
+            AccountType.CREDIT_CARD,
+            new BigDecimal("250.00"),
+            true
+        );
+        FinancialAccount foreignAccount = createOverviewAccount("Overview foreign", AccountType.DEBIT, new BigDecimal("999.00"), true);
+        foreignAccount.setUser(createOtherUser(em));
+        foreignAccount = financialAccountRepository.saveAndFlush(foreignAccount);
+
+        createTransaction(debit, LocalDate.now().minusDays(1), TransactionFlow.IN, new BigDecimal("50.00"));
+        createTransaction(debit, LocalDate.now(), TransactionFlow.OUT, new BigDecimal("25.00"));
+        createTransaction(creditCard, LocalDate.now(), TransactionFlow.OUT, new BigDecimal("500.00"));
+        createTransaction(creditCard, LocalDate.now(), TransactionFlow.IN, new BigDecimal("200.00"));
+        createCreditAccountDetails(creditCard, new BigDecimal("5000.00"));
+        em.flush();
+
+        String response = restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "/overview"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(5)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        List<FinancialAccountOverviewDTO> overview = om.readValue(response, new TypeReference<>() {});
+
+        assertThat(overview)
+            .extracting(FinancialAccountOverviewDTO::getName)
+            .containsExactlyInAnyOrder(
+                "Overview debit",
+                "Overview cash",
+                "Overview investment",
+                "Overview card",
+                "Overview incomplete card"
+            );
+        assertThat(overview).extracting(FinancialAccountOverviewDTO::getName).doesNotContain("Overview foreign");
+        FinancialAccountOverviewDTO debitOverview = overview
+            .stream()
+            .filter(account -> account.getId().equals(debit.getId()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(debitOverview.getAccountType()).isEqualTo(AccountType.DEBIT);
+        assertThat(debitOverview.getCurrentBalance()).isEqualByComparingTo("125.00");
+        FinancialAccountOverviewDTO creditOverview = overview
+            .stream()
+            .filter(account -> account.getId().equals(creditCard.getId()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(creditOverview.getCurrentDebt()).isEqualByComparingTo("1300.00");
+        assertThat(creditOverview.getCreditLimit()).isEqualByComparingTo("5000.00");
+        assertThat(creditOverview.getAvailableCredit()).isEqualByComparingTo("3700.00");
+        assertThat(creditOverview.getStatementDay()).isEqualTo(15);
+        assertThat(creditOverview.getPaymentDueDay()).isEqualTo(5);
+        assertThat(creditOverview.getAnnualInterestRate()).isEqualByComparingTo("65.00");
+        assertThat(creditOverview.getActive()).isFalse();
+        FinancialAccountOverviewDTO incompleteCardOverview = overview
+            .stream()
+            .filter(account -> account.getId().equals(incompleteCard.getId()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(incompleteCardOverview.getCurrentDebt()).isEqualByComparingTo("250.00");
+        assertThat(incompleteCardOverview.getMissingCreditDetails()).isTrue();
+        assertThat(incompleteCardOverview.getCreditLimit()).isNull();
+        assertThat(response).doesNotContain("createdAt", "updatedAt", "financialTransactions", "transactionIngestions", "\"user\"");
+
+        em.clear();
+        assertThat(em.find(FinancialAccount.class, debit.getId()).getInitialBalance()).isEqualByComparingTo("100.00");
+        assertThat(em.find(FinancialAccount.class, creditCard.getId()).getInitialBalance()).isEqualByComparingTo("1000.00");
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(authorities = AuthoritiesConstants.ADMIN)
+    void adminCanGetOverviewIncludingAnotherUsersAccount() throws Exception {
+        FinancialAccount foreignAccount = createOverviewAccount(
+            "Overview visible to admin",
+            AccountType.DEBIT,
+            new BigDecimal("100.00"),
+            true
+        );
+        foreignAccount.setUser(createOtherUser(em));
+        financialAccountRepository.saveAndFlush(foreignAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "/overview"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].name", hasItem("Overview visible to admin")));
+    }
+
+    private FinancialAccount createOverviewAccount(String name, AccountType accountType, BigDecimal initialBalance, boolean active) {
+        FinancialAccount account = createEntity(em);
+        account.setName(name);
+        account.setAccountType(accountType);
+        account.setInitialBalance(initialBalance);
+        account.setInitialBalanceDate(LocalDate.now().minusDays(2));
+        account.setActive(active);
+        return financialAccountRepository.saveAndFlush(account);
     }
 
     protected long getRepositoryCount() {

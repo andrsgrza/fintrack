@@ -2,28 +2,28 @@
   "fintrackApp": {
     "financialAccount": {
       "home": {
-        "title": "Financial Accounts",
+        "title": "Cuentas",
         "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nuevo Financial Account",
-        "createOrEditLabel": "Crear o editar Financial Account",
+        "createLabel": "Crear cuenta",
+        "createOrEditLabel": "Crear o editar cuenta",
         "createTitle": "Crear cuenta financiera",
         "editTitle": "Editar cuenta financiera",
-        "notFound": "Ningún Financial Accounts encontrado"
+        "notFound": "No se encontraron cuentas"
       },
-      "created": "Un nuevo Financial Account ha sido creado con el identificador {{ param }}",
-      "updated": "Un Financial Account ha sido actualizado con el identificador {{ param }}",
-      "deleted": "Un Financial Account ha sido eliminado con el identificador {{ param }}",
+      "created": "Se creó una cuenta con el identificador {{ param }}",
+      "updated": "Se actualizó la cuenta con el identificador {{ param }}",
+      "deleted": "Se eliminó la cuenta con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Financial Account {{ id }}?"
+        "question": "¿Seguro que quiere eliminar la cuenta {{ id }}?"
       },
       "detail": {
-        "title": "Financial Account"
+        "title": "Cuenta"
       },
       "id": "ID",
-      "name": "Name",
-      "institutionName": "Institution Name",
-      "accountType": "Account Type",
-      "currency": "Currency",
+      "name": "Nombre",
+      "institutionName": "Institución",
+      "accountType": "Tipo de cuenta",
+      "currency": "Moneda",
       "initialBalance": "Posición inicial",
       "initialBalanceByAccountType": {
         "DEBIT": "Saldo inicial",
@@ -38,13 +38,17 @@
         "INVESTMENT": "Valor de la cuenta cuando empezaste a registrar. La valuación detallada de inversiones queda pendiente."
       },
       "initialBalanceDate": "Fecha inicial de seguimiento",
-      "lastFourDigits": "Last Four Digits",
-      "description": "Description",
+      "lastFourDigits": "Últimos cuatro dígitos",
+      "description": "Descripción",
       "color": "Color",
-      "icon": "Icon",
-      "active": "Active",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
+      "icon": "Ícono",
+      "active": "Activa",
+      "status": {
+        "active": "Activa",
+        "inactive": "Inactiva"
+      },
+      "createdAt": "Creada en",
+      "updatedAt": "Actualizada en",
       "balanceSnapshot": "Resumen de balance",
       "loadingBalance": "Cargando balance...",
       "balanceUnavailable": "El balance no está disponible.",
@@ -52,6 +56,9 @@
       "currentDebt": "Deuda actual",
       "creditLimit": "Límite de crédito",
       "availableCredit": "Crédito disponible",
+      "statementDay": "Día de corte",
+      "paymentDueDay": "Día límite de pago",
+      "annualInterestRate": "Tasa anual",
       "inflowTotal": "Entradas totales",
       "outflowTotal": "Salidas totales",
       "asOfDate": "Fecha de corte",
@@ -61,12 +68,20 @@
       "noTransactionsYet": "Todavía no hay movimientos.",
       "transactionsUnavailable": "Los movimientos no están disponibles.",
       "viewAllTransactions": "Ver todos los movimientos",
-      "user": "User",
+      "overview": {
+        "loading": "Cargando cuentas...",
+        "loadError": "No se pudieron cargar las cuentas.",
+        "retry": "Intentar de nuevo",
+        "emptyTitle": "Todavía no hay cuentas",
+        "emptyDescription": "Crea una cuenta para empezar a registrar tus finanzas.",
+        "endsIn": "Termina en"
+      },
+      "user": "Usuario",
       "creditAccountDetails": "Detalles de tarjeta de crédito",
-      "financialTransactions": "Financial Transactions",
-      "subscriptions": "Subscriptions",
-      "budgets": "Budgets",
-      "transactionIngestions": "Transaction Ingestions"
+      "financialTransactions": "Transacciones",
+      "subscriptions": "Suscripciones",
+      "budgets": "Presupuestos",
+      "transactionIngestions": "Importaciones de transacciones"
     }
   }
 }

@@ -650,11 +650,11 @@ describe('FinancialAccount opening-position labels', () => {
 
     expect(within(section).getByText('13/07/2026')).toBeTruthy();
     expect(within(section).getByText('Bus fare')).toBeTruthy();
-    expect(within(section).getByText('OUT')).toBeTruthy();
+    expect(within(section).getByText('Expense')).toBeTruthy();
     expect(within(section).getByText('3 MXN')).toBeTruthy();
     expect(within(section).getByText('06/07/2026')).toBeTruthy();
     expect(within(section).getByText('Refund')).toBeTruthy();
-    expect(within(section).getByText('IN')).toBeTruthy();
+    expect(within(section).getByText('Income')).toBeTruthy();
     expect(within(section).getByText('5 MXN')).toBeTruthy();
     expect(within(section).queryByRole('link', { name: /edit/i })).toBeNull();
     expect(within(section).queryByRole('button', { name: /delete/i })).toBeNull();

@@ -43,6 +43,10 @@
       "color": "Color",
       "icon": "Icon",
       "active": "Active",
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "balanceSnapshot": "Balance snapshot",
@@ -52,6 +56,9 @@
       "currentDebt": "Current debt",
       "creditLimit": "Credit limit",
       "availableCredit": "Available credit",
+      "statementDay": "Statement closing day",
+      "paymentDueDay": "Payment due day",
+      "annualInterestRate": "Annual interest rate",
       "inflowTotal": "Inflow total",
       "outflowTotal": "Outflow total",
       "asOfDate": "As of date",
@@ -61,6 +68,14 @@
       "noTransactionsYet": "No transactions yet.",
       "transactionsUnavailable": "Transactions are not available.",
       "viewAllTransactions": "View all transactions",
+      "overview": {
+        "loading": "Loading accounts...",
+        "loadError": "Accounts could not be loaded.",
+        "retry": "Try again",
+        "emptyTitle": "No accounts yet",
+        "emptyDescription": "Create an account to start tracking your finances.",
+        "endsIn": "Ends in"
+      },
       "user": "User",
       "creditAccountDetails": "Credit Account Details",
       "financialTransactions": "Financial Transactions",

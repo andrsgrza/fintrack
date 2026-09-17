@@ -2,10 +2,10 @@
   "fintrackApp": {
     "AccountType": {
       "null": "",
-      "DEBIT": "DEBIT",
-      "CASH": "CASH",
-      "CREDIT_CARD": "CREDIT_CARD",
-      "INVESTMENT": "INVESTMENT"
+      "DEBIT": "Cuenta de débito",
+      "CASH": "Efectivo",
+      "CREDIT_CARD": "Tarjeta de crédito",
+      "INVESTMENT": "Cuenta de inversión"
     }
   }
 }

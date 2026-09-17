@@ -3,11 +3,13 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FinancialAccountBalanceService;
+import com.fintrack.app.service.FinancialAccountOverviewService;
 import com.fintrack.app.service.FinancialAccountQueryService;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.criteria.FinancialAccountCriteria;
 import com.fintrack.app.service.dto.FinancialAccountBalanceDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.FinancialAccountOverviewDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -45,17 +47,21 @@ public class FinancialAccountResource {
 
     private final FinancialAccountBalanceService financialAccountBalanceService;
 
+    private final FinancialAccountOverviewService financialAccountOverviewService;
+
     private final ObjectMapper objectMapper;
 
     public FinancialAccountResource(
         FinancialAccountService financialAccountService,
         FinancialAccountQueryService financialAccountQueryService,
         FinancialAccountBalanceService financialAccountBalanceService,
+        FinancialAccountOverviewService financialAccountOverviewService,
         ObjectMapper objectMapper
     ) {
         this.financialAccountService = financialAccountService;
         this.financialAccountQueryService = financialAccountQueryService;
         this.financialAccountBalanceService = financialAccountBalanceService;
+        this.financialAccountOverviewService = financialAccountOverviewService;
         this.objectMapper = objectMapper;
     }
 
@@ -197,6 +203,15 @@ public class FinancialAccountResource {
     public ResponseEntity<Long> countFinancialAccounts(FinancialAccountCriteria criteria) {
         LOG.debug("REST request to count FinancialAccounts by criteria: {}", criteria);
         return ResponseEntity.ok().body(financialAccountQueryService.countByCriteria(criteria));
+    }
+
+    /**
+     * {@code GET /financial-accounts/overview} : get product summaries for every FinancialAccount visible to the current user.
+     */
+    @GetMapping("/overview")
+    public ResponseEntity<List<FinancialAccountOverviewDTO>> getFinancialAccountOverview() {
+        LOG.debug("REST request to get FinancialAccount overview");
+        return ResponseEntity.ok(financialAccountOverviewService.getOverview());
     }
 
     /**

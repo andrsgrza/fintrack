@@ -7,7 +7,6 @@ import {
   entityDetailsBackButtonSelector,
   entityDetailsButtonSelector,
   entityEditButtonSelector,
-  entityTableSelector,
 } from '../../support/entity';
 
 describe('FinancialAccount e2e test', () => {
@@ -42,9 +41,6 @@ describe('FinancialAccount e2e test', () => {
     cy.get('[data-cy="currency"]').select('MXN');
     cy.get('[data-cy="initialBalance"]').clear().type('1000');
     cy.get('[data-cy="initialBalanceDate"]').type('2026-07-08');
-    cy.get('[data-cy="active"]').check();
-    cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
-    cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');
   };
 
   beforeEach(() => {
@@ -52,7 +48,7 @@ describe('FinancialAccount e2e test', () => {
   });
 
   beforeEach(() => {
-    cy.intercept('GET', '/api/financial-accounts+(?*|)').as('entitiesRequest');
+    cy.intercept('GET', '/api/financial-accounts/overview').as('overviewRequest');
     cy.intercept('POST', '/api/financial-accounts').as('postEntityRequest');
     cy.intercept('DELETE', '/api/financial-accounts/*').as('deleteEntityRequest');
   });
@@ -71,11 +67,11 @@ describe('FinancialAccount e2e test', () => {
   it('FinancialAccounts menu should load FinancialAccounts page', () => {
     cy.visit('/');
     cy.clickOnEntityMenuItem('financial-account');
-    cy.wait('@entitiesRequest').then(({ response }) => {
+    cy.wait('@overviewRequest').then(({ response }) => {
       if (response?.body.length === 0) {
-        cy.get(entityTableSelector).should('not.exist');
+        cy.get('[data-cy="financialAccountOverviewCard"]').should('not.exist');
       } else {
-        cy.get(entityTableSelector).should('exist');
+        cy.get('[data-cy="financialAccountOverviewCard"]').should('exist');
       }
     });
     cy.getEntityHeading('FinancialAccount').should('exist');
@@ -86,7 +82,7 @@ describe('FinancialAccount e2e test', () => {
     describe('create button click', () => {
       beforeEach(() => {
         cy.visit(financialAccountPageUrl);
-        cy.wait('@entitiesRequest');
+        cy.wait('@overviewRequest');
       });
 
       it('should load create FinancialAccount page', () => {
@@ -95,7 +91,7 @@ describe('FinancialAccount e2e test', () => {
         cy.getEntityCreateUpdateHeading('FinancialAccount');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
+        cy.wait('@overviewRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialAccountPageUrlPattern);
@@ -114,17 +110,23 @@ describe('FinancialAccount e2e test', () => {
         });
 
         cy.visit(financialAccountPageUrl);
-        cy.wait('@entitiesRequest');
+        cy.wait('@overviewRequest');
       });
 
       it('detail button click should load details FinancialAccount page', () => {
         cy.get(entityDetailsButtonSelector).first().click();
         cy.getEntityDetailsHeading('financialAccount');
         cy.get(entityDetailsBackButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
+        cy.wait('@overviewRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialAccountPageUrlPattern);
+      });
+
+      it('renders the product overview card without the generated CRUD table', () => {
+        cy.contains('[data-cy="financialAccountOverviewCard"]', financialAccount.name).should('contain', 'MXN').and('contain', '1000');
+        cy.get('[data-cy="financialAccountOverview"]').should('exist');
+        cy.get('[data-cy="entityTable"]').should('not.exist');
       });
 
       it('edit button click should load edit FinancialAccount page and go back', () => {
@@ -132,7 +134,7 @@ describe('FinancialAccount e2e test', () => {
         cy.getEntityCreateUpdateHeading('FinancialAccount');
         cy.get(entityCreateSaveButtonSelector).should('exist');
         cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
+        cy.wait('@overviewRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialAccountPageUrlPattern);
@@ -142,7 +144,7 @@ describe('FinancialAccount e2e test', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('FinancialAccount');
         cy.get(entityCreateSaveButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
+        cy.wait('@overviewRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialAccountPageUrlPattern);
@@ -157,7 +159,7 @@ describe('FinancialAccount e2e test', () => {
         cy.wait('@deleteEntityRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(204);
         });
-        cy.wait('@entitiesRequest').then(({ response }) => {
+        cy.wait('@overviewRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialAccountPageUrlPattern);
@@ -185,7 +187,7 @@ describe('FinancialAccount e2e test', () => {
         expect(response?.body.user.login).to.equal(username);
         financialAccount = response.body;
       });
-      cy.wait('@entitiesRequest').then(({ response }) => {
+      cy.wait('@overviewRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(200);
       });
       cy.url().should('match', financialAccountPageUrlPattern);
@@ -210,7 +212,7 @@ describe('FinancialAccount e2e test', () => {
         cy.login(username, password);
         cy.authenticatedRequest({
           method: 'GET',
-          url: '/api/financial-accounts',
+          url: '/api/financial-accounts/overview',
         }).then(({ body: userAccounts }) => {
           expect(userAccounts.some(account => account.id === adminAccount.id)).to.equal(false);
         });
@@ -235,7 +237,7 @@ describe('FinancialAccount e2e test', () => {
         cy.login(adminUsername, adminPassword);
         cy.authenticatedRequest({
           method: 'GET',
-          url: '/api/financial-accounts',
+          url: '/api/financial-accounts/overview',
         }).then(({ body: adminAccounts }) => {
           expect(adminAccounts.some(account => account.id === userAccount.id)).to.equal(true);
         });

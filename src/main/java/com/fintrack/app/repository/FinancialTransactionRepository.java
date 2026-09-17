@@ -2,6 +2,7 @@ package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.FinancialTransaction;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -106,6 +107,8 @@ public interface FinancialTransactionRepository
     Optional<LocalDate> findEarliestTransactionDateByAccountId(@Param("accountId") Long accountId);
 
     List<FinancialTransaction> findByAccountIdAndTransactionDateBetween(Long accountId, LocalDate startDate, LocalDate endDate);
+
+    List<FinancialTransaction> findByAccountIdInAndTransactionDateLessThanEqual(Collection<Long> accountIds, LocalDate asOfDate);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(

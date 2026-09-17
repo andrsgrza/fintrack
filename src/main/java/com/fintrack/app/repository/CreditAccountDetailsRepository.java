@@ -1,6 +1,7 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.CreditAccountDetails;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface CreditAccountDetailsRepository extends JpaRepository<CreditAccountDetails, Long> {
     boolean existsByAccountId(Long accountId);
+
+    List<CreditAccountDetails> findAllByAccount_IdIn(Collection<Long> accountIds);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from CreditAccountDetails creditAccountDetails where creditAccountDetails.account.id = :accountId")

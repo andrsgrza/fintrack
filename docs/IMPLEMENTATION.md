@@ -311,7 +311,9 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Missing CAD       | Snapshot returns `missingCreditDetails = true`, no error                                                            |
 | `INVESTMENT`      | Uses provisional cash-flow formula; investment valuation deferred                                                   |
 
-**Archivos:** `FinancialAccountBalanceService`, `AccountBalanceCalculator`, `DebitBalanceCalculator`, `CashBalanceCalculator`, `CreditCardBalanceCalculator`, `InvestmentBalanceCalculator`, `FinancialAccountBalanceDTO`, `FinancialTransactionRepository`, `FinancialAccountResource`.
+**Product overview:** `GET /api/financial-accounts/overview` returns a read-only `FinancialAccountOverviewDTO` for every account visible to the current user. It batches the balance inputs server-side rather than making one browser request per account. The response contains product identity, calculated balance/debt, and useful card details only; it persists no balance. The Financial Accounts list uses this endpoint and does not expose generated ids, audit fields, or relationship columns.
+
+**Archivos:** `FinancialAccountBalanceService`, `FinancialAccountOverviewService`, `AccountBalanceCalculator`, `DebitBalanceCalculator`, `CashBalanceCalculator`, `CreditCardBalanceCalculator`, `InvestmentBalanceCalculator`, `FinancialAccountBalanceDTO`, `FinancialAccountOverviewDTO`, `FinancialTransactionRepository`, `FinancialAccountResource`.
 
 #### Ownership ✅
 
@@ -328,17 +330,17 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 #### Domain rules ✅
 
-| Regla                                          | Estado | Notas                                                                              |
-| ---------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Usuario no puede ver/editar cuenta ajena       | ✅     |                                                                                    |
-| No cambiar dueño en update/patch               | ✅     |                                                                                    |
-| Admin accede a todo                            | ✅     |                                                                                    |
-| Delete orchestration                           | ✅     | TI tree → remaining FT → budget links → subscriptions null → CAD → account         |
-| `initialBalanceDate` floor                     | ✅     | no floor without txs; otherwise `<= earliest transactionDate`                      |
-| `initialBalance` mutable                       | ✅     | opening position; positive/zero/negative allowed; no balance recalculation         |
-| Monetary scale validation for `initialBalance` | ✅     | `scale <= 2`; reject without rounding; no non-negative rule                        |
-| `active` mutable                               | ✅     | no side effects                                                                    |
-| Balance actual/current position formulas       | ✅     | backend-only read model; no persisted balance fields; UI/charts/dashboard deferred |
+| Regla                                          | Estado | Notas                                                                                                                          |
+| ---------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Usuario no puede ver/editar cuenta ajena       | ✅     |                                                                                                                                |
+| No cambiar dueño en update/patch               | ✅     |                                                                                                                                |
+| Admin accede a todo                            | ✅     |                                                                                                                                |
+| Delete orchestration                           | ✅     | TI tree → remaining FT → budget links → subscriptions null → CAD → account                                                     |
+| `initialBalanceDate` floor                     | ✅     | no floor without txs; otherwise `<= earliest transactionDate`                                                                  |
+| `initialBalance` mutable                       | ✅     | opening position; positive/zero/negative allowed; no balance recalculation                                                     |
+| Monetary scale validation for `initialBalance` | ✅     | `scale <= 2`; reject without rounding; no non-negative rule                                                                    |
+| `active` mutable                               | ✅     | no side effects                                                                                                                |
+| Balance actual/current position formulas       | ✅     | calculated on demand; account detail and overview UI display it; no persisted balance fields, charts, or dashboard aggregation |
 
 #### Validations ✅
 

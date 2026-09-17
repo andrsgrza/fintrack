@@ -2,10 +2,10 @@
   "fintrackApp": {
     "AccountType": {
       "null": "",
-      "DEBIT": "DEBIT",
-      "CASH": "CASH",
-      "CREDIT_CARD": "CREDIT_CARD",
-      "INVESTMENT": "INVESTMENT"
+      "DEBIT": "Debit account",
+      "CASH": "Cash",
+      "CREDIT_CARD": "Credit card",
+      "INVESTMENT": "Investment account"
     }
   }
 }

@@ -292,6 +292,16 @@ For example, TransactionRuleCondition may store `FLOW = IN` or `FLOW = OUT`, but
 
 ## FinancialAccount + CreditAccountDetails
 
+### Product overview
+
+`/financial-account` is a product overview, not a generated CRUD table. It renders one concise card per accessible account with its name, translated type, currency, active/inactive state, optional last four digits, and a calculated balance summary.
+
+- `DEBIT`, `CASH`, and `INVESTMENT` cards show **Current balance / Saldo actual**.
+- `CREDIT_CARD` cards show **Current debt / Deuda actual** and, when `CreditAccountDetails` exists, credit limit, available credit, statement day, payment due day, and APR.
+- A historical card with no `CreditAccountDetails` remains visible with its calculated debt and an incomplete-card warning; the overview never creates details as a side effect.
+
+The overview does not display database ids, audit timestamps, ownership fields, or generated relationship dumps. View, Edit, and Delete remain available as secondary actions.
+
 ### Relationship type
 
 `FinancialAccount` to `CreditAccountDetails` is a 1:1 child-style relationship for credit card accounts.
