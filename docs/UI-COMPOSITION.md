@@ -302,6 +302,14 @@ For example, TransactionRuleCondition may store `FLOW = IN` or `FLOW = OUT`, but
 
 The overview does not display database ids, audit timestamps, ownership fields, or generated relationship dumps. View, Edit, and Delete remain available as secondary actions.
 
+### Product detail and delete
+
+`/financial-account/:id` is the canonical product detail view. It groups useful information into **Account**, **Balance**, optional **Credit details**, **Recent activity**, and **Status**. It shows the translated account type, currency, useful institution/last-four/description data, calculated balance data, and a read-only recent-transaction list. It intentionally hides database ids, audit timestamps, owner data, and raw Budget or TransactionIngestion relationship dumps.
+
+An inactive account shows a clear status badge and a concise historical-only explanation: history and balances remain available, existing work may finish, and the account becomes selectable for new transactions, imports, and rules only after reactivation. Credit-card details stay inline; a missing detail record offers the parent Account edit route rather than a child CRUD route.
+
+The account delete dialog identifies the account by name and explains the real behavior in product terms. The existing backend orchestration may clean eligible workflow/import data, while protected candidate/provenance references block deletion. A blocked response is rendered as contextual product copy, never as the raw server exception; successful delete returns to the account overview.
+
 ### Relationship type
 
 `FinancialAccount` to `CreditAccountDetails` is a 1:1 child-style relationship for credit card accounts.

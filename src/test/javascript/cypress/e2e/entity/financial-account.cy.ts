@@ -118,6 +118,7 @@ describe('FinancialAccount e2e test', () => {
           url: '/api/financial-accounts',
           body: buildFinancialAccountPayload(accountName),
         }).then(({ body }) => {
+          expect(body.active).to.equal(true);
           financialAccount = body;
         });
 
@@ -130,6 +131,10 @@ describe('FinancialAccount e2e test', () => {
           cy.get(entityDetailsButtonSelector).click();
         });
         cy.getEntityDetailsHeading('financialAccount');
+        cy.get('[data-cy="financialAccountDetailAccountSection"]').should('contain', financialAccount.name).and('contain', 'MXN');
+        cy.get('[data-cy="financialAccountStatus"]').should('exist').and('not.be.empty');
+        cy.get('[data-cy="financialAccountBalanceSection"]').should('contain', '1000');
+        cy.get('[data-cy="financialAccountDetailAccountSection"]').find('#id, #createdAt, #updatedAt').should('not.exist');
         cy.get(entityDetailsBackButtonSelector).click();
         cy.wait('@overviewRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
@@ -176,6 +181,8 @@ describe('FinancialAccount e2e test', () => {
         });
         cy.wait('@dialogDeleteRequest');
         cy.getEntityDeleteDialogHeading('financialAccount').should('exist');
+        cy.get('#fintrackApp\\.financialAccount\\.delete\\.question').should('contain', financialAccount.name);
+        cy.get('#fintrackApp\\.financialAccount\\.delete\\.question').should('not.contain', `Financial Account ${financialAccount.id}`);
         cy.get(entityConfirmDeleteButtonSelector).click();
         cy.wait('@deleteEntityRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(204);
@@ -187,6 +194,22 @@ describe('FinancialAccount e2e test', () => {
 
         financialAccount = undefined;
       });
+    });
+
+    it('shows the historical-only explanation for an inactive account', () => {
+      const inactiveAccountName = `inactive-${Date.now()}`;
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/financial-accounts',
+        body: { ...buildFinancialAccountPayload(inactiveAccountName), active: false },
+      }).then(({ body }) => {
+        financialAccount = body;
+        cy.visit(`/financial-account/${financialAccount.id}`);
+      });
+
+      cy.get('[data-cy="financialAccountStatus"]').should('contain', /Inactive|Inactiva/);
+      cy.get('[data-cy="financialAccountInactiveExplanation"]').should('exist');
+      cy.get('[data-cy="financialAccountBalanceSection"]').should('exist');
     });
   });
 
@@ -224,6 +247,7 @@ describe('FinancialAccount e2e test', () => {
         financialAccount = response.body.financialAccount;
       });
       cy.get('[data-cy="creditCardDetailsViewSection"]').should('contain', '5000').and('contain', '15').and('contain', '5');
+      cy.get('[data-cy="financialAccountBalanceSection"]').should('contain', '1000').and('contain', '5000');
       cy.get(entityEditButtonSelector).click();
       cy.get('[data-cy="accountType"]').should('be.disabled');
       cy.get('[data-cy="currency"]').should('be.disabled');

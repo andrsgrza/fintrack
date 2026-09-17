@@ -119,6 +119,7 @@ Active candidate foundation rules:
 - Category delete is blocked while any `TransactionCandidate.category` references the category. The service must not silently clear candidate categories, because candidate category is part of draft/provenance/review state.
 - Tag delete is blocked while any `TransactionCandidate` tag join references the tag. The service must not silently remove candidate tags.
 - FinancialAccount delete is blocked while a `MANUAL` or otherwise non-workflow-cleaned `TransactionCandidate` references the account. Controlled workflow cleanup may delete `FILE_IMPORT` candidates first as part of deleting an ingestion/account workflow tree; any candidate that would survive the account delete must reject the delete.
+- FinancialAccount product delete explains this orchestration without exposing persistence details: eligible related workflow/import data may be cleaned up, while protected candidate/provenance references block the deletion. The account detail remains available for inactive accounts and presents their history-only status; this UI does not alter the underlying delete or inactive-account rules.
 - `POSTED` and `CANCELLED` are final for mutation purposes.
 - Deleting a candidate clears its tag join rows.
 - There is no global `NEEDS_REVIEW` candidate lifecycle status. Review needs are represented by specific fields: `validationStatus`, `descriptionReviewStatus`, and `classificationReviewStatus`.

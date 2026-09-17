@@ -14,10 +14,17 @@
       "updated": "A Financial Account is updated with identifier {{ param }}",
       "deleted": "A Financial Account is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Financial Account {{ id }}?"
+        "title": "Delete account",
+        "question": "Are you sure you want to permanently delete {{ accountName }}?",
+        "consequences": "Related imported or workflow data is removed only when it can be cleaned up safely. Deletion can be blocked by protected transaction data.",
+        "protectedReferences": "This account cannot be deleted because it is still referenced by protected transaction data. Resolve those references first.",
+        "failed": "This account could not be deleted. Try again."
       },
       "detail": {
-        "title": "Financial Account"
+        "title": "Account details",
+        "account": "Account",
+        "status": "Status",
+        "creditDetails": "Credit details"
       },
       "id": "ID",
       "name": "Name",
@@ -45,7 +52,8 @@
       "active": "Active",
       "status": {
         "active": "Active",
-        "inactive": "Inactive"
+        "inactive": "Inactive",
+        "inactiveExplanation": "This account is inactive. Its history and balance remain available, and existing work can finish, but it cannot be selected for new transactions, imports, or rules until it is reactivated."
       },
       "createdAt": "Created At",
       "updatedAt": "Updated At",

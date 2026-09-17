@@ -9,36 +9,40 @@ import { ICreditAccountDetails } from 'app/shared/model/credit-account-details.m
 interface CreditCardDetailsViewSectionProps {
   details?: ICreditAccountDetails;
   accountId?: number;
+  currency?: string;
 }
 
-export const CreditCardDetailsViewSection = ({ details, accountId }: CreditCardDetailsViewSectionProps) => (
+const formatMoney = (value: number | undefined | null, currency: string | undefined) =>
+  value === undefined || value === null ? '' : `${value} ${currency ?? ''}`.trim();
+
+export const CreditCardDetailsViewSection = ({ details, accountId, currency }: CreditCardDetailsViewSectionProps) => (
   <div data-cy="creditCardDetailsViewSection">
     <h3>
-      <Translate contentKey="fintrackApp.creditAccountDetails.detail.title">Credit card details</Translate>
+      <Translate contentKey="fintrackApp.financialAccount.detail.creditDetails">Credit details</Translate>
     </h3>
     {details?.id ? (
       <dl className="jh-entity-details">
         <dt>
-          <Translate contentKey="fintrackApp.creditAccountDetails.creditLimit">Credit limit</Translate>
+          <Translate contentKey="fintrackApp.financialAccount.creditLimit">Credit limit</Translate>
         </dt>
-        <dd>{details.creditLimit}</dd>
+        <dd>{formatMoney(details.creditLimit, currency)}</dd>
         <dt>
-          <Translate contentKey="fintrackApp.creditAccountDetails.statementDay">Statement day</Translate>
+          <Translate contentKey="fintrackApp.financialAccount.statementDay">Statement closing day</Translate>
         </dt>
         <dd>{details.statementDay}</dd>
         <dt>
-          <Translate contentKey="fintrackApp.creditAccountDetails.paymentDueDay">Payment due day</Translate>
+          <Translate contentKey="fintrackApp.financialAccount.paymentDueDay">Payment due day</Translate>
         </dt>
         <dd>{details.paymentDueDay}</dd>
         <dt>
-          <Translate contentKey="fintrackApp.creditAccountDetails.annualInterestRate">Annual interest rate</Translate>
+          <Translate contentKey="fintrackApp.financialAccount.annualInterestRate">Annual interest rate</Translate>
         </dt>
         <dd>{details.annualInterestRate}</dd>
       </dl>
     ) : (
       <>
         <p>
-          <Translate contentKey="fintrackApp.creditAccountDetails.composition.notConfigured">
+          <Translate contentKey="fintrackApp.financialAccount.creditDetailsMissing">
             Credit card details have not been configured yet.
           </Translate>
         </p>

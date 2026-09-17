@@ -5,6 +5,7 @@ import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
+import enAccountType from 'app/../i18n/en/accountType.json';
 import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enCreditAccountDetails from 'app/../i18n/en/creditAccountDetails.json';
@@ -81,6 +82,7 @@ const baseState = {
 
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enFinancialAccount);
+  TranslatorContext.registerTranslations('en', enAccountType);
   TranslatorContext.registerTranslations('en', enFinancialTransaction);
   TranslatorContext.registerTranslations('en', enTransactionFlow);
   TranslatorContext.registerTranslations('en', enCreditAccountDetails);
@@ -199,11 +201,13 @@ const renderDetail = (accountType, creditAccountDetailsEntity = {}, detailOption
     const options =
       detailOptions === undefined ||
       Object.prototype.hasOwnProperty.call(detailOptions, 'balance') ||
-      Object.prototype.hasOwnProperty.call(detailOptions, 'transactions')
+      Object.prototype.hasOwnProperty.call(detailOptions, 'transactions') ||
+      Object.prototype.hasOwnProperty.call(detailOptions, 'account')
         ? detailOptions
         : { balance: detailOptions };
     setupDetailAxiosMocks(accountType, options);
   }
+  const accountOverrides = detailOptions?.account ?? {};
   mockState = {
     ...baseState,
     financialAccount: {
@@ -213,8 +217,16 @@ const renderDetail = (accountType, creditAccountDetailsEntity = {}, detailOption
         name: 'Test account',
         accountType,
         currency: 'MXN',
+        active: true,
+        institutionName: 'Test bank',
+        lastFourDigits: '1234',
         initialBalance: 123,
         initialBalanceDate: '2026-01-10',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        budgets: [{ id: 21 }],
+        transactionIngestions: [{ id: 22 }],
+        ...accountOverrides,
       },
     },
     creditAccountDetails: {
@@ -561,6 +573,33 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByText('Credit card details')).toBeNull();
   });
 
+  it('renders a product account detail without technical metadata or relationship dumps', () => {
+    renderDetail('DEBIT');
+
+    expect(screen.getByText('Account details')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountDetailAccountSection')).toBeTruthy();
+    expect(screen.getByText('Test bank')).toBeTruthy();
+    expect(screen.getByText('Debit account')).toBeTruthy();
+    expect(screen.getByText('••••1234')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountDetailStatusSection').textContent).toContain('Active');
+    expect(screen.queryByText('ID')).toBeNull();
+    expect(screen.queryByText('Created At')).toBeNull();
+    expect(screen.queryByText('Updated At')).toBeNull();
+    expect(screen.queryByText('Budgets')).toBeNull();
+    expect(screen.queryByText('Transaction Ingestions')).toBeNull();
+    expect(screen.queryByText('true')).toBeNull();
+    expect(screen.getByRole('link', { name: /edit/i }).getAttribute('href')).toBe('/financial-account/1/edit');
+  });
+
+  it('explains the historical-only meaning of an inactive account', () => {
+    renderDetail('DEBIT', {}, { account: { active: false } });
+
+    expect(screen.getByTestId('financialAccountStatus').textContent).toContain('Inactive');
+    expect(screen.getByTestId('financialAccountInactiveExplanation').textContent).toContain(
+      'cannot be selected for new transactions, imports, or rules until it is reactivated',
+    );
+  });
+
   it('shows DEBIT balance snapshot with current balance and hides credit-card-only fields', async () => {
     renderDetail('DEBIT', {}, { currentBalance: 273, inflowTotal: 200, outflowTotal: 50 });
 
@@ -590,10 +629,10 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.getByText('Opening card balance')).toBeTruthy();
     expect(screen.getByText('Tracking start date')).toBeTruthy();
     expect(screen.getByText('123')).toBeTruthy();
-    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit details')).toBeTruthy();
     expect(screen.getByText('Credit limit')).toBeTruthy();
-    expect(screen.getByText('50000')).toBeTruthy();
-    expect(screen.queryByText('Account')).toBeNull();
+    expect(screen.getByText('50000 MXN')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Account' })).toBeNull();
     expectNoMissingTranslations();
   });
 
@@ -686,6 +725,7 @@ describe('FinancialAccount opening-position labels', () => {
             description: 'Bus fare',
             flow: 'OUT',
             amount: 3,
+            category: { name: 'Transport' },
           },
           {
             id: 2502,
@@ -704,6 +744,7 @@ describe('FinancialAccount opening-position labels', () => {
     expect(within(section).getByText('Bus fare')).toBeTruthy();
     expect(within(section).getByText('Expense')).toBeTruthy();
     expect(within(section).getByText('3 MXN')).toBeTruthy();
+    expect(within(section).getByText('Transport')).toBeTruthy();
     expect(within(section).getByText('06/07/2026')).toBeTruthy();
     expect(within(section).getByText('Refund')).toBeTruthy();
     expect(within(section).getByText('Income')).toBeTruthy();

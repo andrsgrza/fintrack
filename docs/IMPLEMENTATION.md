@@ -313,6 +313,8 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 **Product overview:** `GET /api/financial-accounts/overview` returns a read-only `FinancialAccountOverviewDTO` for every account visible to the current user. It batches the balance inputs server-side rather than making one browser request per account. The response contains product identity, calculated balance/debt, and useful card details only; it persists no balance. The Financial Accounts list uses this endpoint and does not expose generated ids, audit fields, or relationship columns.
 
+**Product detail/delete UI (ACC-UX-3B):** `/financial-account/:id` is the canonical account view. It fetches the accessible account, its calculated balance snapshot, and a small read-only recent-transaction list; it renders translated account type/status and optional inline credit details, but not audit fields, owner data, technical relationship dumps, or database IDs. `active=false` shows the historical-only explanation without changing the ACC-UX-3A eligibility semantics. The existing `DELETE /api/financial-accounts/{id}` orchestration is unchanged: the dialog explains that cleanup can occur only when safe and that protected candidate/provenance references can block deletion; `400 invalid` becomes contextual product copy in the UI.
+
 **Archivos:** `FinancialAccountBalanceService`, `FinancialAccountOverviewService`, `AccountBalanceCalculator`, `DebitBalanceCalculator`, `CashBalanceCalculator`, `CreditCardBalanceCalculator`, `InvestmentBalanceCalculator`, `FinancialAccountBalanceDTO`, `FinancialAccountOverviewDTO`, `FinancialTransactionRepository`, `FinancialAccountResource`.
 
 #### Ownership ✅

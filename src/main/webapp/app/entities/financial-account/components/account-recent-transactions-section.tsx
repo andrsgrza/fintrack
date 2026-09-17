@@ -94,6 +94,9 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
               <th>
                 <Translate contentKey="fintrackApp.financialTransaction.amount">Amount</Translate>
               </th>
+              <th>
+                <Translate contentKey="fintrackApp.financialTransaction.category">Category</Translate>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -109,6 +112,7 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
                   <Translate contentKey={`fintrackApp.TransactionFlow.${transaction.flow}`} />
                 </td>
                 <td>{formatMoney(transaction.amount, currency)}</td>
+                <td>{transaction.category?.name ?? null}</td>
               </tr>
             ))}
           </tbody>

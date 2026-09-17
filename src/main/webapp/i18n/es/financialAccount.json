@@ -14,10 +14,17 @@
       "updated": "Se actualizó la cuenta con el identificador {{ param }}",
       "deleted": "Se eliminó la cuenta con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar la cuenta {{ id }}?"
+        "title": "Eliminar cuenta",
+        "question": "¿Seguro que quieres eliminar permanentemente {{ accountName }}?",
+        "consequences": "Los datos importados o de flujos relacionados se eliminan sólo cuando se pueden limpiar de forma segura. La eliminación puede bloquearse por datos de transacciones protegidos.",
+        "protectedReferences": "Esta cuenta no se puede eliminar porque todavía está referenciada por datos de transacciones protegidos. Resuelve esas referencias primero.",
+        "failed": "No se pudo eliminar esta cuenta. Inténtalo de nuevo."
       },
       "detail": {
-        "title": "Cuenta"
+        "title": "Detalles de la cuenta",
+        "account": "Cuenta",
+        "status": "Estado",
+        "creditDetails": "Detalles de crédito"
       },
       "id": "ID",
       "name": "Nombre",
@@ -45,7 +52,8 @@
       "active": "Activa",
       "status": {
         "active": "Activa",
-        "inactive": "Inactiva"
+        "inactive": "Inactiva",
+        "inactiveExplanation": "Esta cuenta está inactiva. Su historial y saldo permanecen disponibles, y los flujos existentes pueden terminar, pero no se puede seleccionar para nuevas transacciones, importaciones o reglas hasta que se reactive."
       },
       "createdAt": "Creada en",
       "updatedAt": "Actualizada en",

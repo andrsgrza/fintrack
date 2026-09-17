@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
+import { Alert, Badge, Button, Col, Row } from 'reactstrap';
 import { TextFormat, Translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { APP_DATE_FORMAT, APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
+import { APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntity } from './financial-account.reducer';
@@ -29,6 +29,7 @@ export const FinancialAccountDetail = () => {
 
   const financialAccountEntity = useAppSelector(state => state.financialAccount.entity);
   const creditAccountDetailsEntity = useAppSelector(state => state.creditAccountDetails.entity);
+  const isInactive = financialAccountEntity.active === false;
 
   useEffect(() => {
     if (financialAccountEntity.id && financialAccountEntity.accountType === 'CREDIT_CARD') {
@@ -40,137 +41,118 @@ export const FinancialAccountDetail = () => {
     <Row>
       <Col md="8">
         <h2 data-cy="financialAccountDetailsHeading">
-          <Translate contentKey="fintrackApp.financialAccount.detail.title">FinancialAccount</Translate>
+          <Translate contentKey="fintrackApp.financialAccount.detail.title">Account details</Translate>
         </h2>
-        <dl className="jh-entity-details">
-          <dt>
-            <span id="id">
-              <Translate contentKey="global.field.id">ID</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.id}</dd>
-          <dt>
-            <span id="name">
-              <Translate contentKey="fintrackApp.financialAccount.name">Name</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.name}</dd>
-          <dt>
-            <span id="institutionName">
-              <Translate contentKey="fintrackApp.financialAccount.institutionName">Institution Name</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.institutionName}</dd>
-          <dt>
-            <span id="accountType">
-              <Translate contentKey="fintrackApp.financialAccount.accountType">Account Type</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.accountType}</dd>
-          <dt>
-            <span id="currency">
-              <Translate contentKey="fintrackApp.financialAccount.currency">Currency</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.currency}</dd>
-          <dt>
-            <span id="initialBalance">
-              <Translate contentKey={getInitialBalanceLabelKey(financialAccountEntity.accountType)}>Opening position</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.initialBalance}</dd>
-          <dt>
-            <span id="initialBalanceDate">
-              <Translate contentKey="fintrackApp.financialAccount.initialBalanceDate">Initial Balance Date</Translate>
-            </span>
-          </dt>
-          <dd>
-            {financialAccountEntity.initialBalanceDate ? (
-              <TextFormat value={financialAccountEntity.initialBalanceDate} type="date" format={APP_LOCAL_DATE_FORMAT} />
-            ) : null}
-          </dd>
-          <dt>
-            <span id="lastFourDigits">
-              <Translate contentKey="fintrackApp.financialAccount.lastFourDigits">Last Four Digits</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.lastFourDigits}</dd>
-          <dt>
-            <span id="description">
-              <Translate contentKey="fintrackApp.financialAccount.description">Description</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.description}</dd>
-          <dt>
-            <span id="color">
-              <Translate contentKey="fintrackApp.financialAccount.color">Color</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.color}</dd>
-          <dt>
-            <span id="icon">
-              <Translate contentKey="fintrackApp.financialAccount.icon">Icon</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.icon}</dd>
-          <dt>
-            <span id="active">
-              <Translate contentKey="fintrackApp.financialAccount.active">Active</Translate>
-            </span>
-          </dt>
-          <dd>{financialAccountEntity.active ? 'true' : 'false'}</dd>
-          <dt>
-            <span id="createdAt">
-              <Translate contentKey="fintrackApp.financialAccount.createdAt">Created At</Translate>
-            </span>
-          </dt>
-          <dd>
-            {financialAccountEntity.createdAt ? (
-              <TextFormat value={financialAccountEntity.createdAt} type="date" format={APP_DATE_FORMAT} />
-            ) : null}
-          </dd>
-          <dt>
-            <span id="updatedAt">
-              <Translate contentKey="fintrackApp.financialAccount.updatedAt">Updated At</Translate>
-            </span>
-          </dt>
-          <dd>
-            {financialAccountEntity.updatedAt ? (
-              <TextFormat value={financialAccountEntity.updatedAt} type="date" format={APP_DATE_FORMAT} />
-            ) : null}
-          </dd>
-          <dt>
-            <Translate contentKey="fintrackApp.financialAccount.budgets">Budgets</Translate>
-          </dt>
-          <dd>
-            {financialAccountEntity.budgets
-              ? financialAccountEntity.budgets.map((val, i) => (
-                  <span key={val.id}>
-                    <a>{val.id}</a>
-                    {financialAccountEntity.budgets && i === financialAccountEntity.budgets.length - 1 ? '' : ', '}
+        <section data-cy="financialAccountDetailAccountSection" data-testid="financialAccountDetailAccountSection" className="mb-4">
+          <h3>
+            <Translate contentKey="fintrackApp.financialAccount.detail.account">Account</Translate>
+          </h3>
+          <dl className="jh-entity-details mb-0">
+            <dt>
+              <span id="name">
+                <Translate contentKey="fintrackApp.financialAccount.name">Name</Translate>
+              </span>
+            </dt>
+            <dd>{financialAccountEntity.name}</dd>
+            {financialAccountEntity.institutionName ? (
+              <>
+                <dt>
+                  <span id="institutionName">
+                    <Translate contentKey="fintrackApp.financialAccount.institutionName">Institution Name</Translate>
                   </span>
-                ))
-              : null}
-          </dd>
-          <dt>
-            <Translate contentKey="fintrackApp.financialAccount.transactionIngestions">Transaction Ingestions</Translate>
-          </dt>
-          <dd>
-            {financialAccountEntity.transactionIngestions
-              ? financialAccountEntity.transactionIngestions.map((val, i) => (
-                  <span key={val.id}>
-                    <a>{val.id}</a>
-                    {financialAccountEntity.transactionIngestions && i === financialAccountEntity.transactionIngestions.length - 1
-                      ? ''
-                      : ', '}
+                </dt>
+                <dd>{financialAccountEntity.institutionName}</dd>
+              </>
+            ) : null}
+            <dt>
+              <span id="accountType">
+                <Translate contentKey="fintrackApp.financialAccount.accountType">Account Type</Translate>
+              </span>
+            </dt>
+            <dd>
+              {financialAccountEntity.accountType ? (
+                <Translate contentKey={`fintrackApp.AccountType.${financialAccountEntity.accountType}`} />
+              ) : null}
+            </dd>
+            <dt>
+              <span id="currency">
+                <Translate contentKey="fintrackApp.financialAccount.currency">Currency</Translate>
+              </span>
+            </dt>
+            <dd>{financialAccountEntity.currency}</dd>
+            <dt>
+              <span id="initialBalance">
+                <Translate contentKey={getInitialBalanceLabelKey(financialAccountEntity.accountType)}>Opening position</Translate>
+              </span>
+            </dt>
+            <dd>{financialAccountEntity.initialBalance}</dd>
+            <dt>
+              <span id="initialBalanceDate">
+                <Translate contentKey="fintrackApp.financialAccount.initialBalanceDate">Initial Balance Date</Translate>
+              </span>
+            </dt>
+            <dd>
+              {financialAccountEntity.initialBalanceDate ? (
+                <TextFormat value={financialAccountEntity.initialBalanceDate} type="date" format={APP_LOCAL_DATE_FORMAT} />
+              ) : null}
+            </dd>
+            {financialAccountEntity.lastFourDigits ? (
+              <>
+                <dt>
+                  <span id="lastFourDigits">
+                    <Translate contentKey="fintrackApp.financialAccount.lastFourDigits">Last Four Digits</Translate>
                   </span>
-                ))
-              : null}
-          </dd>
-        </dl>
+                </dt>
+                <dd>{`••••${financialAccountEntity.lastFourDigits}`}</dd>
+              </>
+            ) : null}
+            {financialAccountEntity.description ? (
+              <>
+                <dt>
+                  <span id="description">
+                    <Translate contentKey="fintrackApp.financialAccount.description">Description</Translate>
+                  </span>
+                </dt>
+                <dd>{financialAccountEntity.description}</dd>
+              </>
+            ) : null}
+          </dl>
+        </section>
+        <section data-cy="financialAccountDetailStatusSection" data-testid="financialAccountDetailStatusSection" className="mb-4">
+          <h3>
+            <Translate contentKey="fintrackApp.financialAccount.detail.status">Status</Translate>
+          </h3>
+          {financialAccountEntity.id ? (
+            <Badge color={isInactive ? 'secondary' : 'success'} pill data-cy="financialAccountStatus" data-testid="financialAccountStatus">
+              <Translate
+                contentKey={isInactive ? 'fintrackApp.financialAccount.status.inactive' : 'fintrackApp.financialAccount.status.active'}
+              >
+                {isInactive ? 'Inactive' : 'Active'}
+              </Translate>
+            </Badge>
+          ) : null}
+          {isInactive ? (
+            <Alert
+              color="secondary"
+              fade={false}
+              className="mt-3 mb-0"
+              data-cy="financialAccountInactiveExplanation"
+              data-testid="financialAccountInactiveExplanation"
+            >
+              <Translate contentKey="fintrackApp.financialAccount.status.inactiveExplanation">
+                This account is inactive. Its history and balance remain available, and existing work can finish, but it cannot be selected
+                for new transactions, imports, or rules until it is reactivated.
+              </Translate>
+            </Alert>
+          ) : null}
+        </section>
         {financialAccountEntity.accountType === 'CREDIT_CARD' ? (
           <div className="mt-3 mb-3">
-            <CreditCardDetailsViewSection details={creditAccountDetailsEntity} accountId={financialAccountEntity.id} />
+            <CreditCardDetailsViewSection
+              details={creditAccountDetailsEntity}
+              accountId={financialAccountEntity.id}
+              currency={financialAccountEntity.currency}
+            />
           </div>
         ) : null}
         {financialAccountEntity.id ? (

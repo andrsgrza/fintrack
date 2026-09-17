@@ -3047,3 +3047,7 @@ npm run webapp:build:dev -- --env stats=minimal
 ## ACC-UX-3A — inactive FinancialAccount historical-only policy
 
 Focused coverage lives in `FinancialAccountResourceIT` (owner-scoped selectable endpoint, inactive exclusion/include, reactivation, and no admin cross-user product leakage), `TransactionCandidateResourceIT` (new/reassigned inactive rejection and historical draft autosave/post), `TransactionIngestionWorkflowResourceIT` (new FILE rejection and completion after deactivation), `TransactionRuleConditionResourceIT` / `TransactionRuleResourceIT` (new or changed inactive account conditions rejected while historical conditions remain editable), and `FinancialTransactionResourceIT` (direct create rejection). Jest covers the shared product selector in manual draft, new ingestion, and rule-condition forms.
+
+## ACC-UX-3B — account product detail and delete UX
+
+`npm run jest -- financial-account` covers the canonical detail: technical metadata and raw relationships are absent, active/inactive status and the historical-only explanation render correctly, debit/credit balance data and contextual credit details render safely, recent activity is read-only, and the parent edit action remains available. `financial-account-delete-dialog.spec.tsx` verifies account-name confirmation, protected-reference error copy without raw backend text, and successful-delete redirect behavior. Cypress `financial-account.cy.ts` covers active detail, inactive explanation, inline credit-card detail/balance, and a safe successful-delete redirect.
