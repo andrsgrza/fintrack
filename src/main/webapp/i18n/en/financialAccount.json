@@ -59,14 +59,19 @@
       "updatedAt": "Updated At",
       "balanceSnapshot": "Balance snapshot",
       "loadingBalance": "Loading balance...",
+      "loading": "Loading...",
       "balanceUnavailable": "Balance is not available.",
       "currentBalance": "Current balance",
       "currentDebt": "Current debt",
       "creditLimit": "Credit limit",
+      "creditLimitHelp": "Maximum approved credit line for this card.",
       "availableCredit": "Available credit",
       "statementDay": "Statement closing day",
+      "statementDayHelp": "Day of the month when the statement period closes.",
       "paymentDueDay": "Payment due day",
+      "paymentDueDayHelp": "Day of the month when payment is due.",
       "annualInterestRate": "Annual interest rate",
+      "annualInterestRateHelp": "Annual percentage interest rate. Used later for interest calculations.",
       "configured": {
         "saveError": "The account could not be saved. Review the account and credit-card details and try again."
       },
@@ -88,7 +93,7 @@
         "endsIn": "Ends in"
       },
       "user": "User",
-      "creditAccountDetails": "Credit Account Details",
+      "creditAccountDetails": "Credit card details",
       "financialTransactions": "Financial Transactions",
       "subscriptions": "Subscriptions",
       "budgets": "Budgets",

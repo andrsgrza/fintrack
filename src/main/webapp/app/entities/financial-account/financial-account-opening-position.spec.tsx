@@ -296,7 +296,18 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Budgets')).toBeNull();
     expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
+  });
+
+  it('renders a translated label for every supported account type', () => {
+    renderCreateForm();
+
+    const optionLabels = Array.from((screen.getByLabelText('Account Type') as HTMLSelectElement).options).map(option => option.textContent);
+
+    expect(optionLabels).toEqual(['Debit account', 'Cash', 'Credit card', 'Investment account']);
+    expect(optionLabels).not.toContain('DEBIT');
+    expect(optionLabels).not.toContain('CREDIT_CARD');
+    expect(optionLabels).not.toContain('INVESTMENT');
   });
 
   it('renders secondary account fields before account type in create mode', () => {
@@ -334,9 +345,9 @@ describe('FinancialAccount opening-position labels', () => {
     ).toBeNull();
     expect((screen.getByLabelText('Opening card balance') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Tracking start date') as HTMLInputElement).value).toBe('');
-    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit details')).toBeTruthy();
     expect(screen.getByLabelText('Credit limit')).toBeTruthy();
-    expect(screen.getByLabelText('Statement day')).toBeTruthy();
+    expect(screen.getByLabelText('Statement closing day')).toBeTruthy();
     expect(screen.getByLabelText('Payment due day')).toBeTruthy();
     expect(screen.getByLabelText('Annual interest rate')).toBeTruthy();
     expect(screen.queryByLabelText('Account')).toBeNull();
@@ -399,7 +410,7 @@ describe('FinancialAccount opening-position labels', () => {
     fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
     fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '50000' } });
-    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Statement closing day'), { target: { value: '15' } });
     fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '5' } });
     fireEvent.change(screen.getByLabelText('Annual interest rate'), { target: { value: '65' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
@@ -439,14 +450,14 @@ describe('FinancialAccount opening-position labels', () => {
       ),
     ).toBeNull();
     expect((screen.getByLabelText('Initial balance') as HTMLInputElement).value).toBe('');
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
     expectNoMissingTranslations();
   });
 
   it('does not show credit card details in DEBIT edit mode', () => {
     renderEditForm('DEBIT');
 
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
   });
 
   it('hydrates existing credit card details and updates parent and child with one configured request', async () => {
@@ -461,7 +472,7 @@ describe('FinancialAccount opening-position labels', () => {
       account: { id: 1, name: 'Existing account' },
     });
 
-    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit details')).toBeTruthy();
     expect((screen.getByLabelText('Credit limit') as HTMLInputElement).value).toBe('50000');
     expect(screen.queryByLabelText('Account')).toBeNull();
     expectNoMissingTranslations();
@@ -492,7 +503,7 @@ describe('FinancialAccount opening-position labels', () => {
     fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
     fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
     expect((screen.getByLabelText('Account Type') as HTMLSelectElement).value).toBe('CREDIT_CARD');
-    expect(screen.getByText('Credit card details')).toBeTruthy();
+    expect(screen.getByText('Credit details')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
     await waitFor(() => expect(screen.getAllByText('This field is required.')).toHaveLength(3));
@@ -509,7 +520,7 @@ describe('FinancialAccount opening-position labels', () => {
     fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
     fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '50000' } });
-    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Statement closing day'), { target: { value: '15' } });
     fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
@@ -526,7 +537,7 @@ describe('FinancialAccount opening-position labels', () => {
     mockAxiosPut.mockResolvedValue({ data: { financialAccount: { id: 1 } } });
 
     fireEvent.change(screen.getByLabelText('Credit limit'), { target: { value: '40000' } });
-    fireEvent.change(screen.getByLabelText('Statement day'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('Statement closing day'), { target: { value: '12' } });
     fireEvent.change(screen.getByLabelText('Payment due day'), { target: { value: '4' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
@@ -570,7 +581,7 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.getByText('Tracking start date')).toBeTruthy();
     expect(screen.getByText('123')).toBeTruthy();
     expect(screen.queryByText('Opening card balance')).toBeNull();
-    expect(screen.queryByText('Credit card details')).toBeNull();
+    expect(screen.queryByText('Credit details')).toBeNull();
   });
 
   it('renders a product account detail without technical metadata or relationship dumps', () => {

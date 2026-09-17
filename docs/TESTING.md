@@ -3051,3 +3051,7 @@ Focused coverage lives in `FinancialAccountResourceIT` (owner-scoped selectable 
 ## ACC-UX-3B — account product detail and delete UX
 
 `npm run jest -- financial-account` covers the canonical detail: technical metadata and raw relationships are absent, active/inactive status and the historical-only explanation render correctly, debit/credit balance data and contextual credit details render safely, recent activity is read-only, and the parent edit action remains available. `financial-account-delete-dialog.spec.tsx` verifies account-name confirmation, protected-reference error copy without raw backend text, and successful-delete redirect behavior. Cypress `financial-account.cy.ts` covers active detail, inactive explanation, inline credit-card detail/balance, and a safe successful-delete redirect.
+
+## ACC-UX-4 — CreditAccountDetails technical UI demotion
+
+`npm run jest -- credit-account-details` covers the retained direct child routes: list/detail show the technical notice and meaningful parent-account links, while direct create/edit routes still resolve but offer no child write form or Save control. `menu.spec.tsx` verifies FinancialAccount remains in the normal entity menu and CreditAccountDetails is absent. FinancialAccount Jest/Cypress coverage continues to verify that credit-card create/edit occurs only through the configured parent request. The focused `credit-account-details.cy.ts` smoke test covers the technical list, direct detail parent navigation, and direct write-route guidance without exercising generic child writes.

@@ -2,38 +2,37 @@
   "fintrackApp": {
     "creditAccountDetails": {
       "home": {
-        "title": "Detalles de tarjeta de crédito",
+        "title": "Detalles técnicos de tarjeta de crédito",
         "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nuevos detalles de tarjeta de crédito",
-        "createOrEditLabel": "Crear o editar detalles de tarjeta de crédito",
-        "createTitle": "Crear detalles de tarjeta de crédito",
-        "editTitle": "Editar detalles de tarjeta de crédito",
-        "notFound": "No se encontraron detalles de tarjeta de crédito"
+        "notFound": "No se encontraron detalles técnicos de tarjeta de crédito"
       },
-      "created": "Se crearon nuevos detalles de tarjeta de crédito con el identificador {{ param }}",
-      "updated": "Se actualizaron detalles de tarjeta de crédito con el identificador {{ param }}",
-      "deleted": "Se eliminaron detalles de tarjeta de crédito con el identificador {{ param }}",
+      "created": "Se crearon detalles técnicos de tarjeta de crédito con el identificador {{ param }}",
+      "updated": "Se actualizaron detalles técnicos de tarjeta de crédito con el identificador {{ param }}",
+      "deleted": "Se eliminaron detalles técnicos de tarjeta de crédito con el identificador {{ param }}",
       "delete": {
-        "title": "No se pueden eliminar los detalles de tarjeta de crédito",
-        "message": "Los detalles de tarjeta de crédito no se pueden eliminar directamente. Estos detalles son necesarios para las cuentas de tarjeta de crédito. Para eliminarlos, debes eliminar la cuenta financiera."
+        "title": "La eliminación directa no está disponible",
+        "message": "Los detalles de tarjeta de crédito no se pueden eliminar de forma independiente. Administra la cuenta padre en su lugar."
       },
       "detail": {
-        "title": "Detalles de tarjeta de crédito"
+        "title": "Detalles técnicos de tarjeta de crédito"
       },
-      "id": "ID",
       "creditLimit": "Límite de crédito",
-      "creditLimitHelp": "Línea máxima de crédito aprobada para esta tarjeta.",
       "statementDay": "Día de corte",
-      "statementDayHelp": "Día del mes en que cierra el periodo de corte.",
       "paymentDueDay": "Día límite de pago",
-      "paymentDueDayHelp": "Día del mes en que vence el pago.",
-      "annualInterestRate": "Tasa anual de interés",
-      "annualInterestRateHelp": "Porcentaje anual de interés. Se usará después para cálculos de intereses.",
-      "createdAt": "Creado en",
-      "updatedAt": "Actualizado en",
-      "account": "Cuenta",
+      "annualInterestRate": "Tasa de interés anual",
+      "account": "Cuenta padre",
+      "technical": {
+        "badge": "Técnico",
+        "description": "Los detalles de la tarjeta de crédito normalmente se administran desde la cuenta padre.",
+        "writeUnavailable": "La creación y edición directas no están disponibles. Administra la cuenta de tarjeta de crédito padre en su lugar.",
+        "writeUnavailableTitle": "La edición directa no está disponible",
+        "manageFromAccount": "Crea o edita la cuenta de tarjeta de crédito padre para administrar estos detalles.",
+        "goToAccounts": "Ir a cuentas",
+        "backToAccounts": "Volver a cuentas",
+        "manageParentAccount": "Editar cuenta padre"
+      },
       "composition": {
-        "notConfigured": "Los detalles de tarjeta de crédito aún no han sido configurados."
+        "notConfigured": "Los detalles de tarjeta de crédito aún no se han configurado."
       }
     }
   }

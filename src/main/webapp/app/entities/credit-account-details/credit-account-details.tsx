@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Table } from 'reactstrap';
-import { TextFormat, Translate, getSortState } from 'react-jhipster';
+import { Translate, getSortState } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
-import { APP_DATE_FORMAT } from 'app/config/constants';
 import { ASC, DESC } from 'app/shared/util/pagination.constants';
 import { overrideSortStateWithQueryParams } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities } from './credit-account-details.reducer';
+import CreditAccountDetailsTechnicalNotice from './credit-account-details-technical-notice';
 
 export const CreditAccountDetails = () => {
   const dispatch = useAppDispatch();
@@ -65,23 +65,14 @@ export const CreditAccountDetails = () => {
 
   return (
     <div>
+      <CreditAccountDetailsTechnicalNotice />
       <h2 id="credit-account-details-heading" data-cy="CreditAccountDetailsHeading">
-        <Translate contentKey="fintrackApp.creditAccountDetails.home.title">Credit Account Details</Translate>
+        <Translate contentKey="fintrackApp.creditAccountDetails.home.title">Technical credit card details</Translate>
         <div className="d-flex justify-content-end">
           <Button className="me-2" color="info" onClick={handleSyncList} disabled={loading}>
             <FontAwesomeIcon icon="sync" spin={loading} />{' '}
             <Translate contentKey="fintrackApp.creditAccountDetails.home.refreshListLabel">Refresh List</Translate>
           </Button>
-          <Link
-            to="/credit-account-details/new"
-            className="btn btn-primary jh-create-entity"
-            id="jh-create-entity"
-            data-cy="entityCreateButton"
-          >
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.creditAccountDetails.home.createLabel">Create new Credit Account Details</Translate>
-          </Link>
         </div>
       </h2>
       <div className="table-responsive">
@@ -89,9 +80,8 @@ export const CreditAccountDetails = () => {
           <Table responsive>
             <thead>
               <tr>
-                <th className="hand" onClick={sort('id')}>
-                  <Translate contentKey="fintrackApp.creditAccountDetails.id">ID</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('id')} />
+                <th>
+                  <Translate contentKey="fintrackApp.creditAccountDetails.account">Account</Translate>
                 </th>
                 <th className="hand" onClick={sort('creditLimit')}>
                   <Translate contentKey="fintrackApp.creditAccountDetails.creditLimit">Credit Limit</Translate>{' '}
@@ -109,17 +99,6 @@ export const CreditAccountDetails = () => {
                   <Translate contentKey="fintrackApp.creditAccountDetails.annualInterestRate">Annual Interest Rate</Translate>{' '}
                   <FontAwesomeIcon icon={getSortIconByFieldName('annualInterestRate')} />
                 </th>
-                <th className="hand" onClick={sort('createdAt')}>
-                  <Translate contentKey="fintrackApp.creditAccountDetails.createdAt">Created At</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('createdAt')} />
-                </th>
-                <th className="hand" onClick={sort('updatedAt')}>
-                  <Translate contentKey="fintrackApp.creditAccountDetails.updatedAt">Updated At</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.creditAccountDetails.account">Account</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
                 <th />
               </tr>
             </thead>
@@ -127,31 +106,14 @@ export const CreditAccountDetails = () => {
               {creditAccountDetailsList.map((creditAccountDetails, i) => (
                 <tr key={`entity-${i}`} data-cy="entityTable">
                   <td>
-                    <Button tag={Link} to={`/credit-account-details/${creditAccountDetails.id}`} color="link" size="sm">
-                      {creditAccountDetails.id}
-                    </Button>
+                    {creditAccountDetails.account ? (
+                      <Link to={`/financial-account/${creditAccountDetails.account.id}`}>{creditAccountDetails.account.name}</Link>
+                    ) : null}
                   </td>
                   <td>{creditAccountDetails.creditLimit}</td>
                   <td>{creditAccountDetails.statementDay}</td>
                   <td>{creditAccountDetails.paymentDueDay}</td>
                   <td>{creditAccountDetails.annualInterestRate}</td>
-                  <td>
-                    {creditAccountDetails.createdAt ? (
-                      <TextFormat type="date" value={creditAccountDetails.createdAt} format={APP_DATE_FORMAT} />
-                    ) : null}
-                  </td>
-                  <td>
-                    {creditAccountDetails.updatedAt ? (
-                      <TextFormat type="date" value={creditAccountDetails.updatedAt} format={APP_DATE_FORMAT} />
-                    ) : null}
-                  </td>
-                  <td>
-                    {creditAccountDetails.account ? (
-                      <Link to={`/financial-account/${creditAccountDetails.account.id}`}>{creditAccountDetails.account.name}</Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">
                       <Button
@@ -164,29 +126,6 @@ export const CreditAccountDetails = () => {
                         <FontAwesomeIcon icon="eye" />{' '}
                         <span className="d-none d-md-inline">
                           <Translate contentKey="entity.action.view">View</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        tag={Link}
-                        to={`/credit-account-details/${creditAccountDetails.id}/edit`}
-                        color="primary"
-                        size="sm"
-                        data-cy="entityEditButton"
-                      >
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.edit">Edit</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        onClick={() => (window.location.href = `/credit-account-details/${creditAccountDetails.id}/delete`)}
-                        color="danger"
-                        size="sm"
-                        data-cy="entityDeleteButton"
-                      >
-                        <FontAwesomeIcon icon="trash" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.delete">Delete</Translate>
                         </span>
                       </Button>
                     </div>

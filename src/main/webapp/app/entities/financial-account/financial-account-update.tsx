@@ -212,7 +212,9 @@ export const FinancialAccountUpdate = () => {
       <Row className="justify-content-center">
         <Col md="8">
           {loading ? (
-            <p>Loading...</p>
+            <p>
+              <Translate contentKey="fintrackApp.financialAccount.loading">Loading...</Translate>
+            </p>
           ) : (
             <ValidatedForm
               key={`${financialAccountEntity?.id ?? 'new'}-${creditAccountDetailsEntity?.id ?? 'missing'}`}
@@ -344,7 +346,9 @@ export const FinancialAccountUpdate = () => {
               />
               {selectedAccountType === 'CREDIT_CARD' ? (
                 creditAccountDetailsLoading && !isNew ? (
-                  <p>Loading...</p>
+                  <p>
+                    <Translate contentKey="fintrackApp.financialAccount.loading">Loading...</Translate>
+                  </p>
                 ) : (
                   <CreditCardDetailsFormSection
                     details={creditAccountDetailsEntity}

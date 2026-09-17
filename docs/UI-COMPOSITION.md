@@ -353,9 +353,11 @@ FinancialAccount create/edit uses one atomic product command:
 
 For `CREDIT_CARD`, the command receives the parent account and its embedded credit-card details together. The backend scopes the parent to the current user, validates the child against that parent, and persists both in one transaction. A child validation or persistence failure rolls back the parent write; the product UI never writes `CreditAccountDetails` in a second request.
 
-### Standalone CRUD
+### Technical compatibility routes
 
-Standalone CreditAccountDetails CRUD remains available for admin/debug/direct maintenance. It is not the FinancialAccount product write path.
+`/credit-account-details` and its direct detail/create/edit/delete URLs remain routable only for compatibility and technical inspection. They are not listed in the normal entity menu. The list and detail render a **Technical / Técnico** notice and remain read-only; they link to the meaningful parent account rather than treating the child as an independent product record.
+
+The direct `/new` and `/:id/edit` URLs render guidance only: product users must create or edit the parent `FinancialAccount`. The technical child UI offers no Create, Save, Edit, or Delete action, so there is no second browser write path around the configured parent commands. Backend generic endpoints remain technically compatible; this UI demotion does not remove or redirect them.
 
 ## TransactionRule + TransactionRuleCondition
 

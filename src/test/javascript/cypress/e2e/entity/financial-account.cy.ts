@@ -78,7 +78,9 @@ describe('FinancialAccount e2e test', () => {
 
   it('FinancialAccounts menu should load FinancialAccounts page', () => {
     cy.visit('/');
-    cy.clickOnEntityMenuItem('financial-account');
+    cy.get('[data-cy="entity"]').click();
+    cy.get('[data-cy="entity"]').find('[href="/credit-account-details"]').should('not.exist');
+    cy.get('[data-cy="entity"]').find('[href="/financial-account"]').click();
     cy.wait('@overviewRequest').then(({ response }) => {
       if (response?.body.length === 0) {
         cy.get('[data-cy="financialAccountOverviewCard"]').should('not.exist');

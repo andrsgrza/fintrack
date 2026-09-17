@@ -37,10 +37,10 @@ export const CreditCardDetailsFormSection = ({
 }: CreditCardDetailsFormSectionProps) => (
   <div data-cy="creditCardDetailsFormSection">
     <h3>
-      <Translate contentKey="fintrackApp.creditAccountDetails.detail.title">Credit card details</Translate>
+      <Translate contentKey="fintrackApp.financialAccount.detail.creditDetails">Credit details</Translate>
     </h3>
     <FormGroup>
-      <Label for="financial-account-credit-card-creditLimit">{translate('fintrackApp.creditAccountDetails.creditLimit')}</Label>
+      <Label for="financial-account-credit-card-creditLimit">{translate('fintrackApp.financialAccount.creditLimit')}</Label>
       <Input
         id="financial-account-credit-card-creditLimit"
         name={creditCardDetailsFieldNames.creditLimit}
@@ -56,10 +56,10 @@ export const CreditCardDetailsFormSection = ({
       ) : null}
     </FormGroup>
     <FormText>
-      <Translate contentKey="fintrackApp.creditAccountDetails.creditLimitHelp">Maximum approved credit line for this card.</Translate>
+      <Translate contentKey="fintrackApp.financialAccount.creditLimitHelp">Maximum approved credit line for this card.</Translate>
     </FormText>
     <FormGroup>
-      <Label for="financial-account-credit-card-statementDay">{translate('fintrackApp.creditAccountDetails.statementDay')}</Label>
+      <Label for="financial-account-credit-card-statementDay">{translate('fintrackApp.financialAccount.statementDay')}</Label>
       <Input
         id="financial-account-credit-card-statementDay"
         name={creditCardDetailsFieldNames.statementDay}
@@ -74,12 +74,10 @@ export const CreditCardDetailsFormSection = ({
       ) : null}
     </FormGroup>
     <FormText>
-      <Translate contentKey="fintrackApp.creditAccountDetails.statementDayHelp">
-        Day of the month when the statement period closes.
-      </Translate>
+      <Translate contentKey="fintrackApp.financialAccount.statementDayHelp">Day of the month when the statement period closes.</Translate>
     </FormText>
     <FormGroup>
-      <Label for="financial-account-credit-card-paymentDueDay">{translate('fintrackApp.creditAccountDetails.paymentDueDay')}</Label>
+      <Label for="financial-account-credit-card-paymentDueDay">{translate('fintrackApp.financialAccount.paymentDueDay')}</Label>
       <Input
         id="financial-account-credit-card-paymentDueDay"
         name={creditCardDetailsFieldNames.paymentDueDay}
@@ -94,12 +92,10 @@ export const CreditCardDetailsFormSection = ({
       ) : null}
     </FormGroup>
     <FormText>
-      <Translate contentKey="fintrackApp.creditAccountDetails.paymentDueDayHelp">Day of the month when payment is due.</Translate>
+      <Translate contentKey="fintrackApp.financialAccount.paymentDueDayHelp">Day of the month when payment is due.</Translate>
     </FormText>
     <FormGroup>
-      <Label for="financial-account-credit-card-annualInterestRate">
-        {translate('fintrackApp.creditAccountDetails.annualInterestRate')}
-      </Label>
+      <Label for="financial-account-credit-card-annualInterestRate">{translate('fintrackApp.financialAccount.annualInterestRate')}</Label>
       <Input
         id="financial-account-credit-card-annualInterestRate"
         name={creditCardDetailsFieldNames.annualInterestRate}
@@ -115,7 +111,7 @@ export const CreditCardDetailsFormSection = ({
       ) : null}
     </FormGroup>
     <FormText>
-      <Translate contentKey="fintrackApp.creditAccountDetails.annualInterestRateHelp">
+      <Translate contentKey="fintrackApp.financialAccount.annualInterestRateHelp">
         Annual percentage interest rate. Used later for interest calculations.
       </Translate>
     </FormText>

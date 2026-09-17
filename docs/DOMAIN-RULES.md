@@ -359,7 +359,7 @@ Grupo 1 #2 domain rules **Done**.
 | `createdAt` / `updatedAt` server-owned                  | Ignore client values; set both to `Instant.now()`                                                               | Yes              | —             | **Done** |
 | `CREDIT_CARD` configured product write requires details | `POST`/`PUT /api/financial-accounts[/id]/configured` creates or updates the parent and its one child atomically | Yes              | `400` invalid | **Done** |
 
-The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints remain technically compatible. The product FinancialAccount form uses only the configured parent command; no migration or change to the generic endpoints is implied.
+The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints remain technically compatible. The product FinancialAccount form uses only the configured parent command; no migration or change to the generic endpoints is implied. The direct `CreditAccountDetails` UI is therefore a technical compatibility surface, not an independent normal-user lifecycle: it is hidden from the product menu and does not offer child writes.
 
 ### UPDATE / PATCH
 

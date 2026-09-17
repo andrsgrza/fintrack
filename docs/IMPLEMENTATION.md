@@ -315,6 +315,8 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 **Product detail/delete UI (ACC-UX-3B):** `/financial-account/:id` is the canonical account view. It fetches the accessible account, its calculated balance snapshot, and a small read-only recent-transaction list; it renders translated account type/status and optional inline credit details, but not audit fields, owner data, technical relationship dumps, or database IDs. `active=false` shows the historical-only explanation without changing the ACC-UX-3A eligibility semantics. The existing `DELETE /api/financial-accounts/{id}` orchestration is unchanged: the dialog explains that cleanup can occur only when safe and that protected candidate/provenance references can block deletion; `400 invalid` becomes contextual product copy in the UI.
 
+**CreditAccountDetails UI demotion (ACC-UX-4):** `FinancialAccount` is the only normal account/card product entry and owns the configured atomic card write. Direct `CreditAccountDetails` URLs remain as technical compatibility routes, but are removed from the normal menu, visibly marked technical, and expose no normal child Create/Edit/Delete controls. Direct write URLs resolve to parent-account guidance rather than sending a generic child write request.
+
 **Archivos:** `FinancialAccountBalanceService`, `FinancialAccountOverviewService`, `AccountBalanceCalculator`, `DebitBalanceCalculator`, `CashBalanceCalculator`, `CreditCardBalanceCalculator`, `InvestmentBalanceCalculator`, `FinancialAccountBalanceDTO`, `FinancialAccountOverviewDTO`, `FinancialTransactionRepository`, `FinancialAccountResource`.
 
 #### Ownership ✅
