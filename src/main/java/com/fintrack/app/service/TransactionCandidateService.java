@@ -170,12 +170,13 @@ public class TransactionCandidateService {
 
                 TransactionCandidateClassificationReviewStatus previousClassificationReviewStatus =
                     existing.getClassificationReviewStatus();
+                boolean ruleInputChanged = hasRuleInputChange(existing, patchNode);
                 transactionCandidateMapper.partialUpdate(existing, transactionCandidateDTO);
                 applyRelationshipPatches(existing, transactionCandidateDTO, patchNode);
                 normalizeFields(existing);
                 deriveAmountAndFlow(existing);
                 recalculateManualDraftStatus(existing);
-                updateClassificationReviewStatusAfterManualPatch(existing, patchNode, previousClassificationReviewStatus);
+                updateClassificationReviewStatusAfterManualPatch(existing, patchNode, previousClassificationReviewStatus, ruleInputChanged);
                 validateCandidate(existing, existing);
                 existing.setUpdatedAt(Instant.now());
                 return existing;
@@ -1212,15 +1213,55 @@ public class TransactionCandidateService {
     private void updateClassificationReviewStatusAfterManualPatch(
         TransactionCandidate candidate,
         JsonNode patchNode,
-        TransactionCandidateClassificationReviewStatus previousStatus
+        TransactionCandidateClassificationReviewStatus previousStatus,
+        boolean ruleInputChanged
     ) {
         if (fieldPresent(patchNode, "category") || fieldPresent(patchNode, "tags")) {
             candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
             return;
         }
-        if (isFreshClassificationStatus(previousStatus) && containsRuleInputField(patchNode)) {
+        if (isFreshClassificationStatus(previousStatus) && ruleInputChanged) {
             candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.STALE);
         }
+    }
+
+    /**
+     * The manual autosave client sends its current editable draft snapshot. A rule-input field is therefore stale-making only
+     * when its persisted value actually changed, rather than merely because it is present beside an unrelated edit such as notes.
+     */
+    private boolean hasRuleInputChange(TransactionCandidate existing, JsonNode patchNode) {
+        return (
+            (fieldPresent(patchNode, "account") && relationshipChanged(existing.getAccount(), patchNode.get("account"))) ||
+            (fieldPresent(patchNode, "transactionDate") && dateChanged(existing.getTransactionDate(), patchNode.get("transactionDate"))) ||
+            (fieldPresent(patchNode, "postingDate") && dateChanged(existing.getPostingDate(), patchNode.get("postingDate"))) ||
+            (fieldPresent(patchNode, "description") && textChanged(existing.getDescription(), patchNode.get("description"))) ||
+            (fieldPresent(patchNode, "signedAmount") && decimalChanged(existing.getSignedAmount(), patchNode.get("signedAmount"))) ||
+            (fieldPresent(patchNode, "externalReference") &&
+                textChanged(existing.getExternalReference(), patchNode.get("externalReference")))
+        );
+    }
+
+    private boolean relationshipChanged(FinancialAccount existing, JsonNode requested) {
+        Long existingId = existing != null ? existing.getId() : null;
+        Long requestedId = requested != null && requested.hasNonNull("id") ? requested.get("id").asLong() : null;
+        return !Objects.equals(existingId, requestedId);
+    }
+
+    private boolean dateChanged(java.time.LocalDate existing, JsonNode requested) {
+        String requestedValue = requested != null && !requested.isNull() ? requested.asText() : null;
+        return !Objects.equals(existing != null ? existing.toString() : null, requestedValue);
+    }
+
+    private boolean textChanged(String existing, JsonNode requested) {
+        String requestedValue = requested != null && !requested.isNull() ? requested.asText() : null;
+        return !Objects.equals(existing, requestedValue);
+    }
+
+    private boolean decimalChanged(BigDecimal existing, JsonNode requested) {
+        if (requested == null || requested.isNull()) {
+            return existing != null;
+        }
+        return existing == null || existing.compareTo(requested.decimalValue()) != 0;
     }
 
     private boolean isFreshClassificationStatus(TransactionCandidateClassificationReviewStatus status) {
@@ -1228,19 +1269,6 @@ public class TransactionCandidateService {
             status == TransactionCandidateClassificationReviewStatus.SUGGESTED ||
             status == TransactionCandidateClassificationReviewStatus.USER_SELECTED ||
             status == TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE
-        );
-    }
-
-    private boolean containsRuleInputField(JsonNode patchNode) {
-        return (
-            fieldPresent(patchNode, "account") ||
-            fieldPresent(patchNode, "description") ||
-            fieldPresent(patchNode, "signedAmount") ||
-            fieldPresent(patchNode, "amount") ||
-            fieldPresent(patchNode, "flow") ||
-            fieldPresent(patchNode, "transactionDate") ||
-            fieldPresent(patchNode, "postingDate") ||
-            fieldPresent(patchNode, "externalReference")
         );
     }
 

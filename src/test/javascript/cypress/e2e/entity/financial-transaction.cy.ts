@@ -45,7 +45,14 @@ describe('FinancialTransaction e2e test', () => {
   });
 
   const waitForManualCandidate = (
-    predicate: (candidate: { description?: string; signedAmount?: number | string }) => boolean,
+    predicate: (candidate: {
+      description?: string;
+      signedAmount?: number | string;
+      notes?: string | null;
+      classificationReviewStatus?: string | null;
+      category?: { id?: number | string } | null;
+      tags?: Array<{ id?: number | string }>;
+    }) => boolean,
     attemptsRemaining = 25,
   ) =>
     cy.location('pathname').then(pathname => {
@@ -379,6 +386,47 @@ describe('FinancialTransaction e2e test', () => {
         expect(response?.body.candidate.category.id).to.equal(suggestedCategoryId);
         expect(response?.body.candidate.tags.map(candidateTag => candidateTag.id)).to.include(tag.id);
       });
+      cy.then(() => {
+        cy.get('[data-cy="category"]').should('have.value', String(suggestedCategoryId));
+        cy.get('[data-cy="tags"]')
+          .find('option:checked')
+          .then(selectedTags => {
+            expect([...selectedTags].map(option => option.value)).to.include(String(tag.id));
+          });
+      });
+
+      // Classification changes are deliberate user actions. A later rule preview may show the
+      // same recommendations, but it must not silently restore manually cleared selections.
+      cy.get('[data-cy="category"]').select('');
+      cy.get('[data-cy="tags"]').select([]);
+      waitForManualCandidate(
+        candidate =>
+          candidate.classificationReviewStatus === 'USER_SELECTED' && candidate.category === null && candidate.tags?.length === 0,
+      );
+
+      cy.get('[data-cy="externalReference"]').type('manual-repreview');
+      cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(200);
+        expect(response?.body.suggestedCategory.categoryId).to.equal(suggestedCategoryId);
+        expect(response?.body.suggestedTags.map(suggestedTag => suggestedTag.tagId)).to.include(tag.id);
+      });
+      cy.get('[data-cy="category"]').should('have.value', '');
+      cy.get('[data-cy="tags"]').find('option:checked').should('have.length', 0);
+
+      // Restore the values as explicit manual selections so post remains review-ready.
+      cy.then(() => {
+        cy.get('[data-cy="category"]').select(String(suggestedCategoryId));
+        cy.get('[data-cy="tags"]').select([String(tag.id)]);
+      });
+      waitForManualCandidate(
+        candidate =>
+          candidate.classificationReviewStatus === 'USER_SELECTED' &&
+          candidate.category?.id === suggestedCategoryId &&
+          candidate.tags?.some(candidateTag => candidateTag.id === tag.id) === true,
+      );
+
+      const lastSecondNotes = uniqueName('latest-notes');
+      cy.get('[data-cy="notes"]').type(lastSecondNotes);
       cy.get('[data-cy="manualDraftPostButton"]').should('not.be.disabled').click();
       let postedFinancialTransactionId;
       cy.wait('@postManualCandidateRequest').then(({ response }) => {
@@ -397,6 +445,7 @@ describe('FinancialTransaction e2e test', () => {
         }).then(({ body }) => {
           financialTransaction = body;
           expect(body.description).to.equal(manualCandidateDescription);
+          expect(body.notes).to.equal(lastSecondNotes);
           expect(body.category.id).to.equal(suggestedCategoryId);
           expect(body.tags.map(transactionTag => transactionTag.id)).to.include(tag.id);
         });
