@@ -4,7 +4,9 @@ import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhips
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { useAppDispatch, useAppSelector } from 'app/config/store';
-import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
+import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
+import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITransactionRuleCondition } from 'app/shared/model/transaction-rule-condition.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { TransactionOrigin } from 'app/shared/model/enumerations/transaction-origin.model';
@@ -92,8 +94,8 @@ export const TransactionRuleConditionFormSection = ({
 }: TransactionRuleConditionFormSectionProps) => {
   const dispatch = useAppDispatch();
   const transactionRules = useAppSelector(state => state.transactionRule.entities);
-  const financialAccounts = useAppSelector(state => state.financialAccount.entities);
   const transactionRuleFieldValues = Object.keys(TransactionRuleField);
+  const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
   const [selectedField, setSelectedField] = useState(TransactionRuleField.DESCRIPTION);
   const [selectedOperator, setSelectedOperator] = useState(RuleOperator.EQUALS);
   const [value, setValue] = useState('');
@@ -132,9 +134,26 @@ export const TransactionRuleConditionFormSection = ({
 
   useEffect(() => {
     if (selectedField === TransactionRuleField.ACCOUNT) {
-      dispatch(getFinancialAccounts({}));
+      let mounted = true;
+      const currentAccountId = /^\d+$/.test(value) ? Number(value) : undefined;
+      getSelectableFinancialAccounts(currentAccountId)
+        .then(accounts => {
+          if (mounted) {
+            setSelectableAccounts(accounts);
+          }
+        })
+        .catch(() => {
+          if (mounted) {
+            setSelectableAccounts([]);
+          }
+        });
+      return () => {
+        mounted = false;
+      };
     }
-  }, [selectedField]);
+    setSelectableAccounts([]);
+    return undefined;
+  }, [selectedField, value]);
 
   const resetConditionValues = (nextField: TransactionRuleField, nextOperator: RuleOperator) => {
     setValue('');
@@ -289,13 +308,11 @@ export const TransactionRuleConditionFormSection = ({
           onChange={event => setValue(event.target.value)}
         >
           <option value="" key="0" />
-          {financialAccounts
-            ? financialAccounts.map(account => (
-                <option value={account.id} key={account.id}>
-                  {account.name}
-                </option>
-              ))
-            : null}
+          {selectableAccounts.map(account => (
+            <option value={account.id} key={account.id}>
+              {formatFinancialAccountLabel(account)}
+            </option>
+          ))}
         </ValidatedField>
       ) : null}
       {valueInputKind === 'text' || valueInputKind === 'number' || valueInputKind === 'date' ? (

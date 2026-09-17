@@ -3043,3 +3043,7 @@ JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvn
 ```bash
 npm run webapp:build:dev -- --env stats=minimal
 ```
+
+## ACC-UX-3A — inactive FinancialAccount historical-only policy
+
+Focused coverage lives in `FinancialAccountResourceIT` (owner-scoped selectable endpoint, inactive exclusion/include, reactivation, and no admin cross-user product leakage), `TransactionCandidateResourceIT` (new/reassigned inactive rejection and historical draft autosave/post), `TransactionIngestionWorkflowResourceIT` (new FILE rejection and completion after deactivation), `TransactionRuleConditionResourceIT` / `TransactionRuleResourceIT` (new or changed inactive account conditions rejected while historical conditions remain editable), and `FinancialTransactionResourceIT` (direct create rejection). Jest covers the shared product selector in manual draft, new ingestion, and rule-condition forms.

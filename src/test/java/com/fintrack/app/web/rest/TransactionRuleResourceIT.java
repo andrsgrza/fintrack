@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Category;
+import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
@@ -2538,6 +2539,77 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
+    void createConfiguredTransactionRuleRejectsInactiveAccountCondition() throws Exception {
+        FinancialAccount inactiveAccount = FinancialAccountResourceIT.createEntity(em);
+        inactiveAccount.setActive(false);
+        em.persist(inactiveAccount);
+        Tag tag = TagResourceIT.createEntity(em);
+        em.persist(tag);
+        em.flush();
+
+        TransactionRuleConfiguredRequestDTO request = configuredRequest(
+            null,
+            Set.of(createTagDTO(tag)),
+            List.of(accountCondition(inactiveAccount.getId()))
+        );
+
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateConfiguredTransactionRulePreservesUnchangedInactiveAccountCondition() throws Exception {
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        account.setActive(true);
+        em.persist(account);
+        Tag tag = TagResourceIT.createEntity(em);
+        em.persist(tag);
+        em.flush();
+
+        TransactionRuleConfiguredRequestDTO createRequest = configuredRequest(
+            null,
+            Set.of(createTagDTO(tag)),
+            List.of(accountCondition(account.getId()))
+        );
+        TransactionRuleConfiguredResponseDTO created = om.readValue(
+            restTransactionRuleMockMvc
+                .perform(
+                    post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(createRequest))
+                )
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            TransactionRuleConfiguredResponseDTO.class
+        );
+        insertedTransactionRule = transactionRuleRepository.findById(created.getId()).orElseThrow();
+
+        account.setActive(false);
+        em.flush();
+
+        TransactionRuleConfiguredConditionDTO historicalCondition = accountCondition(account.getId());
+        historicalCondition.setId(created.getConditions().get(0).getId());
+        TransactionRuleConfiguredRequestDTO updateRequest = configuredRequest(
+            null,
+            Set.of(createTagDTO(tag)),
+            List.of(historicalCondition)
+        );
+        updateRequest.setName("Updated while account is inactive");
+
+        restTransactionRuleMockMvc
+            .perform(
+                put(ENTITY_CONFIGURED_API_URL_ID, created.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(updateRequest))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.conditions.[0].value").value(account.getId().toString()));
+    }
+
+    @Test
+    @Transactional
     void createConfiguredExpenseCategoryWithFlowOutSucceeds() throws Exception {
         Category category = createCategory(CategoryType.EXPENSE);
         TransactionRuleConfiguredRequestDTO request = configuredRequest(
@@ -2856,6 +2928,15 @@ class TransactionRuleResourceIT {
         condition.setField(TransactionRuleField.FLOW);
         condition.setOperator(operator);
         condition.setValue(value);
+        condition.setCaseSensitive(false);
+        return condition;
+    }
+
+    private TransactionRuleConfiguredConditionDTO accountCondition(Long accountId) {
+        TransactionRuleConfiguredConditionDTO condition = new TransactionRuleConfiguredConditionDTO();
+        condition.setField(TransactionRuleField.ACCOUNT);
+        condition.setOperator(RuleOperator.EQUALS);
+        condition.setValue(accountId.toString());
         condition.setCaseSensitive(false);
         return condition;
     }

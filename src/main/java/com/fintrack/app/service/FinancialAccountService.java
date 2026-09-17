@@ -11,10 +11,12 @@ import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.FinancialAccountSelectableDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -243,6 +245,30 @@ public class FinancialAccountService {
     }
 
     /**
+     * Returns accounts that the current product actor may select for a new reference.
+     *
+     * <p>Unlike generic account reads, this is always owner-scoped, including for administrators. An optional
+     * existing account id is included only to render an already-persisted inactive reference during editing;
+     * consumers must not treat that exception as selectable for a new assignment.
+     */
+    @Transactional(readOnly = true)
+    public List<FinancialAccountSelectableDTO> findSelectableAccounts(Long includeId) {
+        String currentUserLogin = currentUserService.getCurrentUserLogin();
+        List<FinancialAccount> accounts = new LinkedList<>(
+            financialAccountRepository.findAllWithToOneRelationshipsByUserLogin(currentUserLogin)
+        );
+        if (includeId != null && accounts.stream().noneMatch(account -> Objects.equals(account.getId(), includeId))) {
+            financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(includeId, currentUserLogin).ifPresent(accounts::add);
+        }
+        return accounts
+            .stream()
+            .filter(account -> Boolean.TRUE.equals(account.getActive()) || Objects.equals(account.getId(), includeId))
+            .sorted(Comparator.comparing(FinancialAccount::getName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .map(this::toSelectableDto)
+            .toList();
+    }
+
+    /**
      * Delete the financialAccount by id.
      *
      * @param id the id of the entity.
@@ -275,6 +301,17 @@ public class FinancialAccountService {
             return financialAccountRepository.findOneWithEagerRelationships(id);
         }
         return financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
+    }
+
+    private FinancialAccountSelectableDTO toSelectableDto(FinancialAccount account) {
+        FinancialAccountSelectableDTO dto = new FinancialAccountSelectableDTO();
+        dto.setId(account.getId());
+        dto.setName(account.getName());
+        dto.setAccountType(account.getAccountType());
+        dto.setCurrency(account.getCurrency());
+        dto.setLastFourDigits(account.getLastFourDigits());
+        dto.setActive(account.getActive());
+        return dto;
     }
 
     private void rejectImmutableFieldChanges(FinancialAccount existing, FinancialAccountDTO financialAccountDTO, JsonNode patchNode) {

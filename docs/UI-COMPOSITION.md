@@ -720,3 +720,7 @@ TR-3 clarifies the TransactionRule UI split:
 - No UI text should recommend the old “create empty parent, then add conditions later” product flow.
 - No ingestion category/tag review work was added as part of this TransactionRule branch.
 - UserPreference remains deferred.
+
+### Inactive account selection policy (ACC-UX-3A)
+
+Manual transaction drafts, new file ingestions, and TransactionRule `ACCOUNT` condition forms use the shared selectable-account read model, not the generic account entity list. New choices are active and current-owner scoped. When editing an existing historical reference, its inactive account remains shown as `… · Inactive`; it is not a general inactive-account picker. Budget UI remains deferred to BUD-1 and FinancialSubscription is intentionally unchanged.

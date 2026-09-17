@@ -225,6 +225,10 @@ public class CsvIngestionWorkflowService {
         }
         return financialAccountRepository
             .findOneWithToOneRelationshipsByIdAndUserLogin(accountId, currentUserService.getCurrentUserLogin())
+            .map(account -> {
+                FinancialAccountReferenceValidator.validateActiveForNewReference(account);
+                return account;
+            })
             .orElseThrow(() -> new IllegalArgumentException("Account is not accessible"));
     }
 

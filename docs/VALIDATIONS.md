@@ -398,3 +398,7 @@ _Last updated: 2026-07-13 — validation catalog aligned with FinancialAccount b
 - `caseSensitive` is required.
 - `position` is required, non-negative, and server-managed.
 - parent rule is required and cannot be changed after create.
+
+### FinancialAccount active eligibility (ACC-UX-3A)
+
+`GET /api/financial-accounts/selectable` is the owner-scoped product read model for new account assignments. It returns active accounts only; `includeId` may return the caller's one already-linked inactive account solely for historical edit/display. Backend validation rejects an inactive account for a new MANUAL candidate assignment, a reassignment, a new FILE ingestion, a new/changed `TransactionRule` `ACCOUNT` condition, and direct `FinancialTransaction` create. It is intentionally not run when posting an existing draft, confirming an existing ingestion, evaluating an existing rule, or editing an existing FinancialTransaction whose account is immutable.

@@ -11,6 +11,7 @@ import enTransactionOrigin from 'app/../i18n/en/transactionOrigin.json';
 import { TransactionRuleCondition } from './transaction-rule-condition';
 import { TransactionRuleConditionDetail } from './transaction-rule-condition-detail';
 import { TransactionRuleConditionUpdate } from './transaction-rule-condition-update';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 
 const mockDispatch = jest.fn();
 const mockGetEntity = jest.fn(id => ({ type: 'transactionRuleCondition/getEntity', payload: id }));
@@ -19,7 +20,6 @@ const mockReset = jest.fn(() => ({ type: 'transactionRuleCondition/reset' }));
 const mockCreateEntity = jest.fn(entity => ({ type: 'transactionRuleCondition/createEntity', payload: entity }));
 const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'transactionRuleCondition/partialUpdateEntity', payload: entity }));
 const mockGetTransactionRules = jest.fn(() => ({ type: 'transactionRule/getEntities' }));
-const mockGetFinancialAccounts = jest.fn(() => ({ type: 'financialAccount/getEntities' }));
 let mockState;
 
 jest.mock('app/config/store', () => ({
@@ -39,8 +39,8 @@ jest.mock('app/entities/transaction-rule/transaction-rule.reducer', () => ({
   getEntities: () => mockGetTransactionRules(),
 }));
 
-jest.mock('app/entities/financial-account/financial-account.reducer', () => ({
-  getEntities: () => mockGetFinancialAccounts(),
+jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
+  getSelectableFinancialAccounts: jest.fn(),
 }));
 
 const baseState = {
@@ -92,6 +92,11 @@ const baseState = {
     updateSuccess: false,
   },
 };
+
+const selectableAccounts = [
+  { id: 2, name: 'Checking account', accountType: 'DEBIT', currency: 'MXN', lastFourDigits: '1234', active: true },
+];
+const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
 
 const technicalBannerText =
   'This generated screen is kept temporarily for debugging and direct maintenance. Product TransactionRule create/edit uses the configured rule workflow.';
@@ -162,6 +167,7 @@ const renderEditForm = () => {
 describe('TransactionRuleCondition UX', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSelectableFinancialAccounts.mockResolvedValue(selectableAccounts);
     registerTranslations();
   });
 
@@ -264,7 +270,7 @@ describe('TransactionRuleCondition UX', () => {
     expect((screen.getByLabelText('Value') as HTMLInputElement).type).toBe('date');
   });
 
-  it('filters operators for ACCOUNT and renders account selector for equals', () => {
+  it('filters operators for ACCOUNT and renders the active-only account selector for equals', async () => {
     renderCreateForm();
 
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'ACCOUNT' } });
@@ -272,8 +278,9 @@ describe('TransactionRuleCondition UX', () => {
     const operatorSelect = screen.getByLabelText('Operator');
     expect(within(operatorSelect).getByRole('option', { name: 'Equals' })).toBeTruthy();
     expect(within(operatorSelect).queryByRole('option', { name: 'Contains' })).toBeNull();
-    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'Checking account' })).toBeTruthy();
-    expect(mockGetFinancialAccounts).toHaveBeenCalled();
+    expect(await within(screen.getByLabelText('Value')).findByRole('option', { name: /Checking account/ })).toBeTruthy();
+    expect(within(screen.getByLabelText('Value')).queryByRole('option', { name: /Closed account/ })).toBeNull();
+    expect(mockGetSelectableFinancialAccounts).toHaveBeenCalledWith(undefined);
   });
 
   it('renders ORIGIN enum select for equals', () => {
@@ -322,6 +329,7 @@ describe('TransactionRuleCondition UX', () => {
     renderCreateForm('/transaction-rule-condition/new?transactionRuleId=1');
 
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'ACCOUNT' } });
+    await within(screen.getByLabelText('Value')).findByRole('option', { name: /Checking account/ });
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 

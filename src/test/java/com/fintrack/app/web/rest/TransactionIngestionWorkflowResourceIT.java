@@ -954,6 +954,43 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void canonicalFileWorkflowRejectsInactiveAccountWithoutPersisting() throws Exception {
+        FinancialAccount inactiveAccount = createCurrentUserAccount();
+        inactiveAccount.setActive(false);
+        financialAccountRepository.saveAndFlush(inactiveAccount);
+
+        mockMvc
+            .perform(
+                multipart(FILE_WORKFLOW_URL)
+                    .file(csvFile("canonical.csv", VALID_CSV))
+                    .param("accountId", inactiveAccount.getId().toString())
+            )
+            .andExpect(status().isBadRequest());
+
+        assertNothingCreated();
+    }
+
+    @Test
+    @Transactional
+    void existingWorkflowCanPrepareAndConfirmAfterItsAccountBecomesInactive() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        FinancialAccount account = ingestion.getAccount();
+        account.setActive(false);
+        financialAccountRepository.saveAndFlush(account);
+
+        prepareCandidatesForConfirm(ingestion, TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
+
+        confirmImport(ingestion)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(1));
+
+        assertThat(financialTransactionRepository.findAll()).hasSize(1);
+        assertThat(financialTransactionRepository.findAll().get(0).getAccount().getId()).isEqualTo(account.getId());
+    }
+
+    @Test
+    @Transactional
     void legacyFileWorkflowCreateEndpointIsNotMapped() throws Exception {
         FinancialAccount account = createCurrentUserAccount();
 
@@ -4168,6 +4205,7 @@ class TransactionIngestionWorkflowResourceIT {
     private FinancialAccount createAccountForUser(User user) {
         FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
         account.setUser(user);
+        account.setActive(true);
         return financialAccountRepository.saveAndFlush(account);
     }
 

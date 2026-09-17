@@ -99,6 +99,7 @@ class FinancialTransactionServiceTest {
         financialAccount = new FinancialAccount();
         financialAccount.setId(20L);
         financialAccount.setUser(currentUser);
+        financialAccount.setActive(true);
 
         financialTransaction = new FinancialTransaction();
         financialTransaction.setId(30L);

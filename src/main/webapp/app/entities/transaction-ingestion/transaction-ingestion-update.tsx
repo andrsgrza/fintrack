@@ -8,7 +8,9 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { convertDateTimeFromServer, convertDateTimeToServer } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
-import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
+import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
+import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { IngestionType } from 'app/shared/model/enumerations/ingestion-type.model';
 import { IngestionStatus } from 'app/shared/model/enumerations/ingestion-status.model';
 import { getEntity, reset, updateEntity } from './transaction-ingestion.reducer';
@@ -24,10 +26,10 @@ export const TransactionIngestionUpdate = () => {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [selectedIngestionType, setSelectedIngestionType] = useState('FILE');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
   const [uploading, setUploading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const financialAccounts = useAppSelector(state => state.financialAccount.entities);
   const transactionIngestionEntity = useAppSelector(state => state.transactionIngestion.entity);
   const loading = useAppSelector(state => state.transactionIngestion.loading);
   const updating = useAppSelector(state => state.transactionIngestion.updating);
@@ -45,8 +47,24 @@ export const TransactionIngestionUpdate = () => {
     } else {
       dispatch(getEntity(id));
     }
+  }, []);
 
-    dispatch(getFinancialAccounts({}));
+  useEffect(() => {
+    let mounted = true;
+    getSelectableFinancialAccounts()
+      .then(accounts => {
+        if (mounted) {
+          setSelectableAccounts(accounts);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSelectableAccounts([]);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -202,13 +220,11 @@ export const TransactionIngestionUpdate = () => {
                       }}
                     >
                       <option value="" key="0" />
-                      {financialAccounts
-                        ? financialAccounts.map(otherEntity => (
-                            <option value={otherEntity.id} key={otherEntity.id}>
-                              {otherEntity.name}
-                            </option>
-                          ))
-                        : null}
+                      {selectableAccounts.map(account => (
+                        <option value={account.id} key={account.id}>
+                          {formatFinancialAccountLabel(account)}
+                        </option>
+                      ))}
                     </Input>
                   </div>
                   <div className="mb-3">
@@ -390,13 +406,11 @@ export const TransactionIngestionUpdate = () => {
                     }}
                   >
                     <option value="" key="0" />
-                    {financialAccounts
-                      ? financialAccounts.map(otherEntity => (
-                          <option value={otherEntity.id} key={otherEntity.id}>
-                            {otherEntity.name}
-                          </option>
-                        ))
-                      : null}
+                    {transactionIngestionEntity?.account ? (
+                      <option value={transactionIngestionEntity.account.id}>
+                        {formatFinancialAccountLabel(transactionIngestionEntity.account)}
+                      </option>
+                    ) : null}
                   </ValidatedField>
                 </>
               )}

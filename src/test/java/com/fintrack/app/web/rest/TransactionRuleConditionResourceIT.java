@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
+import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
@@ -1440,6 +1441,69 @@ class TransactionRuleConditionResourceIT {
         restTransactionRuleConditionMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createAccountConditionRequiresActiveAccount() throws Exception {
+        FinancialAccount inactiveAccount = FinancialAccountResourceIT.createEntity(em);
+        inactiveAccount.setActive(false);
+        em.persist(inactiveAccount);
+        em.flush();
+
+        TransactionRuleConditionDTO dto = transactionRuleConditionMapper.toDto(transactionRuleCondition);
+        dto.setId(null);
+        dto.setField(TransactionRuleField.ACCOUNT);
+        dto.setOperator(RuleOperator.EQUALS);
+        dto.setValue(inactiveAccount.getId().toString());
+
+        restTransactionRuleConditionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updatingAccountConditionToInactiveAccountIsRejectedButHistoricalReferenceIsPreserved() throws Exception {
+        FinancialAccount activeAccount = FinancialAccountResourceIT.createEntity(em);
+        activeAccount.setActive(true);
+        em.persist(activeAccount);
+        FinancialAccount inactiveAccount = FinancialAccountResourceIT.createEntity(em);
+        inactiveAccount.setActive(false);
+        em.persist(inactiveAccount);
+        em.flush();
+
+        TransactionRuleCondition existing = transactionRuleCondition;
+        existing.getTransactionRule().setActive(true);
+        existing.getTransactionRule().setResultingCategory(null);
+        transactionRuleRepository.saveAndFlush(existing.getTransactionRule());
+        existing.setField(TransactionRuleField.ACCOUNT);
+        existing.setOperator(RuleOperator.EQUALS);
+        existing.setValue(activeAccount.getId().toString());
+        insertedTransactionRuleCondition = transactionRuleConditionRepository.saveAndFlush(existing);
+
+        TransactionRuleConditionDTO changed = transactionRuleConditionMapper.toDto(existing);
+        changed.setValue(inactiveAccount.getId().toString());
+        restTransactionRuleConditionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, existing.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(changed))
+            )
+            .andExpect(status().isBadRequest());
+
+        existing.setValue(inactiveAccount.getId().toString());
+        transactionRuleConditionRepository.saveAndFlush(existing);
+        TransactionRuleConditionDTO historical = transactionRuleConditionMapper.toDto(existing);
+        historical.setCaseSensitive(true);
+
+        restTransactionRuleConditionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, existing.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(historical))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.value").value(inactiveAccount.getId().toString()))
+            .andExpect(jsonPath("$.caseSensitive").value(true));
+
+        assertThat(transactionRuleRepository.findById(existing.getTransactionRule().getId()).orElseThrow().getActive()).isTrue();
     }
 
     @Test

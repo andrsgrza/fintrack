@@ -182,6 +182,7 @@ class FinancialTransactionResourceIT {
         FinancialAccount financialAccount;
         if (TestUtil.findAll(em, FinancialAccount.class).isEmpty()) {
             financialAccount = FinancialAccountResourceIT.createEntity(em);
+            financialAccount.setActive(true);
             em.persist(financialAccount);
             em.flush();
         } else {
@@ -213,6 +214,7 @@ class FinancialTransactionResourceIT {
         FinancialAccount financialAccount;
         if (TestUtil.findAll(em, FinancialAccount.class).isEmpty()) {
             financialAccount = FinancialAccountResourceIT.createUpdatedEntity(em);
+            financialAccount.setActive(true);
             em.persist(financialAccount);
             em.flush();
         } else {
@@ -1538,6 +1540,45 @@ class FinancialTransactionResourceIT {
         restFinancialTransactionMockMvc
             .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void createFinancialTransactionOnInactiveAccountFails() throws Exception {
+        FinancialAccount inactiveAccount = FinancialAccountResourceIT.createEntity(em);
+        inactiveAccount.setActive(false);
+        em.persist(inactiveAccount);
+        em.flush();
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.getAccount().setId(inactiveAccount.getId());
+
+        restFinancialTransactionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateExistingFinancialTransactionAllowsUnrelatedEditsAfterAccountDeactivation() throws Exception {
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        FinancialAccount historicalAccount = insertedFinancialTransaction.getAccount();
+        historicalAccount.setActive(false);
+        financialAccountRepository.saveAndFlush(historicalAccount);
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(insertedFinancialTransaction);
+        financialTransactionDTO.setDescription(UPDATED_DESCRIPTION);
+
+        restFinancialTransactionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialTransactionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialTransactionDTO))
+            )
+            .andExpect(status().isOk());
+
+        assertThat(getPersistedFinancialTransaction(insertedFinancialTransaction).getDescription()).isEqualTo(UPDATED_DESCRIPTION);
     }
 
     @Test

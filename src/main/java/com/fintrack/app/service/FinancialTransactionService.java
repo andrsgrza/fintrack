@@ -609,6 +609,7 @@ public class FinancialTransactionService {
         if (!Objects.equals(ownerLogin(account), currentUserService.getCurrentUserLogin())) {
             throw new IllegalArgumentException("Financial account is not accessible");
         }
+        FinancialAccountReferenceValidator.validateActiveForNewReference(account);
         return account;
     }
 

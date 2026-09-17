@@ -1411,6 +1411,7 @@ class TransactionCandidateServiceTest {
         account.setAccountType(AccountType.DEBIT);
         account.setCurrency(CurrencyCode.MXN);
         account.setUser(owner);
+        account.setActive(true);
         return account;
     }
 

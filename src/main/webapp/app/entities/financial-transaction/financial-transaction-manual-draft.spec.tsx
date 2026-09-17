@@ -5,6 +5,8 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
+import enAccountType from 'app/../i18n/en/accountType.json';
+import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
 import FinancialTransactionManualDraft from './financial-transaction-manual-draft';
 import {
   applyManualDraftRules,
@@ -16,6 +18,7 @@ import {
   updateManualDraft,
 } from './services/manual-transaction-candidate.service';
 import { FinancialTransactionUpdate } from './financial-transaction-update';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 
 const mockDispatch = jest.fn();
 let mockState;
@@ -29,6 +32,10 @@ jest.mock('app/config/store', () => ({
 
 jest.mock('app/entities/financial-account/financial-account.reducer', () => ({
   getEntities: () => ({ type: 'financialAccount/getEntities' }),
+}));
+
+jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
+  getSelectableFinancialAccounts: jest.fn(),
 }));
 
 jest.mock('app/entities/category/category.reducer', () => ({
@@ -52,10 +59,11 @@ const mockCancelManualDraft = cancelManualDraft as jest.Mock;
 const mockPostManualDraft = postManualDraft as jest.Mock;
 const mockPreviewManualDraftRules = previewManualDraftRules as jest.Mock;
 const mockApplyManualDraftRules = applyManualDraftRules as jest.Mock;
+const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
 
 const accounts = [
-  { id: 1, name: 'Checking', currency: 'MXN' },
-  { id: 2, name: 'Savings', currency: 'MXN' },
+  { id: 1, name: 'Checking', accountType: 'DEBIT', currency: 'MXN', lastFourDigits: '1234', active: true },
+  { id: 2, name: 'Savings', accountType: 'CREDIT_CARD', currency: 'MXN', lastFourDigits: '9876', active: true },
 ];
 const categories = [{ id: 10, name: 'Transport', categoryType: 'EXPENSE' }];
 const tags = [{ id: 20, name: 'Business' }];
@@ -152,6 +160,8 @@ const LocationDisplay = () => {
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enFinancialTransaction);
   TranslatorContext.registerTranslations('en', enTransactionFlow);
+  TranslatorContext.registerTranslations('en', enAccountType);
+  TranslatorContext.registerTranslations('en', enFinancialAccount);
   TranslatorContext.setLocale('en');
 };
 
@@ -200,6 +210,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     mockPostManualDraft.mockReset();
     mockPreviewManualDraftRules.mockReset();
     mockApplyManualDraftRules.mockReset();
+    mockGetSelectableFinancialAccounts.mockReset();
     mockCreateManualDraft.mockResolvedValue({ data: candidate });
     mockGetManualDraft.mockResolvedValue({ data: candidate });
     mockUpdateManualDraft.mockResolvedValue({ data: readyCandidate });
@@ -214,6 +225,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
         tagIdsApplied: [20],
       },
     });
+    mockGetSelectableFinancialAccounts.mockImplementation(() => new Promise(() => {}));
   });
 
   afterEach(() => {
@@ -546,8 +558,10 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
 
   it('account, date, external reference, amount and flow edits trigger autosave then auto-preview', async () => {
     mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    mockGetSelectableFinancialAccounts.mockResolvedValue(accounts);
     renderManualDraft('/financial-transaction/drafts/77');
     await screen.findByDisplayValue('Coffee');
+    await screen.findByRole('option', { name: /Savings/ });
     await waitFor(() => expect(mockPreviewManualDraftRules).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByLabelText('Account'), { target: { value: '2' } });
@@ -870,12 +884,39 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
 
   it('resume draft by URL loads candidate values', async () => {
     mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    mockGetSelectableFinancialAccounts.mockResolvedValue(accounts);
     renderManualDraft('/financial-transaction/drafts/77');
 
     expect(await screen.findByDisplayValue('Coffee')).toBeTruthy();
+    await screen.findByRole('option', { name: /Checking/ });
     expect(screen.getByLabelText('Account').value).toBe('1');
     expect(screen.getByLabelText('Amount').value).toBe('12');
     expect(screen.getByLabelText('Type').value).toBe('OUT');
+  });
+
+  it('shows only active accounts for a new draft and retains its current inactive account for an existing draft', async () => {
+    const inactiveHistoricalAccount = {
+      id: 3,
+      name: 'Closed checking',
+      accountType: 'DEBIT',
+      currency: 'MXN',
+      lastFourDigits: '0001',
+      active: false,
+    };
+    mockGetSelectableFinancialAccounts.mockImplementation(includeId =>
+      Promise.resolve(includeId === 3 ? [...accounts, inactiveHistoricalAccount] : accounts),
+    );
+
+    const newDraft = renderManualDraft();
+    expect(await screen.findByRole('option', { name: /Checking/ })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Closed checking/ })).toBeNull();
+    newDraft.unmount();
+
+    mockGetManualDraft.mockResolvedValue({ data: { ...readyCandidate, account: inactiveHistoricalAccount } });
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    expect(await screen.findByRole('option', { name: /Closed checking.*Inactive/ })).toBeTruthy();
+    expect((screen.getByLabelText('Account') as HTMLSelectElement).value).toBe('3');
   });
 
   it('non-MANUAL candidate shows safe route error without rendering editable form', async () => {

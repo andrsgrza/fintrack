@@ -1576,3 +1576,7 @@ The single FILE-ingestion review can create both rule types without leaving the 
 - A row `TransactionRule` prefill uses the persisted `FILE_IMPORT` candidate description, its current `FLOW`, and only its persisted selected category/tags as outputs. It does **not** turn account context or transient suggestions into conditions or outputs.
 - Rule creation is atomic and server-managed: priority, condition positions, timestamps, ownership, normalization-rule validation, and rollback on invalid input are handled by `POST /api/description-normalization-rules/configured`. Transaction rules reuse `POST /api/transaction-rules/configured`.
 - Saving a contextual rule by itself changes neither `rawData`, `IngestionRecord`, nor `TransactionCandidate`, and does not create a `FinancialTransaction` or confirm the import. Re-evaluation is an explicit second action.
+
+### FinancialAccount inactive eligibility (ACC-UX-3A)
+
+`FinancialAccount.active=false` is a historical-only state: the account, balances, existing references, and workflows already linked to it remain readable and valid. It does not cancel drafts or ingestions, disable rules, alter balances, or unlink data. New or reassigned product references must target an active account. Reactivating an account restores that eligibility immediately. Budget adoption is deferred to BUD-1; FinancialSubscription is intentionally outside this policy slice.

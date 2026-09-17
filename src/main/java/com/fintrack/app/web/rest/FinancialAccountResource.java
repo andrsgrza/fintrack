@@ -13,6 +13,7 @@ import com.fintrack.app.service.dto.FinancialAccountConfiguredRequestDTO;
 import com.fintrack.app.service.dto.FinancialAccountConfiguredResponseDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialAccountOverviewDTO;
+import com.fintrack.app.service.dto.FinancialAccountSelectableDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -261,6 +262,20 @@ public class FinancialAccountResource {
     public ResponseEntity<List<FinancialAccountOverviewDTO>> getFinancialAccountOverview() {
         LOG.debug("REST request to get FinancialAccount overview");
         return ResponseEntity.ok(financialAccountOverviewService.getOverview());
+    }
+
+    /**
+     * {@code GET /financial-accounts/selectable} : get owner-scoped active accounts for product assignment controls.
+     *
+     * <p>{@code includeId} is only for rendering an already persisted inactive value while editing. It does not make
+     * inactive accounts available for new product assignments.
+     */
+    @GetMapping("/selectable")
+    public ResponseEntity<List<FinancialAccountSelectableDTO>> getSelectableFinancialAccounts(
+        @RequestParam(value = "includeId", required = false) Long includeId
+    ) {
+        LOG.debug("REST request to get selectable FinancialAccounts; includeId: {}", includeId);
+        return ResponseEntity.ok(financialAccountService.findSelectableAccounts(includeId));
     }
 
     /**

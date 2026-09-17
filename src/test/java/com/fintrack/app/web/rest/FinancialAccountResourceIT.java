@@ -247,6 +247,14 @@ class FinancialAccountResourceIT {
         return account;
     }
 
+    private FinancialAccount createSelectableAccount(String name, boolean active, User owner) {
+        FinancialAccount account = createEntity(em);
+        account.setName(name);
+        account.setActive(active);
+        account.setUser(owner);
+        return financialAccountRepository.saveAndFlush(account);
+    }
+
     private FinancialAccountDTO createFinancialAccountWith(AccountType accountType, BigDecimal initialBalance) throws Exception {
         financialAccount.setAccountType(accountType);
         financialAccount.setInitialBalance(initialBalance);
@@ -2458,6 +2466,68 @@ class FinancialAccountResourceIT {
         financialAccountRepository.saveAndFlush(financialAccount);
 
         restFinancialAccountMockMvc.perform(get(ENTITY_API_URL + "/count")).andExpect(status().isOk()).andExpect(content().string("0"));
+    }
+
+    @Test
+    @Transactional
+    void selectableAccountsReturnsOnlyActiveAccountsOwnedByCurrentProductUser() throws Exception {
+        FinancialAccount activeOwnAccount = createSelectableAccount("Selectable active", true, getCurrentMockUser(em));
+        FinancialAccount inactiveOwnAccount = createSelectableAccount("Selectable inactive", false, getCurrentMockUser(em));
+        FinancialAccount activeForeignAccount = createSelectableAccount("Selectable foreign", true, createOtherUser(em));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id", hasItem(activeOwnAccount.getId().intValue())))
+            .andExpect(jsonPath("$[*].id", not(hasItem(inactiveOwnAccount.getId().intValue()))))
+            .andExpect(jsonPath("$[*].id", not(hasItem(activeForeignAccount.getId().intValue()))))
+            .andExpect(jsonPath("$[?(@.id == %d)].name", activeOwnAccount.getId()).value(hasItem("Selectable active")))
+            .andExpect(jsonPath("$[?(@.id == %d)].accountType", activeOwnAccount.getId()).value(hasItem("DEBIT")))
+            .andExpect(jsonPath("$[?(@.id == %d)].currency", activeOwnAccount.getId()).value(hasItem("MXN")))
+            .andExpect(jsonPath("$[?(@.id == %d)].lastFourDigits", activeOwnAccount.getId()).value(hasItem(DEFAULT_LAST_FOUR_DIGITS)))
+            .andExpect(jsonPath("$[?(@.id == %d)].active", activeOwnAccount.getId()).value(hasItem(true)))
+            .andExpect(jsonPath("$[?(@.id == %d)].initialBalance", activeOwnAccount.getId()).doesNotExist());
+    }
+
+    @Test
+    @Transactional
+    void selectableAccountsIncludesRequestedHistoricalInactiveAccountAndReactivationRestoresNormalEligibility() throws Exception {
+        FinancialAccount inactiveAccount = createSelectableAccount("Reactivatable account", false, getCurrentMockUser(em));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id", not(hasItem(inactiveAccount.getId().intValue()))));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable?includeId=" + inactiveAccount.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id", hasItem(inactiveAccount.getId().intValue())))
+            .andExpect(jsonPath("$[?(@.id == %d)].active", inactiveAccount.getId()).value(hasItem(false)));
+
+        inactiveAccount.setActive(true);
+        financialAccountRepository.saveAndFlush(inactiveAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id", hasItem(inactiveAccount.getId().intValue())))
+            .andExpect(jsonPath("$[?(@.id == %d)].active", inactiveAccount.getId()).value(hasItem(true)));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void selectableAccountsDoesNotGiveAdminProductSelectorForeignAccounts() throws Exception {
+        User admin = userRepository.findOneByLogin("admin").orElseThrow();
+        FinancialAccount adminAccount = createSelectableAccount("Admin selectable", true, admin);
+        FinancialAccount foreignAccount = createSelectableAccount("Foreign selectable", true, createOtherUser(em));
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].id", hasItem(adminAccount.getId().intValue())))
+            .andExpect(jsonPath("$[*].id", not(hasItem(foreignAccount.getId().intValue()))));
     }
 
     @Test

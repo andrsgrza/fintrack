@@ -184,7 +184,7 @@ describe('FinancialTransaction e2e test', () => {
     cy.intercept('POST', '/api/transaction-candidates/*/apply-rules').as('candidateApplyRulesRequest');
     cy.intercept('POST', '/api/financial-transactions/rule-preview').as('rulePreviewRequest');
     cy.intercept('DELETE', '/api/financial-transactions/*').as('deleteEntityRequest');
-    cy.intercept('GET', '/api/financial-accounts+(?*|)').as('accountsRequest');
+    cy.intercept('GET', '/api/financial-accounts/selectable*').as('selectableAccountsRequest');
     cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
     cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
   });
@@ -341,13 +341,13 @@ describe('FinancialTransaction e2e test', () => {
     beforeEach(() => {
       createRuleSuggestionSeed().then(() => {
         cy.visit(`${financialTransactionPageUrl}/new`);
-        cy.wait('@accountsRequest');
+        cy.wait('@selectableAccountsRequest');
         cy.wait('@categoriesRequest');
         cy.wait('@tagsRequest');
       });
     });
 
-    it('creates a candidate after a meaningful change, resumes after reload, posts, and redirects to posted FinancialTransaction detail', () => {
+    it('keeps a draft usable after its account becomes inactive, then posts it and excludes that account from new drafts', () => {
       cy.get('[data-cy="description"]').type(manualCandidateDescription);
 
       cy.wait('@createManualCandidateRequest').then(({ response }) => {
@@ -357,16 +357,31 @@ describe('FinancialTransaction e2e test', () => {
       });
       cy.url().should('match', new RegExp('/financial-transaction/drafts/\\d+$'));
 
-      cy.get('[data-cy="account"]').select(financialAccount.name);
+      cy.get('[data-cy="account"]').select(String(financialAccount.id));
       cy.get('[data-cy="transactionDate"]').type('2026-07-08');
       cy.get('[data-cy="amount"]').clear().type('100.5');
       cy.get('[data-cy="flow"]').select('OUT');
       waitForSavedManualCandidateDraft(manualCandidateDescription);
       cy.get('[data-cy="manualDraftPostButton"]').should('be.disabled');
 
+      cy.authenticatedRequest({
+        method: 'PATCH',
+        url: `/api/financial-accounts/${financialAccount.id}`,
+        body: { active: false },
+      })
+        .its('status')
+        .should('eq', 200);
+
       cy.reload();
       cy.wait('@getManualCandidateRequest');
       cy.get('[data-cy="description"]').should('have.value', manualCandidateDescription);
+      cy.wait('@selectableAccountsRequest').then(({ request }) => {
+        expect(request.url).to.contain('includeId=');
+      });
+      cy.get('[data-cy="account"] option:selected')
+        .should('contain', financialAccount.name)
+        .invoke('text')
+        .should('match', /Inactiv[ae]/);
       cy.get('[data-cy="amount"]').should('have.value', '100.5');
       cy.get('[data-cy="flow"]').should('have.value', 'OUT');
 
@@ -456,6 +471,9 @@ describe('FinancialTransaction e2e test', () => {
         expect(response?.body.map(draft => draft.description)).not.to.include(manualCandidateDescription);
       });
       cy.contains('[data-cy="manualDraftRow"]', manualCandidateDescription).should('not.exist');
+      cy.visit(`${financialTransactionPageUrl}/new`);
+      cy.wait('@selectableAccountsRequest');
+      cy.get('[data-cy="account"] option').should('not.contain', financialAccount.name);
       cy.get('@rulePreviewRequest.all').should('have.length', 0);
     });
 
