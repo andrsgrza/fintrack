@@ -213,6 +213,15 @@ const descriptionReviewTestId = (row: ICsvIngestionWorkflowRow, suffix: string) 
 const hasTransientDescriptionSuggestion = (reevaluation?: IDescriptionReevaluationResult) =>
   Boolean(reevaluation?.suggestedDescription && (reevaluation.action === 'PREVIEWED' || reevaluation.action === 'MANUAL_PRESERVED'));
 
+const hasApplicableDescriptionSuggestion = (
+  row: ICsvIngestionWorkflowRow,
+  reevaluation?: IDescriptionReevaluationResult,
+  protectManualChanges = false,
+) =>
+  hasTransientDescriptionSuggestion(reevaluation) &&
+  reevaluation?.suggestedDescription !== row.description &&
+  (!protectManualChanges || (reevaluation?.action !== 'MANUAL_PRESERVED' && row.descriptionReview?.source !== 'USER_EDIT'));
+
 const renderDescriptionReviewDetail = (labelKey: string, fallbackLabel: string, value?: React.ReactNode) =>
   value ? (
     <div>
@@ -236,7 +245,7 @@ const DescriptionReviewDisplay = ({
 }) => {
   const review = row.descriptionReview;
   const source = review?.source;
-  const hasSuggestion = hasTransientDescriptionSuggestion(reevaluation);
+  const hasSuggestion = hasApplicableDescriptionSuggestion(row, reevaluation);
 
   const renderReevaluationSuggestion = () =>
     hasSuggestion ? (
@@ -444,6 +453,22 @@ const suggestedCategoryName = (preview?: IFileImportCandidateRulePreviewRow) =>
 
 const suggestedTagName = (tag: NonNullable<IFileImportCandidateRulePreviewRow['suggestedTags']>[number]) => tag.tagName ?? tag.name;
 
+const hasApplicableSuggestedCategory = (
+  candidate: IFileImportCandidateWorkflowSummary | null | undefined,
+  preview: IFileImportCandidateRulePreviewRow | undefined,
+) => Boolean(suggestedCategoryName(preview)) && candidate?.categoryId == null && !preview?.suggestedCategory?.conflictsWithCurrentValue;
+
+const hasApplicableSuggestedTags = (
+  candidate: IFileImportCandidateWorkflowSummary | null | undefined,
+  preview: IFileImportCandidateRulePreviewRow | undefined,
+) => {
+  const selectedTagIds = new Set(candidate?.tagIds ?? []);
+  return (preview?.suggestedTags ?? []).some(tag => {
+    const tagId = tag.tagId ?? tag.id;
+    return tagId !== undefined && !tag.alreadyPresent && !tag.duplicateOfEarlierSuggestion && !selectedTagIds.has(tagId);
+  });
+};
+
 const candidateBlocksClassification = (row: ICsvIngestionWorkflowRow) => {
   const candidate = row.candidate;
   if (!candidate?.id) {
@@ -536,8 +561,8 @@ export const TransactionIngestionWorkflowDetail = () => {
   >({});
   const [loadingClassification, setLoadingClassification] = useState(false);
   const [classificationActionInProgress, setClassificationActionInProgress] = useState<number | null>(null);
-  const [applyingAllSuggestions, setApplyingAllSuggestions] = useState(false);
-  const [classificationApplyAllWarning, setClassificationApplyAllWarning] = useState<string | null>(null);
+  const [applyingAllScopedSuggestions, setApplyingAllScopedSuggestions] = useState(false);
+  const [classificationSuggestionApplyWarning, setClassificationSuggestionApplyWarning] = useState<string | null>(null);
   const [descriptionReevaluationByRecordId, setDescriptionReevaluationByRecordId] = useState<
     Record<number, IDescriptionReevaluationResult>
   >({});
@@ -765,14 +790,38 @@ export const TransactionIngestionWorkflowDetail = () => {
     row => row.candidate?.classificationReviewStatus === 'NOT_EVALUATED',
   ).length;
   const staleClassificationRows = classificationRows.filter(row => row.candidate?.classificationReviewStatus === 'STALE').length;
+  const categorySuggestionCandidateIds = classificationRows
+    .filter(row => {
+      const candidateId = row.candidate?.id;
+      return candidateId !== undefined && hasApplicableSuggestedCategory(row.candidate, classificationPreviewByCandidateId[candidateId]);
+    })
+    .map(row => row.candidate?.id)
+    .filter((candidateId): candidateId is number => candidateId !== undefined);
+  const tagSuggestionCandidateIds = classificationRows
+    .filter(row => {
+      const candidateId = row.candidate?.id;
+      return candidateId !== undefined && hasApplicableSuggestedTags(row.candidate, classificationPreviewByCandidateId[candidateId]);
+    })
+    .map(row => row.candidate?.id)
+    .filter((candidateId): candidateId is number => candidateId !== undefined);
   const rowsWithSuggestions = classificationRows.filter(row => {
     const candidateId = row.candidate?.id;
-    return candidateId !== undefined && classificationPreviewByCandidateId[candidateId]?.hasSuggestions;
+    const preview = candidateId === undefined ? undefined : classificationPreviewByCandidateId[candidateId];
+    return hasApplicableSuggestedCategory(row.candidate, preview) || hasApplicableSuggestedTags(row.candidate, preview);
   }).length;
   const descriptionSuggestionRecordIds = rows
-    .filter(row => row.status === 'VALID' && row.ingestionRecordId !== undefined)
+    .filter(
+      row =>
+        row.status === 'VALID' &&
+        row.ingestionRecordId !== undefined &&
+        hasApplicableDescriptionSuggestion(
+          row,
+          descriptionReevaluationByRecordId[row.ingestionRecordId],
+          automationConfig.protectManualChanges,
+        ),
+    )
     .map(row => row.ingestionRecordId)
-    .filter(recordId => hasTransientDescriptionSuggestion(descriptionReevaluationByRecordId[recordId]));
+    .filter((recordId): recordId is number => recordId !== undefined);
   const classificationConfirmBlocked = Boolean(
     classificationRows.find(row => candidateBlocksClassification(row) || !candidateHasReviewedClassification(row.candidate)),
   );
@@ -780,7 +829,7 @@ export const TransactionIngestionWorkflowDetail = () => {
   const classificationReevaluationAvailable =
     workflow?.status === 'READY' && classificationRows.length > 0 && !validateCandidateBackedWorkflow(workflow);
   const classificationReevaluationRunning =
-    Boolean(reevaluationInProgress) || loadingClassification || applyingAllSuggestions || descriptionApplicationInProgress !== null;
+    Boolean(reevaluationInProgress) || loadingClassification || applyingAllScopedSuggestions || descriptionApplicationInProgress !== null;
 
   const canDisable = (row: ICsvIngestionWorkflowRow) => reviewActionsEnabled && ['VALID', 'REJECTED'].includes(row.status ?? '');
   const canEnable = (row: ICsvIngestionWorkflowRow) => reviewActionsEnabled && row.status === 'DISABLED';
@@ -1390,17 +1439,20 @@ export const TransactionIngestionWorkflowDetail = () => {
     }
   };
 
-  const applySuggestionsForCandidate = async (candidateId: number) => {
+  const applySuggestionsForCandidate = async (
+    candidateId: number,
+    scope: Extract<FileImportCandidateRulePreviewScope, 'CATEGORY' | 'TAGS'>,
+  ) => {
     if (!workflow?.transactionIngestionId) {
       return;
     }
     setBackendError(null);
     setClassificationActionInProgress(candidateId);
     try {
-      const response = await applyFileImportCandidateRules(workflow.transactionIngestionId, [candidateId]);
+      const response = await applyFileImportCandidateRules(workflow.transactionIngestionId, [candidateId], scope);
       const applyRows = response.data.rows ?? [];
       applyRows.forEach(row => updateCandidateInWorkflow(row.candidate));
-      clearPersistedClassificationPreviews(applyRows);
+      clearPersistedClassificationPreviews(applyRows, scope);
       await reloadWorkflowAfterRuleApply(workflow.transactionIngestionId);
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationUpdateFailed'));
@@ -1409,7 +1461,7 @@ export const TransactionIngestionWorkflowDetail = () => {
     }
   };
 
-  const applyAllClassificationSuggestions = async () => {
+  const applyAllSuggestionsForScope = async (scope: Extract<FileImportCandidateRulePreviewScope, 'CATEGORY' | 'TAGS'>) => {
     if (
       !workflow?.transactionIngestionId ||
       !classificationReevaluationAvailable ||
@@ -1419,23 +1471,24 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
-    setClassificationApplyAllWarning(null);
-    setApplyingAllSuggestions(true);
+    setClassificationSuggestionApplyWarning(null);
+    setApplyingAllScopedSuggestions(true);
     try {
-      // Omitting candidateIds is the existing batch contract: apply current FILE_IMPORT
-      // classification suggestions for every candidate belonging to this ingestion.
-      const response = await applyFileImportCandidateRules(workflow.transactionIngestionId);
+      // Omitting candidateIds applies this domain's current FILE_IMPORT suggestions across the ingestion.
+      const response = await applyFileImportCandidateRules(workflow.transactionIngestionId, undefined, scope);
       const applyRows = response.data.rows ?? [];
       applyRows.forEach(row => updateCandidateInWorkflow(row.candidate));
-      clearPersistedClassificationPreviews(applyRows);
+      clearPersistedClassificationPreviews(applyRows, scope);
       await reloadWorkflowAfterRuleApply(workflow.transactionIngestionId);
       if (applyRows.some(row => row.action === 'SKIPPED')) {
-        setClassificationApplyAllWarning(translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllPartial'));
+        setClassificationSuggestionApplyWarning(
+          translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllPartial'),
+        );
       }
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllFailed'));
     } finally {
-      setApplyingAllSuggestions(false);
+      setApplyingAllScopedSuggestions(false);
     }
   };
 
@@ -1764,6 +1817,7 @@ export const TransactionIngestionWorkflowDetail = () => {
     const candidateId = candidate?.id;
     const compatibleCategories = categories.filter(category => categoryCompatibleWithFlow(category, candidate?.flow ?? row.flow));
     const previewCategoryName = suggestedCategoryName(preview);
+    const categorySuggestionApplicable = hasApplicableSuggestedCategory(candidate, preview);
     const editable = reviewActionsEnabled && row.status === 'VALID' && Boolean(candidateId) && !rowBlocked;
 
     return (
@@ -1798,6 +1852,20 @@ export const TransactionIngestionWorkflowDetail = () => {
             {previewCategoryName}
           </small>
         ) : null}
+        {editable && categorySuggestionApplicable ? (
+          <Button
+            size="sm"
+            color="primary"
+            className="mt-1"
+            disabled={actionBusy}
+            onClick={() => candidateId !== undefined && applySuggestionsForCandidate(candidateId, 'CATEGORY')}
+            data-testid={`classificationApplySuggestedCategory-${candidateId}`}
+          >
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applySuggestedCategory">
+              Apply suggested category
+            </Translate>
+          </Button>
+        ) : null}
       </td>
     );
   };
@@ -1811,6 +1879,7 @@ export const TransactionIngestionWorkflowDetail = () => {
   ) => {
     const candidateId = candidate?.id;
     const selectedTagIds = (candidate?.tagIds ?? []).map(tagId => String(tagId));
+    const tagSuggestionApplicable = hasApplicableSuggestedTags(candidate, preview);
     const editable = reviewActionsEnabled && row.status === 'VALID' && Boolean(candidateId) && !rowBlocked;
 
     return (
@@ -1848,43 +1917,23 @@ export const TransactionIngestionWorkflowDetail = () => {
             {(preview?.suggestedTags ?? []).map(tag => suggestedTagName(tag)).join(', ')}
           </small>
         ) : null}
+        {editable && tagSuggestionApplicable ? (
+          <Button
+            size="sm"
+            color="primary"
+            className="mt-1"
+            disabled={actionBusy}
+            onClick={() => candidateId !== undefined && applySuggestionsForCandidate(candidateId, 'TAGS')}
+            data-testid={`classificationApplySuggestedTags-${candidateId}`}
+          >
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applySuggestedTags">
+              Apply suggested tags
+            </Translate>
+          </Button>
+        ) : null}
       </td>
     );
   };
-
-  const renderClassificationActionsCell = (
-    candidateId: number | undefined,
-    preview: IFileImportCandidateRulePreviewRow | undefined,
-    actionBusy: boolean,
-    rowBlocked: string | null,
-  ) => (
-    <>
-      {preview?.hasSuggestions ? (
-        <Button
-          size="sm"
-          color="primary"
-          disabled={actionBusy || !candidateId || Boolean(rowBlocked)}
-          onClick={() => candidateId !== undefined && applySuggestionsForCandidate(candidateId)}
-          data-testid={`classificationApply-${candidateId}`}
-        >
-          <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applySuggestions">Apply suggestions</Translate>
-        </Button>
-      ) : null}{' '}
-      {preview && !preview.hasSuggestions ? (
-        <Button
-          size="sm"
-          color="secondary"
-          disabled={actionBusy || !candidateId || Boolean(rowBlocked)}
-          onClick={() => candidateId !== undefined && confirmCandidateHasNoSuggestions(candidateId)}
-          data-testid={`classificationConfirmNoSuggestions-${candidateId}`}
-        >
-          <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.confirmNoSuggestions">
-            Confirm no suggestions
-          </Translate>
-        </Button>
-      ) : null}
-    </>
-  );
 
   const renderClassificationDetailsCell = (
     row: ICsvIngestionWorkflowRow,
@@ -1901,9 +1950,19 @@ export const TransactionIngestionWorkflowDetail = () => {
           <>
             <div data-testid={`classificationStatus-${candidateId}`}>{renderCandidateClassificationStatus(candidate)}</div>
             {renderClassificationNotes(preview)}
-            {reviewActionsEnabled && row.status === 'VALID'
-              ? renderClassificationActionsCell(candidateId, preview, actionBusy, rowBlocked)
-              : null}
+            {reviewActionsEnabled && row.status === 'VALID' && preview && !preview.hasSuggestions ? (
+              <Button
+                size="sm"
+                color="secondary"
+                disabled={actionBusy || Boolean(rowBlocked)}
+                onClick={() => confirmCandidateHasNoSuggestions(candidateId)}
+                data-testid={`classificationConfirmNoSuggestions-${candidateId}`}
+              >
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.confirmNoSuggestions">
+                  Confirm no suggestions
+                </Translate>
+              </Button>
+            ) : null}
           </>
         ) : row.status === 'VALID' ? (
           <small className="text-muted">
@@ -2168,7 +2227,7 @@ export const TransactionIngestionWorkflowDetail = () => {
             <strong>
               <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.suggestionsAvailable">Suggestions</Translate>
             </strong>
-            <div>{rowsWithSuggestions}</div>
+            <div data-testid="classificationSuggestionCount">{rowsWithSuggestions}</div>
           </Col>
         </Row>
         {classificationConfirmBlocked ? (
@@ -2188,19 +2247,6 @@ export const TransactionIngestionWorkflowDetail = () => {
           >
             {reevaluationInProgress?.kind === 'DESCRIPTIONS' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}{' '}
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.descriptions">Reevaluate descriptions</Translate>
-          </Button>
-          <Button
-            color="primary"
-            size="sm"
-            disabled={descriptionSuggestionRecordIds.length === 0 || classificationReevaluationRunning}
-            onClick={applyAllDescriptionSuggestions}
-            data-cy="workflowApplyAllDescriptionSuggestions"
-            data-testid="workflowApplyAllDescriptionSuggestions"
-          >
-            {descriptionApplicationInProgress === 'ALL' ? <Spinner size="sm" /> : null}{' '}
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.applyAllSuggestions">
-              Apply all suggested descriptions
-            </Translate>
           </Button>
           <Button
             color="secondary"
@@ -2232,34 +2278,60 @@ export const TransactionIngestionWorkflowDetail = () => {
             {reevaluationInProgress?.kind === 'ALL' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="sync" />}{' '}
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.all">Reevaluate all</Translate>
           </Button>
-          <div className="border-start border-secondary ps-2 ms-1">
-            <Button
-              color="success"
-              size="sm"
-              disabled={
-                !classificationReevaluationAvailable || classificationReevaluationRunning || classificationActionInProgress !== null
-              }
-              onClick={applyAllClassificationSuggestions}
-              data-cy="workflowApplyAllSuggestions"
-            >
-              {applyingAllSuggestions ? <Spinner size="sm" /> : null}{' '}
-              {applyingAllSuggestions ? (
-                <Translate
-                  key="applying-all-classification-suggestions"
-                  contentKey="fintrackApp.transactionIngestion.workflow.classification.applyingAllSuggestions"
-                >
-                  Applying classification suggestions...
-                </Translate>
-              ) : (
-                <Translate
-                  key="apply-all-classification-suggestions"
-                  contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestions"
-                >
-                  Apply all classification suggestions
-                </Translate>
-              )}
-            </Button>
-          </div>
+        </div>
+        <div className="d-flex flex-wrap align-items-center gap-2 mt-2" data-cy="workflowSuggestionApplicationControls">
+          <small className="text-muted me-1">
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applicationTitle">Apply</Translate>
+          </small>
+          <Button
+            color="primary"
+            size="sm"
+            disabled={descriptionSuggestionRecordIds.length === 0 || classificationReevaluationRunning}
+            onClick={applyAllDescriptionSuggestions}
+            data-cy="workflowApplyAllDescriptionSuggestions"
+            data-testid="workflowApplyAllDescriptionSuggestions"
+          >
+            {descriptionApplicationInProgress === 'ALL' ? <Spinner size="sm" /> : null}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.applyAllSuggestions">
+              Apply all suggested descriptions
+            </Translate>
+          </Button>
+          <Button
+            color="success"
+            size="sm"
+            disabled={
+              categorySuggestionCandidateIds.length === 0 ||
+              !classificationReevaluationAvailable ||
+              classificationReevaluationRunning ||
+              classificationActionInProgress !== null
+            }
+            onClick={() => applyAllSuggestionsForScope('CATEGORY')}
+            data-cy="workflowApplyAllSuggestedCategories"
+            data-testid="workflowApplyAllSuggestedCategories"
+          >
+            {applyingAllScopedSuggestions ? <Spinner size="sm" /> : null}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestedCategories">
+              Apply all suggested categories
+            </Translate>
+          </Button>
+          <Button
+            color="success"
+            size="sm"
+            disabled={
+              tagSuggestionCandidateIds.length === 0 ||
+              !classificationReevaluationAvailable ||
+              classificationReevaluationRunning ||
+              classificationActionInProgress !== null
+            }
+            onClick={() => applyAllSuggestionsForScope('TAGS')}
+            data-cy="workflowApplyAllSuggestedTags"
+            data-testid="workflowApplyAllSuggestedTags"
+          >
+            {applyingAllScopedSuggestions ? <Spinner size="sm" /> : null}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestedTags">
+              Apply all suggested tags
+            </Translate>
+          </Button>
         </div>
       </div>
     ) : null;
@@ -2296,9 +2368,9 @@ export const TransactionIngestionWorkflowDetail = () => {
           </Alert>
         ) : null}
 
-        {classificationApplyAllWarning ? (
+        {classificationSuggestionApplyWarning ? (
           <Alert color="warning" data-cy="workflowApplyAllWarning" data-testid="workflowApplyAllWarning" fade={false}>
-            {classificationApplyAllWarning}
+            {classificationSuggestionApplyWarning}
           </Alert>
         ) : null}
 
@@ -2484,7 +2556,7 @@ export const TransactionIngestionWorkflowDetail = () => {
                     const rowBlocked = candidateBlocksClassification(row);
                     const actionBusy =
                       processing ||
-                      applyingAllSuggestions ||
+                      applyingAllScopedSuggestions ||
                       reviewActionInProgress === row.ingestionRecordId ||
                       (candidateId !== undefined && classificationActionInProgress === candidateId);
                     const isEditing = editingRecordId === row.ingestionRecordId;
@@ -2615,7 +2687,7 @@ export const TransactionIngestionWorkflowDetail = () => {
                     processing ||
                     loadingClassification ||
                     Boolean(reevaluationInProgress) ||
-                    applyingAllSuggestions ||
+                    applyingAllScopedSuggestions ||
                     classificationConfirmBlocked
                   }
                   onClick={confirmImport}

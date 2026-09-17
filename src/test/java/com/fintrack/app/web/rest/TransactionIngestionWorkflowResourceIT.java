@@ -2759,6 +2759,46 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void fileImportCandidateApplyRulesHonorsExplicitCategoryAndTagScopes() throws Exception {
+        Category category = persistCategory("Scoped transport", CategoryType.EXPENSE, currentMockUser());
+        Tag tag = persistTag("Scoped ride share", currentMockUser());
+        TransactionRule rule = persistTransactionRule("Scoped OXXO rule", category, List.of(tag));
+        persistTransactionRuleCondition(rule, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "OXXO");
+        persistTransactionRuleCondition(rule, TransactionRuleField.ORIGIN, RuleOperator.EQUALS, "FILE_IMPORT");
+
+        TransactionIngestion categoryIngestion = createWorkflowWithSingleValidRow();
+        IngestionRecord categoryRecord = recordsFor(categoryIngestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(categoryIngestion))).andExpect(status().isOk());
+        TransactionCandidate categoryCandidate = candidateForRecord(categoryRecord);
+
+        mockMvc
+            .perform(
+                post(candidateApplyRulesUrl(categoryIngestion)).contentType(MediaType.APPLICATION_JSON).content("{\"scope\":\"CATEGORY\"}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].candidateId").value(categoryCandidate.getId()))
+            .andExpect(jsonPath("$.rows[0].categoryApplied").value(true))
+            .andExpect(jsonPath("$.rows[0].tagIdsApplied.length()").value(0))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").value(category.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds.length()").value(0));
+
+        TransactionIngestion tagsIngestion = createWorkflowWithSingleValidRow();
+        IngestionRecord tagsRecord = recordsFor(tagsIngestion).get(0);
+        mockMvc.perform(post(prepareCandidatesUrl(tagsIngestion))).andExpect(status().isOk());
+        TransactionCandidate tagsCandidate = candidateForRecord(tagsRecord);
+
+        mockMvc
+            .perform(post(candidateApplyRulesUrl(tagsIngestion)).contentType(MediaType.APPLICATION_JSON).content("{\"scope\":\"TAGS\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rows[0].candidateId").value(tagsCandidate.getId()))
+            .andExpect(jsonPath("$.rows[0].categoryApplied").value(false))
+            .andExpect(jsonPath("$.rows[0].tagIdsApplied[0]").value(tag.getId()))
+            .andExpect(jsonPath("$.rows[0].candidate.categoryId").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].candidate.tagIds[0]").value(tag.getId()));
+    }
+
+    @Test
+    @Transactional
     void fileImportCandidateApplyRulesPreservesManualSelectionsAndAvoidsDuplicates() throws Exception {
         Category manualCategory = persistCategory("Manual", CategoryType.EXPENSE, currentMockUser());
         Category suggestedCategory = persistCategory("Suggested", CategoryType.EXPENSE, currentMockUser());

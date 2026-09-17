@@ -32,8 +32,23 @@ public class TransactionCandidateRuleApplicationService {
         Function<Long, Category> categoryResolver,
         Function<Long, Tag> tagResolver
     ) {
-        boolean categoryApplied = applySuggestedCategory(candidate, evaluation, categoryResolver);
-        List<Long> tagIdsApplied = applySuggestedTags(candidate, evaluation, tagResolver);
+        return applyFillEmptyOnly(candidate, evaluation, preserveUserSelectedClassification, true, true, categoryResolver, tagResolver);
+    }
+
+    /**
+     * Applies only the requested explicit output domains while retaining FILL_EMPTY_ONLY behavior.
+     */
+    public TransactionCandidateRuleApplicationResult applyFillEmptyOnly(
+        TransactionCandidate candidate,
+        TransactionRuleEvaluationResult evaluation,
+        boolean preserveUserSelectedClassification,
+        boolean applyCategory,
+        boolean applyTags,
+        Function<Long, Category> categoryResolver,
+        Function<Long, Tag> tagResolver
+    ) {
+        boolean categoryApplied = applyCategory && applySuggestedCategory(candidate, evaluation, categoryResolver);
+        List<Long> tagIdsApplied = applyTags ? applySuggestedTags(candidate, evaluation, tagResolver) : List.of();
         TransactionCandidateClassificationReviewStatus recommendedClassificationReviewStatus = recommendedClassificationReviewStatus(
             preserveUserSelectedClassification,
             categoryApplied,
