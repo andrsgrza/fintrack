@@ -24,7 +24,10 @@
         "title": "Account details",
         "account": "Account",
         "status": "Status",
-        "creditDetails": "Credit details"
+        "creditDetails": "Credit details",
+        "balanceSummary": "Account balance",
+        "creditSummary": "Credit card summary",
+        "generalInformation": "General information"
       },
       "id": "ID",
       "name": "Name",
@@ -51,8 +54,10 @@
       "icon": "Icon",
       "active": "Active",
       "status": {
+        "label": "Status",
         "active": "Active",
         "inactive": "Inactive",
+        "help": "Inactive accounts keep their history and balance, but cannot be selected for new transactions, imports, or rules until reactivated.",
         "inactiveExplanation": "This account is inactive. Its history and balance remain available, and existing work can finish, but it cannot be selected for new transactions, imports, or rules until it is reactivated."
       },
       "createdAt": "Created At",
@@ -85,6 +90,7 @@
       "transactionsUnavailable": "Transactions are not available.",
       "viewAllTransactions": "View all transactions",
       "overview": {
+        "productSubtitle": "Track balances, available credit, and recent account activity.",
         "loading": "Loading accounts...",
         "loadError": "Accounts could not be loaded.",
         "retry": "Try again",
@@ -92,6 +98,10 @@
         "emptyDescription": "Create an account to start tracking your finances.",
         "endsIn": "Ends in"
       },
+      "basicInformation": "Basic information",
+      "identity": "Identity",
+      "configuration": "Configuration",
+      "moreActions": "More account actions",
       "user": "User",
       "creditAccountDetails": "Credit card details",
       "financialTransactions": "Financial Transactions",

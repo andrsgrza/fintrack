@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Alert } from 'reactstrap';
+import { Alert, Col, Row } from 'reactstrap';
 import { TextFormat, Translate } from 'react-jhipster';
 
 import { APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
@@ -11,19 +11,29 @@ interface FinancialAccountBalanceSectionProps {
 }
 
 const formatMoney = (value: number | undefined | null, currency: string | undefined | null) =>
-  value === undefined || value === null ? '' : `${value} ${currency ?? ''}`.trim();
+  value === undefined || value === null ? '—' : `${value} ${currency ?? ''}`.trim();
 
-const BalanceRow = ({ labelKey, fallback, value }: { labelKey: string; fallback: string; value: React.ReactNode }) => (
-  <>
-    <dt>
+const Metric = ({
+  labelKey,
+  fallback,
+  value,
+  primary = false,
+}: {
+  labelKey: string;
+  fallback: string;
+  value: React.ReactNode;
+  primary?: boolean;
+}) => (
+  <div className={`border rounded-3 p-3 h-100 ${primary ? 'bg-body-tertiary' : ''}`}>
+    <div className="text-muted small mb-1">
       <Translate contentKey={labelKey}>{fallback}</Translate>
-    </dt>
-    <dd>{value}</dd>
-  </>
+    </div>
+    <div className={primary ? 'fs-3 fw-semibold' : 'fw-semibold'}>{value}</div>
+  </div>
 );
 
 const DateValue = ({ value }: { value?: string }) =>
-  value ? <TextFormat value={value} type="date" format={APP_LOCAL_DATE_FORMAT} /> : null;
+  value ? <TextFormat value={value} type="date" format={APP_LOCAL_DATE_FORMAT} /> : <>—</>;
 
 export const getFinancialAccountBalance = (accountId: string | number) =>
   axios.get<IFinancialAccountBalance>(`api/financial-accounts/${accountId}/balance`);
@@ -34,19 +44,14 @@ export const FinancialAccountBalanceSection = ({ accountId }: FinancialAccountBa
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!accountId) {
-      return;
-    }
+    if (!accountId) return;
 
     let active = true;
-
     setLoading(true);
     setError(false);
     getFinancialAccountBalance(accountId)
       .then(response => {
-        if (active) {
-          setBalance(response.data);
-        }
+        if (active) setBalance(response.data);
       })
       .catch(() => {
         if (active) {
@@ -55,9 +60,7 @@ export const FinancialAccountBalanceSection = ({ accountId }: FinancialAccountBa
         }
       })
       .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       });
 
     return () => {
@@ -67,82 +70,109 @@ export const FinancialAccountBalanceSection = ({ accountId }: FinancialAccountBa
 
   return (
     <div data-cy="financialAccountBalanceSection" data-testid="financialAccountBalanceSection">
-      <h3>
-        <Translate contentKey="fintrackApp.financialAccount.balanceSnapshot">Balance snapshot</Translate>
-      </h3>
       {loading ? (
-        <p>
+        <p className="mb-0">
           <Translate contentKey="fintrackApp.financialAccount.loadingBalance">Loading balance...</Translate>
         </p>
       ) : null}
       {error ? (
-        <p>
+        <p className="mb-0">
           <Translate contentKey="fintrackApp.financialAccount.balanceUnavailable">Balance is not available.</Translate>
         </p>
       ) : null}
       {!loading && !error && balance ? (
         <>
           {balance.accountType === 'CREDIT_CARD' && balance.missingCreditDetails ? (
-            <Alert color="warning" fade={false}>
+            <Alert color="warning" fade={false} className="small mb-3">
               <Translate contentKey="fintrackApp.financialAccount.creditDetailsMissing">
                 Credit card details have not been configured yet.
               </Translate>
             </Alert>
           ) : null}
-          <dl className="jh-entity-details">
-            {balance.accountType === 'CREDIT_CARD' ? (
-              <BalanceRow
-                labelKey="fintrackApp.financialAccount.currentDebt"
-                fallback="Current debt"
-                value={formatMoney(balance.currentDebt, balance.currency)}
-              />
-            ) : (
-              <BalanceRow
-                labelKey="fintrackApp.financialAccount.currentBalance"
-                fallback="Current balance"
-                value={formatMoney(balance.currentBalance, balance.currency)}
-              />
-            )}
-            <BalanceRow
-              labelKey="fintrackApp.financialAccount.inflowTotal"
-              fallback="Inflow total"
-              value={formatMoney(balance.inflowTotal, balance.currency)}
-            />
-            <BalanceRow
-              labelKey="fintrackApp.financialAccount.outflowTotal"
-              fallback="Outflow total"
-              value={formatMoney(balance.outflowTotal, balance.currency)}
-            />
-            <BalanceRow
-              labelKey="fintrackApp.financialAccount.initialBalance"
-              fallback="Initial balance"
-              value={formatMoney(balance.initialBalance, balance.currency)}
-            />
-            <BalanceRow
-              labelKey="fintrackApp.financialAccount.initialBalanceDate"
-              fallback="Initial balance date"
-              value={<DateValue value={balance.initialBalanceDate} />}
-            />
-            <BalanceRow
-              labelKey="fintrackApp.financialAccount.asOfDate"
-              fallback="As of date"
-              value={<DateValue value={balance.asOfDate} />}
-            />
-            {balance.accountType === 'CREDIT_CARD' && balance.creditLimit !== undefined && balance.creditLimit !== null ? (
-              <BalanceRow
-                labelKey="fintrackApp.financialAccount.creditLimit"
-                fallback="Credit limit"
-                value={formatMoney(balance.creditLimit, balance.currency)}
-              />
-            ) : null}
-            {balance.accountType === 'CREDIT_CARD' && balance.availableCredit !== undefined && balance.availableCredit !== null ? (
-              <BalanceRow
-                labelKey="fintrackApp.financialAccount.availableCredit"
-                fallback="Available credit"
-                value={formatMoney(balance.availableCredit, balance.currency)}
-              />
-            ) : null}
-          </dl>
+          {balance.accountType === 'CREDIT_CARD' ? (
+            <Row className="g-3" data-cy="financialAccountCreditMetrics" data-testid="financialAccountCreditMetrics">
+              <Col sm="6">
+                <Metric
+                  primary
+                  labelKey="fintrackApp.financialAccount.currentDebt"
+                  fallback="Current debt"
+                  value={formatMoney(balance.currentDebt, balance.currency)}
+                />
+              </Col>
+              <Col sm="6">
+                <Metric
+                  primary
+                  labelKey="fintrackApp.financialAccount.availableCredit"
+                  fallback="Available credit"
+                  value={formatMoney(balance.availableCredit, balance.currency)}
+                />
+              </Col>
+              <Col sm="6" lg="4">
+                <Metric
+                  labelKey="fintrackApp.financialAccount.creditLimit"
+                  fallback="Credit limit"
+                  value={formatMoney(balance.creditLimit, balance.currency)}
+                />
+              </Col>
+              <Col sm="6" lg="4">
+                <Metric
+                  labelKey="fintrackApp.financialAccount.initialBalance"
+                  fallback="Opening position"
+                  value={formatMoney(balance.initialBalance, balance.currency)}
+                />
+              </Col>
+              <Col sm="6" lg="4">
+                <Metric
+                  labelKey="fintrackApp.financialAccount.initialBalanceDate"
+                  fallback="Tracking start date"
+                  value={<DateValue value={balance.initialBalanceDate} />}
+                />
+              </Col>
+            </Row>
+          ) : (
+            <Row className="g-3" data-cy="financialAccountDebitMetrics" data-testid="financialAccountDebitMetrics">
+              <Col lg="5">
+                <Metric
+                  primary
+                  labelKey="fintrackApp.financialAccount.currentBalance"
+                  fallback="Current balance"
+                  value={formatMoney(balance.currentBalance, balance.currency)}
+                />
+              </Col>
+              <Col sm="6" lg="7">
+                <Row className="g-3">
+                  <Col sm="6">
+                    <Metric
+                      labelKey="fintrackApp.financialAccount.initialBalance"
+                      fallback="Opening position"
+                      value={formatMoney(balance.initialBalance, balance.currency)}
+                    />
+                  </Col>
+                  <Col sm="6">
+                    <Metric
+                      labelKey="fintrackApp.financialAccount.initialBalanceDate"
+                      fallback="Tracking start date"
+                      value={<DateValue value={balance.initialBalanceDate} />}
+                    />
+                  </Col>
+                  <Col sm="6">
+                    <Metric
+                      labelKey="fintrackApp.financialAccount.inflowTotal"
+                      fallback="Inflow total"
+                      value={formatMoney(balance.inflowTotal, balance.currency)}
+                    />
+                  </Col>
+                  <Col sm="6">
+                    <Metric
+                      labelKey="fintrackApp.financialAccount.outflowTotal"
+                      fallback="Outflow total"
+                      value={formatMoney(balance.outflowTotal, balance.currency)}
+                    />
+                  </Col>
+                </Row>
+              </Col>
+            </Row>
+          )}
         </>
       ) : null}
     </div>

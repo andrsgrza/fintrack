@@ -249,13 +249,6 @@ const expectNoMissingTranslations = () => {
   expect(screen.queryByText(/translation-not-found\[fintrackApp\.creditAccountDetails\.composition/)).toBeNull();
 };
 
-const expectFieldBefore = (firstLabel: string, secondLabel: string) => {
-  const firstField = screen.getByLabelText(firstLabel);
-  const secondField = screen.getByLabelText(secondLabel);
-
-  expect(firstField.compareDocumentPosition(secondField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-};
-
 describe('FinancialAccount opening-position labels', () => {
   beforeAll(registerTranslations);
 
@@ -310,14 +303,15 @@ describe('FinancialAccount opening-position labels', () => {
     expect(optionLabels).not.toContain('INVESTMENT');
   });
 
-  it('renders secondary account fields before account type in create mode', () => {
+  it('composes the account form into product sections and hides the uncontracted icon field', () => {
     renderCreateForm();
 
-    expectFieldBefore('Currency', 'Account Type');
-    expectFieldBefore('Last Four Digits', 'Account Type');
-    expectFieldBefore('Description', 'Account Type');
-    expectFieldBefore('Color', 'Account Type');
-    expectFieldBefore('Icon', 'Account Type');
+    expect(screen.getByTestId('financialAccountBasicInformationSection')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountIdentitySection')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountConfigurationSection')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountColorControlRow')).toBeTruthy();
+    expect(document.querySelector('[data-cy="financialAccountColorPicker"]')).toBeTruthy();
+    expect(screen.queryByLabelText('Icon')).toBeNull();
   });
 
   it('changes DEBIT to CREDIT_CARD labels and resets initial balance fields', () => {
@@ -375,9 +369,10 @@ describe('FinancialAccount opening-position labels', () => {
   it('does not expose server-owned timestamps in edit mode and locks immutable selects', () => {
     renderEditForm();
 
-    expect(screen.getByText('Edit Financial Account')).toBeTruthy();
+    expect(screen.getByText('Existing account')).toBeTruthy();
     expect(screen.getByLabelText('Opening card balance')).toBeTruthy();
     expect(screen.getByLabelText('Active')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountStatusControl')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect((screen.getByLabelText('Account Type') as HTMLSelectElement).disabled).toBe(true);
@@ -574,12 +569,12 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByText('Opening card balance')).toBeNull();
   });
 
-  it('uses the DEBIT opening-position label in detail view', () => {
-    renderDetail('DEBIT');
+  it('uses the DEBIT opening-position label in detail view', async () => {
+    renderDetail('DEBIT', {}, {});
 
-    expect(screen.getByText('Initial balance')).toBeTruthy();
-    expect(screen.getByText('Tracking start date')).toBeTruthy();
-    expect(screen.getByText('123')).toBeTruthy();
+    expect(await screen.findByText('Opening position')).toBeTruthy();
+    expect(screen.getAllByText('Tracking start date')).toHaveLength(2);
+    expect(screen.getByTestId('financialAccountDebitMetrics').textContent).toContain('123 MXN');
     expect(screen.queryByText('Opening card balance')).toBeNull();
     expect(screen.queryByText('Credit details')).toBeNull();
   });
@@ -587,7 +582,7 @@ describe('FinancialAccount opening-position labels', () => {
   it('renders a product account detail without technical metadata or relationship dumps', () => {
     renderDetail('DEBIT');
 
-    expect(screen.getByText('Account details')).toBeTruthy();
+    expect(screen.getByText('Test account')).toBeTruthy();
     expect(screen.getByTestId('financialAccountDetailAccountSection')).toBeTruthy();
     expect(screen.getByText('Test bank')).toBeTruthy();
     expect(screen.getByText('Debit account')).toBeTruthy();
@@ -617,7 +612,7 @@ describe('FinancialAccount opening-position labels', () => {
     const section = await screen.findByTestId('financialAccountBalanceSection');
 
     expect(mockAxiosGet).toHaveBeenCalledWith('api/financial-accounts/1/balance');
-    expect(within(section).getByText('Balance snapshot')).toBeTruthy();
+    expect(screen.getByTestId('financialAccountDetailBalanceSection').textContent).toContain('Account balance');
     expect(within(section).getByText('Current balance')).toBeTruthy();
     expect(within(section).getByText('273 MXN')).toBeTruthy();
     expect(within(section).getByText('Inflow total')).toBeTruthy();
@@ -628,21 +623,26 @@ describe('FinancialAccount opening-position labels', () => {
     expect(within(section).queryByText('Available credit')).toBeNull();
   });
 
-  it('uses the CREDIT_CARD opening-position label in detail view', () => {
-    renderDetail('CREDIT_CARD', {
-      id: 25,
-      creditLimit: 50000,
-      statementDay: 15,
-      paymentDueDay: 5,
-      annualInterestRate: 65,
-    });
+  it('uses a credit-card summary with the card terms in detail view', async () => {
+    renderDetail(
+      'CREDIT_CARD',
+      {
+        id: 25,
+        creditLimit: 50000,
+        statementDay: 15,
+        paymentDueDay: 5,
+        annualInterestRate: 65,
+      },
+      { currentDebt: 73, creditLimit: 50000, availableCredit: 49927 },
+    );
 
-    expect(screen.getByText('Opening card balance')).toBeTruthy();
-    expect(screen.getByText('Tracking start date')).toBeTruthy();
-    expect(screen.getByText('123')).toBeTruthy();
-    expect(screen.getByText('Credit details')).toBeTruthy();
+    await screen.findByText('Credit limit');
+    expect(screen.getByText('Opening position')).toBeTruthy();
+    expect(screen.getAllByText('Tracking start date')).toHaveLength(2);
+    expect(screen.getByText('Credit card summary')).toBeTruthy();
     expect(screen.getByText('Credit limit')).toBeTruthy();
     expect(screen.getByText('50000 MXN')).toBeTruthy();
+    expect(screen.getByText('Statement closing day')).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Account' })).toBeNull();
     expectNoMissingTranslations();
   });
@@ -678,7 +678,7 @@ describe('FinancialAccount opening-position labels', () => {
 
     expect(within(section).getByText('Credit card details have not been configured yet.')).toBeTruthy();
     expect(within(section).getByText('Current debt')).toBeTruthy();
-    expect(within(section).queryByText('Available credit')).toBeNull();
+    expect(within(section).getByText('Available credit')).toBeTruthy();
   });
 
   it('shows balance unavailable when balance request fails but keeps account detail rendered', async () => {
@@ -687,7 +687,7 @@ describe('FinancialAccount opening-position labels', () => {
 
     expect(screen.getByText('Test account')).toBeTruthy();
     expect(await screen.findByText('Balance is not available.')).toBeTruthy();
-    expect(screen.getByText('Initial balance')).toBeTruthy();
+    expect(screen.getByText('Tracking start date')).toBeTruthy();
   });
 
   it('shows loading state while balance request is pending', async () => {
@@ -769,13 +769,13 @@ describe('FinancialAccount opening-position labels', () => {
 
     expect(screen.getByText('Test account')).toBeTruthy();
     expect(await screen.findByText('Transactions are not available.')).toBeTruthy();
-    expect(screen.getByText('Initial balance')).toBeTruthy();
+    expect(screen.getByText('Tracking start date')).toBeTruthy();
   });
 
-  it('shows a clear detail message when CREDIT_CARD details are missing', () => {
-    renderDetail('CREDIT_CARD');
+  it('shows a clear detail message when CREDIT_CARD details are missing', async () => {
+    renderDetail('CREDIT_CARD', {}, { missingCreditDetails: true });
 
-    expect(screen.getByText('Credit card details have not been configured yet.')).toBeTruthy();
+    expect(await screen.findByText('Credit card details have not been configured yet.')).toBeTruthy();
     expectNoMissingTranslations();
   });
 });

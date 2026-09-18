@@ -3265,6 +3265,8 @@ class FinancialAccountResourceIT {
     @Transactional
     void getOverviewReturnsAccessibleProductSummariesForEveryAccountType() throws Exception {
         FinancialAccount debit = createOverviewAccount("Overview debit", AccountType.DEBIT, new BigDecimal("100.00"), true);
+        debit.setColor("#2463A5");
+        financialAccountRepository.saveAndFlush(debit);
         FinancialAccount cash = createOverviewAccount("Overview cash", AccountType.CASH, new BigDecimal("50.00"), true);
         FinancialAccount investment = createOverviewAccount("Overview investment", AccountType.INVESTMENT, new BigDecimal("700.00"), true);
         FinancialAccount creditCard = createOverviewAccount("Overview card", AccountType.CREDIT_CARD, new BigDecimal("1000.00"), false);
@@ -3310,6 +3312,7 @@ class FinancialAccountResourceIT {
             .findFirst()
             .orElseThrow();
         assertThat(debitOverview.getAccountType()).isEqualTo(AccountType.DEBIT);
+        assertThat(debitOverview.getColor()).isEqualTo("#2463A5");
         assertThat(debitOverview.getCurrentBalance()).isEqualByComparingTo("125.00");
         FinancialAccountOverviewDTO creditOverview = overview
             .stream()

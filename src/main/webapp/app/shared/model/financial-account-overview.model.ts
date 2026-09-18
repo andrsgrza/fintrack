@@ -8,6 +8,7 @@ export interface IFinancialAccountOverview {
   currency: keyof typeof CurrencyCode;
   active: boolean;
   lastFourDigits?: string | null;
+  color?: string | null;
   currentBalance?: number | null;
   currentDebt?: number | null;
   creditLimit?: number | null;

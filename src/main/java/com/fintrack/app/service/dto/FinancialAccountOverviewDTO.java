@@ -24,6 +24,11 @@ public class FinancialAccountOverviewDTO implements Serializable {
 
     private String lastFourDigits;
 
+    /**
+     * Product identity accent for the account overview. This is account metadata only; it does not affect balance calculation.
+     */
+    private String color;
+
     private BigDecimal currentBalance;
 
     private BigDecimal currentDebt;
@@ -86,6 +91,14 @@ public class FinancialAccountOverviewDTO implements Serializable {
 
     public void setLastFourDigits(String lastFourDigits) {
         this.lastFourDigits = lastFourDigits;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
     }
 
     public BigDecimal getCurrentBalance() {

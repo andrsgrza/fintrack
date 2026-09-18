@@ -24,7 +24,10 @@
         "title": "Detalles de la cuenta",
         "account": "Cuenta",
         "status": "Estado",
-        "creditDetails": "Detalles de crédito"
+        "creditDetails": "Detalles de crédito",
+        "balanceSummary": "Balance de la cuenta",
+        "creditSummary": "Resumen de la tarjeta",
+        "generalInformation": "Información general"
       },
       "id": "ID",
       "name": "Nombre",
@@ -51,8 +54,10 @@
       "icon": "Ícono",
       "active": "Activa",
       "status": {
+        "label": "Estado",
         "active": "Activa",
         "inactive": "Inactiva",
+        "help": "Las cuentas inactivas conservan su historial y balance, pero no se pueden seleccionar para nuevas transacciones, importaciones o reglas hasta reactivarlas.",
         "inactiveExplanation": "Esta cuenta está inactiva. Su historial y saldo permanecen disponibles, y los flujos existentes pueden terminar, pero no se puede seleccionar para nuevas transacciones, importaciones o reglas hasta que se reactive."
       },
       "createdAt": "Creada en",
@@ -85,6 +90,7 @@
       "transactionsUnavailable": "Los movimientos no están disponibles.",
       "viewAllTransactions": "Ver todos los movimientos",
       "overview": {
+        "productSubtitle": "Consulta balances, crédito disponible y actividad reciente de tus cuentas.",
         "loading": "Cargando cuentas...",
         "loadError": "No se pudieron cargar las cuentas.",
         "retry": "Intentar de nuevo",
@@ -92,6 +98,10 @@
         "emptyDescription": "Crea una cuenta para empezar a registrar tus finanzas.",
         "endsIn": "Termina en"
       },
+      "basicInformation": "Información básica",
+      "identity": "Identidad",
+      "configuration": "Configuración",
+      "moreActions": "Más acciones de la cuenta",
       "user": "Usuario",
       "creditAccountDetails": "Detalles de tarjeta de crédito",
       "financialTransactions": "Transacciones",

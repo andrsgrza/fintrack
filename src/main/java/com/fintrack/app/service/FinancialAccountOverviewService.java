@@ -68,6 +68,7 @@ public class FinancialAccountOverviewService {
         overview.setCurrency(account.getCurrency());
         overview.setActive(account.getActive());
         overview.setLastFourDigits(account.getLastFourDigits());
+        overview.setColor(account.getColor());
 
         if (balance != null) {
             overview.setCurrentBalance(balance.getCurrentBalance());

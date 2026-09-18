@@ -60,26 +60,23 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
 
   return (
     <div data-cy="accountRecentTransactionsSection" data-testid="accountRecentTransactionsSection">
-      <h3>
-        <Translate contentKey="fintrackApp.financialAccount.recentTransactions">Recent transactions</Translate>
-      </h3>
       {loading ? (
-        <p>
+        <p className="mb-0">
           <Translate contentKey="fintrackApp.financialAccount.loadingTransactions">Loading transactions...</Translate>
         </p>
       ) : null}
       {error ? (
-        <p>
+        <p className="mb-0">
           <Translate contentKey="fintrackApp.financialAccount.transactionsUnavailable">Transactions are not available.</Translate>
         </p>
       ) : null}
       {!loading && !error && transactions.length === 0 ? (
-        <p>
+        <p className="text-muted mb-0">
           <Translate contentKey="fintrackApp.financialAccount.noTransactionsYet">No transactions yet.</Translate>
         </p>
       ) : null}
       {!loading && !error && transactions.length > 0 ? (
-        <Table responsive size="sm">
+        <Table responsive size="sm" className="mb-3 align-middle">
           <thead>
             <tr>
               <th>
@@ -118,7 +115,7 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
           </tbody>
         </Table>
       ) : null}
-      <Button tag={Link} to="/financial-transaction" color="link" size="sm" className="p-0">
+      <Button tag={Link} to="/financial-transaction" color="link" size="sm" className="p-0 text-decoration-none">
         <FontAwesomeIcon icon="list" />{' '}
         <Translate contentKey="fintrackApp.financialAccount.viewAllTransactions">View all transactions</Translate>
       </Button>
