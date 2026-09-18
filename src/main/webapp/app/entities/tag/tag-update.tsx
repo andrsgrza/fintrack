@@ -1,18 +1,29 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
-import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
+import { Alert, Button } from 'reactstrap';
+import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { useAppDispatch, useAppSelector } from 'app/config/store';
+import { HexColorControl, isHexColor } from 'app/shared/ui/hex-color-control';
+import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { CompactProductStatusControl } from 'app/shared/ui/product-status-control';
+import { ProductValidatedField, ProductValidatedForm } from 'app/shared/ui/product-validated-form';
 
 import { createEntity, getEntity, partialUpdateEntity, reset } from './tag.reducer';
 
+const tagSaveErrorKey = (result: unknown) => {
+  const error = (result as { error?: { message?: string; response?: { data?: { detail?: string } } } }).error;
+  const detail = `${error?.response?.data?.detail ?? ''} ${error?.message ?? ''}`.toLowerCase();
+  if (detail.includes('already exists')) return 'fintrackApp.tag.errors.duplicate';
+  if (detail.includes('color')) return 'fintrackApp.tag.errors.invalidColor';
+  if (detail.includes('inactive')) return 'fintrackApp.tag.errors.inactiveReference';
+  return 'fintrackApp.tag.errors.saveFailed';
+};
+
 export const TagUpdate = () => {
   const dispatch = useAppDispatch();
-
   const navigate = useNavigate();
-
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
 
@@ -20,6 +31,9 @@ export const TagUpdate = () => {
   const loading = useAppSelector(state => state.tag.loading);
   const updating = useAppSelector(state => state.tag.updating);
   const updateSuccess = useAppSelector(state => state.tag.updateSuccess);
+  const [colorValue, setColorValue] = useState(isHexColor(tagEntity.color) ? tagEntity.color! : '');
+  const [active, setActive] = useState(true);
+  const [saveErrorKey, setSaveErrorKey] = useState<string | null>(null);
 
   const handleClose = () => {
     navigate('/tag');
@@ -34,64 +48,92 @@ export const TagUpdate = () => {
   }, []);
 
   useEffect(() => {
+    setColorValue(isHexColor(tagEntity.color) ? tagEntity.color! : '');
+  }, [tagEntity?.color]);
+
+  useEffect(() => {
+    setActive(isNew ? true : tagEntity.active !== false);
+  }, [isNew, tagEntity.active]);
+
+  useEffect(() => {
     if (updateSuccess) {
       handleClose();
     }
   }, [updateSuccess]);
 
   const saveEntity = values => {
-    if (values.id !== undefined && typeof values.id !== 'number') {
-      values.id = Number(values.id);
-    }
-
+    setSaveErrorKey(null);
     const entity = {
       name: values.name,
-      description: values.description,
-      color: values.color,
-      active: values.active,
+      description: values.description || null,
+      color: colorValue || null,
+      active: values.active ?? true,
     };
 
-    if (isNew) {
-      dispatch(createEntity(entity));
-    } else {
-      dispatch(
-        partialUpdateEntity({
-          id: tagEntity.id,
-          ...entity,
-        }),
-      );
-    }
+    const action = isNew ? createEntity(entity) : partialUpdateEntity({ id: tagEntity.id, ...entity });
+    dispatch(action).then(result => {
+      if (result.type.endsWith('/rejected')) {
+        setSaveErrorKey(tagSaveErrorKey(result));
+      }
+    });
   };
 
-  const defaultValues = () =>
-    isNew
-      ? {
-          active: true,
-        }
-      : {
-          id: tagEntity.id,
-          name: tagEntity.name,
-          description: tagEntity.description,
-          color: tagEntity.color,
-          active: tagEntity.active,
-        };
+  const defaultValues = useMemo(
+    () =>
+      isNew
+        ? {
+            active: true,
+          }
+        : {
+            ...tagEntity,
+          },
+    [tagEntity, isNew],
+  );
 
   return (
-    <div>
-      <Row className="justify-content-center">
-        <Col md="8">
-          <h2 id="fintrackApp.tag.home.createOrEditLabel" data-cy="TagCreateUpdateHeading">
-            <Translate contentKey="fintrackApp.tag.home.createOrEditLabel">Create or edit a Tag</Translate>
-          </h2>
-        </Col>
-      </Row>
-      <Row className="justify-content-center">
-        <Col md="8">
-          {loading ? (
-            <p>Loading...</p>
-          ) : (
-            <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
-              <ValidatedField
+    <ProductPage>
+      {loading ? (
+        <p>Loading...</p>
+      ) : (
+        <ProductValidatedForm defaultValues={defaultValues} onSubmit={saveEntity} formKey={tagEntity.id ?? 'new'}>
+          <ProductPageHeader
+            headingId="fintrackApp.tag.home.createOrEditLabel"
+            dataCy="TagCreateUpdateHeading"
+            title={<Translate contentKey="fintrackApp.tag.home.createOrEditLabel">Create or edit tag</Translate>}
+            metadata={
+              <CompactProductStatusControl
+                id="tag-active"
+                name="active"
+                active={active}
+                onActiveChange={setActive}
+                label={translate('fintrackApp.tag.status.label')}
+                activeLabel={translate('fintrackApp.tag.status.active')}
+                inactiveLabel={translate('fintrackApp.tag.status.inactive')}
+                help={
+                  <Translate contentKey="fintrackApp.tag.status.help">
+                    Inactive tags are kept for history and cannot be newly assigned until reactivated.
+                  </Translate>
+                }
+                dataCyPrefix="tag"
+              />
+            }
+            actions={
+              <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/tag" replace color="secondary" outline size="sm">
+                <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.back">Back</Translate>
+              </Button>
+            }
+          />
+          {saveErrorKey ? (
+            <Alert color="danger" fade={false} data-cy="tagSaveError" data-testid="tagSaveError">
+              <Translate contentKey={saveErrorKey}>The tag could not be saved. Review its values and try again.</Translate>
+            </Alert>
+          ) : null}
+          <div className="vstack gap-3">
+            <ProductSection
+              title={<Translate contentKey="fintrackApp.tag.basicInformation">Basic information</Translate>}
+              dataCy="tagBasicInformationSection"
+            >
+              <ProductValidatedField
                 label={translate('fintrackApp.tag.name')}
                 id="tag-name"
                 name="name"
@@ -103,55 +145,41 @@ export const TagUpdate = () => {
                   maxLength: { value: 50, message: translate('entity.validation.maxlength', { max: 50 }) },
                 }}
               />
-              <ValidatedField
+              <ProductValidatedField
                 label={translate('fintrackApp.tag.description')}
                 id="tag-description"
                 name="description"
                 data-cy="description"
-                type="text"
+                type="textarea"
                 validate={{
                   maxLength: { value: 250, message: translate('entity.validation.maxlength', { max: 250 }) },
                 }}
               />
-              <ValidatedField
-                label={translate('fintrackApp.tag.color')}
-                id="tag-color"
+            </ProductSection>
+            <ProductSection title={<Translate contentKey="fintrackApp.tag.color">Color</Translate>} dataCy="tagColorSection">
+              <HexColorControl
                 name="color"
-                data-cy="color"
-                type="text"
-                validate={{
-                  pattern: {
-                    value: /^#[0-9A-Fa-f]{6}$/,
-                    message: translate('entity.validation.pattern', { pattern: '^#[0-9A-Fa-f]{6}$' }),
-                  },
-                }}
+                pickerId="tag-colorPicker"
+                colorInputId="tag-color"
+                colorValue={colorValue}
+                onChange={setColorValue}
+                pickerLabel={translate('fintrackApp.tag.colorPicker')}
+                colorLabel={translate('fintrackApp.tag.color')}
+                dataCyPrefix="tag"
               />
-              <ValidatedField
-                label={translate('fintrackApp.tag.active')}
-                id="tag-active"
-                name="active"
-                data-cy="active"
-                check
-                type="checkbox"
-              />
-              <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/tag" replace color="info">
-                <FontAwesomeIcon icon="arrow-left" />
-                &nbsp;
-                <span className="d-none d-md-inline">
-                  <Translate contentKey="entity.action.back">Back</Translate>
-                </span>
-              </Button>
-              &nbsp;
-              <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
-                <FontAwesomeIcon icon="save" />
-                &nbsp;
-                <Translate contentKey="entity.action.save">Save</Translate>
-              </Button>
-            </ValidatedForm>
-          )}
-        </Col>
-      </Row>
-    </div>
+            </ProductSection>
+          </div>
+          <div className="d-flex justify-content-end gap-2 mt-4">
+            <Button tag={Link} to="/tag" replace color="secondary" outline>
+              <Translate contentKey="entity.action.cancel">Cancel</Translate>
+            </Button>
+            <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
+              <FontAwesomeIcon icon="save" /> <Translate contentKey="entity.action.save">Save</Translate>
+            </Button>
+          </div>
+        </ProductValidatedForm>
+      )}
+    </ProductPage>
   );
 };
 

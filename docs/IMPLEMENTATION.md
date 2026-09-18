@@ -1445,3 +1445,19 @@ Product account selection uses `GET /api/financial-accounts/selectable`, a curre
 ### CAT-UX-2 — Category product presentation
 
 CAT-UX-2 is frontend-only. It reuses the existing `GET /api/categories` list and immediate `parentCategory` DTO projection to compose full hierarchy paths and immediate-child summaries from one catalog fetch. No hierarchy API, persistence model, domain rule, selector behavior, or Transaction Ingestion behavior changed. The category presentation helper is deliberately display-only; server-side hierarchy, ownership, unique sibling name, parent immutability, type-change, inactive, and deletion rules remain in `CategoryService`.
+
+### CAT-UX-3 — Tag product presentation
+
+CAT-UX-3 is frontend-only. It keeps generated Tag CRUD compatibility endpoints and the existing `TagService` contracts, but composes their list, detail, edit, and delete routes as product catalog screens. `TagColorChip` and `TagStatusBadge` are display-only helpers. The edit form retains the backend `^#[0-9A-Fa-f]{6}$` color contract, pairing the editable hex value with a native browser color picker. No selector behavior, candidate provenance, transaction flow, or Tag domain service behavior changed.
+
+### CAT-UX-3.5 — shared catalog composition
+
+Category and Tag now share frontend-only presentation primitives for a constrained product-page width, page headers, compact content sections, overflow actions, a header color accent, and a native color-picker/hex control. The form wrapper preserves the existing React Hook Form validation contract while allowing fields inside visual sections; it does not change request payloads or validation rules. Category's stored free-text `icon` is intentionally hidden from normal product composition because no icon registry or rendering contract exists. No endpoint, persistence schema, inactive/delete guard, selector, ingestion, candidate, or Rule Engine behavior changed.
+
+### CAT-UX-3.5B — product identity refinement
+
+The Category list derives a stable parent-before-child display tree entirely in the frontend from the existing parent projection, preserving the already requested list order among siblings. The derived depth only affects layout and an accessible hierarchy structure; it changes neither hierarchy persistence nor category selection. Read-only colors are rendered as visual card/chip/header identity, with hex reserved for edit-time configuration. Compact status controls reuse the existing form field and submit the same `active` value; their tooltip is presentation-only. No product command, payload, validation, or inactive historical-only behavior changed.
+
+### CAT-UX-3.5C — Category view state
+
+`Category` adds page-local `nested`/`flat` view state and local collapsed-parent ids only. It still requests the current server sort, then derives the two presentations from that payload: nested preserves parent/descendant grouping while sibling order follows the loaded sort; flat renders the complete loaded collection at depth zero with a `›` path. Disclosure state does not trigger requests or alter the persisted parent relation. Carets are ordinary focusable buttons with translated labels and `aria-expanded`; no ASCII tree glyph or hierarchy-specific bar is emitted.

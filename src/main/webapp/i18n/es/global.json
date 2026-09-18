@@ -12,7 +12,7 @@
         "creditAccountDetails": "Detalles técnicos de tarjeta de crédito",
         "financialTransaction": "Financial Transaction",
         "category": "Category",
-        "tag": "Tag",
+        "tag": "Etiquetas",
         "transactionRule": "Transaction Rule",
         "transactionRuleCondition": "Transaction Rule Condition",
         "descriptionNormalizationRule": "Regla de normalización de descripción",

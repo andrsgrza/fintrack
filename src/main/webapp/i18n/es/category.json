@@ -4,9 +4,16 @@
       "home": {
         "title": "Categorías",
         "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nueva categoría",
+        "createLabel": "Crear categoría",
         "createOrEditLabel": "Crear o editar categoría",
-        "notFound": "No se encontraron categorías"
+        "notFound": "No se encontraron categorías",
+        "productSubtitle": "Organiza cómo se clasifican tus transacciones.",
+        "sortByName": "Ordenar por nombre",
+        "viewMode": "Vista de categorías",
+        "nestedView": "Anidada",
+        "flatView": "Plana",
+        "expandCategory": "Expandir {{ name }}",
+        "collapseCategory": "Contraer {{ name }}"
       },
       "created": "Categoría creada.",
       "updated": "Categoría actualizada.",
@@ -22,23 +29,27 @@
       "detail": {
         "title": "Categoría"
       },
-      "id": "ID",
       "name": "Nombre",
       "description": "Descripción",
       "categoryType": "Tipo",
       "color": "Color",
-      "icon": "Ícono",
+      "colorPicker": "Elegir color",
       "active": "Activa",
       "inactive": "Inactiva",
       "status": {
+        "label": "Estado",
         "active": "Activa",
-        "inactive": "Inactiva"
+        "inactive": "Inactiva",
+        "help": "Las categorías inactivas se conservan para el historial y no pueden asignarse a registros nuevos hasta reactivarlas."
       },
+      "basicInformation": "Información básica",
+      "classification": "Clasificación",
+      "moreActions": "Más acciones",
       "hierarchy": "Jerarquía",
       "appearance": "Apariencia",
       "colorSwatch": "Muestra de color {{ color }}",
-      "colorPreview": "Vista previa",
       "noColor": "Sin color seleccionado",
+      "noDescription": "No se proporcionó una descripción.",
       "children": "Subcategorías",
       "noChildren": "No hay subcategorías.",
       "noParent": "Sin categoría padre",
@@ -49,8 +60,6 @@
         "INCOME": "Usa esta categoría para transacciones de entrada.",
         "BOTH": "Usa esta categoría para transacciones de entrada o salida."
       },
-      "inactiveExplanation": "Esta categoría se conserva para el historial y no puede asignarse a registros nuevos hasta reactivarla.",
-      "inactiveFormHelp": "Las categorías inactivas se conservan para el historial y no pueden asignarse a registros nuevos hasta reactivarlas.",
       "errors": {
         "duplicate": "Ya existe una categoría con este nombre en este nivel y tipo.",
         "parentImmutable": "La categoría padre no se puede cambiar después de crearla.",
@@ -58,15 +67,7 @@
         "typeInUse": "El tipo de esta categoría no se puede cambiar mientras esté en uso.",
         "saveFailed": "No se pudo guardar la categoría. Revisa sus valores e inténtalo de nuevo."
       },
-      "createdAt": "Creado en",
-      "updatedAt": "Actualizado en",
-      "user": "Usuario",
-      "parentCategory": "Categoría padre",
-      "financialTransactions": "Transacciones financieras",
-      "childCategories": "Subcategorías",
-      "transactionRules": "Reglas de transacción",
-      "subscriptions": "Suscripciones",
-      "budgets": "Presupuestos"
+      "parentCategory": "Categoría padre"
     }
   }
 }

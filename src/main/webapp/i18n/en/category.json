@@ -4,9 +4,16 @@
       "home": {
         "title": "Categories",
         "refreshListLabel": "Refresh list",
-        "createLabel": "Create a new Category",
+        "createLabel": "Create category",
         "createOrEditLabel": "Create or edit Category",
-        "notFound": "No Categories found"
+        "notFound": "No categories found",
+        "productSubtitle": "Organize how your transactions are classified.",
+        "sortByName": "Sort by name",
+        "viewMode": "Category view",
+        "nestedView": "Nested",
+        "flatView": "Flat",
+        "expandCategory": "Expand {{ name }}",
+        "collapseCategory": "Collapse {{ name }}"
       },
       "created": "Category created.",
       "updated": "Category updated.",
@@ -22,23 +29,27 @@
       "detail": {
         "title": "Category"
       },
-      "id": "ID",
       "name": "Name",
       "description": "Description",
       "categoryType": "Type",
       "color": "Color",
-      "icon": "Icon",
+      "colorPicker": "Choose color",
       "active": "Active",
       "inactive": "Inactive",
       "status": {
+        "label": "Status",
         "active": "Active",
-        "inactive": "Inactive"
+        "inactive": "Inactive",
+        "help": "Inactive categories are kept for history and cannot be newly assigned until reactivated."
       },
+      "basicInformation": "Basic information",
+      "classification": "Classification",
+      "moreActions": "More actions",
       "hierarchy": "Hierarchy",
       "appearance": "Appearance",
       "colorSwatch": "Color swatch {{ color }}",
-      "colorPreview": "Preview",
       "noColor": "No color selected",
+      "noDescription": "No description provided.",
       "children": "Subcategories",
       "noChildren": "No subcategories.",
       "noParent": "No parent category",
@@ -49,8 +60,6 @@
         "INCOME": "Use this category for incoming transactions.",
         "BOTH": "Use this category for either incoming or outgoing transactions."
       },
-      "inactiveExplanation": "This category is kept for historical records and cannot be newly assigned until it is reactivated.",
-      "inactiveFormHelp": "Inactive categories remain in historical records and cannot be newly assigned until reactivated.",
       "errors": {
         "duplicate": "A category with this name already exists at this level for this type.",
         "parentImmutable": "Parent category cannot be changed after creation.",
@@ -58,15 +67,7 @@
         "typeInUse": "This category type cannot be changed while the category is in use.",
         "saveFailed": "The category could not be saved. Review its values and try again."
       },
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
-      "user": "User",
-      "parentCategory": "Parent category",
-      "financialTransactions": "Financial Transactions",
-      "childCategories": "Child Categories",
-      "transactionRules": "Transaction Rules",
-      "subscriptions": "Subscriptions",
-      "budgets": "Budgets"
+      "parentCategory": "Parent category"
     }
   }
 }

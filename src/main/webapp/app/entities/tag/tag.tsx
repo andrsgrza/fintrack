@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Table } from 'reactstrap';
-import { Translate, getSortState } from 'react-jhipster';
+import { Button, DropdownItem } from 'reactstrap';
+import { Translate, getSortState, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
 import { ASC, DESC } from 'app/shared/util/pagination.constants';
@@ -9,6 +9,8 @@ import { overrideSortStateWithQueryParams } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities } from './tag.reducer';
+import { TagColorChip, TagStatusBadge } from './tag-presentation';
+import { ProductActionsMenu, ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
 export const Tag = () => {
   const dispatch = useAppDispatch();
@@ -16,7 +18,7 @@ export const Tag = () => {
   const pageLocation = useLocation();
   const navigate = useNavigate();
 
-  const [sortState, setSortState] = useState(overrideSortStateWithQueryParams(getSortState(pageLocation, 'id'), pageLocation.search));
+  const [sortState, setSortState] = useState(overrideSortStateWithQueryParams(getSortState(pageLocation, 'name'), pageLocation.search));
 
   const tagList = useAppSelector(state => state.tag.entities);
   const loading = useAppSelector(state => state.tag.loading);
@@ -63,94 +65,95 @@ export const Tag = () => {
   };
 
   return (
-    <div>
-      <h2 id="tag-heading" data-cy="TagHeading">
-        <Translate contentKey="fintrackApp.tag.home.title">Tags</Translate>
-        <div className="d-flex justify-content-end">
-          <Button className="me-2" color="info" onClick={handleSyncList} disabled={loading}>
-            <FontAwesomeIcon icon="sync" spin={loading} />{' '}
-            <Translate contentKey="fintrackApp.tag.home.refreshListLabel">Refresh List</Translate>
-          </Button>
-          <Link to="/tag/new" className="btn btn-primary jh-create-entity" id="jh-create-entity" data-cy="entityCreateButton">
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.tag.home.createLabel">Create new Tag</Translate>
-          </Link>
-        </div>
-      </h2>
-      <div className="table-responsive">
-        {tagList && tagList.length > 0 ? (
-          <Table responsive>
-            <thead>
-              <tr>
-                <th className="hand" onClick={sort('name')}>
-                  <Translate contentKey="fintrackApp.tag.name">Name</Translate> <FontAwesomeIcon icon={getSortIconByFieldName('name')} />
-                </th>
-                <th className="hand" onClick={sort('description')}>
-                  <Translate contentKey="fintrackApp.tag.description">Description</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('description')} />
-                </th>
-                <th className="hand" onClick={sort('color')}>
-                  <Translate contentKey="fintrackApp.tag.color">Color</Translate> <FontAwesomeIcon icon={getSortIconByFieldName('color')} />
-                </th>
-                <th className="hand" onClick={sort('active')}>
-                  <Translate contentKey="fintrackApp.tag.active">Active</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('active')} />
-                </th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {tagList.map((tag, i) => (
-                <tr key={`entity-${i}`} data-cy="entityTable">
-                  <td>
-                    <Button tag={Link} to={`/tag/${tag.id}`} color="link" size="sm">
-                      {tag.name}
-                    </Button>
-                  </td>
-                  <td>{tag.description}</td>
-                  <td>{tag.color}</td>
-                  <td>{tag.active ? 'true' : 'false'}</td>
-                  <td className="text-end">
-                    <div className="btn-group flex-btn-group-container">
-                      <Button tag={Link} to={`/tag/${tag.id}`} color="info" size="sm" data-cy="entityDetailsButton">
-                        <FontAwesomeIcon icon="eye" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.view">View</Translate>
-                        </span>
-                      </Button>
-                      <Button tag={Link} to={`/tag/${tag.id}/edit`} color="primary" size="sm" data-cy="entityEditButton">
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
+    <ProductPage wide>
+      <ProductPageHeader
+        headingId="tag-heading"
+        dataCy="TagHeading"
+        title={<Translate contentKey="fintrackApp.tag.home.title">Tags</Translate>}
+        subtitle={<Translate contentKey="fintrackApp.tag.home.productSubtitle">Group transactions with useful labels.</Translate>}
+        actions={
+          <>
+            <Button color="secondary" outline size="sm" onClick={handleSyncList} disabled={loading}>
+              <FontAwesomeIcon icon="sync" spin={loading} />{' '}
+              <Translate contentKey="fintrackApp.tag.home.refreshListLabel">Refresh List</Translate>
+            </Button>
+            <Button tag={Link} to="/tag/new" color="primary" size="sm" id="jh-create-entity" data-cy="entityCreateButton">
+              <FontAwesomeIcon icon="plus" /> <Translate contentKey="fintrackApp.tag.home.createLabel">Create tag</Translate>
+            </Button>
+          </>
+        }
+      />
+      {tagList && tagList.length > 0 ? (
+        <>
+          <div className="d-flex justify-content-end mb-2">
+            <Button color="link" className="p-0 small text-decoration-none" onClick={sort('name')} data-cy="tagSortByName">
+              <Translate contentKey="fintrackApp.tag.home.sortByName">Sort by name</Translate>{' '}
+              <FontAwesomeIcon icon={getSortIconByFieldName('name')} />
+            </Button>
+          </div>
+          <div className="vstack gap-2" data-cy="tagProductList" data-testid="tagProductList">
+            {tagList.map(tag => (
+              <article key={tag.id} className="card border-0 shadow-sm" data-cy="entityTable">
+                <div className="card-body p-3">
+                  <div className="d-flex align-items-start gap-3">
+                    <div className="flex-grow-1 min-w-0">
+                      <div className="d-flex flex-wrap align-items-center gap-2 mb-1" data-cy="tagPrimaryRow">
+                        <Link to={`/tag/${tag.id}`} className="d-inline-flex text-decoration-none" data-cy="entityDetailsLink">
+                          <TagColorChip tag={tag} />
+                        </Link>
+                        <TagStatusBadge active={tag.active} />
+                      </div>
+                      {tag.description ? (
+                        <p className="text-muted small mb-0" data-cy="tagDescription">
+                          {tag.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="d-flex align-items-center gap-1">
+                      <Button
+                        tag={Link}
+                        to={`/tag/${tag.id}/edit`}
+                        color="primary"
+                        outline
+                        size="sm"
+                        data-cy="entityEditButton"
+                        aria-label={translate('entity.action.edit')}
+                        title={translate('entity.action.edit')}
+                      >
+                        <FontAwesomeIcon icon="pencil-alt" />
+                        <span className="visually-hidden">
                           <Translate contentKey="entity.action.edit">Edit</Translate>
                         </span>
                       </Button>
-                      <Button
-                        onClick={() => (window.location.href = `/tag/${tag.id}/delete`)}
-                        color="danger"
-                        size="sm"
-                        data-cy="entityDeleteButton"
-                      >
-                        <FontAwesomeIcon icon="trash" />{' '}
-                        <span className="d-none d-md-inline">
+                      <ProductActionsMenu label={translate('fintrackApp.tag.moreActions')}>
+                        <DropdownItem tag={Link} to={`/tag/${tag.id}`} data-cy="entityDetailsButton">
+                          <Translate contentKey="entity.action.view">View</Translate>
+                        </DropdownItem>
+                        <DropdownItem divider />
+                        <DropdownItem tag={Link} to={`/tag/${tag.id}/delete`} className="text-danger" data-cy="entityDeleteButton">
                           <Translate contentKey="entity.action.delete">Delete</Translate>
-                        </span>
-                      </Button>
+                        </DropdownItem>
+                      </ProductActionsMenu>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        ) : (
-          !loading && (
-            <div className="alert alert-warning">
-              <Translate contentKey="fintrackApp.tag.home.notFound">No Tags found</Translate>
-            </div>
-          )
-        )}
-      </div>
-    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      ) : (
+        !loading && (
+          <ProductSection title={<Translate contentKey="fintrackApp.tag.home.title">Tags</Translate>} dataCy="tagEmptyState">
+            <p className="text-muted mb-3">
+              <Translate contentKey="fintrackApp.tag.home.notFound">No tags found</Translate>
+            </p>
+            <Button tag={Link} to="/tag/new" color="primary" size="sm">
+              <FontAwesomeIcon icon="plus" /> <Translate contentKey="fintrackApp.tag.home.createLabel">Create tag</Translate>
+            </Button>
+          </ProductSection>
+        )
+      )}
+    </ProductPage>
   );
 };
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from 'reactstrap';
-import { Translate, translate } from 'react-jhipster';
+import { Translate } from 'react-jhipster';
 
 import { ICategory } from 'app/shared/model/category.model';
 
@@ -45,54 +45,91 @@ export const getCategoryPathLabel = (category?: ICategory | null, categories: Re
   getCategoryPath(category, categories)
     .map(item => item.name)
     .filter((name): name is string => Boolean(name))
-    .join(' > ');
+    .join(' › ');
 
 export const getImmediateChildren = (categoryIdValue?: number, categories: ReadonlyArray<ICategory> = []) =>
   categories.filter(category => category.parentCategory?.id === categoryIdValue);
 
+export type CategoryHierarchyRow = {
+  category: ICategory;
+  depth: number;
+  hasChildren: boolean;
+  ancestorIds: number[];
+};
+
+/**
+ * Flattens the current catalog in parent-before-child order while preserving the list's existing sibling order.
+ * Missing parents and malformed cycles remain visible instead of silently disappearing from the catalog.
+ */
+export const getCategoryHierarchyRows = (categories: ReadonlyArray<ICategory> = []): CategoryHierarchyRow[] => {
+  const knownIds = new Set(categories.map(category => category.id).filter((id): id is number => id !== undefined));
+  const childrenByParent = new Map<number, ICategory[]>();
+  const roots: ICategory[] = [];
+
+  categories.forEach(category => {
+    const parentId = category.parentCategory?.id;
+    if (parentId === undefined || !knownIds.has(parentId)) {
+      roots.push(category);
+      return;
+    }
+    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), category]);
+  });
+
+  const rows: CategoryHierarchyRow[] = [];
+  const visited = new Set<number>();
+  const appendCategory = (category: ICategory, depth: number, ancestorIds: number[]) => {
+    if (category.id !== undefined && visited.has(category.id)) {
+      return;
+    }
+    if (category.id !== undefined) {
+      visited.add(category.id);
+    }
+    const children = category.id !== undefined ? (childrenByParent.get(category.id) ?? []) : [];
+    rows.push({ category, depth, hasChildren: children.length > 0, ancestorIds });
+    if (category.id !== undefined) {
+      children.forEach(child => appendCategory(child, depth + 1, [...ancestorIds, category.id]));
+    }
+  };
+
+  roots.forEach(category => appendCategory(category, 0, []));
+  categories.forEach(category => appendCategory(category, 0, []));
+  return rows;
+};
+
 export const CategoryTypeLabel = ({ categoryType }: { categoryType?: ICategory['categoryType'] }) =>
-  categoryType ? <Translate contentKey={`fintrackApp.CategoryType.${categoryType}`} /> : null;
+  categoryType ? (
+    <Badge color="light" className="border text-dark fw-normal" data-cy="categoryTypeBadge" data-testid="categoryTypeBadge">
+      <Translate contentKey={`fintrackApp.CategoryType.${categoryType}`} />
+    </Badge>
+  ) : null;
 
 export const CategoryStatusBadge = ({ active }: { active?: boolean }) => (
-  <Badge color={active ? 'success' : 'secondary'} pill data-cy="categoryStatusBadge">
+  <Badge color={active ? 'success' : 'secondary'} pill data-cy="categoryStatusBadge" data-testid="categoryStatusBadge">
     <Translate contentKey={active ? 'fintrackApp.category.status.active' : 'fintrackApp.category.status.inactive'}>
       {active ? 'Active' : 'Inactive'}
     </Translate>
   </Badge>
 );
 
-export const CategoryAppearance = ({ category }: { category: ICategory }) => (
-  <div className="d-flex flex-wrap align-items-center gap-2" data-cy="categoryAppearance">
-    {category.color ? (
-      <span
-        className="d-inline-flex align-items-center gap-1"
-        aria-label={translate('fintrackApp.category.colorSwatch', { color: category.color })}
-      >
-        <span
-          aria-hidden="true"
-          className="border rounded-circle d-inline-block"
-          style={{ width: '1rem', height: '1rem', backgroundColor: category.color }}
-        />
-        <span>{category.color}</span>
-      </span>
-    ) : null}
-    {category.icon ? (
-      <Badge color="light" className="border text-dark fw-normal">
-        {category.icon}
-      </Badge>
-    ) : null}
-    {!category.color && !category.icon ? <span className="text-muted">—</span> : null}
-  </div>
-);
+export const getCategoryColorAccentStyle = (category: ICategory): React.CSSProperties =>
+  category.color
+    ? {
+        borderInlineStart: `0.4rem solid ${category.color}`,
+      }
+    : {};
 
 export const CategoryPath = ({
   category,
   categories,
   linkCurrent = false,
+  dataCy = 'categoryPath',
+  className = '',
 }: {
   category?: ICategory | null;
   categories: ReadonlyArray<ICategory>;
   linkCurrent?: boolean;
+  dataCy?: string;
+  className?: string;
 }) => {
   const path = getCategoryPath(category, categories);
 
@@ -101,13 +138,24 @@ export const CategoryPath = ({
   }
 
   return (
-    <span data-cy="categoryPath" data-testid="categoryPath">
+    <span className={className} data-cy={dataCy} data-testid={dataCy}>
       {path.map((item, index) => {
         const isCurrent = index === path.length - 1;
         return (
           <React.Fragment key={item.id ?? `${item.name}-${index}`}>
-            {index > 0 ? <span className="text-muted"> &gt; </span> : null}
-            {item.id !== undefined && (linkCurrent || !isCurrent) ? <Link to={`/category/${item.id}`}>{item.name}</Link> : item.name}
+            {index > 0 ? <span className="text-muted category-breadcrumb-separator"> {'›'} </span> : null}
+            {item.id !== undefined && (linkCurrent || !isCurrent) ? (
+              <Link
+                to={`/category/${item.id}`}
+                className="category-breadcrumb-link"
+                data-cy="categoryBreadcrumbAncestor"
+                onClick={event => event.stopPropagation()}
+              >
+                {item.name}
+              </Link>
+            ) : (
+              item.name
+            )}
           </React.Fragment>
         );
       })}

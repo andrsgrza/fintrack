@@ -406,7 +406,7 @@ The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints 
 ## 4. Tag
 
 **Pattern:** A — direct `user`. **Relationships:** M2M inverse — `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags`.  
-**Status:** **Done** (ownership + validations + server-owned timestamps + CRUD UX cleanup + DELETE M2M unlink).
+**Status:** **Done** (ownership + validations + server-owned timestamps + product catalog UX + DELETE M2M unlink).
 
 ### Baseline **Done** (ownership + validations)
 
@@ -430,6 +430,10 @@ The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints 
 | PATCH timestamps                 | `JsonNode` presence-aware for timestamps; omitted preserves, changed/null rejected        | **Done** |
 | Successful PUT/PATCH             | Preserve `createdAt`; set `updatedAt = now`                                               | **Done** |
 | Ownership                        | Client cannot change `user`; create assigns current user; update/patch preserve owner     | **Done** |
+
+### Product catalog presentation (CAT-UX-3)
+
+Tag maintenance presents name, optional description, a swatch plus its existing `#RRGGBB` color value, and a translated active/inactive state. Inactive tags remain visible and can be reactivated from the catalog; historical-only limits apply to new assignments in product workflows, not to maintenance. The catalog never exposes ownership, timestamps, ids, or raw relationship collections as product data.
 
 ### DELETE
 

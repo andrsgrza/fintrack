@@ -181,6 +181,14 @@ npm run jest -- tag
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm test
 ```
 
+### Category and Tag product composition
+
+`category-ux.spec.tsx` and `tag-ux.spec.tsx` cover the product-facing list, detail, and create/edit composition: name-first navigation, compact Edit plus overflow secondary actions, visible status/type metadata, labelled detail sections, header color accents, native color-picker/hex controls without redundant previews, and switch-style active controls. The Cypress entity specs retain the create, edit, inactive, and guarded-delete journeys using stable `data-cy` controls rather than generated CRUD table layout.
+
+CAT-UX-3.5B/3.5F/3.5G additionally characterizes non-technical read-only color treatment, Tag identity chips, detail header color accents without Appearance cards/raw hex, an aligned semantic picker + hex control row without right-side previews, compact header status controls, and a keyboard-focusable Popper status-help tooltip. The Tag tests keep identity and textual status together in the primary row with description as secondary content. The Cypress Category/Tag specs assert color persistence through create/edit, non-obstructive focused status help, hierarchy/navigation continuity, and the existing guarded delete paths.
+
+CAT-UX-3.5C/3.5D/3.5E extends `category-ux.spec.tsx` and `category.cy.ts` with the local Category view modes: default nested parent-before-child structure, arbitrary-depth indentation, a fixed disclosure slot for both parent and leaf rows, accessible expand/collapse disclosure, no ASCII branch glyph, flat depth-zero rows, and `›` breadcrumbs. Jest verifies that collapsing does not change the parent name’s fixed-slot structure, leaves expose only a non-interactive placeholder, every flat ancestor has its canonical detail `href`, and immediate active/inactive child names on a parent detail page are canonical links with separate status badges. Flat ancestor and detail-child links retain the scoped subtle product styling rather than a default-primary link style. The Jest coverage also verifies that selecting the existing sort requests the selected server sort without breaking nested grouping, while flat retains the loaded global order. Cypress switches views, compares parent/leaf disclosure-slot widths, collapses/restores a parent, follows a flat ancestor breadcrumb to its detail page, follows the parent’s child link to the child detail, returns through the hierarchy, and continues through the existing child navigation/edit flow.
+
 ### E2E — single entity
 
 ```bash
@@ -872,7 +880,7 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 **Domain rules:** DELETE allowed when in use by posted/product relationships — unlink from `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags` (join rows only), then delete tag. Related entities survive. DELETE is blocked when `TransactionCandidate` tag joins reference the tag because candidate review state must not be silently unlinked. `active=false` keeps links. `createdAt` / `updatedAt` are server-owned: create ignores client timestamps; PUT/PATCH preserve `createdAt`, reject changed/null timestamp fields, and set `updatedAt = now`. See [`DOMAIN-RULES.md` §4](DOMAIN-RULES.md#4-tag).
 
-**Frontend UX:** Tag create/edit shows only `name`, `description`, `color`, `active`. It does not show/send `user`, `createdAt`, `updatedAt`, or relationship editors. Edit uses PATCH with editable fields only so existing relationships survive. Detail/list show clean catalog fields and do not show raw relationship IDs; related read-only lists are deferred.
+**Frontend UX:** Tag create/edit shows only `name`, `description`, `color`, `active`. The persisted `#RRGGBB` value uses a native picker beside its editable hex field in one aligned control, with no redundant preview. It does not show/send `user`, `createdAt`, `updatedAt`, or relationship editors. Edit uses PATCH with editable fields only so existing relationships survive. Detail/list show clean catalog fields, translated status, and no raw relationship IDs; related read-only lists are deferred.
 
 **Validation rules in service:** trim `name` on persist; **`name` unique per owner** (case-insensitive via `existsByUserIdAndNormalizedName`); uniqueness checked against **tag owner**, not current user (admin CRUD ajeno OK). **Inactive tags participate in uniqueness** (query does not filter `active`).
 
@@ -1004,25 +1012,10 @@ Happy-path CRUD, required-field checks, criteria per field (`name`, `description
 
 ### E2E — `tag.cy.ts`
 
-#### Navigation & CRUD UI (7) — ✅
-
-| Test                                                      | What it checks                                                |
-| --------------------------------------------------------- | ------------------------------------------------------------- |
-| `Tags menu should load Tags page`                         | Menu → list route                                             |
-| `should load create Tag page`                             | Create → form → cancel                                        |
-| `detail button click should load details Tag page`        | Detail view                                                   |
-| `edit button click should load edit Tag page and go back` | Edit cancel                                                   |
-| `edit button click should load edit Tag page and save`    | Edit save                                                     |
-| `last delete button click should delete instance of Tag`  | Delete dialog → `204`                                         |
-| `should create an instance of Tag`                        | Full form → `201`; `user.login = user`; no `[data-cy="user"]` |
-
-#### Ownership smoke (3) — ✅ custom
-
-| Test                                                | What it checks                   |
-| --------------------------------------------------- | -------------------------------- |
-| `should not render user selector on create form`    | `[data-cy="user"]` absent        |
-| `regular user should not see tags created by admin` | API isolation user vs admin      |
-| `admin should see tags created by another user`     | Admin `GET` includes other's tag |
+| Test                                                                                             | What it checks                                                                                                                          |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `creates, presents, edits, deactivates/reactivates, and deletes a tag as a product catalog item` | Product list/detail, aligned native color picker plus hex control, description edit, status explanation, reactivation, and safe delete. |
+| `shows a product-safe delete block when an active transaction workflow still references a tag`   | Candidate-reference `400` maps to product-safe wording without backend jargon.                                                          |
 
 ### Gaps
 
@@ -3078,3 +3071,7 @@ Focused coverage lives in `FinancialAccountResourceIT` (owner-scoped selectable 
 ## CAT-UX-2 — Category product UX
 
 `npm run jest -- category` covers the product list (description, hierarchy, translated type, status badge, visual color/icon, and no technical metadata), detail (hierarchy, child summary, historical-only inactive explanation), create/edit (description hydration, hierarchy-labelled parent selection, immutable parent, translated type guidance), and product-safe validation/delete error copy. `category.cy.ts` covers the browser flow: list, root and child creation, hierarchy display, description/color/status edit, parent immutability, allowed unused-root type change, deactivate/reactivate, parent-with-child pre-delete block, candidate-reference delete block, and safe leaf deletion. Existing `CategoryResourceIT` and `CategoryServiceTest` remain the source for hierarchy/ownership/domain-rule coverage because CAT-UX-2 adds no backend behavior.
+
+## CAT-UX-3 — Tag product UX
+
+`npm run jest -- tag` covers product list/detail presentation (compact color-accented identity chip with adjacent translated status, secondary description, and no technical metadata), create/edit hydration, an aligned native picker plus editable hex field without a preview, exact hex validation, product-safe duplicate copy, and candidate-reference delete wording. `tag.cy.ts` covers creating, presenting, editing color/description, deactivating/reactivating, safe deletion, and the candidate-reference deletion block. Existing `TagResourceIT` and `TagServiceTest` remain the source for ownership, historical-only selection, timestamp, cleanup, and delete-guard behavior because CAT-UX-3 adds no backend behavior.

@@ -1,12 +1,15 @@
 import React, { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
-import { Translate } from 'react-jhipster';
+import { Button, DropdownItem } from 'reactstrap';
+import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntity } from './tag.reducer';
+import { TagStatusBadge } from './tag-presentation';
+import { ProductActionsMenu, ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { ProductStatusHelp } from 'app/shared/ui/product-status-control';
 
 export const TagDetail = () => {
   const dispatch = useAppDispatch();
@@ -19,52 +22,50 @@ export const TagDetail = () => {
 
   const tagEntity = useAppSelector(state => state.tag.entity);
   return (
-    <Row>
-      <Col md="8">
-        <h2 data-cy="tagDetailsHeading">
-          <Translate contentKey="fintrackApp.tag.detail.title">Tag</Translate>
-        </h2>
-        <dl className="jh-entity-details">
-          <dt>
-            <span id="name">
-              <Translate contentKey="fintrackApp.tag.name">Name</Translate>
-            </span>
-          </dt>
-          <dd>{tagEntity.name}</dd>
-          <dt>
-            <span id="description">
-              <Translate contentKey="fintrackApp.tag.description">Description</Translate>
-            </span>
-          </dt>
-          <dd>{tagEntity.description}</dd>
-          <dt>
-            <span id="color">
-              <Translate contentKey="fintrackApp.tag.color">Color</Translate>
-            </span>
-          </dt>
-          <dd>{tagEntity.color}</dd>
-          <dt>
-            <span id="active">
-              <Translate contentKey="fintrackApp.tag.active">Active</Translate>
-            </span>
-          </dt>
-          <dd>{tagEntity.active ? 'true' : 'false'}</dd>
-        </dl>
-        <Button tag={Link} to="/tag" replace color="info" data-cy="entityDetailsBackButton">
-          <FontAwesomeIcon icon="arrow-left" />{' '}
-          <span className="d-none d-md-inline">
-            <Translate contentKey="entity.action.back">Back</Translate>
-          </span>
-        </Button>
-        &nbsp;
-        <Button tag={Link} to={`/tag/${tagEntity.id}/edit`} replace color="primary">
-          <FontAwesomeIcon icon="pencil-alt" />{' '}
-          <span className="d-none d-md-inline">
-            <Translate contentKey="entity.action.edit">Edit</Translate>
-          </span>
-        </Button>
-      </Col>
-    </Row>
+    <ProductPage>
+      <ProductPageHeader
+        headingId="tag-details-heading"
+        dataCy="tagDetailsHeading"
+        accentColor={tagEntity.color}
+        accentDataCy="tagDetailColorAccent"
+        title={tagEntity.name ?? <Translate contentKey="fintrackApp.tag.detail.title">Tag</Translate>}
+        metadata={
+          <>
+            <TagStatusBadge active={tagEntity.active} />
+            <ProductStatusHelp
+              id="tag-detail-status-help"
+              label={translate('fintrackApp.tag.status.label')}
+              help={
+                <Translate contentKey="fintrackApp.tag.status.help">
+                  Inactive tags are kept for history and cannot be newly assigned until reactivated.
+                </Translate>
+              }
+              dataCyPrefix="tagDetail"
+            />
+          </>
+        }
+        actions={
+          <>
+            <Button tag={Link} to="/tag" replace color="secondary" outline size="sm" data-cy="entityDetailsBackButton">
+              <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.back">Back</Translate>
+            </Button>
+            <Button tag={Link} to={`/tag/${tagEntity.id}/edit`} replace color="primary" size="sm" data-cy="entityDetailsEditButton">
+              <FontAwesomeIcon icon="pencil-alt" /> <Translate contentKey="entity.action.edit">Edit</Translate>
+            </Button>
+            <ProductActionsMenu label={translate('fintrackApp.tag.moreActions')} dataCy="tagDetailActionsMenu">
+              <DropdownItem tag={Link} to={`/tag/${tagEntity.id}/delete`} className="text-danger" data-cy="entityDeleteButton">
+                <Translate contentKey="entity.action.delete">Delete</Translate>
+              </DropdownItem>
+            </ProductActionsMenu>
+          </>
+        }
+      />
+      <ProductSection title={<Translate contentKey="fintrackApp.tag.description">Description</Translate>} dataCy="tagDetailDescription">
+        <p className="mb-0">
+          {tagEntity.description || <Translate contentKey="fintrackApp.tag.noDescription">No description provided.</Translate>}
+        </p>
+      </ProductSection>
+    </ProductPage>
   );
 };
 

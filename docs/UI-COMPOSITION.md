@@ -737,6 +737,40 @@ Manual transaction drafts, new file ingestions, and TransactionRule `ACCOUNT` co
 
 ## CAT-UX-2 — Category product UI
 
-`/category`, `/category/new`, `/category/:id`, and `/category/:id/edit` are product catalog screens. They show category name, optional description, translated type, hierarchy, active state, and the existing color/icon fields without exposing identifiers, ownership, timestamps, or relationship dumps. The page loads the current catalog once and derives readable paths such as `Expenses > Transport > Ride share` plus immediate children; it does not introduce a tree endpoint or one request per ancestor.
+`/category`, `/category/new`, `/category/:id`, and `/category/:id/edit` are product catalog screens. They show category name, optional description, translated type, hierarchy, active state, and color without exposing identifiers, ownership, timestamps, raw hex values, or relationship dumps. The page loads the current catalog once and derives readable paths such as `Expenses › Transport › Ride share` plus immediate children; it does not introduce a tree endpoint or one request per ancestor.
 
-Create offers name, description, type, an optional type-compatible parent, color, icon, and active state. Parent options use hierarchy labels. Edit preserves the current parent as read-only with an explanation because parent changes are not allowed after creation. A root category can attempt a type change; the backend remains authoritative when existing usage makes it unavailable. Inactive categories use an explicit status badge and historical-only explanation. Delete names the category, pre-blocks categories with children, and maps protected active-workflow references to product-safe wording.
+Create offers name, description, type, an optional type-compatible parent, color, and active state. Parent options use hierarchy labels. Edit preserves the current parent as read-only with an explanation because parent changes are not allowed after creation. A root category can attempt a type change; the backend remains authoritative when existing usage makes it unavailable. Inactive categories use an explicit status badge and historical-only explanation. Delete names the category, pre-blocks categories with children, and maps protected active-workflow references to product-safe wording.
+
+## CAT-UX-3 — Tag product UI
+
+`/tag`, `/tag/new`, `/tag/:id`, and `/tag/:id/edit` are product catalog screens. List rows combine the optional description with the tag name, render its configured color as a visual identity chip, and use translated active/inactive badges; they do not expose ids, ownership, timestamps, raw hex values, or relationship dumps. The list starts sorted by name, which is the stable product order for a flat catalog.
+
+Tag create/edit exposes only name, description, color, and active state. Color is configured through a browser-native picker beside its editable `#RRGGBB` field; no additional preview box, alternate color format, or schema is introduced. Inactive tags stay visible and editable in this catalog, while the product explanation makes clear that they remain historical-only until reactivated. Delete names the tag, explains permanence and active-workflow blocking, and maps a protected candidate reference to product-safe copy rather than a raw backend error.
+
+### CAT-UX-3.5 — Category and Tag visual composition
+
+The catalog screens use a shared, deliberately compact composition: a title/header with primary creation or edit action, a readable sortable list of product rows, and an overflow menu for secondary View/Delete actions. The name is the row's primary navigation; Edit remains a compact visible action. This replaces the generated three-button CRUD action groups without removing any route or backend capability.
+
+Detail pages use labelled product sections rather than a raw entity-property dump. Category details group description, classification, hierarchy, and immediate subcategories; Tag details group description. Their configured color is a subtle decorative accent on the header, not a standalone Appearance card or raw hex field. Forms keep a narrower reading width and divide inputs into Basic information, Classification where applicable, Color, and Status. Both use the same native color-picker + editable hex control without a redundant preview box, and active status uses a form switch with historical-only guidance.
+
+The stored Category `icon` field is intentionally absent from normal product create/edit/list/detail presentation: there is no icon registry or product rendering contract yet, so exposing a free-text icon field would create a misleading setting. The field and its backend compatibility remain untouched. The composition is responsive: headers and controls stack on narrow screens while cards and form sections retain the same hierarchy.
+
+### CAT-UX-3.5B — hierarchy, color, and compact status
+
+The Category catalog is rendered from the current catalog payload in parent-before-child order. Category color is a card accent in the list and a subtle header accent in detail; raw `#RRGGBB` is edit-time configuration only.
+
+Tags use their configured color as a readable name chip in the list and a subtle header accent in detail. Color never stands alone as meaning: category/tag names, type, hierarchy, and status remain visible text. Create/edit keeps the native picker and editable hex value together in one labelled color-control group without a separate preview.
+
+Create/edit status is compact metadata directly below the title: translated active/inactive badge, accessible switch, and focusable/hoverable help icon. The historical-only explanation lives in that tooltip rather than a full-width Status card or fixed inactive warning. Detail pages retain the compact status badge and help affordance.
+
+### CAT-UX-3.5G — final control and Tag-list polish
+
+The shared status-help affordance uses a body-mounted Popper tooltip: it prefers the lower-right side of the help control, has an offset, stays inside the viewport, and flips to another available side when necessary. It opens on hover and keyboard focus, so it does not reserve layout space or cover its own control with a fixed-position hint.
+
+The Color field remains one semantic fieldset and one aligned control row: a fixed-size native picker sits beside the editable `#RRGGBB` input, sharing the same effective height and wrapping only on small widths. Tag list cards use a compact primary row that keeps the tinted color-accented name chip and textual Active/Inactive badge together; the optional description is secondary content below, while Edit and the overflow menu stay on the right.
+
+### CAT-UX-3.5C — Category hierarchy view modes
+
+The Category list has two local, non-persisted views beside its existing sort control. **Nested** is the default: it groups each parent with descendants, indents by arbitrary current depth, and reserves a fixed disclosure column on every row. Parents render an accessible `aria-expanded` caret in that slot; leaves retain an empty, non-interactive placeholder so names remain aligned at the same depth. The caret starts open and hides every descendant when collapsed. It deliberately has no ASCII branch symbols or hierarchy-only color treatment.
+
+**Flat** renders every category at the same visual level using the current sorted catalog order. A nested category keeps its name as the primary link and shows a secondary breadcrumb with the typographic `›` separator, for example `Expenses › Transport › Ride share`. Every ancestor in that breadcrumb links to its canonical Category detail; the current category remains plain text to avoid a redundant self-link. Ancestor links inherit surrounding text color, receive a subtle emphasis and hover/focus underline, and never compete with the row's primary name link. Category detail completes the inverse navigation: each immediate child name links to that child’s canonical detail route while its status badge remains a separate, non-navigating element. Nested mode sorts within sibling groups while retaining descendants below their parent; flat mode uses the full catalog order returned for the selected sort.
