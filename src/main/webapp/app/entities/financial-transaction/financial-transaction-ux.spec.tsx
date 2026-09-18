@@ -52,8 +52,8 @@ jest.mock('app/entities/tag/tag.reducer', () => ({
 }));
 
 const accounts = [{ id: 1, name: 'Checking', currency: 'MXN' }];
-const categories = [{ id: 10, name: 'Groceries', categoryType: 'EXPENSE' }];
-const tags = [{ id: 20, name: 'Personal' }];
+const categories = [{ id: 10, name: 'Groceries', categoryType: 'EXPENSE', color: '#2463A5', active: true }];
+const tags = [{ id: 20, name: 'Personal', color: '#E31B23', active: true }];
 
 const existingTransaction = {
   id: 2501,
@@ -90,6 +90,7 @@ const baseState = {
     totalItems: 1,
     updating: false,
     updateSuccess: false,
+    errorMessage: null,
   },
 };
 
@@ -150,16 +151,60 @@ describe('FinancialTransaction posted transaction UX', () => {
     mockAxiosPost.mockReset();
   });
 
-  it('posted transaction list links to recoverable manual drafts without mixing drafts into the table', () => {
+  it('renders a product transaction list without generated technical columns', () => {
     renderList();
 
-    const draftsLink = screen.getByRole('link', { name: /view drafts/i });
+    const draftsLink = screen.getByRole('link', { name: /drafts/i });
     expect(draftsLink.getAttribute('href')).toBe('/financial-transaction/drafts');
-    expect(screen.getByRole('link', { name: /create a new financial transaction/i }).getAttribute('href')).toBe(
-      '/financial-transaction/new',
-    );
+    expect(screen.getByRole('link', { name: /new transaction/i }).getAttribute('href')).toBe('/financial-transaction/new');
     expect(screen.getByText('Bus fare')).toBeTruthy();
-    expect(screen.queryByText('Untitled draft')).toBeNull();
+    expect(screen.getByText('Checking · MXN')).toBeTruthy();
+    expect(screen.getByText('Groceries')).toBeTruthy();
+    expect(screen.getByText('Personal')).toBeTruthy();
+    expect(screen.getByText('−3.00 MXN')).toBeTruthy();
+    expect(screen.getByText('Expense')).toBeTruthy();
+    const category = document.querySelector('[data-cy="transactionCategory"]') as HTMLElement;
+    expect(category.className).toContain('rounded-1');
+    expect(category.getAttribute('data-color-treatment')).toBe('category');
+    const tagChip = screen.getByText('Personal');
+    expect(tagChip.className).toContain('rounded-pill');
+    expect(tagChip.getAttribute('data-color-treatment')).toBe('tag');
+    expect(screen.queryByText('Created At')).toBeNull();
+    expect(screen.queryByText('Updated At')).toBeNull();
+    expect(screen.queryByText('Financial Subscription')).toBeNull();
+    expect(screen.queryByText('Transaction Ingestion')).toBeNull();
+    expect(screen.queryByText('MANUAL')).toBeNull();
+    expect(screen.queryByText('2501')).toBeNull();
+  });
+
+  it('keeps compact edit and overflow delete actions for a posted transaction', () => {
+    renderList();
+
+    expect(screen.getByRole('link', { name: /edit/i }).getAttribute('href')).toContain('/financial-transaction/2501/edit');
+    fireEvent.click(screen.getByRole('button', { name: /more transaction actions/i }));
+    expect(screen.getByRole('menuitem', { name: /delete/i }).getAttribute('href')).toContain('/financial-transaction/2501/delete');
+  });
+
+  it('uses a product empty state with a new transaction call to action', () => {
+    mockState = {
+      ...baseState,
+      financialTransaction: {
+        ...baseState.financialTransaction,
+        entities: [],
+        totalItems: 0,
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/financial-transaction']}>
+        <Routes>
+          <Route path="/financial-transaction" element={<FinancialTransaction />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('No transactions yet')).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: /new transaction/i })[1].getAttribute('href')).toBe('/financial-transaction/new');
   });
 
   it('edit form hides technical fields, keeps account immutable, and does not call rule-preview', () => {

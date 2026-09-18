@@ -696,7 +696,7 @@ Key TC-3A FILE import candidate prepare assertions:
 Key TC-3B FILE import workflow summary assertions:
 
 - `GET /api/transaction-ingestions/{id}/workflow` includes an optional lightweight candidate summary for rows with prepared candidates.
-- Candidate summaries include source/status/review statuses, normalized transaction fields, account id/name, category id/name, tag ids/names, timestamps, and financial transaction id when present.
+- Candidate summaries include source/status/review statuses, normalized transaction fields, account id/name/type/final-four/activity, category id/name/parent/color/activity, detailed tag id/name/color/activity (plus compatibility `tagNames`), timestamps, and financial transaction id when present.
 - Rows without prepared candidates keep `candidate` absent/null.
 - Workflow GET is read-only: it does not create candidates, create `FinancialTransaction` rows, or mutate `rawData`.
 - Candidate summaries are scoped to the current-user owned workflow and do not expose foreign candidate rows.
@@ -740,10 +740,10 @@ Key TC-2D backend/UI recovery assertions:
 - the response uses the lightweight manual draft summary shape and does not expose full `TransactionCandidateDTO` fields such as `source`, `validationStatus`, or `financialTransaction`.
 - incomplete/null draft fields map safely for future UI fallback copy.
 - `/financial-transaction/drafts` loads the manual draft summary endpoint.
-- The posted FinancialTransaction list links to `/financial-transaction/drafts` with a "View drafts" action, but does not mix draft rows into the posted transaction table.
-- The recovery page renders compact summary fields and fallback copy for missing description/account/date/amount/category/tags.
+- The posted FinancialTransaction list links to `/financial-transaction/drafts` with a "Drafts" action, but does not mix draft rows into the posted transaction list.
+- The recovery page renders compact summary fields, signed product amount/flow presentation, persisted account/category/tag context, localized status/classification labels, and fallback copy for missing description/account/date/amount/category/tags. Unknown status values use safe localized fallback copy rather than exposing raw lifecycle enums.
 - Resume links to `/financial-transaction/drafts/{id}`.
-- Cancel draft calls `POST /api/transaction-candidates/{id}/cancel` and removes/reloads the row; the list does not delete or post candidates.
+- Cancel draft calls `POST /api/transaction-candidates/{id}/cancel` from the overflow menu and removes/reloads the row; the list does not delete or post candidates.
 - The recovery page does not expose generic TransactionCandidate CRUD UI.
 
 Key TC-2B.1 frontend assertions:

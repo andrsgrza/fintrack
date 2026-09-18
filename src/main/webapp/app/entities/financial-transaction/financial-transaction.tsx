@@ -1,19 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Table } from 'reactstrap';
-import { JhiItemCount, JhiPagination, TextFormat, Translate, getPaginationState } from 'react-jhipster';
+import { Alert, Button, DropdownItem, Spinner } from 'reactstrap';
+import { JhiItemCount, JhiPagination, TextFormat, Translate, getPaginationState, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSort, faSortDown, faSortUp } from '@fortawesome/free-solid-svg-icons';
-import { APP_DATE_FORMAT, APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
+
+import { APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
 import { ASC, DESC, ITEMS_PER_PAGE, SORT } from 'app/shared/util/pagination.constants';
 import { overridePaginationStateWithQueryParams } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
+import { ProductActionsMenu, ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
 import { getEntities } from './financial-transaction.reducer';
+import { TransactionAccountLabel, TransactionAmount, TransactionClassification } from './transaction-presentation';
 
 export const FinancialTransaction = () => {
   const dispatch = useAppDispatch();
-
   const pageLocation = useLocation();
   const navigate = useNavigate();
 
@@ -23,6 +25,7 @@ export const FinancialTransaction = () => {
 
   const financialTransactionList = useAppSelector(state => state.financialTransaction.entities);
   const loading = useAppSelector(state => state.financialTransaction.loading);
+  const errorMessage = useAppSelector(state => state.financialTransaction.errorMessage);
   const totalItems = useAppSelector(state => state.financialTransaction.totalItems);
 
   const getAllEntities = () => {
@@ -62,11 +65,11 @@ export const FinancialTransaction = () => {
     }
   }, [pageLocation.search]);
 
-  const sort = p => () => {
+  const sortByTransactionDate = () => {
     setPaginationState({
       ...paginationState,
-      order: paginationState.order === ASC ? DESC : ASC,
-      sort: p,
+      order: paginationState.sort === 'transactionDate' && paginationState.order === ASC ? DESC : ASC,
+      sort: 'transactionDate',
     });
   };
 
@@ -76,237 +79,146 @@ export const FinancialTransaction = () => {
       activePage: currentPage,
     });
 
-  const handleSyncList = () => {
-    sortEntities();
-  };
-
-  const getSortIconByFieldName = (fieldName: string) => {
-    const sortFieldName = paginationState.sort;
-    const order = paginationState.order;
-    if (sortFieldName !== fieldName) {
-      return faSort;
-    }
-    return order === ASC ? faSortUp : faSortDown;
-  };
+  const transactionDateSortIcon =
+    paginationState.sort !== 'transactionDate' ? faSort : paginationState.order === ASC ? faSortUp : faSortDown;
 
   return (
-    <div>
-      <h2 id="financial-transaction-heading" data-cy="FinancialTransactionHeading">
-        <Translate contentKey="fintrackApp.financialTransaction.home.title">Financial Transactions</Translate>
-        <div className="d-flex justify-content-end">
-          <Link to="/financial-transaction/drafts" className="btn btn-secondary me-2" data-cy="manualDraftsButton">
-            <FontAwesomeIcon icon="list" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.financialTransaction.home.viewDraftsLabel">View drafts</Translate>
-          </Link>
-          <Button className="me-2" color="info" onClick={handleSyncList} disabled={loading}>
-            <FontAwesomeIcon icon="sync" spin={loading} />{' '}
-            <Translate contentKey="fintrackApp.financialTransaction.home.refreshListLabel">Refresh List</Translate>
-          </Button>
-          <Link
-            to="/financial-transaction/new"
-            className="btn btn-primary jh-create-entity"
-            id="jh-create-entity"
-            data-cy="entityCreateButton"
-          >
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.financialTransaction.home.createLabel">Create new Financial Transaction</Translate>
-          </Link>
+    <ProductPage wide>
+      <ProductPageHeader
+        headingId="financial-transaction-heading"
+        dataCy="FinancialTransactionHeading"
+        title={<Translate contentKey="fintrackApp.financialTransaction.home.title">Transactions</Translate>}
+        actions={
+          <>
+            <Button tag={Link} to="/financial-transaction/drafts" color="secondary" outline size="sm" data-cy="manualDraftsButton">
+              <FontAwesomeIcon icon="list" />{' '}
+              <Translate contentKey="fintrackApp.financialTransaction.home.viewDraftsLabel">Drafts</Translate>
+            </Button>
+            <Button color="secondary" outline size="sm" onClick={sortEntities} disabled={loading} data-cy="refreshTransactionList">
+              <FontAwesomeIcon icon="sync" spin={loading} />{' '}
+              <Translate contentKey="fintrackApp.financialTransaction.home.refreshListLabel">Refresh</Translate>
+            </Button>
+            <Button tag={Link} to="/financial-transaction/new" color="primary" size="sm" id="jh-create-entity" data-cy="entityCreateButton">
+              <FontAwesomeIcon icon="plus" />{' '}
+              <Translate contentKey="fintrackApp.financialTransaction.home.createLabel">New transaction</Translate>
+            </Button>
+          </>
+        }
+      />
+
+      {loading && !financialTransactionList.length ? (
+        <div className="d-flex align-items-center gap-2 text-muted py-4" data-cy="financialTransactionListLoading">
+          <Spinner size="sm" />
+          <Translate contentKey="fintrackApp.financialTransaction.product.loading">Loading transactions…</Translate>
         </div>
-      </h2>
-      <div className="table-responsive">
-        {financialTransactionList && financialTransactionList.length > 0 ? (
-          <Table responsive>
-            <thead>
-              <tr>
-                <th className="hand" onClick={sort('id')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.id">ID</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('id')} />
-                </th>
-                <th className="hand" onClick={sort('transactionDate')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction Date</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('transactionDate')} />
-                </th>
-                <th className="hand" onClick={sort('postingDate')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting Date</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('postingDate')} />
-                </th>
-                <th className="hand" onClick={sort('description')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.description">Description</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('description')} />
-                </th>
-                <th className="hand" onClick={sort('amount')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.amount">Amount</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('amount')} />
-                </th>
-                <th className="hand" onClick={sort('flow')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.flow">Flow</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('flow')} />
-                </th>
-                <th className="hand" onClick={sort('origin')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.origin">Origin</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('origin')} />
-                </th>
-                <th className="hand" onClick={sort('externalReference')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.externalReference">External Reference</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('externalReference')} />
-                </th>
-                <th className="hand" onClick={sort('notes')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.notes">Notes</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('notes')} />
-                </th>
-                <th className="hand" onClick={sort('createdAt')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.createdAt">Created At</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('createdAt')} />
-                </th>
-                <th className="hand" onClick={sort('updatedAt')}>
-                  <Translate contentKey="fintrackApp.financialTransaction.updatedAt">Updated At</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('updatedAt')} />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.account">Account</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.category">Category</Translate> <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.financialSubscription">Financial Subscription</Translate>{' '}
-                  <FontAwesomeIcon icon="sort" />
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.transactionIngestion">Transaction Ingestion</Translate>{' '}
-                  <FontAwesomeIcon icon="sort" />
-                </th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {financialTransactionList.map((financialTransaction, i) => (
-                <tr key={`entity-${i}`} data-cy="entityTable">
-                  <td>
-                    <Button tag={Link} to={`/financial-transaction/${financialTransaction.id}`} color="link" size="sm">
-                      {financialTransaction.id}
-                    </Button>
-                  </td>
-                  <td>
+      ) : null}
+
+      {errorMessage ? (
+        <Alert color="danger" fade={false} data-cy="financialTransactionListError">
+          <Translate contentKey="fintrackApp.financialTransaction.product.loadFailed">Transactions could not be loaded.</Translate>
+        </Alert>
+      ) : null}
+
+      {!loading && !errorMessage && financialTransactionList.length === 0 ? (
+        <ProductSection title={<Translate contentKey="fintrackApp.financialTransaction.product.emptyTitle">No transactions yet</Translate>}>
+          <p className="text-muted mb-3">
+            <Translate contentKey="fintrackApp.financialTransaction.product.emptyDescription">
+              Create a transaction to start tracking this account activity.
+            </Translate>
+          </p>
+          <Button tag={Link} to="/financial-transaction/new" color="primary" size="sm" data-cy="financialTransactionEmptyCreateButton">
+            <FontAwesomeIcon icon="plus" />{' '}
+            <Translate contentKey="fintrackApp.financialTransaction.home.createLabel">New transaction</Translate>
+          </Button>
+        </ProductSection>
+      ) : null}
+
+      {financialTransactionList.length > 0 ? (
+        <div className="vstack gap-2" data-cy="financialTransactionProductList">
+          <div className="d-flex justify-content-end">
+            <Button
+              color="link"
+              className="p-0 text-decoration-none small text-muted"
+              type="button"
+              onClick={sortByTransactionDate}
+              data-cy="financialTransactionDateSort"
+            >
+              <Translate contentKey="fintrackApp.financialTransaction.product.sortByDate">Sort by transaction date</Translate>{' '}
+              <FontAwesomeIcon icon={transactionDateSortIcon} />
+            </Button>
+          </div>
+          {financialTransactionList.map(financialTransaction => (
+            <article
+              key={financialTransaction.id}
+              className="border rounded-3 bg-white p-3 p-md-4"
+              data-cy="entityTable"
+              data-testid="financialTransactionRow"
+            >
+              <div className="d-flex flex-column flex-md-row align-items-md-start gap-3">
+                <div className="flex-grow-1 min-w-0">
+                  <Link
+                    to={`/financial-transaction/${financialTransaction.id}`}
+                    className="h5 d-inline-block mb-2 text-decoration-none text-body"
+                    data-cy="entityDetailsButton"
+                  >
+                    {financialTransaction.description}
+                  </Link>
+                  <div className="d-flex flex-wrap gap-2 small text-muted mb-3">
                     {financialTransaction.transactionDate ? (
-                      <TextFormat type="date" value={financialTransaction.transactionDate} format={APP_LOCAL_DATE_FORMAT} />
+                      <span>
+                        <TextFormat type="date" value={financialTransaction.transactionDate} format={APP_LOCAL_DATE_FORMAT} />
+                      </span>
                     ) : null}
-                  </td>
-                  <td>
-                    {financialTransaction.postingDate ? (
-                      <TextFormat type="date" value={financialTransaction.postingDate} format={APP_LOCAL_DATE_FORMAT} />
-                    ) : null}
-                  </td>
-                  <td>{financialTransaction.description}</td>
-                  <td>{financialTransaction.amount}</td>
-                  <td>
-                    <Translate contentKey={`fintrackApp.TransactionFlow.${financialTransaction.flow}`} />
-                  </td>
-                  <td>
-                    <Translate contentKey={`fintrackApp.TransactionOrigin.${financialTransaction.origin}`} />
-                  </td>
-                  <td>{financialTransaction.externalReference}</td>
-                  <td>{financialTransaction.notes}</td>
-                  <td>
-                    {financialTransaction.createdAt ? (
-                      <TextFormat type="date" value={financialTransaction.createdAt} format={APP_DATE_FORMAT} />
-                    ) : null}
-                  </td>
-                  <td>
-                    {financialTransaction.updatedAt ? (
-                      <TextFormat type="date" value={financialTransaction.updatedAt} format={APP_DATE_FORMAT} />
-                    ) : null}
-                  </td>
-                  <td>
-                    {financialTransaction.account ? (
-                      <Link to={`/financial-account/${financialTransaction.account.id}`}>{financialTransaction.account.name}</Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
-                  <td>
-                    {financialTransaction.category ? (
-                      <Link to={`/category/${financialTransaction.category.id}`}>{financialTransaction.category.name}</Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
-                  <td>
-                    {financialTransaction.financialSubscription ? (
-                      <Link to={`/financial-subscription/${financialTransaction.financialSubscription.id}`}>
-                        {financialTransaction.financialSubscription.name}
-                      </Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
-                  <td>
-                    {financialTransaction.transactionIngestion ? (
-                      <Link to={`/transaction-ingestion/${financialTransaction.transactionIngestion.id}`}>
-                        {financialTransaction.transactionIngestion.id}
-                      </Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
-                  <td className="text-end">
-                    <div className="btn-group flex-btn-group-container">
-                      <Button
+                    {financialTransaction.transactionDate && financialTransaction.account ? <span>·</span> : null}
+                    <TransactionAccountLabel account={financialTransaction.account} className="text-muted" />
+                  </div>
+                  <TransactionClassification category={financialTransaction.category} tags={financialTransaction.tags} />
+                </div>
+
+                <div className="d-flex align-items-start justify-content-between gap-3 flex-shrink-0">
+                  <TransactionAmount
+                    amount={financialTransaction.amount}
+                    currency={financialTransaction.account?.currency}
+                    flow={financialTransaction.flow}
+                  />
+                  <div className="d-flex align-items-center gap-1">
+                    <Button
+                      tag={Link}
+                      to={`/financial-transaction/${financialTransaction.id}/edit?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`}
+                      color="secondary"
+                      outline
+                      size="sm"
+                      aria-label={translate('entity.action.edit')}
+                      title={translate('entity.action.edit')}
+                      data-cy="entityEditButton"
+                    >
+                      <FontAwesomeIcon icon="pencil-alt" />
+                    </Button>
+                    <ProductActionsMenu
+                      label={translate('fintrackApp.financialTransaction.product.moreActions')}
+                      dataCy="financialTransactionActionsMenu"
+                    >
+                      <DropdownItem
                         tag={Link}
-                        to={`/financial-transaction/${financialTransaction.id}`}
-                        color="info"
-                        size="sm"
-                        data-cy="entityDetailsButton"
-                      >
-                        <FontAwesomeIcon icon="eye" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.view">View</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        tag={Link}
-                        to={`/financial-transaction/${financialTransaction.id}/edit?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`}
-                        color="primary"
-                        size="sm"
-                        data-cy="entityEditButton"
-                      >
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.edit">Edit</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        onClick={() =>
-                          (window.location.href = `/financial-transaction/${financialTransaction.id}/delete?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`)
-                        }
-                        color="danger"
-                        size="sm"
+                        to={`/financial-transaction/${financialTransaction.id}/delete?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`}
+                        className="text-danger"
                         data-cy="entityDeleteButton"
                       >
-                        <FontAwesomeIcon icon="trash" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="entity.action.delete">Delete</Translate>
-                        </span>
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        ) : (
-          !loading && (
-            <div className="alert alert-warning">
-              <Translate contentKey="fintrackApp.financialTransaction.home.notFound">No Financial Transactions found</Translate>
-            </div>
-          )
-        )}
-      </div>
+                        <FontAwesomeIcon icon="trash" className="me-2" />
+                        <Translate contentKey="entity.action.delete">Delete</Translate>
+                      </DropdownItem>
+                    </ProductActionsMenu>
+                  </div>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
       {totalItems ? (
-        <div className={financialTransactionList && financialTransactionList.length > 0 ? '' : 'd-none'}>
-          <div className="justify-content-center d-flex">
+        <div className={financialTransactionList.length > 0 ? 'pt-4' : 'd-none'} data-cy="financialTransactionPagination">
+          <div className="justify-content-center d-flex small text-muted">
             <JhiItemCount page={paginationState.activePage} total={totalItems} itemsPerPage={paginationState.itemsPerPage} i18nEnabled />
           </div>
           <div className="justify-content-center d-flex">
@@ -319,10 +231,8 @@ export const FinancialTransaction = () => {
             />
           </div>
         </div>
-      ) : (
-        ''
-      )}
-    </div>
+      ) : null}
+    </ProductPage>
   );
 };
 

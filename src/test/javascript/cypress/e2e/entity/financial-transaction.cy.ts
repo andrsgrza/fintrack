@@ -35,13 +35,15 @@ describe('FinancialTransaction e2e test', () => {
     active: true,
   });
 
-  const buildFinancialTransactionPayload = (accountId: number) => ({
+  const buildFinancialTransactionPayload = (accountId: number, categoryId?: number, tagId?: number) => ({
     transactionDate: '2026-07-08',
     description: 'E2E transaction',
     amount: 100.5,
     flow: 'OUT',
     origin: 'MANUAL',
     account: { id: accountId },
+    ...(categoryId ? { category: { id: categoryId } } : {}),
+    ...(tagId ? { tags: [{ id: tagId }] } : {}),
   });
 
   const waitForManualCandidate = (
@@ -248,6 +250,7 @@ describe('FinancialTransaction e2e test', () => {
   });
 
   it('FinancialTransactions menu should load FinancialTransactions page', () => {
+    cy.viewport(1280, 800);
     cy.visit('/');
     cy.clickOnEntityMenuItem('financial-transaction');
     cy.wait('@entitiesRequest').then(({ response }) => {
@@ -279,19 +282,42 @@ describe('FinancialTransaction e2e test', () => {
 
     describe('with existing value', () => {
       beforeEach(() => {
-        cy.authenticatedRequest({
-          method: 'POST',
-          url: '/api/financial-transactions',
-          body: buildFinancialTransactionPayload(financialAccount.id),
-        }).then(({ body }) => {
-          financialTransaction = body;
-        });
+        createCategory()
+          .then(() => createTag())
+          .then(() =>
+            cy.authenticatedRequest({
+              method: 'POST',
+              url: '/api/financial-transactions',
+              body: buildFinancialTransactionPayload(financialAccount.id, category.id, tag.id),
+            }),
+          )
+          .then(({ body }) => {
+            financialTransaction = body;
+          });
 
-        cy.visit(financialTransactionPageUrl);
+        cy.visit(`${financialTransactionPageUrl}?page=1&sort=id,desc`);
         cy.wait('@entitiesRequest');
       });
 
       it('detail button click should load details FinancialTransaction page', () => {
+        cy.viewport(1280, 800);
+        cy.get('[data-cy="financialTransactionProductList"]').should('exist');
+        cy.contains('th', 'Created').should('not.exist');
+        cy.contains('th', 'Updated').should('not.exist');
+        cy.contains(entityTableSelector, financialTransaction.description)
+          .should('contain', financialAccount.name)
+          .and('contain', category.name)
+          .and('contain', tag.name)
+          .and('contain', '−100.50 MXN');
+        cy.contains(entityTableSelector, financialTransaction.description)
+          .find('[data-cy="transactionCategory"]')
+          .should('have.attr', 'data-color-treatment', 'category')
+          .and('have.class', 'rounded-1');
+        cy.contains(entityTableSelector, financialTransaction.description)
+          .find('[data-cy="transactionTagChip"]')
+          .should('have.attr', 'data-color-treatment', 'tag')
+          .and('have.class', 'rounded-pill');
+        cy.contains('MANUAL').should('not.exist');
         cy.get(entityDetailsButtonSelector).first().click();
         cy.getEntityDetailsHeading('financialTransaction');
         cy.get(entityDetailsBackButtonSelector).click();
@@ -527,6 +553,11 @@ describe('FinancialTransaction e2e test', () => {
         expect(response?.body.map(draft => draft.description)).to.include(draftDescription);
       });
       cy.url().should('match', new RegExp('/financial-transaction/drafts$'));
+      cy.get('[data-cy="manualDraftBackToTransactions"]').click();
+      cy.wait('@entitiesRequest');
+      cy.url().should('match', financialTransactionPageUrlPattern);
+      cy.get('[data-cy="manualDraftsButton"]').click();
+      cy.wait('@manualDraftsRequest');
       cy.contains('[data-cy="manualDraftRow"]', draftDescription).as('draftRow');
       cy.get('@draftRow').find('[data-cy="manualDraftResumeButton"]').click();
       cy.url().should('match', new RegExp('/financial-transaction/drafts/\\d+$'));
@@ -535,6 +566,7 @@ describe('FinancialTransaction e2e test', () => {
       cy.visit(`${financialTransactionPageUrl}/drafts`);
       cy.wait('@manualDraftsRequest');
       cy.on('window:confirm', () => true);
+      cy.contains('[data-cy="manualDraftRow"]', draftDescription).find('[data-cy="manualDraftActionsMenuToggle"]').click();
       cy.contains('[data-cy="manualDraftRow"]', draftDescription).find('[data-cy="manualDraftCancelListButton"]').click();
       cy.wait('@cancelManualCandidateRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(200);

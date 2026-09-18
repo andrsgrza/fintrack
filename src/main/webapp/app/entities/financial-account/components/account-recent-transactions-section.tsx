@@ -7,14 +7,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
 import { IFinancialTransaction } from 'app/shared/model/financial-transaction.model';
+import { TransactionAmount, TransactionClassification } from 'app/entities/financial-transaction/transaction-presentation';
 
 interface AccountRecentTransactionsSectionProps {
   accountId?: number;
   currency?: string;
 }
-
-const formatMoney = (value: number | undefined | null, currency: string | undefined | null) =>
-  value === undefined || value === null ? '' : `${value} ${currency ?? ''}`.trim();
 
 export const getRecentTransactionsForAccount = (accountId: string | number) =>
   axios.get<IFinancialTransaction[]>(
@@ -86,13 +84,10 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
                 <Translate contentKey="fintrackApp.financialTransaction.description">Description</Translate>
               </th>
               <th>
-                <Translate contentKey="fintrackApp.financialTransaction.flow">Flow</Translate>
+                <Translate contentKey="fintrackApp.financialTransaction.product.classification">Classification</Translate>
               </th>
-              <th>
+              <th className="text-end">
                 <Translate contentKey="fintrackApp.financialTransaction.amount">Amount</Translate>
-              </th>
-              <th>
-                <Translate contentKey="fintrackApp.financialTransaction.category">Category</Translate>
               </th>
             </tr>
           </thead>
@@ -106,10 +101,11 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
                 </td>
                 <td>{transaction.description}</td>
                 <td>
-                  <Translate contentKey={`fintrackApp.TransactionFlow.${transaction.flow}`} />
+                  <TransactionClassification category={transaction.category} tags={transaction.tags} />
                 </td>
-                <td>{formatMoney(transaction.amount, currency)}</td>
-                <td>{transaction.category?.name ?? null}</td>
+                <td>
+                  <TransactionAmount amount={transaction.amount} currency={currency} flow={transaction.flow} compact />
+                </td>
               </tr>
             ))}
           </tbody>

@@ -25,6 +25,9 @@ export interface IManualTransactionDraftSummary {
   classificationReviewStatus?: string;
   accountId?: number | null;
   accountName?: string | null;
+  accountType?: string | null;
+  accountLastFourDigits?: string | null;
+  accountActive?: boolean | null;
   transactionDate?: string | null;
   description?: string | null;
   amount?: number | null;
@@ -33,7 +36,19 @@ export interface IManualTransactionDraftSummary {
   createdAt?: string | null;
   updatedAt?: string | null;
   categoryName?: string | null;
+  categoryId?: number | null;
+  categoryParentName?: string | null;
+  categoryColor?: string | null;
+  categoryActive?: boolean | null;
   tagNames?: string[] | null;
+  tags?: IManualTransactionDraftTagSummary[] | null;
+}
+
+export interface IManualTransactionDraftTagSummary {
+  id?: number;
+  name?: string | null;
+  color?: string | null;
+  active?: boolean | null;
 }
 
 export const getManualDrafts = () => axios.get<IManualTransactionDraftSummary[]>(`${apiUrl}/manual-drafts`);

@@ -623,12 +623,18 @@ TC-2D.2 adds the manual draft recovery page:
 - It shows current-user recoverable `MANUAL` draft summaries only.
 - It includes only `DRAFT` and `READY_TO_POST` and excludes `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT`.
 - There is no global `NEEDS_REVIEW` candidate status; review needs are represented by specific review/status fields. `API_IMPORT` is reserved/deferred and must not appear as an active manual draft recovery/product UI state until a later lifecycle slice formalizes it.
-- It displays compact description/account/date/amount/status/classification/category/tags/updated-at metadata with fallback copy for incomplete drafts.
+- It displays compact description/account/date/amount/status/classification/category/tags/updated-at metadata with fallback copy for incomplete drafts. Account references include the stored account type, currency, final four digits, and an inactive marker when applicable; category and tag chips retain their stored color and inactive context.
 - Resume links to `/financial-transaction/drafts/{id}`.
-- Cancel draft calls `POST /api/transaction-candidates/{id}/cancel`, then removes/reloads the row.
+- Resume is the primary row action. Cancel draft is deliberately destructive and lives in the row overflow menu; it calls `POST /api/transaction-candidates/{id}/cancel`, then removes/reloads the row.
 - It does not post candidates from the list.
-- The FinancialTransaction list links to this page through a secondary "View drafts" action; draft rows are not mixed into the posted FinancialTransaction table.
+- The FinancialTransaction list links to this page through a secondary "Drafts" action; draft rows are not mixed into the posted FinancialTransaction list.
 - Generic `TransactionCandidate` CRUD routes are not product UI.
+
+## FinancialTransaction posted list — product presentation
+
+`/financial-transaction` is a posted-transaction list, not a generated entity table. Each responsive card presents only the decision-making fields: description/detail link, transaction date, linked account, category path, tag chips, signed display amount, and flow. Income is shown as `+amount currency`; expense is shown as `−amount currency`. Origin, IDs, timestamps, subscriptions, ingestion internals, and other technical relations remain off the primary list.
+
+The header has a primary **New transaction** action and secondary **Drafts** and refresh actions. Each posted row keeps compact edit visible and places Delete in an overflow menu. Existing routes, pagination, sorting query parameters, and delete confirmation behavior remain unchanged.
 
 Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
 

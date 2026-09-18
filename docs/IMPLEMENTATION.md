@@ -181,9 +181,9 @@ TC-2D.2 adds the manual draft recovery page on top of the TC-2D.1 backend query:
 - Included statuses are `DRAFT` and `READY_TO_POST`.
 - Excluded statuses/sources are `POSTED`, `CANCELLED`, `FAILED`, `FILE_IMPORT`, and `API_IMPORT`.
 - Results are sorted by `updatedAt DESC, id DESC`.
-- `/financial-transaction/drafts` loads the recovery summaries, displays compact draft/account/date/amount/status/classification/category/tags metadata, and provides Resume plus Cancel draft actions.
-- Resume navigates to `/financial-transaction/drafts/{id}`. Cancel calls the candidate cancel command; the list does not post candidates.
-- The FinancialTransaction list links to the recovery page with a secondary "View drafts" action, but draft rows are not mixed into the posted FinancialTransaction table.
+- `/financial-transaction/drafts` loads the recovery summaries, displays compact draft/account/date/amount/status/classification/category/tags metadata, and provides Resume plus Cancel draft actions. The backwards-compatible summary projection now also includes account type/final four digits/activity, category id/parent/color/activity, and detailed tag id/color/activity data so the recovery UI can render persisted historical references without fragile lookup calls. Existing `accountName`, `categoryName`, and `tagNames` remain in the response for compatibility.
+- Resume navigates to `/financial-transaction/drafts/{id}`. Cancel calls the candidate cancel command from the row overflow menu; the list does not post candidates.
+- The FinancialTransaction list links to the recovery page with a secondary "Drafts" action, but draft rows are not mixed into the posted FinancialTransaction list. The posted list is a responsive product card presentation of date, description, account, classification, amount, and flow; it preserves existing pagination/sort URLs, detail/edit/delete routes, and delete semantics.
 - The endpoint/page do not expose generic `TransactionCandidate` CRUD as product UI.
 
 TC-3A adds backend-only FILE import candidate preparation:
