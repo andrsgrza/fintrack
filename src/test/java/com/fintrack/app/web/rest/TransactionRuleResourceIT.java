@@ -144,6 +144,7 @@ class TransactionRuleResourceIT {
             .updatedAt(DEFAULT_UPDATED_AT);
         transactionRule.setUser(getCurrentMockUser(em));
         Category resultingCategory = CategoryResourceIT.createEntity(em);
+        resultingCategory.setActive(true);
         em.persist(resultingCategory);
         em.flush();
         transactionRule.setResultingCategory(resultingCategory);
@@ -167,6 +168,7 @@ class TransactionRuleResourceIT {
             .updatedAt(UPDATED_UPDATED_AT);
         updatedTransactionRule.setUser(getCurrentMockUser(em));
         Category resultingCategory = CategoryResourceIT.createUpdatedEntity(em);
+        resultingCategory.setActive(true);
         em.persist(resultingCategory);
         em.flush();
         updatedTransactionRule.setResultingCategory(resultingCategory);
@@ -2301,6 +2303,7 @@ class TransactionRuleResourceIT {
     @Transactional
     void createTransactionRuleWithAccessibleCategorySucceeds() throws Exception {
         Category ownCategory = CategoryResourceIT.createEntity(em);
+        ownCategory.setActive(true);
         ownCategory = em.merge(ownCategory);
         em.flush();
 
@@ -2328,6 +2331,7 @@ class TransactionRuleResourceIT {
     @Transactional
     void createTransactionRuleWithAccessibleTagsOnlySucceeds() throws Exception {
         Tag ownTag = TagResourceIT.createEntity(em);
+        ownTag.setActive(true);
         ownTag = em.merge(ownTag);
         em.flush();
 
@@ -2358,6 +2362,7 @@ class TransactionRuleResourceIT {
     void patchTransactionRuleWithoutCategoryFieldPreservesExistingCategory() throws Exception {
         Category ownCategory = CategoryResourceIT.createEntity(em);
         ownCategory = em.merge(ownCategory);
+        ownCategory.setActive(false);
         em.flush();
 
         transactionRule.setResultingCategory(ownCategory);
@@ -2511,8 +2516,35 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
+    void createTransactionRuleRejectsInactiveCategoryAndTagOutputs() throws Exception {
+        Category inactiveCategory = createCategory(CategoryType.BOTH);
+        inactiveCategory.setActive(false);
+        Tag inactiveTag = TagResourceIT.createEntity(em);
+        inactiveTag.setActive(false);
+        em.persist(inactiveTag);
+        em.flush();
+
+        TransactionRuleDTO categoryRequest = transactionRuleMapper.toDto(transactionRule);
+        categoryRequest.setId(null);
+        categoryRequest.setResultingCategory(createCategoryDTO(inactiveCategory));
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryRequest)))
+            .andExpect(status().isBadRequest());
+
+        TransactionRuleDTO tagRequest = transactionRuleMapper.toDto(transactionRule);
+        tagRequest.setId(null);
+        tagRequest.setResultingCategory(null);
+        tagRequest.setResultingTags(Set.of(createTagDTO(inactiveTag)));
+        restTransactionRuleMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagRequest)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
     void createConfiguredTagOnlyTransactionRuleWithConditionSucceeds() throws Exception {
         Tag tag = TagResourceIT.createEntity(em);
+        tag.setActive(true);
         em.persist(tag);
         em.flush();
         TransactionRuleConfiguredRequestDTO request = configuredRequest(
@@ -2544,6 +2576,7 @@ class TransactionRuleResourceIT {
         inactiveAccount.setActive(false);
         em.persist(inactiveAccount);
         Tag tag = TagResourceIT.createEntity(em);
+        tag.setActive(true);
         em.persist(tag);
         em.flush();
 
@@ -2565,6 +2598,7 @@ class TransactionRuleResourceIT {
         account.setActive(true);
         em.persist(account);
         Tag tag = TagResourceIT.createEntity(em);
+        tag.setActive(true);
         em.persist(tag);
         em.flush();
 
@@ -2945,6 +2979,7 @@ class TransactionRuleResourceIT {
         Category category = CategoryResourceIT.createEntity(em);
         category.setName("Category " + categoryType + " " + longCount.incrementAndGet());
         category.setCategoryType(categoryType);
+        category.setActive(true);
         em.persist(category);
         em.flush();
         return category;

@@ -185,8 +185,12 @@ describe('FinancialTransaction e2e test', () => {
     cy.intercept('POST', '/api/financial-transactions/rule-preview').as('rulePreviewRequest');
     cy.intercept('DELETE', '/api/financial-transactions/*').as('deleteEntityRequest');
     cy.intercept('GET', '/api/financial-accounts/selectable*').as('selectableAccountsRequest');
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/categories/selectable*', request => {
+      request.alias = request.query.includeId ? 'currentCategoryRequest' : 'categoriesRequest';
+    });
+    cy.intercept('GET', '/api/tags/selectable*', request => {
+      request.alias = request.query.includeId ? 'currentTagRequest' : 'tagsRequest';
+    });
   });
 
   afterEach(() => {
@@ -385,60 +389,62 @@ describe('FinancialTransaction e2e test', () => {
       cy.get('[data-cy="amount"]').should('have.value', '100.5');
       cy.get('[data-cy="flow"]').should('have.value', 'OUT');
 
-      let suggestedCategoryId;
-      cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-        expect(response?.body.hasSuggestions).to.equal(true);
-        expect(response?.body.suggestedCategory.categoryId).to.exist;
-        suggestedCategoryId = response?.body.suggestedCategory.categoryId;
-        expect(response?.body.suggestedTags.map(suggestedTag => suggestedTag.tagId)).to.include(tag.id);
-      });
-      cy.get('[data-cy="manualDraftPostButton"]').should('be.disabled');
-      cy.get('[data-cy="manualDraftApplyRulesButton"]').click();
-      cy.wait('@candidateApplyRulesRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-        expect(response?.body.candidate.classificationReviewStatus).to.equal('SUGGESTED');
-        expect(response?.body.candidate.category.id).to.equal(suggestedCategoryId);
-        expect(response?.body.candidate.tags.map(candidateTag => candidateTag.id)).to.include(tag.id);
-      });
-      cy.then(() => {
-        cy.get('[data-cy="category"]').should('have.value', String(suggestedCategoryId));
-        cy.get('[data-cy="tags"]')
-          .find('option:checked')
-          .then(selectedTags => {
-            expect([...selectedTags].map(option => option.value)).to.include(String(tag.id));
-          });
-      });
-
-      // Classification changes are deliberate user actions. A later rule preview may show the
-      // same recommendations, but it must not silently restore manually cleared selections.
-      cy.get('[data-cy="category"]').select('');
-      cy.get('[data-cy="tags"]').select([]);
-      waitForManualCandidate(
-        candidate =>
-          candidate.classificationReviewStatus === 'USER_SELECTED' && candidate.category === null && candidate.tags?.length === 0,
-      );
-
-      cy.get('[data-cy="externalReference"]').type('manual-repreview');
-      cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(200);
-        expect(response?.body.suggestedCategory.categoryId).to.equal(suggestedCategoryId);
-        expect(response?.body.suggestedTags.map(suggestedTag => suggestedTag.tagId)).to.include(tag.id);
-      });
-      cy.get('[data-cy="category"]').should('have.value', '');
-      cy.get('[data-cy="tags"]').find('option:checked').should('have.length', 0);
-
-      // Restore the values as explicit manual selections so post remains review-ready.
-      cy.then(() => {
-        cy.get('[data-cy="category"]').select(String(suggestedCategoryId));
-        cy.get('[data-cy="tags"]').select([String(tag.id)]);
-      });
+      // Explicit manual selection avoids assuming a newly-created rule outranks pre-existing
+      // local rules. It also establishes the historical associations we must preserve.
+      cy.get('[data-cy="category"]').select(String(category.id));
+      cy.get('[data-cy="tags"]').select([String(tag.id)]);
       waitForManualCandidate(
         candidate =>
           candidate.classificationReviewStatus === 'USER_SELECTED' &&
-          candidate.category?.id === suggestedCategoryId &&
+          candidate.category?.id === category.id &&
           candidate.tags?.some(candidateTag => candidateTag.id === tag.id) === true,
       );
+
+      cy.authenticatedRequest({
+        method: 'PATCH',
+        url: `/api/categories/${category.id}`,
+        body: { active: false },
+      })
+        .its('status')
+        .should('eq', 200);
+      cy.authenticatedRequest({
+        method: 'PATCH',
+        url: `/api/tags/${tag.id}`,
+        body: { active: false },
+      })
+        .its('status')
+        .should('eq', 200);
+
+      cy.reload();
+      cy.wait('@getManualCandidateRequest');
+      cy.wait('@currentCategoryRequest').then(({ response }) => {
+        expect(response?.body.map(selectableCategory => selectableCategory.id)).to.include(category.id);
+      });
+      cy.wait('@currentTagRequest').then(({ response }) => {
+        expect(response?.body.map(selectableTag => selectableTag.id)).to.include(tag.id);
+      });
+      cy.contains('[data-cy="category"] option', category.name)
+        .should('have.value', String(category.id))
+        .invoke('text')
+        .should('match', /Inactiv[ae]/);
+      cy.get('[data-cy="category"]').should('have.value', String(category.id));
+      cy.contains('[data-cy="tags"] option', tag.name)
+        .should('have.value', String(tag.id))
+        .invoke('text')
+        .should('match', /Inactiv[ae]/);
+      cy.get('[data-cy="tags"] option:selected').should('have.value', String(tag.id));
+
+      cy.location('pathname').then(pathname => {
+        const candidateId = pathname.match(/\/financial-transaction\/drafts\/(\d+)$/)?.[1];
+        expect(candidateId, 'manual draft id in URL').to.exist;
+        cy.authenticatedRequest({
+          method: 'POST',
+          url: `/api/transaction-candidates/${candidateId}/rule-preview`,
+        }).then(({ body }) => {
+          expect(body.suggestedCategory?.categoryId).not.to.equal(category.id);
+          expect(body.suggestedTags?.map(suggestedTag => suggestedTag.tagId) ?? []).not.to.include(tag.id);
+        });
+      });
 
       const lastSecondNotes = uniqueName('latest-notes');
       cy.get('[data-cy="notes"]').type(lastSecondNotes);
@@ -461,7 +467,7 @@ describe('FinancialTransaction e2e test', () => {
           financialTransaction = body;
           expect(body.description).to.equal(manualCandidateDescription);
           expect(body.notes).to.equal(lastSecondNotes);
-          expect(body.category.id).to.equal(suggestedCategoryId);
+          expect(body.category.id).to.equal(category.id);
           expect(body.tags.map(transactionTag => transactionTag.id)).to.include(tag.id);
         });
       });
@@ -474,6 +480,23 @@ describe('FinancialTransaction e2e test', () => {
       cy.visit(`${financialTransactionPageUrl}/new`);
       cy.wait('@selectableAccountsRequest');
       cy.get('[data-cy="account"] option').should('not.contain', financialAccount.name);
+      cy.wait('@categoriesRequest');
+      cy.wait('@tagsRequest');
+      cy.get('[data-cy="category"] option').should('not.contain', category.name);
+      cy.get('[data-cy="tags"] option').should('not.contain', tag.name);
+
+      cy.authenticatedRequest({ method: 'PATCH', url: `/api/categories/${category.id}`, body: { active: true } })
+        .its('status')
+        .should('eq', 200);
+      cy.authenticatedRequest({ method: 'PATCH', url: `/api/tags/${tag.id}`, body: { active: true } })
+        .its('status')
+        .should('eq', 200);
+
+      cy.reload();
+      cy.wait('@categoriesRequest');
+      cy.wait('@tagsRequest');
+      cy.get('[data-cy="category"] option').should('contain', category.name);
+      cy.get('[data-cy="tags"] option').should('contain', tag.name);
       cy.get('@rulePreviewRequest.all').should('have.length', 0);
     });
 

@@ -291,6 +291,42 @@ class TransactionRuleEvaluationServiceTest {
     }
 
     @Test
+    void inactiveCategoryAndTagOutputsAreSkippedWithoutSuggestions() {
+        Category inactiveCategory = category(10L, "Historical food");
+        inactiveCategory.setActive(false);
+        Tag inactiveTag = tag(20L, "Historical tag");
+        inactiveTag.setActive(false);
+        TransactionRule rule = rule(1L, 0, true, RuleConditionLogic.ALL, inactiveCategory);
+        rule.setResultingTags(new HashSet<>(Set.of(inactiveTag)));
+        rule.setConditions(Set.of(condition(10L, 0, TransactionRuleField.DESCRIPTION, RuleOperator.CONTAINS, "coffee")));
+        givenRules(rule);
+
+        TransactionRuleEvaluationResult result = service.evaluate(input().description("coffee").build());
+
+        assertThat(result.matchedRules()).singleElement().satisfies(match -> assertThat(match.ruleId()).isEqualTo(1L));
+        assertThat(result.suggestedCategory()).isNull();
+        assertThat(result.suggestedTags()).isEmpty();
+        assertThat(result.skippedOutputs()).anySatisfy(skip -> {
+            assertThat(skip.field()).isEqualTo(RuleOutputField.CATEGORY);
+            assertThat(skip.reason()).isEqualTo(RuleOutputSkipReason.OUTPUT_INACTIVE);
+            assertThat(skip.valueId()).isEqualTo(10L);
+        });
+        assertThat(result.skippedOutputs()).anySatisfy(skip -> {
+            assertThat(skip.field()).isEqualTo(RuleOutputField.TAGS);
+            assertThat(skip.reason()).isEqualTo(RuleOutputSkipReason.OUTPUT_INACTIVE);
+            assertThat(skip.valueId()).isEqualTo(20L);
+        });
+
+        inactiveCategory.setActive(true);
+        inactiveTag.setActive(true);
+
+        TransactionRuleEvaluationResult reactivatedResult = service.evaluate(input().description("coffee").build());
+
+        assertThat(reactivatedResult.suggestedCategory().categoryId()).isEqualTo(10L);
+        assertThat(reactivatedResult.suggestedTags()).singleElement().satisfies(tag -> assertThat(tag.tagId()).isEqualTo(20L));
+    }
+
+    @Test
     void currentCategorySameIdCreatesNoConflict() {
         TransactionRule rule = matchingCategoryRule(1L, 0, 10L, "Food");
         givenRules(rule);
@@ -460,6 +496,7 @@ class TransactionRuleEvaluationServiceTest {
         Category category = new Category();
         category.setId(id);
         category.setName(name);
+        category.setActive(true);
         return category;
     }
 
@@ -467,6 +504,7 @@ class TransactionRuleEvaluationServiceTest {
         Tag tag = new Tag();
         tag.setId(id);
         tag.setName(name);
+        tag.setActive(true);
         return tag;
     }
 

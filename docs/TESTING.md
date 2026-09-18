@@ -592,7 +592,7 @@ The FinancialAccount UI specs cover the product overview (calculated balances/de
 
 **Ownership model:** indirect via `account` (required). Normal users see/edit/delete only transactions whose `account` they own. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules in service:** resolve `account` from DB (`findAccessibleAccountEntity`); validate optional `category` / `tags` / `subscription` against the transaction account owner; create/update/patch use presence-aware JSON semantics; `account`, `origin`, `transactionIngestion`, and server timestamps are immutable/server-owned; `amount > 0` with scale 2; category/subscription compatibility; delete cleanup for linked `IngestionRecord`, `InternalTransfer`, and tag joins. Direct delete is blocked when the transaction is linked to a `TransactionCandidate` provenance record; the guard runs before ingestion-record/internal-transfer/tag mutations.
+**Domain rules in service:** resolve `account` from DB (`findAccessibleAccountEntity`); validate optional `category` / `tags` / `subscription` against the transaction account owner; new category/tag references must be active, while unchanged inactive historical links survive unrelated edits; create/update/patch use presence-aware JSON semantics; `account`, `origin`, `transactionIngestion`, and server timestamps are immutable/server-owned; `amount > 0` with scale 2; category/subscription compatibility; delete cleanup for linked `IngestionRecord`, `InternalTransfer`, and tag joins. Direct delete is blocked when the transaction is linked to a `TransactionCandidate` provenance record; the guard runs before ingestion-record/internal-transfer/tag mutations.
 
 ### Summary counts
 
@@ -1037,7 +1037,7 @@ Happy-path CRUD, required-field checks, criteria per field (`name`, `description
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their categories. `ROLE_ADMIN` bypasses filters.
 
-**Domain rules:** block delete when direct children exist; leaf delete cleans posted/product references (FT/FS null, budget M2M, rule `resultingCategory` null + `active=false`); delete is blocked when `TransactionCandidate.category` references the category; `parentCategory` immutable after create; `categoryType` mutable only when unused; child `categoryType` must match parent. Default categories on signup — **Deferred** (separate pass). See [`DOMAIN-RULES.md` §5](DOMAIN-RULES.md#5-category).
+**Domain rules:** block delete when direct children exist; leaf delete cleans posted/product references (FT/FS null, budget M2M, rule `resultingCategory` null + `active=false`); delete is blocked when `TransactionCandidate.category` references the category; `parentCategory` immutable after create; `categoryType` is mutable only when unused by a child, FinancialTransaction, or TransactionCandidate; child `categoryType` must match parent. There are no system/default categories on signup. See [`DOMAIN-RULES.md` §5](DOMAIN-RULES.md#5-category).
 
 ### Summary counts
 
@@ -3046,6 +3046,21 @@ JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvn
 
 ```bash
 npm run webapp:build:dev -- --env stats=minimal
+```
+
+## CAT-UX-1 — inactive Category/Tag historical-only policy
+
+Focused coverage is split by responsibility:
+
+- `CategoryResourceIT` and `TagResourceIT` verify that `/selectable` returns active current-owner values, includes an explicitly requested current-owner inactive historical value only, and does not leak another user's values to an administrator. `CategoryResourceIT` also verifies that a category used by a `TransactionCandidate` cannot change type.
+- `TransactionCandidateResourceIT`, `FinancialTransactionResourceIT`, and `TransactionIngestionWorkflowResourceIT` verify inactive rejection for new manual/direct/FILE_IMPORT references while allowing unrelated edits to retain an existing historical reference.
+- `TransactionRuleEvaluationServiceTest` verifies an active matching rule reports `OUTPUT_INACTIVE` and produces no suggestion for inactive category/tag outputs. Frontend Jest verifies active-only selector contents plus retained inactive labels in manual drafts, configured rule edit, and the unified ingestion table.
+
+Recommended focused command:
+
+```bash
+JAVA_HOME=/Users/andresgarzaarmendariz/.sdkman/candidates/java/17.0.19-tem ./mvnw \
+  -Dtest=CategoryResourceIT,TagResourceIT,TransactionCandidateResourceIT,FinancialTransactionResourceIT,TransactionRuleResourceIT,TransactionRuleEvaluationServiceTest,TransactionIngestionWorkflowResourceIT test
 ```
 
 ## ACC-UX-3A — inactive FinancialAccount historical-only policy

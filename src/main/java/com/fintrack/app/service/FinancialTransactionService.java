@@ -139,11 +139,15 @@ public class FinancialTransactionService {
         FinancialTransaction financialTransaction = financialTransactionMapper.toEntity(financialTransactionDTO);
         FinancialAccount account = resolveAccountForCreate(financialTransactionDTO.getAccount());
         financialTransaction.setAccount(account);
-        financialTransaction.setCategory(resolveOptionalCategoryForOwner(financialTransactionDTO.getCategory(), ownerLogin(account)));
+        Category category = resolveOptionalCategoryForOwner(financialTransactionDTO.getCategory(), ownerLogin(account));
+        CategoryReferenceValidator.validateActiveForNewReference(category);
+        financialTransaction.setCategory(category);
         financialTransaction.setFinancialSubscription(
             resolveOptionalSubscriptionForOwner(financialTransactionDTO.getFinancialSubscription(), account)
         );
-        financialTransaction.setTags(resolveTagsForOwner(financialTransactionDTO.getTags(), ownerLogin(account)));
+        Set<Tag> tags = resolveTagsForOwner(financialTransactionDTO.getTags(), ownerLogin(account));
+        tags.forEach(TagReferenceValidator::validateActiveForNewReference);
+        financialTransaction.setTags(tags);
         financialTransaction.setTransactionIngestion(
             resolveOptionalTransactionIngestionForCreate(financialTransactionDTO.getTransactionIngestion(), account)
         );
@@ -509,7 +513,14 @@ public class FinancialTransactionService {
             existing.setNotes(dto.getNotes());
         }
         if (fieldPresent(updateNode, "category")) {
-            existing.setCategory(resolveOptionalCategoryPatch(dto.getCategory(), ownerLogin(existing.getAccount()), updateNode));
+            Category requestedCategory = resolveOptionalCategoryPatch(dto.getCategory(), ownerLogin(existing.getAccount()), updateNode);
+            if (
+                requestedCategory != null &&
+                !Objects.equals(existing.getCategory() == null ? null : existing.getCategory().getId(), requestedCategory.getId())
+            ) {
+                CategoryReferenceValidator.validateActiveForNewReference(requestedCategory);
+            }
+            existing.setCategory(requestedCategory);
         }
         if (fieldPresent(updateNode, "financialSubscription")) {
             existing.setFinancialSubscription(
@@ -517,7 +528,13 @@ public class FinancialTransactionService {
             );
         }
         if (fieldPresent(updateNode, "tags")) {
-            existing.setTags(resolveTagsPatch(dto.getTags(), ownerLogin(existing.getAccount()), updateNode));
+            Set<Long> existingTagIds = currentTagIds(existing);
+            Set<Tag> requestedTags = resolveTagsPatch(dto.getTags(), ownerLogin(existing.getAccount()), updateNode);
+            requestedTags
+                .stream()
+                .filter(tag -> tag.getId() != null && !existingTagIds.contains(tag.getId()))
+                .forEach(TagReferenceValidator::validateActiveForNewReference);
+            existing.setTags(requestedTags);
         }
 
         normalizeFields(existing);

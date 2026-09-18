@@ -433,6 +433,58 @@ class TagResourceIT {
 
     @Test
     @Transactional
+    void selectableTagsReturnActiveValuesAndExplicitCurrentUsersHistoricalValue() throws Exception {
+        Tag activeTag = createEntity(em);
+        activeTag.setName("ACTIVE_SELECTABLE_TAG");
+        activeTag.setActive(true);
+        activeTag = tagRepository.saveAndFlush(activeTag);
+
+        Tag inactiveTag = createEntity(em);
+        inactiveTag.setName("INACTIVE_SELECTABLE_TAG");
+        inactiveTag.setActive(false);
+        inactiveTag = tagRepository.saveAndFlush(inactiveTag);
+
+        restTagMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(activeTag.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(inactiveTag.getId().intValue()))));
+
+        restTagMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable").param("includeId", inactiveTag.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(activeTag.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(inactiveTag.getId().intValue())))
+            .andExpect(jsonPath("$.[?(@.id == %d)].active".formatted(inactiveTag.getId())).value(hasItem(false)));
+
+        inactiveTag.setActive(true);
+        tagRepository.saveAndFlush(inactiveTag);
+
+        restTagMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(inactiveTag.getId().intValue())))
+            .andExpect(jsonPath("$.[?(@.id == %d)].active".formatted(inactiveTag.getId())).value(hasItem(true)));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void selectableTagsDoNotExposeAnotherUsersValuesToAdmin() throws Exception {
+        Tag foreignTag = createEntity(em);
+        foreignTag.setName("FOREIGN_SELECTABLE_TAG");
+        foreignTag.setActive(true);
+        foreignTag.setUser(createOtherUser(em));
+        foreignTag = tagRepository.saveAndFlush(foreignTag);
+
+        restTagMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable").param("includeId", foreignTag.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(foreignTag.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
     void getTagsByIdFiltering() throws Exception {
         // Initialize the database
         insertedTag = tagRepository.saveAndFlush(tag);

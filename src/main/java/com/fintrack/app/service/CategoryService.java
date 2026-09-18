@@ -6,8 +6,12 @@ import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.CategorySelectableDTO;
 import com.fintrack.app.service.mapper.CategoryMapper;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -177,6 +181,28 @@ public class CategoryService {
     }
 
     /**
+     * Returns categories the current product actor may select for a new reference. This is deliberately owner-scoped
+     * for administrators too. {@code includeIds} are only for rendering existing historical inactive references.
+     */
+    @Transactional(readOnly = true)
+    public List<CategorySelectableDTO> findSelectableCategories(List<Long> includeIds) {
+        String currentUserLogin = currentUserService.getCurrentUserLogin();
+        List<Long> historicalIds = includeIds == null ? List.of() : includeIds.stream().filter(Objects::nonNull).distinct().toList();
+        List<Category> categories = new ArrayList<>(categoryRepository.findAllWithToOneRelationshipsByUserLogin(currentUserLogin));
+        for (Long includeId : historicalIds) {
+            if (categories.stream().noneMatch(category -> Objects.equals(category.getId(), includeId))) {
+                categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(includeId, currentUserLogin).ifPresent(categories::add);
+            }
+        }
+        return categories
+            .stream()
+            .filter(category -> Boolean.TRUE.equals(category.getActive()) || historicalIds.contains(category.getId()))
+            .sorted(Comparator.comparing(Category::getName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .map(this::toSelectableDto)
+            .toList();
+    }
+
+    /**
      * Get one category by id.
      *
      * @param id the id of the entity.
@@ -310,11 +336,25 @@ public class CategoryService {
     private boolean isCategoryInUse(Long categoryId) {
         return (
             categoryRepository.existsByParentCategoryId(categoryId) ||
+            transactionCandidateRepository.existsByCategoryId(categoryId) ||
             categoryRepository.existsFinancialTransactionByCategoryId(categoryId) ||
             categoryRepository.existsFinancialSubscriptionByCategoryId(categoryId) ||
             categoryRepository.existsBudgetCategoryLinkByCategoryId(categoryId) ||
             categoryRepository.existsTransactionRuleByResultingCategoryId(categoryId)
         );
+    }
+
+    private CategorySelectableDTO toSelectableDto(Category category) {
+        CategorySelectableDTO dto = new CategorySelectableDTO();
+        dto.setId(category.getId());
+        dto.setName(category.getName());
+        dto.setCategoryType(category.getCategoryType());
+        dto.setActive(category.getActive());
+        if (category.getParentCategory() != null) {
+            dto.setParentCategoryId(category.getParentCategory().getId());
+            dto.setParentCategoryName(category.getParentCategory().getName());
+        }
+        return dto;
     }
 
     private String normalizeName(String name) {

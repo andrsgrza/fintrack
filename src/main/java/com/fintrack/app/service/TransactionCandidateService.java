@@ -281,13 +281,17 @@ public class TransactionCandidateService {
                 evaluation,
                 hadManualSelections,
                 categoryId ->
-                    categoryRepository
-                        .findOneWithToOneRelationshipsByIdAndUserLogin(categoryId, candidate.getUser().getLogin())
-                        .orElseThrow(() -> new IllegalArgumentException("Suggested category is not accessible")),
+                    requireActiveSuggestedCategory(
+                        categoryRepository
+                            .findOneWithToOneRelationshipsByIdAndUserLogin(categoryId, candidate.getUser().getLogin())
+                            .orElseThrow(() -> new IllegalArgumentException("Suggested category is not accessible"))
+                    ),
                 tagId ->
-                    tagRepository
-                        .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, candidate.getUser().getLogin())
-                        .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+                    requireActiveSuggestedTag(
+                        tagRepository
+                            .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, candidate.getUser().getLogin())
+                            .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+                    )
             );
 
             candidate.setClassificationReviewStatus(application.recommendedClassificationReviewStatus());
@@ -321,7 +325,7 @@ public class TransactionCandidateService {
         if (transactionCandidate.getSource() == TransactionCandidateSource.MANUAL) {
             validateActiveAccountForNewManualReference(transactionCandidateDTO.getAccount());
         }
-        applyRelationships(transactionCandidate, transactionCandidateDTO);
+        applyRelationships(transactionCandidate, transactionCandidateDTO, null);
         normalizeFields(transactionCandidate);
         deriveAmountAndFlow(transactionCandidate);
         validateCandidate(transactionCandidate, null);
@@ -367,7 +371,7 @@ public class TransactionCandidateService {
         candidate.setCancelledAt(existing.getCancelledAt());
         candidate.setFailedAt(existing.getFailedAt());
         applyDefaults(candidate);
-        applyRelationships(candidate, transactionCandidateDTO);
+        applyRelationships(candidate, transactionCandidateDTO, existing);
         normalizeFields(candidate);
         deriveAmountAndFlow(candidate);
         validateTransition(existing.getStatus(), candidate.getStatus());
@@ -559,12 +563,18 @@ public class TransactionCandidateService {
         }
     }
 
-    private void applyRelationships(TransactionCandidate candidate, TransactionCandidateDTO dto) {
+    private void applyRelationships(TransactionCandidate candidate, TransactionCandidateDTO dto, TransactionCandidate existingReference) {
         String ownerLogin = currentUserService.getCurrentUserLogin();
         candidate.setAccount(resolveOptionalAccount(dto.getAccount(), ownerLogin));
-        candidate.setCategory(resolveOptionalCategory(dto.getCategory(), ownerLogin));
+        Category requestedCategory = resolveOptionalCategory(dto.getCategory(), ownerLogin);
+        if (isNewCategoryReference(existingReference, requestedCategory)) {
+            CategoryReferenceValidator.validateActiveForNewReference(requestedCategory);
+        }
+        candidate.setCategory(requestedCategory);
         candidate.setCategorySource(candidate.getCategory() == null ? null : TransactionCandidateClassificationSource.MANUAL);
-        candidate.replaceTags(resolveTags(dto.getTags(), ownerLogin), TransactionCandidateClassificationSource.MANUAL);
+        Set<Tag> requestedTags = resolveTags(dto.getTags(), ownerLogin);
+        validateNewTagReferences(existingReference, requestedTags);
+        candidate.replaceTags(requestedTags, TransactionCandidateClassificationSource.MANUAL);
         candidate.setTransactionIngestion(resolveOptionalTransactionIngestion(dto.getTransactionIngestion(), ownerLogin));
         candidate.setIngestionRecord(resolveOptionalIngestionRecord(dto.getIngestionRecord(), ownerLogin));
     }
@@ -575,11 +585,17 @@ public class TransactionCandidateService {
             candidate.setAccount(resolveOptionalAccount(dto.getAccount(), ownerLogin));
         }
         if (fieldPresent(patchNode, "category")) {
-            candidate.setCategory(resolveOptionalCategory(dto.getCategory(), ownerLogin));
+            Category requestedCategory = resolveOptionalCategory(dto.getCategory(), ownerLogin);
+            if (isNewCategoryReference(candidate, requestedCategory)) {
+                CategoryReferenceValidator.validateActiveForNewReference(requestedCategory);
+            }
+            candidate.setCategory(requestedCategory);
             candidate.setCategorySource(candidate.getCategory() == null ? null : TransactionCandidateClassificationSource.MANUAL);
         }
         if (fieldPresent(patchNode, "tags")) {
-            candidate.replaceTags(resolveTags(dto.getTags(), ownerLogin), TransactionCandidateClassificationSource.MANUAL);
+            Set<Tag> requestedTags = resolveTags(dto.getTags(), ownerLogin);
+            validateNewTagReferences(candidate, requestedTags);
+            candidate.replaceTags(requestedTags, TransactionCandidateClassificationSource.MANUAL);
         }
         if (fieldPresent(patchNode, "transactionIngestion")) {
             candidate.setTransactionIngestion(resolveOptionalTransactionIngestion(dto.getTransactionIngestion(), ownerLogin));
@@ -652,6 +668,30 @@ public class TransactionCandidateService {
             tags.add(tag);
         }
         return tags;
+    }
+
+    private boolean isNewCategoryReference(TransactionCandidate candidate, Category requestedCategory) {
+        Long existingId = candidate == null || candidate.getCategory() == null ? null : candidate.getCategory().getId();
+        Long requestedId = requestedCategory == null ? null : requestedCategory.getId();
+        return requestedId != null && !Objects.equals(existingId, requestedId);
+    }
+
+    private Category requireActiveSuggestedCategory(Category category) {
+        CategoryReferenceValidator.validateActiveForNewReference(category);
+        return category;
+    }
+
+    private Tag requireActiveSuggestedTag(Tag tag) {
+        TagReferenceValidator.validateActiveForNewReference(tag);
+        return tag;
+    }
+
+    private void validateNewTagReferences(TransactionCandidate candidate, Set<Tag> requestedTags) {
+        Set<Long> existingIds = candidate == null ? Set.of() : currentTagIds(candidate);
+        requestedTags
+            .stream()
+            .filter(tag -> tag.getId() != null && !existingIds.contains(tag.getId()))
+            .forEach(TagReferenceValidator::validateActiveForNewReference);
     }
 
     private TransactionIngestion resolveOptionalTransactionIngestion(TransactionIngestionDTO dto, String ownerLogin) {

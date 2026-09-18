@@ -8,6 +8,8 @@ import enTransactionIngestion from 'app/../i18n/en/transactionIngestion.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enIngestionStatus from 'app/../i18n/en/ingestionStatus.json';
 import enIngestionRecordStatus from 'app/../i18n/en/ingestionRecordStatus.json';
+import enCategory from 'app/../i18n/en/category.json';
+import enTag from 'app/../i18n/en/tag.json';
 import { TransactionIngestion } from './transaction-ingestion';
 import { TransactionIngestionWorkflowDetail } from './transaction-ingestion-workflow-detail';
 
@@ -18,8 +20,8 @@ const mockAxiosGet = axios.get as jest.Mock;
 const mockAxiosPatch = axios.patch as jest.Mock;
 const mockDispatch = jest.fn();
 const mockGetFinancialAccounts = jest.fn(params => ({ type: 'financialAccount/getEntities', payload: params }));
-const mockGetCategories = jest.fn(params => ({ type: 'category/getEntities', payload: params }));
-const mockGetTags = jest.fn(params => ({ type: 'tag/getEntities', payload: params }));
+const mockGetSelectableCategories = jest.fn();
+const mockGetSelectableTags = jest.fn();
 let mockState;
 
 const confirmImportCalls = () => mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/confirm');
@@ -33,12 +35,12 @@ jest.mock('app/entities/financial-account/financial-account.reducer', () => ({
   getEntities: params => mockGetFinancialAccounts(params),
 }));
 
-jest.mock('app/entities/category/category.reducer', () => ({
-  getEntities: params => mockGetCategories(params),
+jest.mock('app/entities/category/category-selectable.service', () => ({
+  getSelectableCategories: (...args) => mockGetSelectableCategories(...args),
 }));
 
-jest.mock('app/entities/tag/tag.reducer', () => ({
-  getEntities: params => mockGetTags(params),
+jest.mock('app/entities/tag/tag-selectable.service', () => ({
+  getSelectableTags: (...args) => mockGetSelectableTags(...args),
 }));
 
 const baseState = {
@@ -92,6 +94,8 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enTransactionFlow);
   TranslatorContext.registerTranslations('en', enIngestionStatus);
   TranslatorContext.registerTranslations('en', enIngestionRecordStatus);
+  TranslatorContext.registerTranslations('en', enCategory);
+  TranslatorContext.registerTranslations('en', enTag);
   TranslatorContext.setLocale('en');
 };
 
@@ -306,6 +310,10 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockReset();
     mockAxiosGet.mockReset();
     mockAxiosPatch.mockReset();
+    mockGetSelectableCategories.mockReset();
+    mockGetSelectableTags.mockReset();
+    mockGetSelectableCategories.mockResolvedValue(baseState.category.entities);
+    mockGetSelectableTags.mockResolvedValue(baseState.tag.entities);
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     mockDispatch.mockImplementation(action => action);
     registerTranslations();
@@ -890,6 +898,47 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByRole('button', { name: /continue to category\/tags/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /back to row review/i })).toBeNull();
     expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/candidates/prepare')).toHaveLength(1);
+  });
+
+  it("keeps a candidate's historical inactive category and tags selectable while hiding them from new selections", async () => {
+    const readyResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+        rows: [persistedReviewResponse.data.rows[0]],
+      },
+    };
+    const candidateResponse = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 77,
+        categoryName: 'Historical salary',
+        tagIds: [66],
+        tagNames: ['Historical payroll'],
+      },
+    });
+    const historicalCategory = { id: 77, name: 'Historical salary', categoryType: 'INCOME', active: false };
+    const historicalTag = { id: 66, name: 'Historical payroll', active: false };
+    mockGetSelectableCategories.mockImplementation(includeIds =>
+      Promise.resolve(includeIds?.includes(77) ? [...baseState.category.entities, historicalCategory] : baseState.category.entities),
+    );
+    mockGetSelectableTags.mockImplementation(includeIds =>
+      Promise.resolve(includeIds?.includes(66) ? [...baseState.tag.entities, historicalTag] : baseState.tag.entities),
+    );
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    const categorySelect = (await screen.findByTestId('classificationCategory-400')) as HTMLSelectElement;
+    const tagsSelect = screen.getByTestId('classificationTags-400') as HTMLSelectElement;
+    expect(categorySelect.value).toBe('77');
+    expect(Array.from(categorySelect.options).map(option => option.textContent)).toContain('Historical salary (Inactive)');
+    expect(Array.from(tagsSelect.selectedOptions).map(option => option.value)).toEqual(['66']);
+    expect(Array.from(tagsSelect.options).map(option => option.textContent)).toContain('Historical payroll (Inactive)');
+    expect(mockGetSelectableCategories).toHaveBeenCalledWith([77]);
+    expect(mockGetSelectableTags).toHaveBeenCalledWith([66]);
   });
 
   it('renders distinct always-visible application controls and removes the ambiguous refresh action', async () => {
@@ -2645,6 +2694,8 @@ describe('TransactionIngestion file workflow', () => {
     const workflowRow = await screen.findByTestId('workflowRow-300');
     fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
+    await screen.findByRole('option', { name: 'Transport' });
+    await screen.findByRole('option', { name: 'Ride share' });
 
     expect((screen.getByTestId('contextualTransactionRuleCategory') as HTMLSelectElement).value).toBe('7');
     expect((screen.getByTestId('contextualTransactionRuleTags') as HTMLSelectElement).value).toBe('3');

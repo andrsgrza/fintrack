@@ -92,8 +92,8 @@ describe('TransactionRule configured workflow e2e test', () => {
   };
 
   const visitCreate = () => {
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
     visitList();
     cy.get(entityCreateButtonSelector).click();
     cy.url().should('match', new RegExp('/transaction-rule/new$'));

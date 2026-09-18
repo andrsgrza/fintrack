@@ -1,4 +1,3 @@
-import { ICategory } from 'app/shared/model/category.model';
 import { ITransactionRuleCondition } from 'app/shared/model/transaction-rule-condition.model';
 import { CategoryType } from 'app/shared/model/enumerations/category-type.model';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
@@ -8,7 +7,9 @@ import { TransactionRuleField } from 'app/shared/model/enumerations/transaction-
 
 const ALL_FLOWS = new Set<string>([TransactionFlow.IN, TransactionFlow.OUT]);
 
-export const requiredFlowForCategory = (category?: ICategory | null): keyof typeof TransactionFlow | null => {
+type CategoryWithType = { categoryType?: keyof typeof CategoryType | null };
+
+export const requiredFlowForCategory = (category?: CategoryWithType | null): keyof typeof TransactionFlow | null => {
   if (category?.categoryType === CategoryType.EXPENSE) {
     return TransactionFlow.OUT;
   }
@@ -50,7 +51,7 @@ export const getEffectiveFlows = (conditions: ITransactionRuleCondition[]) => {
 };
 
 export const isCategoryFlowCompatible = (
-  category: ICategory | null | undefined,
+  category: CategoryWithType | null | undefined,
   conditionLogic: keyof typeof RuleConditionLogic | undefined,
   conditions: ITransactionRuleCondition[],
 ) => {

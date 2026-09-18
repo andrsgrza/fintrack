@@ -79,7 +79,7 @@ public class TransactionRuleService {
         LOG.debug("Request to save TransactionRule : {}", transactionRuleDTO);
         TransactionRule transactionRule = transactionRuleMapper.toEntity(transactionRuleDTO);
         transactionRule.setUser(currentUserService.getCurrentUser());
-        applyRelationships(transactionRule, transactionRuleDTO, transactionRule.getUser().getLogin());
+        applyRelationships(transactionRule, transactionRuleDTO, transactionRule.getUser().getLogin(), null);
         transactionRule.setPriority(nextPriorityForUser(transactionRule.getUser().getId()));
         Instant now = Instant.now();
         transactionRule.setCreatedAt(now);
@@ -115,7 +115,7 @@ public class TransactionRuleService {
         TransactionRule transactionRule = transactionRuleMapper.toEntity(transactionRuleDTO);
         transactionRule.setUser(existingTransactionRule.getUser());
         transactionRule.setPriority(existingTransactionRule.getPriority());
-        applyRelationships(transactionRule, transactionRuleDTO, existingTransactionRule.getUser().getLogin());
+        applyRelationships(transactionRule, transactionRuleDTO, existingTransactionRule.getUser().getLogin(), existingTransactionRule);
         transactionRule.setCreatedAt(existingTransactionRule.getCreatedAt());
         transactionRule.setUpdatedAt(Instant.now());
         normalizeAndValidate(transactionRule, existingTransactionRule.getId());
@@ -160,12 +160,22 @@ public class TransactionRuleService {
                 }
                 TransactionRuleSnapshot snapshot = TransactionRuleSnapshot.from(existingTransactionRule);
                 try {
+                    Long existingCategoryId = existingTransactionRule.getResultingCategory() == null
+                        ? null
+                        : existingTransactionRule.getResultingCategory().getId();
+                    Set<Long> existingTagIds = existingTransactionRule
+                        .getResultingTags()
+                        .stream()
+                        .map(Tag::getId)
+                        .collect(Collectors.toSet());
                     transactionRuleMapper.partialUpdate(existingTransactionRule, transactionRuleDTO);
                     applyRelationshipsForPartialUpdate(
                         existingTransactionRule,
                         transactionRuleDTO,
                         patchNode,
-                        existingTransactionRule.getUser().getLogin()
+                        existingTransactionRule.getUser().getLogin(),
+                        existingCategoryId,
+                        existingTagIds
                     );
                     existingTransactionRule.setUpdatedAt(Instant.now());
                     normalizeAndValidate(existingTransactionRule, existingTransactionRule.getId());
@@ -265,16 +275,35 @@ public class TransactionRuleService {
         return transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void applyRelationships(TransactionRule transactionRule, TransactionRuleDTO transactionRuleDTO, String ownerLogin) {
-        transactionRule.setResultingCategory(resolveOptionalCategory(transactionRuleDTO.getResultingCategory(), ownerLogin));
-        transactionRule.setResultingTags(resolveTags(transactionRuleDTO.getResultingTags(), ownerLogin));
+    private void applyRelationships(
+        TransactionRule transactionRule,
+        TransactionRuleDTO transactionRuleDTO,
+        String ownerLogin,
+        TransactionRule existingReference
+    ) {
+        Category category = resolveOptionalCategory(transactionRuleDTO.getResultingCategory(), ownerLogin);
+        Long existingCategoryId = existingReference == null || existingReference.getResultingCategory() == null
+            ? null
+            : existingReference.getResultingCategory().getId();
+        if (category != null && !java.util.Objects.equals(category.getId(), existingCategoryId)) {
+            CategoryReferenceValidator.validateActiveForNewReference(category);
+        }
+        transactionRule.setResultingCategory(category);
+        Set<Tag> tags = resolveTags(transactionRuleDTO.getResultingTags(), ownerLogin);
+        Set<Long> existingTagIds = existingReference == null
+            ? Set.of()
+            : existingReference.getResultingTags().stream().map(Tag::getId).collect(Collectors.toSet());
+        tags.stream().filter(tag -> !existingTagIds.contains(tag.getId())).forEach(TagReferenceValidator::validateActiveForNewReference);
+        transactionRule.setResultingTags(tags);
     }
 
     private void applyRelationshipsForPartialUpdate(
         TransactionRule transactionRule,
         TransactionRuleDTO transactionRuleDTO,
         JsonNode patchNode,
-        String ownerLogin
+        String ownerLogin,
+        Long existingCategoryId,
+        Set<Long> existingTagIds
     ) {
         if (patchNode != null) {
             if (patchNode.has("resultingCategory")) {
@@ -282,22 +311,32 @@ public class TransactionRuleService {
                     resolveOptionalCategoryForPatch(
                         transactionRuleDTO.getResultingCategory(),
                         patchNode.get("resultingCategory"),
-                        ownerLogin
+                        ownerLogin,
+                        existingCategoryId
                     )
                 );
             }
             if (patchNode.has("resultingTags")) {
                 transactionRule.setResultingTags(
-                    resolveTagsForPatch(transactionRuleDTO.getResultingTags(), patchNode.get("resultingTags"), ownerLogin)
+                    resolveTagsForPatch(transactionRuleDTO.getResultingTags(), patchNode.get("resultingTags"), ownerLogin, existingTagIds)
                 );
             }
             return;
         }
         if (transactionRuleDTO.getResultingCategory() != null) {
-            transactionRule.setResultingCategory(resolveOptionalCategory(transactionRuleDTO.getResultingCategory(), ownerLogin));
+            Category category = resolveOptionalCategory(transactionRuleDTO.getResultingCategory(), ownerLogin);
+            if (!java.util.Objects.equals(category.getId(), existingCategoryId)) {
+                CategoryReferenceValidator.validateActiveForNewReference(category);
+            }
+            transactionRule.setResultingCategory(category);
         }
         if (transactionRuleDTO.getResultingTags() != null) {
-            transactionRule.setResultingTags(resolveTags(transactionRuleDTO.getResultingTags(), ownerLogin));
+            Set<Tag> tags = resolveTags(transactionRuleDTO.getResultingTags(), ownerLogin);
+            tags
+                .stream()
+                .filter(tag -> !existingTagIds.contains(tag.getId()))
+                .forEach(TagReferenceValidator::validateActiveForNewReference);
+            transactionRule.setResultingTags(tags);
         }
     }
 
@@ -313,11 +352,20 @@ public class TransactionRuleService {
             .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
     }
 
-    private Category resolveOptionalCategoryForPatch(CategoryDTO categoryDTO, JsonNode categoryNode, String ownerLogin) {
+    private Category resolveOptionalCategoryForPatch(
+        CategoryDTO categoryDTO,
+        JsonNode categoryNode,
+        String ownerLogin,
+        Long existingCategoryId
+    ) {
         if (categoryNode == null || categoryNode.isNull()) {
             return null;
         }
-        return resolveOptionalCategory(categoryDTO, ownerLogin);
+        Category category = resolveOptionalCategory(categoryDTO, ownerLogin);
+        if (!java.util.Objects.equals(category.getId(), existingCategoryId)) {
+            CategoryReferenceValidator.validateActiveForNewReference(category);
+        }
+        return category;
     }
 
     private Set<Tag> resolveTags(Set<TagDTO> tagDTOs, String ownerLogin) {
@@ -337,11 +385,13 @@ public class TransactionRuleService {
         return tags;
     }
 
-    private Set<Tag> resolveTagsForPatch(Set<TagDTO> tagDTOs, JsonNode tagsNode, String ownerLogin) {
+    private Set<Tag> resolveTagsForPatch(Set<TagDTO> tagDTOs, JsonNode tagsNode, String ownerLogin, Set<Long> existingTagIds) {
         if (tagsNode == null || tagsNode.isNull()) {
             return new HashSet<>();
         }
-        return resolveTags(tagDTOs, ownerLogin);
+        Set<Tag> tags = resolveTags(tagDTOs, ownerLogin);
+        tags.stream().filter(tag -> !existingTagIds.contains(tag.getId())).forEach(TagReferenceValidator::validateActiveForNewReference);
+        return tags;
     }
 
     private void rejectNullRequiredPatchFields(JsonNode patchNode) {

@@ -2503,6 +2503,12 @@ class TransactionIngestionWorkflowResourceIT {
         TransactionIngestion otherIngestion = createWorkflowWithSingleValidRow();
         IngestionRecord otherRecord = recordsFor(otherIngestion).get(0);
         Category incompatibleIncomeCategory = persistCategory("Income", CategoryType.INCOME, currentMockUser());
+        Category inactiveCategory = persistCategory("Inactive", CategoryType.EXPENSE, currentMockUser());
+        inactiveCategory.setActive(false);
+        categoryRepository.saveAndFlush(inactiveCategory);
+        Tag inactiveTag = persistTag("Inactive tag", currentMockUser());
+        inactiveTag.setActive(false);
+        tagRepository.saveAndFlush(inactiveTag);
         User otherUser = createOtherUser();
         Category foreignCategory = persistCategory("Foreign", CategoryType.EXPENSE, otherUser);
         Tag foreignTag = persistTag("Foreign tag", otherUser);
@@ -2516,6 +2522,20 @@ class TransactionIngestionWorkflowResourceIT {
                 patch(candidateClassificationUrl(ingestion, candidate))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsBytes(classificationPayload(incompatibleIncomeCategory.getId(), List.of())))
+            )
+            .andExpect(status().isBadRequest());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(inactiveCategory.getId(), List.of())))
+            )
+            .andExpect(status().isBadRequest());
+        mockMvc
+            .perform(
+                patch(candidateClassificationUrl(ingestion, candidate))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(classificationPayload(null, List.of(inactiveTag.getId()))))
             )
             .andExpect(status().isBadRequest());
         mockMvc
@@ -4120,6 +4140,7 @@ class TransactionIngestionWorkflowResourceIT {
         Category category = CategoryResourceIT.createEntity(em);
         category.setName(name);
         category.setCategoryType(categoryType);
+        category.setActive(true);
         category.setParentCategory(null);
         category.setUser(user);
         return categoryRepository.saveAndFlush(category);

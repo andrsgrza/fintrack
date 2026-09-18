@@ -23,6 +23,7 @@
       "description": "Descripción",
       "color": "Color",
       "active": "Activa",
+      "inactive": "Inactiva",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "user": "User",

@@ -25,6 +25,7 @@ import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -163,6 +164,30 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
+    void createManualDraftRejectsInactiveCategoryAndTagReferences() throws Exception {
+        Category inactiveCategory = createCategory(CategoryType.EXPENSE, currentUser());
+        inactiveCategory.setActive(false);
+        Tag inactiveTag = createTag(currentUser());
+        inactiveTag.setActive(false);
+        em.flush();
+
+        TransactionCandidateDTO categoryRequest = new TransactionCandidateDTO();
+        categoryRequest.setCategory(refCategory(inactiveCategory.getId()));
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_MANUAL_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(categoryRequest)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+
+        TransactionCandidateDTO tagRequest = new TransactionCandidateDTO();
+        tagRequest.setTags(Set.of(refTag(inactiveTag.getId())));
+        restTransactionCandidateMockMvc
+            .perform(post(ENTITY_MANUAL_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(tagRequest)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"));
+    }
+
+    @Test
+    @Transactional
     void createManualDraftEndpointRejectsClientStatus() throws Exception {
         TransactionCandidateDTO dto = new TransactionCandidateDTO();
         dto.setStatus(TransactionCandidateStatus.READY_TO_POST);
@@ -293,6 +318,31 @@ class TransactionCandidateResourceIT {
             .perform(post(ENTITY_API_URL_ID + "/post", candidate.getId()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("POSTED"));
+    }
+
+    @Test
+    @Transactional
+    void inactiveHistoricalManualDraftCategoryAndTagsCanBeAutosaved() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        candidate.getCategory().setActive(false);
+        candidate.getTags().forEach(tag -> tag.setActive(false));
+        em.flush();
+
+        restTransactionCandidateMockMvc
+            .perform(
+                patch(ENTITY_API_URL_ID + "/manual-draft", candidate.getId())
+                    .contentType("application/merge-patch+json")
+                    .content("{\"notes\":\"historical classification retained\"}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.category.id").value(candidate.getCategory().getId()))
+            .andExpect(jsonPath("$.tags.length()").value(1))
+            .andExpect(jsonPath("$.notes").value("historical classification retained"));
+
+        assertThat(candidate.getTagAssociations())
+            .singleElement()
+            .extracting(association -> association.getSource())
+            .isEqualTo(TransactionCandidateClassificationSource.MANUAL);
     }
 
     @Test
@@ -1216,12 +1266,14 @@ class TransactionCandidateResourceIT {
     private Category createCategory(CategoryType type, User owner) {
         Category category = CategoryResourceIT.createEntity(em);
         category.setCategoryType(type);
+        category.setActive(true);
         category.setUser(owner);
         return categoryRepository.saveAndFlush(category);
     }
 
     private Tag createTag(User owner) {
         Tag tag = TagResourceIT.createEntity(em);
+        tag.setActive(true);
         tag.setUser(owner);
         return tagRepository.saveAndFlush(tag);
     }

@@ -149,6 +149,7 @@ The active foundation includes:
 - JDL/.jhipster metadata, Liquibase table, backend entity/DTO/mapper/repository/service/resource.
 - Direct owner via `user`.
 - Optional links to `FinancialAccount`, `Category`, `Tag`, `TransactionIngestion`, and `IngestionRecord`; the optional `FinancialTransaction` link is readable but server-controlled/write-rejected in normal CRUD.
+- Category and tag activity is historical-only: a new candidate, direct transaction, FILE_IMPORT classification, or rule output can reference only an active value. Existing inactive values remain linked for unrelated edits and completion/posting. Product controls use owner-scoped `GET /api/categories/selectable` and `GET /api/tags/selectable`; their `includeId` support is only for rendering existing inactive values.
 - Lifecycle/status support for manual drafts and `FILE_IMPORT` ingestion review. Active `TransactionCandidateStatus` values are `DRAFT`, `READY_TO_POST`, `POSTED`, `CANCELLED`, and `FAILED`; `API_IMPORT` and bank sync are deferred.
 - Server-owned timestamps, derived `amount`/`flow`, server-owned review statuses, and same-owner validations.
 - `TransactionCandidateSource` describes how a candidate entered draft/review. `TransactionOrigin` describes final posted `FinancialTransaction` classification. They are not interchangeable; `TransactionCandidate` does not store `TransactionOrigin`.
@@ -494,7 +495,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Item                                                     | Estado       | Notas                                                               |
 | -------------------------------------------------------- | ------------ | ------------------------------------------------------------------- |
 | Seed default categories per user on signup               | **Deferred** | Separate pass; **not** in `CategoryService.delete()` or CRUD guards |
-| Default rows follow normal Category rules after creation | 📄           | Rename / deactivate / delete like any category                      |
+| Default rows follow normal Category rules after creation | N/A          | No system/default categories are created on signup                  |
 
 ---
 

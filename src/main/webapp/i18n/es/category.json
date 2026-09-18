@@ -26,6 +26,7 @@
       "color": "Color",
       "icon": "Ícono",
       "active": "Activa",
+      "inactive": "Inactiva",
       "createdAt": "Creado en",
       "updatedAt": "Actualizado en",
       "user": "Usuario",
