@@ -734,3 +734,9 @@ TR-3 clarifies the TransactionRule UI split:
 ### Inactive account selection policy (ACC-UX-3A)
 
 Manual transaction drafts, new file ingestions, and TransactionRule `ACCOUNT` condition forms use the shared selectable-account read model, not the generic account entity list. New choices are active and current-owner scoped. When editing an existing historical reference, its inactive account remains shown as `… · Inactive`; it is not a general inactive-account picker. Budget UI remains deferred to BUD-1 and FinancialSubscription is intentionally unchanged.
+
+## CAT-UX-2 — Category product UI
+
+`/category`, `/category/new`, `/category/:id`, and `/category/:id/edit` are product catalog screens. They show category name, optional description, translated type, hierarchy, active state, and the existing color/icon fields without exposing identifiers, ownership, timestamps, or relationship dumps. The page loads the current catalog once and derives readable paths such as `Expenses > Transport > Ride share` plus immediate children; it does not introduce a tree endpoint or one request per ancestor.
+
+Create offers name, description, type, an optional type-compatible parent, color, icon, and active state. Parent options use hierarchy labels. Edit preserves the current parent as read-only with an explanation because parent changes are not allowed after creation. A root category can attempt a type change; the backend remains authoritative when existing usage makes it unavailable. Inactive categories use an explicit status badge and historical-only explanation. Delete names the category, pre-blocks categories with children, and maps protected active-workflow references to product-safe wording.

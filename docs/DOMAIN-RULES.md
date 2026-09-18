@@ -1589,3 +1589,7 @@ The single FILE-ingestion review can create both rule types without leaving the 
 ### FinancialAccount inactive eligibility (ACC-UX-3A)
 
 `FinancialAccount.active=false` is a historical-only state: the account, balances, existing references, and workflows already linked to it remain readable and valid. It does not cancel drafts or ingestions, disable rules, alter balances, or unlink data. New or reassigned product references must target an active account. Reactivating an account restores that eligibility immediately. Budget adoption is deferred to BUD-1; FinancialSubscription is intentionally outside this policy slice.
+
+### Category product presentation (CAT-UX-2)
+
+Category hierarchy remains a same-type, owner-scoped parent relationship. The product UI presents a derived path and immediate children, but it neither changes nor invents hierarchy state. A parent is selected only on creation and is immutable afterwards. Type values are displayed as Expense, Income, or Both; a backend-approved type change remains possible only when the category is unused. `active=false` remains historical-only: existing references stay readable, while new references are rejected until reactivation. Deletion is blocked for a category with direct children or a `TransactionCandidate` reference; other existing cleanup behavior remains server-owned.

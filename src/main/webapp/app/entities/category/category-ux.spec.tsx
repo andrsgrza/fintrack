@@ -1,21 +1,28 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import axios from 'axios';
 
 import enCategory from 'app/../i18n/en/category.json';
 import enCategoryType from 'app/../i18n/en/categoryType.json';
+import enGlobal from 'app/../i18n/en/global.json';
 import { Category } from './category';
+import { CategoryDeleteDialog } from './category-delete-dialog';
 import { CategoryDetail } from './category-detail';
 import { CategoryUpdate } from './category-update';
 
 const mockDispatch = jest.fn();
-const mockCreateEntity = jest.fn(entity => ({ type: 'category/createEntity', payload: { data: { id: 99, ...entity } } }));
-const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'category/partialUpdateEntity', payload: { data: entity } }));
-const mockGetEntity = jest.fn(id => ({ type: 'category/getEntity', payload: id }));
-const mockGetEntities = jest.fn(params => ({ type: 'category/getEntities', payload: params }));
+const mockCreateEntity = jest.fn(entity => ({ type: 'category/create_entity', payload: { data: { id: 99, ...entity } } }));
+const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'category/partial_update_entity', payload: { data: entity } }));
+const mockDeleteEntity = jest.fn(id => ({ type: 'category/delete_entity', payload: id }));
+const mockGetEntity = jest.fn(id => ({ type: 'category/get_entity', payload: id }));
+const mockGetEntities = jest.fn(params => ({ type: 'category/get_entities', payload: params }));
 const mockReset = jest.fn(() => ({ type: 'category/reset' }));
-let mockState;
+const mockAxios = axios as jest.Mocked<typeof axios>;
+let mockState: any;
+
+jest.mock('axios');
 
 jest.mock('app/config/store', () => ({
   useAppDispatch: () => mockDispatch,
@@ -25,14 +32,7 @@ jest.mock('app/config/store', () => ({
 jest.mock('./category.reducer', () => ({
   createEntity: entity => mockCreateEntity(entity),
   partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
-  getEntity: id => mockGetEntity(id),
-  getEntities: params => mockGetEntities(params),
-  reset: () => mockReset(),
-}));
-
-jest.mock('app/entities/category/category.reducer', () => ({
-  createEntity: entity => mockCreateEntity(entity),
-  partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
+  deleteEntity: id => mockDeleteEntity(id),
   getEntity: id => mockGetEntity(id),
   getEntities: params => mockGetEntities(params),
   reset: () => mockReset(),
@@ -42,32 +42,30 @@ const categories = [
   {
     id: 1,
     name: 'Transport',
+    description: 'Getting around town',
     categoryType: 'EXPENSE',
     color: '#123456',
     icon: 'bus',
     active: true,
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-02T00:00:00Z',
-    user: { id: 7, login: 'user' },
   },
   {
     id: 2,
     name: 'Salary',
+    description: 'Monthly pay',
     categoryType: 'INCOME',
     color: '#654321',
     icon: 'money',
     active: true,
-    user: { id: 7, login: 'user' },
   },
   {
     id: 3,
     name: 'Bus',
+    description: 'Public bus rides',
     categoryType: 'EXPENSE',
     color: '#abcdef',
     icon: 'ticket',
-    active: true,
+    active: false,
     parentCategory: { id: 1, name: 'Transport', categoryType: 'EXPENSE' },
-    user: { id: 7, login: 'user' },
   },
 ];
 
@@ -84,222 +82,209 @@ const baseState = {
 const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enCategory);
   TranslatorContext.registerTranslations('en', enCategoryType);
+  TranslatorContext.registerTranslations('en', enGlobal);
   TranslatorContext.setLocale('en');
 };
 
-const renderCreateForm = () => {
-  mockState = {
-    ...baseState,
-    category: {
-      ...baseState.category,
-      entity: {},
-    },
-  };
-
-  return render(
-    <MemoryRouter initialEntries={['/category/new']}>
+const renderAt = (path: string, route: string, element: React.ReactNode) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/category/new" element={<CategoryUpdate />} />
+        <Route path={route} element={element} />
+        <Route path="/category" element={<div data-testid="categoryList">Category list</div>} />
       </Routes>
     </MemoryRouter>,
   );
+
+const renderCreateForm = () => {
+  mockState = { ...baseState, category: { ...baseState.category, entity: {} } };
+  return renderAt('/category/new', '/category/new', <CategoryUpdate />);
 };
 
 const renderEditForm = (entity = categories[2]) => {
-  mockState = {
-    ...baseState,
-    category: {
-      ...baseState.category,
-      entity,
-    },
-  };
-
-  return render(
-    <MemoryRouter initialEntries={[`/category/${entity.id}/edit`]}>
-      <Routes>
-        <Route path="/category/:id/edit" element={<CategoryUpdate />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  mockState = { ...baseState, category: { ...baseState.category, entity } };
+  return renderAt(`/category/${entity.id}/edit`, '/category/:id/edit', <CategoryUpdate />);
 };
 
-const renderDetail = () => {
-  mockState = {
-    ...baseState,
-    category: {
-      ...baseState.category,
-      entity: categories[2],
-    },
-  };
-
-  return render(
-    <MemoryRouter initialEntries={['/category/3']}>
-      <Routes>
-        <Route path="/category/:id" element={<CategoryDetail />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+const renderDetail = (entity = categories[0]) => {
+  mockState = { ...baseState, category: { ...baseState.category, entity } };
+  return renderAt(`/category/${entity.id}`, '/category/:id', <CategoryDetail />);
 };
 
 const renderList = () => {
-  mockState = {
-    ...baseState,
-    category: {
-      ...baseState.category,
-      entities: categories,
-    },
-  };
-
-  return render(
-    <MemoryRouter initialEntries={['/category']}>
-      <Routes>
-        <Route path="/category" element={<Category />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  mockState = { ...baseState, category: { ...baseState.category, entities: categories } };
+  return renderAt('/category', '/category', <Category />);
 };
 
-describe('Category CRUD UX cleanup', () => {
+const renderDeleteDialog = (entity = categories[0]) => {
+  mockState = { ...baseState, category: { ...baseState.category, entity } };
+  return renderAt(`/category/${entity.id}/delete`, '/category/:id/delete', <CategoryDeleteDialog />);
+};
+
+describe('Category product UX', () => {
   beforeAll(registerTranslations);
 
   beforeEach(() => {
     mockDispatch.mockClear();
-    mockDispatch.mockImplementation(action => action);
+    mockDispatch.mockImplementation(action => Promise.resolve(action));
     mockCreateEntity.mockClear();
     mockPartialUpdateEntity.mockClear();
+    mockDeleteEntity.mockClear();
     mockGetEntity.mockClear();
     mockGetEntities.mockClear();
     mockReset.mockClear();
+    mockAxios.get.mockResolvedValue({ data: 0 } as any);
   });
 
-  it('create form hides technical/generated fields and defaults active to true', () => {
-    renderCreateForm();
+  it('lists product fields with hierarchy, translated type, status badge, and visual appearance only', () => {
+    renderList();
 
-    expect(screen.getByLabelText('Name')).toBeTruthy();
-    expect(screen.getByLabelText('Type')).toBeTruthy();
-    expect(screen.getByLabelText('Parent category')).toBeTruthy();
-    expect(screen.getByLabelText('Color')).toBeTruthy();
-    expect(screen.getByLabelText('Icon')).toBeTruthy();
-    expect((screen.getByLabelText('Active') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText('Getting around town')).toBeTruthy();
+    expect(screen.getAllByTestId('categoryPath').some(path => path.textContent === 'Transport > Bus')).toBe(true);
+    expect(screen.getAllByText('Expense').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Active').length).toBeGreaterThan(0);
+    expect(screen.getByText('Inactive')).toBeTruthy();
+    expect(screen.getAllByText('#123456').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Color swatch #123456').length).toBeGreaterThan(0);
 
-    expect(screen.queryByLabelText('User')).toBeNull();
-    expect(screen.queryByLabelText('Created At')).toBeNull();
-    expect(screen.queryByLabelText('Updated At')).toBeNull();
-    expect(screen.queryByLabelText('Description')).toBeNull();
-    expect(screen.queryByLabelText('Budgets')).toBeNull();
+    expect(screen.queryByText('ID')).toBeNull();
+    expect(screen.queryByText('Created At')).toBeNull();
+    expect(screen.queryByText('Updated At')).toBeNull();
+    expect(screen.queryByText('User')).toBeNull();
+    expect(screen.queryByText('Budgets')).toBeNull();
+    expect(screen.queryByText('true')).toBeNull();
+    expect(screen.queryByText('false')).toBeNull();
   });
 
-  it('create form filters parent categories by selected category type', () => {
+  it('shows detail description, complete hierarchy, child summary, and inactive historical-only explanation', () => {
+    const rootView = renderDetail();
+
+    expect(screen.getByText('Getting around town')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Subcategories/ }).textContent).toContain('(1)');
+    expect(screen.getByRole('link', { name: 'Bus' })).toBeTruthy();
+    expect(screen.queryByText('Created At')).toBeNull();
+    expect(screen.queryByText('User')).toBeNull();
+
+    rootView.unmount();
+    renderDetail(categories[2]);
+    expect(screen.getByTestId('categoryInactiveExplanation').textContent).toContain(
+      'This category is kept for historical records and cannot be newly assigned until it is reactivated.',
+    );
+    expect(screen.getByTestId('categoryPath').textContent).toBe('Transport > Bus');
+  });
+
+  it('creates a category with description and a hierarchical, type-compatible parent selector', async () => {
     renderCreateForm();
 
+    expect(screen.getByLabelText('Description')).toBeTruthy();
     const parentSelect = screen.getByLabelText('Parent category') as HTMLSelectElement;
-    expect(Array.from(parentSelect.options).map(option => option.textContent)).toEqual(['', 'Transport', 'Bus']);
+    expect(Array.from(parentSelect.options).map(option => option.textContent)).toEqual(['', 'Transport', 'Transport > Bus']);
 
-    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'INCOME' } });
-
-    expect(Array.from(parentSelect.options).map(option => option.textContent)).toEqual(['', 'Salary']);
-  });
-
-  it('create submit sends current-user-owned catalog fields without fake timestamps', async () => {
-    renderCreateForm();
-
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Fuel' } });
-    fireEvent.change(screen.getByLabelText('Color'), { target: { value: '#000000' } });
-    fireEvent.change(screen.getByLabelText('Icon'), { target: { value: 'gas-pump' } });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Subway' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Metro rides' } });
     fireEvent.change(screen.getByLabelText('Parent category'), { target: { value: '1' } });
-    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(mockCreateEntity).toHaveBeenCalled());
     const payload = mockCreateEntity.mock.calls[0][0];
-    expect(payload.name).toBe('Fuel');
-    expect(payload.categoryType).toBe('EXPENSE');
-    expect(payload.color).toBe('#000000');
-    expect(payload.icon).toBe('gas-pump');
-    expect(payload.active).toBe(true);
+    expect(payload).toEqual(expect.objectContaining({ name: 'Subway', description: 'Metro rides', categoryType: 'EXPENSE', active: true }));
     expect(payload.parentCategory).toEqual(expect.objectContaining({ id: 1, name: 'Transport' }));
     expect(payload).not.toHaveProperty('user');
     expect(payload).not.toHaveProperty('createdAt');
     expect(payload).not.toHaveProperty('updatedAt');
-    expect(payload).not.toHaveProperty('budgets');
   });
 
-  it('edit form hides technical fields and represents immutable parent/type constraints', () => {
+  it('hydrates edit values and explains that the parent is immutable', () => {
     renderEditForm();
 
-    expect(screen.queryByLabelText('User')).toBeNull();
-    expect(screen.queryByLabelText('Created At')).toBeNull();
-    expect(screen.queryByLabelText('Updated At')).toBeNull();
-    expect(screen.queryByLabelText('Description')).toBeNull();
-    expect(screen.queryByLabelText('Budgets')).toBeNull();
-
-    expect((screen.getByLabelText('Type') as HTMLSelectElement).disabled).toBe(true);
-    expect((screen.getByLabelText('Parent category') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByDisplayValue('Public bus rides')).toBeTruthy();
     expect(screen.getByDisplayValue('Transport')).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'Bus' })).toBeNull();
-    expect((screen.getByLabelText('Color') as HTMLInputElement).disabled).toBe(false);
-    expect((screen.getByLabelText('Icon') as HTMLInputElement).disabled).toBe(false);
-    expect((screen.getByLabelText('Active') as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Parent category') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText('Parent category cannot be changed after creation.')).toBeTruthy();
+    expect((screen.getByLabelText('Type') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByText('Use this category for outgoing transactions.')).toBeTruthy();
   });
 
-  it('edit submit uses PATCH without user, timestamps, parent, or budget relationship editors', async () => {
-    renderEditForm();
+  it('uses PATCH for editable values, including description, without technical fields', async () => {
+    renderEditForm(categories[0]);
 
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Metro' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Travel and transport' } });
     fireEvent.change(screen.getByLabelText('Color'), { target: { value: '#111111' } });
-    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(mockPartialUpdateEntity).toHaveBeenCalled());
     const payload = mockPartialUpdateEntity.mock.calls[0][0];
-    expect(payload).toEqual(
-      expect.objectContaining({
-        id: 3,
-        name: 'Metro',
-        color: '#111111',
-        icon: 'ticket',
-        active: true,
-      }),
-    );
+    expect(payload).toEqual(expect.objectContaining({ id: 1, description: 'Travel and transport', color: '#111111' }));
+    expect(payload).not.toHaveProperty('parentCategory');
     expect(payload).not.toHaveProperty('user');
     expect(payload).not.toHaveProperty('createdAt');
     expect(payload).not.toHaveProperty('updatedAt');
-    expect(payload).not.toHaveProperty('parentCategory');
-    expect(payload).not.toHaveProperty('budgets');
-    expect(payload).not.toHaveProperty('categoryType');
   });
 
-  it('detail shows clean category fields without technical/generated relationships', () => {
-    renderDetail();
+  it('keeps an editable root type selection and updates the color preview', async () => {
+    renderEditForm(categories[1]);
 
-    expect(screen.getByText('Bus')).toBeTruthy();
-    expect(screen.getByText('Expense')).toBeTruthy();
-    expect(screen.getByText('Transport')).toBeTruthy();
-    expect(screen.getByText('#abcdef')).toBeTruthy();
-    expect(screen.getByText('ticket')).toBeTruthy();
-    expect(screen.getByText('true')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'BOTH' } });
+    fireEvent.change(screen.getByLabelText('Color'), { target: { value: '#112233' } });
+    expect(screen.getByLabelText('Color swatch #112233')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(screen.queryByText('Created At')).toBeNull();
-    expect(screen.queryByText('Updated At')).toBeNull();
-    expect(screen.queryByText('User')).toBeNull();
-    expect(screen.queryByText('Budgets')).toBeNull();
+    await waitFor(() => expect(mockPartialUpdateEntity).toHaveBeenCalled());
+    expect(mockPartialUpdateEntity.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 2, categoryType: 'BOTH', color: '#112233' }));
   });
 
-  it('list shows catalog columns without raw ids, timestamps, user, or budgets', () => {
-    renderList();
+  it('maps a category type conflict to a product-safe validation message', async () => {
+    renderEditForm(categories[0]);
+    mockDispatch.mockImplementation(action =>
+      Promise.resolve(
+        action.type === 'category/partial_update_entity'
+          ? {
+              type: 'category/partial_update_entity/rejected',
+              error: { message: 'Category type cannot be changed while category is in use' },
+            }
+          : action,
+      ),
+    );
 
-    expect(screen.getByText('Name')).toBeTruthy();
-    expect(screen.getByText('Type')).toBeTruthy();
-    expect(screen.getByText('Parent category')).toBeTruthy();
-    expect(screen.getByText('Color')).toBeTruthy();
-    expect(screen.getByText('Icon')).toBeTruthy();
-    expect(screen.getByText('Active')).toBeTruthy();
-    expect(screen.getAllByRole('link', { name: 'Transport' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: 'Bus' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(screen.queryByText('ID')).toBeNull();
-    expect(screen.queryByText('Description')).toBeNull();
-    expect(screen.queryByText('Created At')).toBeNull();
-    expect(screen.queryByText('Updated At')).toBeNull();
-    expect(screen.queryByText('User')).toBeNull();
-    expect(screen.queryByText('Budgets')).toBeNull();
+    expect((await screen.findByTestId('categorySaveError')).textContent).toContain(
+      'This category type cannot be changed while the category is in use.',
+    );
+    expect(screen.queryByText('Category type cannot be changed while category is in use')).toBeNull();
+  });
+
+  it('shows a clear pre-delete child block with the category name', async () => {
+    mockAxios.get.mockResolvedValue({ data: 1 } as any);
+    renderDeleteDialog();
+
+    expect((await screen.findByTestId('categoryDeleteBlockedMessage')).textContent).toContain(
+      'This category has subcategories. Delete or move those subcategories before trying again.',
+    );
+    expect(screen.getByText('Are you sure you want to delete Transport?')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+  });
+
+  it('maps a candidate-reference delete rejection without displaying the backend message', async () => {
+    mockAxios.get.mockResolvedValue({ data: 0 } as any);
+    renderDeleteDialog(categories[2]);
+    await waitFor(() => expect(screen.getByTestId('categoryDeleteLeafMessage')).toBeTruthy());
+    mockDispatch.mockImplementation(action =>
+      Promise.resolve(
+        action.type === 'category/delete_entity'
+          ? {
+              type: 'category/delete_entity/rejected',
+              error: { message: 'Category cannot be deleted because it is used by transaction candidates.' },
+            }
+          : action,
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect((await screen.findByTestId('categoryDeleteError')).textContent).toContain(
+      'This category cannot be deleted because it is still needed by an active transaction workflow. Resolve that workflow first.',
+    );
+    expect(screen.queryByText('Category cannot be deleted because it is used by transaction candidates.')).toBeNull();
   });
 });

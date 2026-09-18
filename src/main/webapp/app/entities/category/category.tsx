@@ -9,6 +9,7 @@ import { overrideSortStateWithQueryParams } from 'app/shared/util/entity-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getEntities } from './category.reducer';
+import { CategoryAppearance, CategoryPath, CategoryStatusBadge, CategoryTypeLabel } from './category-presentation';
 
 export const Category = () => {
   const dispatch = useAppDispatch();
@@ -16,7 +17,7 @@ export const Category = () => {
   const pageLocation = useLocation();
   const navigate = useNavigate();
 
-  const [sortState, setSortState] = useState(overrideSortStateWithQueryParams(getSortState(pageLocation, 'id'), pageLocation.search));
+  const [sortState, setSortState] = useState(overrideSortStateWithQueryParams(getSortState(pageLocation, 'name'), pageLocation.search));
 
   const categoryList = useAppSelector(state => state.category.entities);
   const loading = useAppSelector(state => state.category.loading);
@@ -92,15 +93,10 @@ export const Category = () => {
                   <FontAwesomeIcon icon={getSortIconByFieldName('categoryType')} />
                 </th>
                 <th>
-                  <Translate contentKey="fintrackApp.category.parentCategory">Parent category</Translate> <FontAwesomeIcon icon="sort" />
+                  <Translate contentKey="fintrackApp.category.hierarchy">Hierarchy</Translate>
                 </th>
-                <th className="hand" onClick={sort('color')}>
-                  <Translate contentKey="fintrackApp.category.color">Color</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('color')} />
-                </th>
-                <th className="hand" onClick={sort('icon')}>
-                  <Translate contentKey="fintrackApp.category.icon">Icon</Translate>{' '}
-                  <FontAwesomeIcon icon={getSortIconByFieldName('icon')} />
+                <th>
+                  <Translate contentKey="fintrackApp.category.appearance">Appearance</Translate>
                 </th>
                 <th className="hand" onClick={sort('active')}>
                   <Translate contentKey="fintrackApp.category.active">Active</Translate>{' '}
@@ -116,20 +112,20 @@ export const Category = () => {
                     <Button tag={Link} to={`/category/${category.id}`} color="link" size="sm">
                       {category.name}
                     </Button>
+                    {category.description ? <div className="small text-muted mt-1">{category.description}</div> : null}
                   </td>
                   <td>
-                    <Translate contentKey={`fintrackApp.CategoryType.${category.categoryType}`} />
+                    <CategoryTypeLabel categoryType={category.categoryType} />
                   </td>
                   <td>
-                    {category.parentCategory ? (
-                      <Link to={`/category/${category.parentCategory.id}`}>{category.parentCategory.name}</Link>
-                    ) : (
-                      ''
-                    )}
+                    <CategoryPath category={category} categories={categoryList} />
                   </td>
-                  <td>{category.color}</td>
-                  <td>{category.icon}</td>
-                  <td>{category.active ? 'true' : 'false'}</td>
+                  <td>
+                    <CategoryAppearance category={category} />
+                  </td>
+                  <td>
+                    <CategoryStatusBadge active={category.active} />
+                  </td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">
                       <Button tag={Link} to={`/category/${category.id}`} color="info" size="sm" data-cy="entityDetailsButton">

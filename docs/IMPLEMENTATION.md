@@ -1441,3 +1441,7 @@ Category/tag `TransactionRule` evaluation is not invoked during Confirm Import. 
 ### ACC-UX-3A — historical-only inactive accounts
 
 Product account selection uses `GET /api/financial-accounts/selectable`, a current-owner-only DTO (`id`, name, account type, currency, last four digits, active) rather than generic account queries. Manual draft, new file-ingestion, and TransactionRule `ACCOUNT` controls share it and render the type through its translated label as `Name · Type · Currency · ••••last4`; an existing inactive reference is included only by its `includeId` for clearly-labelled historical display. Command services enforce active status only when creating or changing a reference. Existing drafts, ingestions, and active rules continue after deactivation; posting and Confirm Import do not revalidate activity.
+
+### CAT-UX-2 — Category product presentation
+
+CAT-UX-2 is frontend-only. It reuses the existing `GET /api/categories` list and immediate `parentCategory` DTO projection to compose full hierarchy paths and immediate-child summaries from one catalog fetch. No hierarchy API, persistence model, domain rule, selector behavior, or Transaction Ingestion behavior changed. The category presentation helper is deliberately display-only; server-side hierarchy, ownership, unique sibling name, parent immutability, type-change, inactive, and deletion rules remain in `CategoryService`.

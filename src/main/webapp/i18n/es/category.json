@@ -8,13 +8,16 @@
         "createOrEditLabel": "Crear o editar categoría",
         "notFound": "No se encontraron categorías"
       },
-      "created": "Se creó una nueva categoría con el identificador {{ param }}",
-      "updated": "Se actualizó la categoría con el identificador {{ param }}",
-      "deleted": "Se eliminó la categoría con el identificador {{ param }}",
+      "created": "Categoría creada.",
+      "updated": "Categoría actualizada.",
+      "deleted": "Categoría eliminada.",
       "delete": {
         "title": "¿Eliminar categoría?",
-        "leafMessage": "Esto eliminará la categoría y la quitará de todo donde se use actualmente. Las transacciones y suscripciones que usen esta categoría seguirán existiendo, pero se les quitará la categoría. Los presupuestos ya no incluirán esta categoría. Las reglas que usen esta categoría se desactivarán porque se eliminará su categoría objetivo. Esta acción no se puede deshacer.",
-        "blockedMessage": "Esta categoría no se puede eliminar porque tiene subcategorías. Elimina primero sus subcategorías e inténtalo de nuevo."
+        "question": "¿Seguro que deseas eliminar {{ categoryName }}?",
+        "leafMessage": "Esta acción no se puede deshacer. La eliminación puede bloquearse mientras la categoría sea usada por un flujo activo.",
+        "blockedMessage": "Esta categoría tiene subcategorías. Elimínalas o muévelas antes de intentarlo de nuevo.",
+        "candidateBlockedMessage": "Esta categoría no se puede eliminar porque todavía es necesaria en un flujo activo de transacciones. Resuelve primero ese flujo.",
+        "failed": "No se pudo eliminar la categoría. Resuelve las referencias restantes e inténtalo de nuevo."
       },
       "detail": {
         "title": "Categoría"
@@ -27,6 +30,34 @@
       "icon": "Ícono",
       "active": "Activa",
       "inactive": "Inactiva",
+      "status": {
+        "active": "Activa",
+        "inactive": "Inactiva"
+      },
+      "hierarchy": "Jerarquía",
+      "appearance": "Apariencia",
+      "colorSwatch": "Muestra de color {{ color }}",
+      "colorPreview": "Vista previa",
+      "noColor": "Sin color seleccionado",
+      "children": "Subcategorías",
+      "noChildren": "No hay subcategorías.",
+      "noParent": "Sin categoría padre",
+      "parentImmutableHelp": "La categoría padre no se puede cambiar después de crearla.",
+      "typeUsageWarning": "El tipo podría no poder cambiarse cuando esta categoría ya está en uso.",
+      "typeHelp": {
+        "EXPENSE": "Usa esta categoría para transacciones de salida.",
+        "INCOME": "Usa esta categoría para transacciones de entrada.",
+        "BOTH": "Usa esta categoría para transacciones de entrada o salida."
+      },
+      "inactiveExplanation": "Esta categoría se conserva para el historial y no puede asignarse a registros nuevos hasta reactivarla.",
+      "inactiveFormHelp": "Las categorías inactivas se conservan para el historial y no pueden asignarse a registros nuevos hasta reactivarlas.",
+      "errors": {
+        "duplicate": "Ya existe una categoría con este nombre en este nivel y tipo.",
+        "parentImmutable": "La categoría padre no se puede cambiar después de crearla.",
+        "parentType": "Una subcategoría debe tener el mismo tipo que su categoría padre.",
+        "typeInUse": "El tipo de esta categoría no se puede cambiar mientras esté en uso.",
+        "saveFailed": "No se pudo guardar la categoría. Revisa sus valores e inténtalo de nuevo."
+      },
       "createdAt": "Creado en",
       "updatedAt": "Actualizado en",
       "user": "Usuario",
