@@ -46,6 +46,7 @@ class FinancialAccountOverviewServiceTest {
     @Test
     void returnsProductSummariesIncludingAnIncompleteCreditCardWithoutPersistingAnything() {
         FinancialAccount debit = account(1L, "Daily account", AccountType.DEBIT, true);
+        debit.setColor("#2463A5");
         FinancialAccount creditCard = account(2L, "Travel card", AccountType.CREDIT_CARD, false);
         FinancialAccount incompleteCard = account(3L, "Legacy card", AccountType.CREDIT_CARD, true);
         CreditAccountDetails creditDetails = new CreditAccountDetails();
@@ -75,6 +76,7 @@ class FinancialAccountOverviewServiceTest {
         assertThat(result).hasSize(3);
         var debitSummary = result.stream().filter(summary -> summary.getId().equals(1L)).findFirst().orElseThrow();
         assertThat(debitSummary.getCurrentBalance()).isEqualByComparingTo("850.00");
+        assertThat(debitSummary.getColor()).isEqualTo("#2463A5");
         assertThat(debitSummary.getCurrentDebt()).isNull();
         assertThat(debitSummary.getActive()).isTrue();
         var creditSummary = result.stream().filter(summary -> summary.getId().equals(2L)).findFirst().orElseThrow();

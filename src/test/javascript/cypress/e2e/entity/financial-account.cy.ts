@@ -5,7 +5,6 @@ import {
   entityCreateSaveButtonSelector,
   entityDeleteButtonSelector,
   entityDetailsBackButtonSelector,
-  entityDetailsButtonSelector,
   entityEditButtonSelector,
 } from '../../support/entity';
 
@@ -28,6 +27,7 @@ describe('FinancialAccount e2e test', () => {
       currency: 'MXN',
       initialBalance: 1000,
       initialBalanceDate: '2026-07-08',
+      color: '#2463A5',
       active: true,
       createdAt: now,
       updatedAt: now,
@@ -53,6 +53,8 @@ describe('FinancialAccount e2e test', () => {
     cy.get('[data-cy="creditCardPaymentDueDay"]').clear().type('5');
     cy.get('[data-cy="creditCardAnnualInterestRate"]').clear().type('65');
   };
+
+  const getOverviewCard = () => cy.get(`[data-cy="financialAccountOverviewCard"][data-account-id="${financialAccount.id}"]`);
 
   beforeEach(() => {
     cy.login(username, password);
@@ -100,7 +102,7 @@ describe('FinancialAccount e2e test', () => {
       });
 
       it('should load create FinancialAccount page', () => {
-        cy.get(entityCreateButtonSelector).click();
+        cy.get(entityCreateButtonSelector).first().click();
         cy.url().should('match', new RegExp('/financial-account/new$'));
         cy.getEntityCreateUpdateHeading('FinancialAccount');
         cy.get(entityCreateSaveButtonSelector).should('exist');
@@ -129,11 +131,12 @@ describe('FinancialAccount e2e test', () => {
       });
 
       it('detail button click should load details FinancialAccount page', () => {
-        cy.contains('[data-cy="financialAccountOverviewCard"]', financialAccount.name).within(() => {
-          cy.get(entityDetailsButtonSelector).click();
+        getOverviewCard().within(() => {
+          cy.get('[data-cy="entityDetailsLink"]').click();
         });
         cy.getEntityDetailsHeading('financialAccount');
-        cy.get('[data-cy="financialAccountDetailAccountSection"]').should('contain', financialAccount.name).and('contain', 'MXN');
+        cy.get('[data-cy="financialAccountDetailsHeading"]').should('contain', financialAccount.name);
+        cy.get('[data-cy="financialAccountDetailAccountSection"]').should('contain', 'MXN');
         cy.get('[data-cy="financialAccountStatus"]').should('exist').and('not.be.empty');
         cy.get('[data-cy="financialAccountBalanceSection"]').should('contain', '1000');
         cy.get('[data-cy="financialAccountDetailAccountSection"]').find('#id, #createdAt, #updatedAt').should('not.exist');
@@ -145,13 +148,14 @@ describe('FinancialAccount e2e test', () => {
       });
 
       it('renders the product overview card without the generated CRUD table', () => {
-        cy.contains('[data-cy="financialAccountOverviewCard"]', financialAccount.name).should('contain', 'MXN').and('contain', '1000');
+        getOverviewCard().should('contain', 'MXN').and('contain', '1000');
+        getOverviewCard().should('have.attr', 'style').and('contain', 'rgb(36, 99, 165)');
         cy.get('[data-cy="financialAccountOverview"]').should('exist');
         cy.get('[data-cy="entityTable"]').should('not.exist');
       });
 
       it('edit button click should load edit FinancialAccount page and go back', () => {
-        cy.contains('[data-cy="financialAccountOverviewCard"]', financialAccount.name).within(() => {
+        getOverviewCard().within(() => {
           cy.get(entityEditButtonSelector).click();
         });
         cy.getEntityCreateUpdateHeading('FinancialAccount');
@@ -164,7 +168,7 @@ describe('FinancialAccount e2e test', () => {
       });
 
       it('edit button click should load edit FinancialAccount page and save', () => {
-        cy.contains('[data-cy="financialAccountOverviewCard"]', financialAccount.name).within(() => {
+        getOverviewCard().within(() => {
           cy.get(entityEditButtonSelector).click();
         });
         cy.getEntityCreateUpdateHeading('FinancialAccount');
@@ -178,7 +182,8 @@ describe('FinancialAccount e2e test', () => {
 
       it('last delete button click should delete instance of FinancialAccount', () => {
         cy.intercept('GET', '/api/financial-accounts/*').as('dialogDeleteRequest');
-        cy.contains('[data-cy="financialAccountOverviewCard"]', financialAccount.name).within(() => {
+        getOverviewCard().within(() => {
+          cy.get('[data-cy="financialAccountActionsMenuToggle"]').click();
           cy.get(entityDeleteButtonSelector).click();
         });
         cy.wait('@dialogDeleteRequest');
@@ -218,13 +223,14 @@ describe('FinancialAccount e2e test', () => {
   describe('new FinancialAccount page', () => {
     beforeEach(() => {
       cy.visit(`${financialAccountPageUrl}`);
-      cy.get(entityCreateButtonSelector).click();
+      cy.get(entityCreateButtonSelector).first().click();
       cy.getEntityCreateUpdateHeading('FinancialAccount');
     });
 
     it('creates a debit account through one configured product request', () => {
       const accountName = `create-${Date.now()}`;
       fillCreateForm(accountName);
+      cy.get('[data-cy="color"]').clear().type('#9A3D81');
       cy.get('[data-cy="user"]').should('not.exist');
       cy.get(entityCreateSaveButtonSelector).click();
 
@@ -232,6 +238,7 @@ describe('FinancialAccount e2e test', () => {
         expect(response?.statusCode).to.equal(201);
         expect(request.body).to.have.all.keys('financialAccount');
         expect(request.body.financialAccount).not.to.have.any.keys('id', 'user', 'createdAt', 'updatedAt');
+        expect(request.body.financialAccount.color).to.equal('#9A3D81');
         financialAccount = response.body.financialAccount;
       });
       cy.url().should('match', new RegExp('/financial-account/\\d+$'));
@@ -248,7 +255,7 @@ describe('FinancialAccount e2e test', () => {
         expect(request.body.creditAccountDetails).to.deep.include({ creditLimit: 5000, statementDay: 15, paymentDueDay: 5 });
         financialAccount = response.body.financialAccount;
       });
-      cy.get('[data-cy="creditCardDetailsViewSection"]').should('contain', '5000').and('contain', '15').and('contain', '5');
+      cy.get('[data-cy="creditCardDetailsViewSection"]').should('contain', '15').and('contain', '5').and('contain', '65');
       cy.get('[data-cy="financialAccountBalanceSection"]').should('contain', '1000').and('contain', '5000');
       cy.get(entityEditButtonSelector).click();
       cy.get('[data-cy="accountType"]').should('be.disabled');
@@ -259,7 +266,7 @@ describe('FinancialAccount e2e test', () => {
         expect(response?.statusCode).to.equal(200);
         expect(request.body.creditAccountDetails.creditLimit).to.equal(6500);
       });
-      cy.get('[data-cy="creditCardDetailsViewSection"]').should('contain', '6500');
+      cy.get('[data-cy="financialAccountBalanceSection"]').should('contain', '6500');
     });
 
     it('rejects an invalid credit-card command without leaving a partial account', () => {

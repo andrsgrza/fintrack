@@ -338,6 +338,10 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 The FinancialAccount Jest/Cypress product tests assert one configured request per save and no product-form `POST`/`PUT`/`PATCH` request to `CreditAccountDetails`.
 
+### ACC-POLISH visual product coverage
+
+`financial-account.spec.tsx` and `financial-account-opening-position.spec.tsx` characterize the product composition: accent-only color presentation on account cards and detail, compact Edit/More actions, the debit versus credit-card metric hierarchy, the sectioned account form, native picker plus editable color value, disabled immutable configuration in edit mode, and the absence of a product icon input. `financial-account.cy.ts` keeps the configured debit/card create-edit, detail navigation, and delete flows covered against the same endpoints; no balance formula or account write route changed for this visual polish.
+
 ---
 
 ### 1. Integration tests — `FinancialAccountResourceIT`

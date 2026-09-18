@@ -32,6 +32,7 @@ describe('FinancialAccount overview', () => {
           currency: 'MXN',
           active: true,
           lastFourDigits: '1234',
+          color: '#2463A5',
           currentBalance: 1250.5,
         },
         {
@@ -41,6 +42,7 @@ describe('FinancialAccount overview', () => {
           currency: 'MXN',
           active: false,
           lastFourDigits: '9876',
+          color: '#8B3D88',
           currentDebt: 1300,
           creditLimit: 5000,
           availableCredit: 3700,
@@ -52,7 +54,7 @@ describe('FinancialAccount overview', () => {
       ],
     });
 
-    renderOverview();
+    const { container } = renderOverview();
 
     await waitFor(() => expect(screen.getByText('Daily account')).toBeTruthy());
     expect(mockAxiosGet).toHaveBeenCalledWith('api/financial-accounts/overview');
@@ -75,10 +77,16 @@ describe('FinancialAccount overview', () => {
     expect(screen.queryByText('Transaction Ingestions')).toBeNull();
     expect(screen.queryByText('12')).toBeNull();
 
-    const viewLinks = screen.getAllByRole('link', { name: /View/ });
-    const editLinks = screen.getAllByRole('link', { name: /Edit/ });
-    expect(viewLinks[0].getAttribute('href')).toBe('/financial-account/12');
-    expect(editLinks[1].getAttribute('href')).toBe('/financial-account/13/edit');
+    expect(screen.getByRole('link', { name: 'Daily account' }).getAttribute('href')).toBe('/financial-account/12');
+    expect(screen.getByRole('link', { name: 'Travel card' }).getAttribute('href')).toBe('/financial-account/13');
+    expect(screen.getAllByTestId('financialAccountOverviewCard')[0].style.borderInlineStart).toContain('#2463A5');
+    expect(screen.getAllByTestId('financialAccountOverviewCard')[1].style.borderInlineStart).toContain('#8B3D88');
+    expect(screen.queryByText('#2463A5')).toBeNull();
+    expect(container.querySelector('.flex-btn-group-container')).toBeNull();
+    expect(screen.queryByRole('link', { name: /View/ })).toBeNull();
+    expect(screen.getAllByTestId('financialAccountOverviewCard')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-cy="entityEditButton"]')[1].getAttribute('href')).toBe('/financial-account/13/edit');
+    expect(container.querySelectorAll('[data-cy="financialAccountActionsMenuToggle"]')).toHaveLength(2);
   });
 
   it('renders a safe incomplete-card state', async () => {

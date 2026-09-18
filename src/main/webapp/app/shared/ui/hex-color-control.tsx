@@ -48,6 +48,7 @@ export const HexColorControl = ({
             id={pickerId}
             className="form-control form-control-color color-picker-control-input"
             data-cy={`${dataCyPrefix}ColorPicker`}
+            data-testid={`${dataCyPrefix}ColorPicker`}
             type="color"
             value={pickerColor}
             onChange={event => onChange(event.target.value)}

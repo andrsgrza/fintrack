@@ -294,17 +294,17 @@ For example, TransactionRuleCondition may store `FLOW = IN` or `FLOW = OUT`, but
 
 ### Product overview
 
-`/financial-account` is a product overview, not a generated CRUD table. It renders one concise card per accessible account with its name, translated type, currency, active/inactive state, optional last four digits, and a calculated balance summary.
+`/financial-account` is a product overview, not a generated CRUD table. It renders one concise, responsive card per accessible account with its name, translated type, currency, active/inactive state, optional last four digits, and a calculated balance summary. The existing account `color` is projected by the overview DTO only to render a restrained card accent; raw hexadecimal values are never displayed in read-only account surfaces.
 
 - `DEBIT`, `CASH`, and `INVESTMENT` cards show **Current balance / Saldo actual**.
 - `CREDIT_CARD` cards show **Current debt / Deuda actual** and, when `CreditAccountDetails` exists, credit limit, available credit, statement day, payment due day, and APR.
 - A historical card with no `CreditAccountDetails` remains visible with its calculated debt and an incomplete-card warning; the overview never creates details as a side effect.
 
-The overview does not display database ids, audit timestamps, ownership fields, or generated relationship dumps. View, Edit, and Delete remain available as secondary actions.
+The overview does not display database ids, audit timestamps, ownership fields, raw colors, or generated relationship dumps. The account name opens its canonical detail, Edit is compact, and destructive Delete lives in a More-actions menu rather than a repeated View/Edit/Delete button group.
 
 ### Product detail and delete
 
-`/financial-account/:id` is the canonical product detail view. It groups useful information into **Account**, **Balance**, optional **Credit details**, **Recent activity**, and **Status**. It shows the translated account type, currency, useful institution/last-four/description data, calculated balance data, and a read-only recent-transaction list. It intentionally hides database ids, audit timestamps, owner data, and raw Budget or TransactionIngestion relationship dumps.
+`/financial-account/:id` is the canonical product detail view. Its header carries the account identity, translated type, currency, optional last four digits, compact status, and existing color accent, with Back, Edit, and More actions. It groups useful information into **Balance**, optional **Credit-card summary**, **General information**, and **Recent activity**. Debit/Cash/Investment accounts prioritize current balance, opening position, tracking date, inflow, and outflow. Credit cards prioritize current debt and available credit, with limit, opening position, tracking date, closing day, due day, and APR as secondary facts. It intentionally hides database ids, audit timestamps, owner data, raw colors, and raw Budget or TransactionIngestion relationship dumps.
 
 An inactive account shows a clear status badge and a concise historical-only explanation: history and balances remain available, existing work may finish, and the account becomes selectable for new transactions, imports, and rules only after reactivation. Credit-card details stay inline; a missing detail record offers the parent Account edit route rather than a child CRUD route.
 
@@ -321,6 +321,8 @@ CreditAccountDetails is only meaningful for `CREDIT_CARD` accounts.
 This uses the 1:1 embedded section pattern.
 
 FinancialAccount create/edit embeds CreditAccountDetails fields when `accountType = CREDIT_CARD`.
+
+The account form uses **Basic information**, **Identity**, **Configuration**, and conditional **Credit-card details** sections. Identity has the native color picker plus editable hex value; the redundant standalone preview is intentionally absent. The optional persisted `icon` remains a compatibility field but has no product form control until an icon system exists. Existing accounts show status as compact metadata; account type and currency remain visibly disabled because their existing immutability rules have not changed.
 
 FinancialAccount detail embeds a read-only CreditAccountDetails view section.
 
