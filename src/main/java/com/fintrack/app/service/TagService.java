@@ -5,8 +5,12 @@ import com.fintrack.app.domain.Tag;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.TagSelectableDTO;
 import com.fintrack.app.service.mapper.TagMapper;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -139,6 +143,28 @@ public class TagService {
     }
 
     /**
+     * Returns tags the current product actor may select for a new association. This is owner-scoped for
+     * administrators too. Included ids only render historical inactive associations during editing.
+     */
+    @Transactional(readOnly = true)
+    public List<TagSelectableDTO> findSelectableTags(List<Long> includeIds) {
+        String currentUserLogin = currentUserService.getCurrentUserLogin();
+        List<Long> historicalIds = includeIds == null ? List.of() : includeIds.stream().filter(Objects::nonNull).distinct().toList();
+        List<Tag> tags = new ArrayList<>(tagRepository.findAllWithToOneRelationshipsByUserLogin(currentUserLogin));
+        for (Long includeId : historicalIds) {
+            if (tags.stream().noneMatch(tag -> Objects.equals(tag.getId(), includeId))) {
+                tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(includeId, currentUserLogin).ifPresent(tags::add);
+            }
+        }
+        return tags
+            .stream()
+            .filter(tag -> Boolean.TRUE.equals(tag.getActive()) || historicalIds.contains(tag.getId()))
+            .sorted(Comparator.comparing(Tag::getName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .map(this::toSelectableDto)
+            .toList();
+    }
+
+    /**
      * Get one tag by id.
      *
      * @param id the id of the entity.
@@ -225,6 +251,15 @@ public class TagService {
             return null;
         }
         return name.trim();
+    }
+
+    private TagSelectableDTO toSelectableDto(Tag tag) {
+        TagSelectableDTO dto = new TagSelectableDTO();
+        dto.setId(tag.getId());
+        dto.setName(tag.getName());
+        dto.setColor(tag.getColor());
+        dto.setActive(tag.getActive());
+        return dto;
     }
 
     private void validateUniqueNameForOwner(Long userId, String name, Long excludeTagId) {

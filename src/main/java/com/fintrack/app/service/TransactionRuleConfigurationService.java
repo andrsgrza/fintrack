@@ -67,7 +67,7 @@ public class TransactionRuleConfigurationService {
         Instant now = Instant.now();
         rule.setCreatedAt(now);
         rule.setUpdatedAt(now);
-        applyRequest(rule, request, rule.getUser().getLogin());
+        applyRequest(rule, request, rule.getUser().getLogin(), null);
         List<TransactionRuleCondition> conditions = toConditions(request, rule);
         validateConfiguredRule(rule, conditions, null, List.of());
         conditions.forEach(condition -> condition.setId(null));
@@ -91,7 +91,7 @@ public class TransactionRuleConfigurationService {
         TransactionRule rule = findAccessibleEntity(id).orElseThrow(() -> new IllegalArgumentException("Entity not found"));
         List<TransactionRuleCondition> existingConditions =
             transactionRuleConditionRepository.findByTransactionRuleIdOrderByPositionAscIdAsc(rule.getId());
-        applyRequest(rule, request, rule.getUser().getLogin());
+        applyRequest(rule, request, rule.getUser().getLogin(), rule);
         rule.setUpdatedAt(Instant.now());
         List<TransactionRuleCondition> conditions = toConditions(request, rule);
         validateConfiguredRule(rule, conditions, rule.getId(), existingConditions);
@@ -114,7 +114,12 @@ public class TransactionRuleConfigurationService {
         return transactionRuleRepository.findOneWithEagerRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
-    private void applyRequest(TransactionRule rule, TransactionRuleConfiguredRequestDTO request, String ownerLogin) {
+    private void applyRequest(
+        TransactionRule rule,
+        TransactionRuleConfiguredRequestDTO request,
+        String ownerLogin,
+        TransactionRule existingReference
+    ) {
         if (request == null) {
             throw new IllegalArgumentException("Transaction rule payload is required");
         }
@@ -122,8 +127,20 @@ public class TransactionRuleConfigurationService {
         rule.setDescription(trimToNull(request.getDescription()));
         rule.setConditionLogic(request.getConditionLogic());
         rule.setActive(request.getActive());
-        rule.setResultingCategory(resolveOptionalCategory(request.getResultingCategory(), ownerLogin));
-        rule.setResultingTags(resolveTags(request.getResultingTags(), ownerLogin));
+        Category category = resolveOptionalCategory(request.getResultingCategory(), ownerLogin);
+        Long existingCategoryId = existingReference == null || existingReference.getResultingCategory() == null
+            ? null
+            : existingReference.getResultingCategory().getId();
+        if (category != null && !java.util.Objects.equals(category.getId(), existingCategoryId)) {
+            CategoryReferenceValidator.validateActiveForNewReference(category);
+        }
+        rule.setResultingCategory(category);
+        Set<Tag> tags = resolveTags(request.getResultingTags(), ownerLogin);
+        Set<Long> existingTagIds = existingReference == null
+            ? Set.of()
+            : existingReference.getResultingTags().stream().map(Tag::getId).collect(Collectors.toSet());
+        tags.stream().filter(tag -> !existingTagIds.contains(tag.getId())).forEach(TagReferenceValidator::validateActiveForNewReference);
+        rule.setResultingTags(tags);
     }
 
     private List<TransactionRuleCondition> toConditions(TransactionRuleConfiguredRequestDTO request, TransactionRule rule) {

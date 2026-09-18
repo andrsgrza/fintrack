@@ -149,6 +149,7 @@ The active foundation includes:
 - JDL/.jhipster metadata, Liquibase table, backend entity/DTO/mapper/repository/service/resource.
 - Direct owner via `user`.
 - Optional links to `FinancialAccount`, `Category`, `Tag`, `TransactionIngestion`, and `IngestionRecord`; the optional `FinancialTransaction` link is readable but server-controlled/write-rejected in normal CRUD.
+- Category and tag activity is historical-only: a new candidate, direct transaction, FILE_IMPORT classification, or rule output can reference only an active value. Existing inactive values remain linked for unrelated edits and completion/posting. Product controls use owner-scoped `GET /api/categories/selectable` and `GET /api/tags/selectable`; their `includeId` support is only for rendering existing inactive values.
 - Lifecycle/status support for manual drafts and `FILE_IMPORT` ingestion review. Active `TransactionCandidateStatus` values are `DRAFT`, `READY_TO_POST`, `POSTED`, `CANCELLED`, and `FAILED`; `API_IMPORT` and bank sync are deferred.
 - Server-owned timestamps, derived `amount`/`flow`, server-owned review statuses, and same-owner validations.
 - `TransactionCandidateSource` describes how a candidate entered draft/review. `TransactionOrigin` describes final posted `FinancialTransaction` classification. They are not interchangeable; `TransactionCandidate` does not store `TransactionOrigin`.
@@ -494,7 +495,7 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 | Item                                                     | Estado       | Notas                                                               |
 | -------------------------------------------------------- | ------------ | ------------------------------------------------------------------- |
 | Seed default categories per user on signup               | **Deferred** | Separate pass; **not** in `CategoryService.delete()` or CRUD guards |
-| Default rows follow normal Category rules after creation | 📄           | Rename / deactivate / delete like any category                      |
+| Default rows follow normal Category rules after creation | N/A          | No system/default categories are created on signup                  |
 
 ---
 
@@ -1440,3 +1441,23 @@ Category/tag `TransactionRule` evaluation is not invoked during Confirm Import. 
 ### ACC-UX-3A — historical-only inactive accounts
 
 Product account selection uses `GET /api/financial-accounts/selectable`, a current-owner-only DTO (`id`, name, account type, currency, last four digits, active) rather than generic account queries. Manual draft, new file-ingestion, and TransactionRule `ACCOUNT` controls share it and render the type through its translated label as `Name · Type · Currency · ••••last4`; an existing inactive reference is included only by its `includeId` for clearly-labelled historical display. Command services enforce active status only when creating or changing a reference. Existing drafts, ingestions, and active rules continue after deactivation; posting and Confirm Import do not revalidate activity.
+
+### CAT-UX-2 — Category product presentation
+
+CAT-UX-2 is frontend-only. It reuses the existing `GET /api/categories` list and immediate `parentCategory` DTO projection to compose full hierarchy paths and immediate-child summaries from one catalog fetch. No hierarchy API, persistence model, domain rule, selector behavior, or Transaction Ingestion behavior changed. The category presentation helper is deliberately display-only; server-side hierarchy, ownership, unique sibling name, parent immutability, type-change, inactive, and deletion rules remain in `CategoryService`.
+
+### CAT-UX-3 — Tag product presentation
+
+CAT-UX-3 is frontend-only. It keeps generated Tag CRUD compatibility endpoints and the existing `TagService` contracts, but composes their list, detail, edit, and delete routes as product catalog screens. `TagColorChip` and `TagStatusBadge` are display-only helpers. The edit form retains the backend `^#[0-9A-Fa-f]{6}$` color contract, pairing the editable hex value with a native browser color picker. No selector behavior, candidate provenance, transaction flow, or Tag domain service behavior changed.
+
+### CAT-UX-3.5 — shared catalog composition
+
+Category and Tag now share frontend-only presentation primitives for a constrained product-page width, page headers, compact content sections, overflow actions, a header color accent, and a native color-picker/hex control. The form wrapper preserves the existing React Hook Form validation contract while allowing fields inside visual sections; it does not change request payloads or validation rules. Category's stored free-text `icon` is intentionally hidden from normal product composition because no icon registry or rendering contract exists. No endpoint, persistence schema, inactive/delete guard, selector, ingestion, candidate, or Rule Engine behavior changed.
+
+### CAT-UX-3.5B — product identity refinement
+
+The Category list derives a stable parent-before-child display tree entirely in the frontend from the existing parent projection, preserving the already requested list order among siblings. The derived depth only affects layout and an accessible hierarchy structure; it changes neither hierarchy persistence nor category selection. Read-only colors are rendered as visual card/chip/header identity, with hex reserved for edit-time configuration. Compact status controls reuse the existing form field and submit the same `active` value; their tooltip is presentation-only. No product command, payload, validation, or inactive historical-only behavior changed.
+
+### CAT-UX-3.5C — Category view state
+
+`Category` adds page-local `nested`/`flat` view state and local collapsed-parent ids only. It still requests the current server sort, then derives the two presentations from that payload: nested preserves parent/descendant grouping while sibling order follows the loaded sort; flat renders the complete loaded collection at depth zero with a `›` path. Disclosure state does not trigger requests or alter the persisted parent relation. Carets are ordinary focusable buttons with translated labels and `aria-expanded`; no ASCII tree glyph or hierarchy-specific bar is emitted.

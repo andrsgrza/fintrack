@@ -4,37 +4,70 @@
       "home": {
         "title": "Categories",
         "refreshListLabel": "Refresh list",
-        "createLabel": "Create a new Category",
+        "createLabel": "Create category",
         "createOrEditLabel": "Create or edit Category",
-        "notFound": "No Categories found"
+        "notFound": "No categories found",
+        "productSubtitle": "Organize how your transactions are classified.",
+        "sortByName": "Sort by name",
+        "viewMode": "Category view",
+        "nestedView": "Nested",
+        "flatView": "Flat",
+        "expandCategory": "Expand {{ name }}",
+        "collapseCategory": "Collapse {{ name }}"
       },
-      "created": "A new Category is created with identifier {{ param }}",
-      "updated": "A Category is updated with identifier {{ param }}",
-      "deleted": "A Category is deleted with identifier {{ param }}",
+      "created": "Category created.",
+      "updated": "Category updated.",
+      "deleted": "Category deleted.",
       "delete": {
         "title": "Delete category?",
-        "leafMessage": "This will delete the category and remove it from everything where it is currently used. Transactions and subscriptions using this category will keep existing, but their category will be cleared. Budgets will no longer include this category. Rules using this category will be disabled because their target category will be removed. This action cannot be undone.",
-        "blockedMessage": "This category cannot be deleted because it has subcategories. Delete its subcategories first, then try again."
+        "question": "Are you sure you want to delete {{ categoryName }}?",
+        "leafMessage": "This action cannot be undone. Deletion may be blocked while this category is used by an active workflow.",
+        "blockedMessage": "This category has subcategories. Delete or move those subcategories before trying again.",
+        "candidateBlockedMessage": "This category cannot be deleted because it is still needed by an active transaction workflow. Resolve that workflow first.",
+        "failed": "This category could not be deleted. Resolve the remaining references and try again."
       },
       "detail": {
         "title": "Category"
       },
-      "id": "ID",
       "name": "Name",
       "description": "Description",
       "categoryType": "Type",
       "color": "Color",
-      "icon": "Icon",
+      "colorPicker": "Choose color",
       "active": "Active",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
-      "user": "User",
-      "parentCategory": "Parent category",
-      "financialTransactions": "Financial Transactions",
-      "childCategories": "Child Categories",
-      "transactionRules": "Transaction Rules",
-      "subscriptions": "Subscriptions",
-      "budgets": "Budgets"
+      "inactive": "Inactive",
+      "status": {
+        "label": "Status",
+        "active": "Active",
+        "inactive": "Inactive",
+        "help": "Inactive categories are kept for history and cannot be newly assigned until reactivated."
+      },
+      "basicInformation": "Basic information",
+      "classification": "Classification",
+      "moreActions": "More actions",
+      "hierarchy": "Hierarchy",
+      "appearance": "Appearance",
+      "colorSwatch": "Color swatch {{ color }}",
+      "noColor": "No color selected",
+      "noDescription": "No description provided.",
+      "children": "Subcategories",
+      "noChildren": "No subcategories.",
+      "noParent": "No parent category",
+      "parentImmutableHelp": "Parent category cannot be changed after creation.",
+      "typeUsageWarning": "Changing the type may be unavailable when this category is already in use.",
+      "typeHelp": {
+        "EXPENSE": "Use this category for outgoing transactions.",
+        "INCOME": "Use this category for incoming transactions.",
+        "BOTH": "Use this category for either incoming or outgoing transactions."
+      },
+      "errors": {
+        "duplicate": "A category with this name already exists at this level for this type.",
+        "parentImmutable": "Parent category cannot be changed after creation.",
+        "parentType": "A subcategory must have the same type as its parent category.",
+        "typeInUse": "This category type cannot be changed while the category is in use.",
+        "saveFailed": "The category could not be saved. Review its values and try again."
+      },
+      "parentCategory": "Parent category"
     }
   }
 }

@@ -11,6 +11,8 @@ import enTransactionRuleField from 'app/../i18n/en/transactionRuleField.json';
 import enRuleOperator from 'app/../i18n/en/ruleOperator.json';
 import enRuleConditionLogic from 'app/../i18n/en/ruleConditionLogic.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
+import enCategory from 'app/../i18n/en/category.json';
+import enTag from 'app/../i18n/en/tag.json';
 import { TransactionRule } from './transaction-rule';
 import { TransactionRuleDetail } from './transaction-rule-detail';
 import { TransactionRuleUpdate } from './transaction-rule-update';
@@ -28,8 +30,8 @@ const mockGetEntities = jest.fn(() => ({ type: 'transactionRule/getEntities' }))
 const mockReset = jest.fn(() => ({ type: 'transactionRule/reset' }));
 const mockCreateEntity = jest.fn(entity => ({ type: 'transactionRule/createEntity', payload: entity }));
 const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'transactionRule/partialUpdateEntity', payload: entity }));
-const mockGetCategories = jest.fn(() => ({ type: 'category/getEntities' }));
-const mockGetTags = jest.fn(() => ({ type: 'tag/getEntities' }));
+const mockGetSelectableCategories = jest.fn();
+const mockGetSelectableTags = jest.fn();
 let mockState;
 
 jest.mock('app/config/store', () => ({
@@ -45,12 +47,12 @@ jest.mock('./transaction-rule.reducer', () => ({
   partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
 }));
 
-jest.mock('app/entities/category/category.reducer', () => ({
-  getEntities: () => mockGetCategories(),
+jest.mock('app/entities/category/category-selectable.service', () => ({
+  getSelectableCategories: (...args) => mockGetSelectableCategories(...args),
 }));
 
-jest.mock('app/entities/tag/tag.reducer', () => ({
-  getEntities: () => mockGetTags(),
+jest.mock('app/entities/tag/tag-selectable.service', () => ({
+  getSelectableTags: (...args) => mockGetSelectableTags(...args),
 }));
 
 const baseRule = {
@@ -92,6 +94,8 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enRuleOperator);
   TranslatorContext.registerTranslations('en', enRuleConditionLogic);
   TranslatorContext.registerTranslations('en', enTransactionFlow);
+  TranslatorContext.registerTranslations('en', enCategory);
+  TranslatorContext.registerTranslations('en', enTag);
   TranslatorContext.setLocale('en');
 };
 
@@ -142,6 +146,11 @@ const renderCreateForm = (stateOverride: any = {}) => {
       </Routes>
     </MemoryRouter>,
   );
+};
+
+const waitForSelectableOutputs = async () => {
+  await screen.findByRole('option', { name: 'Food' });
+  await screen.findByRole('option', { name: 'Morning' });
 };
 
 const configuredRuleResponse = (conditions: any[] = []) => ({
@@ -210,6 +219,10 @@ describe('TransactionRule UX', () => {
     mockAxiosPut.mockReset();
     mockAxiosPatch.mockReset();
     mockAxiosDelete.mockReset();
+    mockGetSelectableCategories.mockReset();
+    mockGetSelectableTags.mockReset();
+    mockGetSelectableCategories.mockResolvedValue(baseState.category.entities);
+    mockGetSelectableTags.mockResolvedValue(baseState.tag.entities);
     mockCreateEntity.mockClear();
     mockPartialUpdateEntity.mockClear();
     registerTranslations();
@@ -365,6 +378,7 @@ describe('TransactionRule UX', () => {
 
   it('auto-adds and locks the required expense Flow OUT condition', async () => {
     renderCreateForm();
+    await waitForSelectableOutputs();
 
     fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
 
@@ -375,6 +389,7 @@ describe('TransactionRule UX', () => {
 
   it('removes only the auto-required Flow condition when category no longer requires flow', async () => {
     renderCreateForm();
+    await waitForSelectableOutputs();
 
     fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
     expect(await screen.findByText('Flow equals Expense')).toBeTruthy();
@@ -386,6 +401,7 @@ describe('TransactionRule UX', () => {
 
   it('forces ALL and disables ANY when ANY is selected before choosing an EXPENSE category', async () => {
     renderCreateForm();
+    await waitForSelectableOutputs();
 
     fireEvent.change(screen.getByLabelText('Condition Logic'), { target: { value: 'ANY' } });
     expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ANY');
@@ -399,6 +415,7 @@ describe('TransactionRule UX', () => {
 
   it('forces ALL and disables ANY when ANY is selected before choosing an INCOME category', async () => {
     renderCreateForm();
+    await waitForSelectableOutputs();
 
     fireEvent.change(screen.getByLabelText('Condition Logic'), { target: { value: 'ANY' } });
     expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ANY');
@@ -412,6 +429,7 @@ describe('TransactionRule UX', () => {
 
   it('allows ANY again when an EXPENSE category changes to BOTH or is cleared', async () => {
     renderCreateForm();
+    await waitForSelectableOutputs();
 
     fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
 
@@ -435,8 +453,9 @@ describe('TransactionRule UX', () => {
     expect((screen.getByRole('option', { name: 'Any condition' }) as HTMLOptionElement).disabled).toBe(false);
   });
 
-  it('allows ANY for tag-only rules', () => {
+  it('allows ANY for tag-only rules', async () => {
     renderCreateForm();
+    await waitForSelectableOutputs();
 
     const tagsSelect = screen.getByLabelText('Resulting Tags') as HTMLSelectElement;
     const morningTag = within(tagsSelect).getByRole('option', { name: 'Morning' }) as HTMLOptionElement;
@@ -448,9 +467,35 @@ describe('TransactionRule UX', () => {
     expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ANY');
   });
 
+  it('lists only active outputs for a new rule and retains its current inactive outputs while editing', async () => {
+    const inactiveCategory = { id: 30, name: 'Former transport', categoryType: 'EXPENSE', active: false };
+    const inactiveTag = { id: 40, name: 'Former business', active: false };
+    mockGetSelectableCategories.mockImplementation(includeIds =>
+      Promise.resolve(includeIds?.includes(30) ? [...baseState.category.entities, inactiveCategory] : baseState.category.entities),
+    );
+    mockGetSelectableTags.mockImplementation(includeIds =>
+      Promise.resolve(includeIds?.includes(40) ? [...baseState.tag.entities, inactiveTag] : baseState.tag.entities),
+    );
+
+    const newRule = renderCreateForm();
+    await waitForSelectableOutputs();
+    expect(screen.queryByRole('option', { name: /Former transport/ })).toBeNull();
+    expect(screen.queryByRole('option', { name: /Former business/ })).toBeNull();
+    newRule.unmount();
+
+    renderEditForm({
+      ...configuredRuleResponse(),
+      resultingCategory: inactiveCategory,
+      resultingTags: [inactiveTag],
+    });
+    expect(await screen.findByRole('option', { name: /Former transport.*Inactive/ })).toBeTruthy();
+    expect(await screen.findByRole('option', { name: /Former business.*Inactive/ })).toBeTruthy();
+  });
+
   it('posts configured create payload instead of creating a draft rule', async () => {
     mockAxiosPost.mockResolvedValue({ data: { id: 42 } });
     renderCreateForm();
+    await waitForSelectableOutputs();
 
     fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '3' } });
     await screen.findByText('Flow equals Expense');
@@ -516,7 +561,7 @@ describe('TransactionRule UX', () => {
     expect(screen.queryByLabelText('Resulting Financial Subscription')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Conditions' })).toBeTruthy();
     expect(screen.getByText('Description contains "Coffee"')).toBeTruthy();
-    expect(screen.getByText('Flow equals Expense')).toBeTruthy();
+    expect(await screen.findByText('Flow equals Expense')).toBeTruthy();
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules/1/configured'));
   });
 
@@ -537,6 +582,7 @@ describe('TransactionRule UX', () => {
     expect(await screen.findByText('Flow equals Expense')).toBeTruthy();
     expect(screen.getByText('This Flow condition is required by the selected category.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^delete condition$/i })).toBeNull();
+    await waitForSelectableOutputs();
 
     fireEvent.change(screen.getByLabelText('Resulting Category'), { target: { value: '4' } });
 
@@ -559,6 +605,7 @@ describe('TransactionRule UX', () => {
       ]),
     );
 
+    await waitForSelectableOutputs();
     await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
     expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Coffee shops');
     expect((screen.getByLabelText('Condition Logic') as HTMLSelectElement).value).toBe('ALL');
@@ -589,6 +636,7 @@ describe('TransactionRule UX', () => {
       ]),
     );
 
+    await waitForSelectableOutputs();
     await waitFor(() => expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Coffee rule'));
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Updated description' } });
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }));

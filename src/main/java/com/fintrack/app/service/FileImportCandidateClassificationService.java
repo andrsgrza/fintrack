@@ -106,11 +106,21 @@ public class FileImportCandidateClassificationService {
             throw new IllegalArgumentException("Classification request must include categoryId or tagIds");
         }
         if (request.hasCategoryId()) {
-            candidate.setCategory(resolveCategory(request.getCategoryId(), userLogin, candidate.getFlow()));
+            candidate.setCategory(
+                resolveCategory(
+                    request.getCategoryId(),
+                    userLogin,
+                    candidate.getFlow(),
+                    candidate.getCategory() == null ? null : candidate.getCategory().getId()
+                )
+            );
             candidate.setCategorySource(candidate.getCategory() == null ? null : TransactionCandidateClassificationSource.MANUAL);
         }
         if (request.hasTagIds()) {
-            candidate.replaceTags(resolveTags(request.getTagIds(), userLogin), TransactionCandidateClassificationSource.MANUAL);
+            candidate.replaceTags(
+                resolveTags(request.getTagIds(), userLogin, currentTagIds(candidate)),
+                TransactionCandidateClassificationSource.MANUAL
+            );
         }
         candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
         candidate.setUpdatedAt(Instant.now());
@@ -207,11 +217,14 @@ public class FileImportCandidateClassificationService {
                     scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.CATEGORY,
                     scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.TAGS,
                     protectManualChanges,
-                    categoryId -> resolveCategory(categoryId, userLogin, candidate.getFlow()),
-                    tagId ->
-                        tagRepository
-                            .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
-                            .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+                    categoryId ->
+                        resolveCategory(
+                            categoryId,
+                            userLogin,
+                            candidate.getFlow(),
+                            candidate.getCategory() == null ? null : candidate.getCategory().getId()
+                        ),
+                    tagId -> resolveSuggestedTag(tagId, userLogin, currentTagIds(candidate))
                 );
             } else {
                 boolean hadManualClassification = candidate.hasManualClassification();
@@ -221,11 +234,14 @@ public class FileImportCandidateClassificationService {
                     hadManualClassification,
                     scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.CATEGORY,
                     scope == FileImportCandidateRulePreviewScope.ALL || scope == FileImportCandidateRulePreviewScope.TAGS,
-                    categoryId -> resolveCategory(categoryId, userLogin, candidate.getFlow()),
-                    tagId ->
-                        tagRepository
-                            .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
-                            .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
+                    categoryId ->
+                        resolveCategory(
+                            categoryId,
+                            userLogin,
+                            candidate.getFlow(),
+                            candidate.getCategory() == null ? null : candidate.getCategory().getId()
+                        ),
+                    tagId -> resolveSuggestedTag(tagId, userLogin, currentTagIds(candidate))
                 );
             }
 
@@ -377,18 +393,21 @@ public class FileImportCandidateClassificationService {
         );
     }
 
-    private Category resolveCategory(Long categoryId, String userLogin, TransactionFlow flow) {
+    private Category resolveCategory(Long categoryId, String userLogin, TransactionFlow flow, Long existingCategoryId) {
         if (categoryId == null) {
             return null;
         }
         Category category = categoryRepository
             .findOneWithToOneRelationshipsByIdAndUserLogin(categoryId, userLogin)
             .orElseThrow(() -> new IllegalArgumentException("Category is not accessible"));
+        if (!Objects.equals(category.getId(), existingCategoryId)) {
+            CategoryReferenceValidator.validateActiveForNewReference(category);
+        }
         validateCategoryCompatibility(category, flow);
         return category;
     }
 
-    private Set<Tag> resolveTags(List<Long> tagIds, String userLogin) {
+    private Set<Tag> resolveTags(List<Long> tagIds, String userLogin, Set<Long> existingTagIds) {
         if (tagIds == null || tagIds.isEmpty()) {
             return new LinkedHashSet<>();
         }
@@ -401,13 +420,25 @@ public class FileImportCandidateClassificationService {
             if (!seenIds.add(tagId)) {
                 throw new IllegalArgumentException("Tag ids must be unique");
             }
-            tags.add(
-                tagRepository
-                    .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
-                    .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"))
-            );
+            Tag tag = tagRepository
+                .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
+                .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
+            if (!existingTagIds.contains(tag.getId())) {
+                TagReferenceValidator.validateActiveForNewReference(tag);
+            }
+            tags.add(tag);
         }
         return tags;
+    }
+
+    private Tag resolveSuggestedTag(Long tagId, String userLogin, Set<Long> existingTagIds) {
+        Tag tag = tagRepository
+            .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, userLogin)
+            .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"));
+        if (!existingTagIds.contains(tag.getId())) {
+            TagReferenceValidator.validateActiveForNewReference(tag);
+        }
+        return tag;
     }
 
     private void validateCategoryCompatibility(Category category, TransactionFlow flow) {

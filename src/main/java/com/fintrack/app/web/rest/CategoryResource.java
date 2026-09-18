@@ -6,6 +6,7 @@ import com.fintrack.app.service.CategoryQueryService;
 import com.fintrack.app.service.CategoryService;
 import com.fintrack.app.service.criteria.CategoryCriteria;
 import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.CategorySelectableDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -170,6 +171,18 @@ public class CategoryResource {
 
         List<CategoryDTO> entityList = categoryQueryService.findByCriteria(criteria);
         return ResponseEntity.ok().body(entityList);
+    }
+
+    /**
+     * {@code GET /categories/selectable} : get current-owner active categories for product assignment controls.
+     * Repeated {@code includeId} values only render already persisted inactive historical values while editing.
+     */
+    @GetMapping("/selectable")
+    public ResponseEntity<List<CategorySelectableDTO>> getSelectableCategories(
+        @RequestParam(value = "includeId", required = false) List<Long> includeIds
+    ) {
+        LOG.debug("REST request to get selectable Categories; includeIds: {}", includeIds);
+        return ResponseEntity.ok(categoryService.findSelectableCategories(includeIds));
     }
 
     /**

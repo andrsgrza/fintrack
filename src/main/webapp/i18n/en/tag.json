@@ -4,32 +4,50 @@
       "home": {
         "title": "Tags",
         "refreshListLabel": "Refresh list",
-        "createLabel": "Create a new Tag",
-        "createOrEditLabel": "Create or edit a Tag",
-        "notFound": "No Tags found"
+        "createLabel": "Create tag",
+        "createOrEditLabel": "Create or edit tag",
+        "notFound": "No tags found",
+        "productSubtitle": "Group transactions with useful labels.",
+        "sortByName": "Sort by name"
       },
-      "created": "A new Tag is created with identifier {{ param }}",
-      "updated": "A Tag is updated with identifier {{ param }}",
-      "deleted": "A Tag is deleted with identifier {{ param }}",
+      "created": "Tag created.",
+      "updated": "Tag updated.",
+      "deleted": "Tag deleted.",
       "delete": {
         "title": "Delete tag?",
-        "message": "This will delete the tag and remove it from everything where it is currently used. Transactions, rules, budgets, and subscriptions that use this tag will not be deleted. They will simply no longer have this tag. This action cannot be undone."
+        "question": "Are you sure you want to permanently delete {{ tagName }}?",
+        "leafMessage": "This action cannot be undone. Deletion may be blocked while this tag is still used by an active workflow.",
+        "candidateBlockedMessage": "This tag cannot be deleted because it is still needed by an active transaction workflow. Resolve that workflow first.",
+        "failed": "This tag could not be deleted. Resolve the remaining references and try again."
       },
       "detail": {
         "title": "Tag"
       },
-      "id": "ID",
       "name": "Name",
       "description": "Description",
       "color": "Color",
+      "colorPicker": "Choose color",
+      "colorSwatch": "Color swatch {{ color }}",
+      "colorPreview": "Preview",
+      "noColor": "No color selected",
+      "appearance": "Appearance",
+      "basicInformation": "Basic information",
+      "moreActions": "More actions",
+      "noDescription": "No description provided.",
       "active": "Active",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
-      "user": "User",
-      "financialTransactions": "Financial Transactions",
-      "transactionRules": "Transaction Rules",
-      "subscriptions": "Subscriptions",
-      "budgets": "Budgets"
+      "inactive": "Inactive",
+      "status": {
+        "label": "Status",
+        "active": "Active",
+        "inactive": "Inactive",
+        "help": "Inactive tags are kept for history and cannot be newly assigned until reactivated."
+      },
+      "errors": {
+        "duplicate": "A tag with this name already exists.",
+        "invalidColor": "Enter a valid color in #RRGGBB format.",
+        "inactiveReference": "An inactive tag cannot be assigned to a new record. Reactivate it first.",
+        "saveFailed": "The tag could not be saved. Review its values and try again."
+      }
     }
   }
 }

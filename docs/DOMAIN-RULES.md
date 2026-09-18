@@ -74,7 +74,7 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 | 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                                     | Runtime enforcement                              | **Done**                                  |
 | 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                                     | FA configured product command ✅                 | **Done**                                  |
 | 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                                     | `active` soft-off                                | **Done**                                  |
-| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                                                   | Default cats on signup                           | **Done**                                  |
+| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                                                   | No system/default categories on signup           | **Done**                                  |
 | 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                                     | Import matching                                  | **Done**                                  |
 | 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                                            | Empty-set matching, spend                        | **Done**                                  |
 | 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                                                    | Motor eval                                       | **Done**                                  |
@@ -138,6 +138,14 @@ Active candidate foundation rules:
 - Clients request automatic scope and manual protection only. They never submit `categorySource` or tag-association sources; the server assigns provenance.
 - Confirm Import copies candidate category/tags into the final `FinancialTransaction`; provenance stays only on the candidate and is not copied into ledger data or `rawData`.
 - Deleting an individual candidate uses ORM orphan cleanup for its tag associations. Workflow/account bulk cleanup deletes association rows before bulk candidate deletion. Category and Tag deletion remain blocked while a candidate references them.
+
+### Active categories and tags are historical-only when inactive
+
+- `Category.active=false` and `Tag.active=false` preserve existing historical references, but cannot be chosen for a new reference. This applies to manual candidates, FILE_IMPORT candidate classification, direct `FinancialTransaction` writes, and `TransactionRule` outputs.
+- An unrelated edit, manual post, or candidate-backed Confirm Import may retain an already-linked inactive category or tag. It must not silently clear or replace historical classification merely because the referenced value was deactivated.
+- Rule evaluation treats an inactive category/tag output as unavailable: it does not suggest or apply it, and reports `OUTPUT_INACTIVE` in skipped-output details for explainability.
+- Product selectors are owner-scoped even for administrators. `GET /api/categories/selectable` and `GET /api/tags/selectable` return active values; `includeId` is only for rendering the current actor's existing inactive historical values during edit/review.
+- `Category.categoryType` cannot change while the category is used by a child, a posted transaction, or a `TransactionCandidate`, because each reference depends on stable flow compatibility.
 
 TC-2A / TC-2A.1 manual backend command rules:
 
@@ -398,7 +406,7 @@ The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints 
 ## 4. Tag
 
 **Pattern:** A — direct `user`. **Relationships:** M2M inverse — `FinancialTransaction.tags`, `TransactionRule.resultingTags`, `FinancialSubscription.tags`, `Budget.tags`.  
-**Status:** **Done** (ownership + validations + server-owned timestamps + CRUD UX cleanup + DELETE M2M unlink).
+**Status:** **Done** (ownership + validations + server-owned timestamps + product catalog UX + DELETE M2M unlink).
 
 ### Baseline **Done** (ownership + validations)
 
@@ -422,6 +430,10 @@ The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints 
 | PATCH timestamps                 | `JsonNode` presence-aware for timestamps; omitted preserves, changed/null rejected        | **Done** |
 | Successful PUT/PATCH             | Preserve `createdAt`; set `updatedAt = now`                                               | **Done** |
 | Ownership                        | Client cannot change `user`; create assigns current user; update/patch preserve owner     | **Done** |
+
+### Product catalog presentation (CAT-UX-3)
+
+Tag maintenance presents name, optional description, a swatch plus its existing `#RRGGBB` color value, and a translated active/inactive state. Inactive tags remain visible and can be reactivated from the catalog; historical-only limits apply to new assignments in product workflows, not to maintenance. The catalog never exposes ownership, timestamps, ids, or raw relationship collections as product data.
 
 ### DELETE
 
@@ -536,7 +548,7 @@ The generic standalone FinancialAccount and CreditAccountDetails CRUD endpoints 
 | `createdAt` server-owned                            | Preserve existing on PUT/PATCH                                | Yes              | `400` invalid if explicit null/changed | **Done** |
 | `updatedAt` server-owned                            | Same timestamp allowed as no-op; successful update sets `now` | Yes              | `400` invalid if explicit null/changed | **Done** |
 
-**Category is “in use” for `categoryType` change if:** direct children; `FinancialTransaction.category`; `FinancialSubscription.category`; `Budget.categories`; `TransactionRule.resultingCategory`.
+**Category is “in use” for `categoryType` change if:** direct children; `FinancialTransaction.category`; `TransactionCandidate.category`; `FinancialSubscription.category`; `Budget.categories`; `TransactionRule.resultingCategory`.
 
 ### CREATE
 
@@ -1581,3 +1593,7 @@ The single FILE-ingestion review can create both rule types without leaving the 
 ### FinancialAccount inactive eligibility (ACC-UX-3A)
 
 `FinancialAccount.active=false` is a historical-only state: the account, balances, existing references, and workflows already linked to it remain readable and valid. It does not cancel drafts or ingestions, disable rules, alter balances, or unlink data. New or reassigned product references must target an active account. Reactivating an account restores that eligibility immediately. Budget adoption is deferred to BUD-1; FinancialSubscription is intentionally outside this policy slice.
+
+### Category product presentation (CAT-UX-2)
+
+Category hierarchy remains a same-type, owner-scoped parent relationship. The product UI presents a derived path and immediate children, but it neither changes nor invents hierarchy state. A parent is selected only on creation and is immutable afterwards. Type values are displayed as Expense, Income, or Both; a backend-approved type change remains possible only when the category is unused. `active=false` remains historical-only: existing references stay readable, while new references are rejected until reactivation. Deletion is blocked for a category with direct children or a `TransactionCandidate` reference; other existing cleanup behavior remains server-owned.

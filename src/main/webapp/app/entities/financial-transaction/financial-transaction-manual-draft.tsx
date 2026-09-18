@@ -4,12 +4,13 @@ import { Alert, Button, Col, Form, FormGroup, FormText, Input, Label, Row, Spinn
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
-import { getEntities as getCategories } from 'app/entities/category/category.reducer';
-import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
+import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
+import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
+import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
+import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
@@ -333,15 +334,13 @@ const RuleSuggestionsSection = ({
 };
 
 export const FinancialTransactionManualDraft = () => {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { draftId } = useParams<'draftId'>();
 
-  const categories = useAppSelector(state => state.category.entities);
-  const tags = useAppSelector(state => state.tag.entities);
-
   const [draft, setDraft] = useState<ManualDraftFormState>(emptyDraft);
   const [candidate, setCandidate] = useState<ITransactionCandidate | null>(null);
+  const [selectableCategories, setSelectableCategories] = useState<ICategorySelectable[]>([]);
+  const [selectableTags, setSelectableTags] = useState<ITagSelectable[]>([]);
   const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
   const [classificationReviewStatus, setClassificationReviewStatus] = useState<
     keyof typeof TransactionCandidateClassificationReviewStatus | null
@@ -387,9 +386,26 @@ export const FinancialTransactionManualDraft = () => {
   );
 
   useEffect(() => {
-    dispatch(getCategories({}));
-    dispatch(getTags({}));
-  }, []);
+    let mounted = true;
+    const categoryIds = candidate?.category?.id === undefined ? [] : [candidate.category.id];
+    const tagIds = candidate?.tags?.map(tag => tag.id).filter((id): id is number => id !== undefined) ?? [];
+    Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
+      .then(([categories, tags]) => {
+        if (mounted) {
+          setSelectableCategories(categories);
+          setSelectableTags(tags);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSelectableCategories([]);
+          setSelectableTags([]);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [candidate?.category?.id, candidate?.tags]);
 
   useEffect(() => {
     let mounted = true;
@@ -952,9 +968,10 @@ export const FinancialTransactionManualDraft = () => {
               disabled={readOnly}
             >
               <option value="" key="0" />
-              {categories?.map(category => (
+              {selectableCategories.map(category => (
                 <option value={category.id} key={category.id}>
                   {category.name}
+                  {category.active === false ? ` (${translate('fintrackApp.category.inactive')})` : ''}
                 </option>
               ))}
             </Input>
@@ -973,9 +990,10 @@ export const FinancialTransactionManualDraft = () => {
               onChange={updateTags}
               disabled={readOnly}
             >
-              {tags?.map(tag => (
+              {selectableTags.map(tag => (
                 <option value={tag.id} key={tag.id}>
                   {tag.name}
+                  {tag.active === false ? ` (${translate('fintrackApp.tag.inactive')})` : ''}
                 </option>
               ))}
             </Input>

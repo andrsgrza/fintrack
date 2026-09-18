@@ -6,6 +6,7 @@ import com.fintrack.app.service.TagQueryService;
 import com.fintrack.app.service.TagService;
 import com.fintrack.app.service.criteria.TagCriteria;
 import com.fintrack.app.service.dto.TagDTO;
+import com.fintrack.app.service.dto.TagSelectableDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -168,6 +169,18 @@ public class TagResource {
 
         List<TagDTO> entityList = tagQueryService.findByCriteria(criteria);
         return ResponseEntity.ok().body(entityList);
+    }
+
+    /**
+     * {@code GET /tags/selectable} : get current-owner active tags for product assignment controls. Repeated
+     * {@code includeId} values only render already persisted inactive historical values while editing.
+     */
+    @GetMapping("/selectable")
+    public ResponseEntity<List<TagSelectableDTO>> getSelectableTags(
+        @RequestParam(value = "includeId", required = false) List<Long> includeIds
+    ) {
+        LOG.debug("REST request to get selectable Tags; includeIds: {}", includeIds);
+        return ResponseEntity.ok(tagService.findSelectableTags(includeIds));
     }
 
     /**

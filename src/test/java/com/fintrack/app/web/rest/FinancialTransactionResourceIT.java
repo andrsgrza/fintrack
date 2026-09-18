@@ -1561,6 +1561,51 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
+    void createFinancialTransactionRejectsInactiveCategoryAndTagReferences() throws Exception {
+        Category inactiveCategory = persistCategory("Inactive direct category", financialTransaction.getAccount().getUser());
+        inactiveCategory.setActive(false);
+        Tag inactiveTag = persistTag("Inactive direct tag", financialTransaction.getAccount().getUser());
+        inactiveTag.setActive(false);
+        em.flush();
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(financialTransaction);
+        financialTransactionDTO.setId(null);
+        financialTransactionDTO.setCategory(categoryDTO(inactiveCategory));
+        financialTransactionDTO.setTags(Set.of(tagDTO(inactiveTag)));
+
+        restFinancialTransactionMockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(financialTransactionDTO)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void updateExistingFinancialTransactionPreservesInactiveCategoryAndTags() throws Exception {
+        Category historicalCategory = persistCategory("Historical direct category", financialTransaction.getAccount().getUser());
+        Tag historicalTag = persistTag("Historical direct tag", financialTransaction.getAccount().getUser());
+        financialTransaction.setCategory(historicalCategory);
+        financialTransaction.setTags(Set.of(historicalTag));
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        historicalCategory.setActive(false);
+        historicalTag.setActive(false);
+        em.flush();
+
+        FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(insertedFinancialTransaction);
+        financialTransactionDTO.setDescription(UPDATED_DESCRIPTION);
+
+        restFinancialTransactionMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, financialTransactionDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(financialTransactionDTO))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.category.id").value(historicalCategory.getId()))
+            .andExpect(jsonPath("$.tags[*].id").value(hasItem(historicalTag.getId().intValue())));
+    }
+
+    @Test
+    @Transactional
     void updateExistingFinancialTransactionAllowsUnrelatedEditsAfterAccountDeactivation() throws Exception {
         insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
         FinancialAccount historicalAccount = insertedFinancialTransaction.getAccount();
@@ -2800,6 +2845,7 @@ class FinancialTransactionResourceIT {
         Category category = CategoryResourceIT.createEntity(em);
         category.setName(name);
         category.setCategoryType(categoryType);
+        category.setActive(true);
         category.setUser(user);
         em.persist(category);
         em.flush();
@@ -2809,6 +2855,7 @@ class FinancialTransactionResourceIT {
     private Tag persistTag(String name, User user) {
         Tag tag = TagResourceIT.createEntity(em);
         tag.setName(name);
+        tag.setActive(true);
         tag.setUser(user);
         em.persist(tag);
         em.flush();

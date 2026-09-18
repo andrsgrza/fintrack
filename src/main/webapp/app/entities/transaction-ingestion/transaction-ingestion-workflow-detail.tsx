@@ -23,13 +23,13 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { APP_DATE_FORMAT } from 'app/config/constants';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
-import { getEntities as getCategories } from 'app/entities/category/category.reducer';
+import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
 import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
-import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
-import { ICategory } from 'app/shared/model/category.model';
+import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
+import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
-import { ITag } from 'app/shared/model/tag.model';
+import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { getEntity } from './transaction-ingestion.reducer';
 import {
   applyFileImportCandidateRules,
@@ -375,7 +375,7 @@ const editDraftPayload = (draft: ICsvIngestionWorkflowRowEditDraft) => ({
   notes: optionalBlankToNull(draft.notes),
 });
 
-const categoryCompatibleWithFlow = (category: ICategory, flow?: string) => {
+const categoryCompatibleWithFlow = (category: ICategorySelectable, flow?: string) => {
   if (!flow || !category.categoryType || category.categoryType === 'BOTH') {
     return true;
   }
@@ -535,17 +535,16 @@ export const TransactionIngestionWorkflowDetail = () => {
 
   const transactionIngestionEntity = useAppSelector(state => state.transactionIngestion.entity);
   const transactionIngestionLoading = useAppSelector(state => state.transactionIngestion.loading);
-  const categories = useAppSelector(state => state.category.entities);
-  const tags = useAppSelector(state => state.tag.entities);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preparedCandidateKeyRef = useRef<string | null>(null);
   const previewedCandidateKeyRef = useRef<string | null>(null);
-  const classificationOptionsLoadedForRef = useRef<number | null>(null);
   const automaticApplicationRunRef = useRef(false);
   const automaticApplicationSequenceRef = useRef(0);
 
   const [accountId, setAccountId] = useState('');
   const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
+  const [categories, setCategories] = useState<ICategorySelectable[]>([]);
+  const [tags, setTags] = useState<ITagSelectable[]>([]);
   const [selectableAccountsLoading, setSelectableAccountsLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1019,12 +1018,6 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
 
-    if (classificationOptionsLoadedForRef.current !== transactionIngestionId) {
-      classificationOptionsLoadedForRef.current = transactionIngestionId;
-      dispatch(getCategories({ sort: 'name,asc' }));
-      dispatch(getTags({ sort: 'name,asc' }));
-    }
-
     const missingCandidateRecordIds = validRows
       .filter(row => !row.candidate?.id)
       .map(row => row.ingestionRecordId ?? row.recordIndex)
@@ -1041,6 +1034,36 @@ export const TransactionIngestionWorkflowDetail = () => {
     preparedCandidateKeyRef.current = preparationKey;
     prepareCandidatesForUnifiedReview(transactionIngestionId).catch(() => undefined);
   }, [dispatch, prepareCandidatesForUnifiedReview, workflow]);
+
+  useEffect(() => {
+    if (!workflow?.transactionIngestionId || workflow.status !== 'READY') {
+      return;
+    }
+    let mounted = true;
+    const candidates = (workflow.rows ?? []).flatMap(row => (row.candidate ? [row.candidate] : []));
+    const categoryIds = candidates
+      .map(candidate => candidate.categoryId)
+      .filter((categoryId): categoryId is number => categoryId !== undefined && categoryId !== null);
+    const tagIds = candidates
+      .flatMap(candidate => candidate.tagIds ?? [])
+      .filter((tagId): tagId is number => tagId !== undefined && tagId !== null);
+    Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
+      .then(([nextCategories, nextTags]) => {
+        if (mounted) {
+          setCategories(nextCategories);
+          setTags(nextTags);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setCategories([]);
+          setTags([]);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [workflow]);
 
   useEffect(() => {
     const transactionIngestionId = workflow?.transactionIngestionId;
@@ -1858,6 +1881,7 @@ export const TransactionIngestionWorkflowDetail = () => {
             {compatibleCategories.map(category => (
               <option value={category.id} key={category.id}>
                 {category.name}
+                {category.active === false ? ` (${translate('fintrackApp.category.inactive')})` : ''}
               </option>
             ))}
           </Input>
@@ -1923,6 +1947,7 @@ export const TransactionIngestionWorkflowDetail = () => {
             {tags.map(tag => (
               <option value={tag.id} key={tag.id}>
                 {tag.name}
+                {tag.active === false ? ` (${translate('fintrackApp.tag.inactive')})` : ''}
               </option>
             ))}
           </Input>

@@ -296,8 +296,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     }).as('confirmNoSuggestionsRequest');
     cy.intercept('PATCH', '/api/transaction-ingestions/*/candidates/*/classification').as('manualClassificationRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/descriptions/reevaluate').as('reevaluateDescriptionsRequest');
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
 
     uploadCsvFromCreatePage(csv, 'uber-flow-classification.csv');
 
@@ -572,8 +572,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/apply-rules').as('applyCandidateRulesRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/descriptions/reevaluate').as('reevaluateDescriptionsRequest');
     cy.intercept('PATCH', '/api/transaction-ingestions/*/candidates/*/classification').as('manualClassificationRequest');
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/confirm').as('confirmImportRequest');
 
     uploadCsvFromCreatePage(csv, 'auto-apply-configuration.csv');
@@ -678,8 +678,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       confirmCalled = true;
       req.continue();
     }).as('confirmImportRequest');
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
 
     uploadCsvFromCreatePage(csv, 'explicit-description-apply.csv');
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
@@ -852,8 +852,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     }).as('reevaluateDescriptionsRequest');
     cy.intercept('POST', '/api/description-normalization-rules/configured').as('createConfiguredNormalizationRule');
     cy.intercept('POST', '/api/transaction-rules/configured').as('createConfiguredTransactionRule');
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
 
     uploadCsvFromCreatePage(csv, 'contextual-rule-creation.csv');
 
@@ -996,8 +996,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/apply-rules').as('applyCandidateRulesRequest');
-    cy.intercept('GET', '/api/categories+(?*|)').as('categoriesRequest');
-    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
 
     uploadCsvFromCreatePage(csv, 'disable-one-before-confirm.csv');
 

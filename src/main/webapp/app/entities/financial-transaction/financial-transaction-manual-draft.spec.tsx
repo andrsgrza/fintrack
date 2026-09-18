@@ -7,6 +7,8 @@ import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import enAccountType from 'app/../i18n/en/accountType.json';
 import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
+import enCategory from 'app/../i18n/en/category.json';
+import enTag from 'app/../i18n/en/tag.json';
 import FinancialTransactionManualDraft from './financial-transaction-manual-draft';
 import {
   applyManualDraftRules,
@@ -19,6 +21,8 @@ import {
 } from './services/manual-transaction-candidate.service';
 import { FinancialTransactionUpdate } from './financial-transaction-update';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
+import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
+import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 
 const mockDispatch = jest.fn();
 let mockState;
@@ -46,6 +50,14 @@ jest.mock('app/entities/tag/tag.reducer', () => ({
   getEntities: () => ({ type: 'tag/getEntities' }),
 }));
 
+jest.mock('app/entities/category/category-selectable.service', () => ({
+  getSelectableCategories: jest.fn(),
+}));
+
+jest.mock('app/entities/tag/tag-selectable.service', () => ({
+  getSelectableTags: jest.fn(),
+}));
+
 jest.mock('./financial-transaction.reducer', () => ({
   partialUpdateEntity: entity => ({ type: 'financialTransaction/partialUpdateEntity', payload: entity }),
   getEntity: id => ({ type: 'financialTransaction/getEntity', payload: id }),
@@ -60,6 +72,8 @@ const mockPostManualDraft = postManualDraft as jest.Mock;
 const mockPreviewManualDraftRules = previewManualDraftRules as jest.Mock;
 const mockApplyManualDraftRules = applyManualDraftRules as jest.Mock;
 const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
+const mockGetSelectableCategories = getSelectableCategories as jest.Mock;
+const mockGetSelectableTags = getSelectableTags as jest.Mock;
 
 const accounts = [
   { id: 1, name: 'Checking', accountType: 'DEBIT', currency: 'MXN', lastFourDigits: '1234', active: true },
@@ -162,6 +176,8 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enTransactionFlow);
   TranslatorContext.registerTranslations('en', enAccountType);
   TranslatorContext.registerTranslations('en', enFinancialAccount);
+  TranslatorContext.registerTranslations('en', enCategory);
+  TranslatorContext.registerTranslations('en', enTag);
   TranslatorContext.setLocale('en');
 };
 
@@ -211,6 +227,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     mockPreviewManualDraftRules.mockReset();
     mockApplyManualDraftRules.mockReset();
     mockGetSelectableFinancialAccounts.mockReset();
+    mockGetSelectableCategories.mockReset();
+    mockGetSelectableTags.mockReset();
     mockCreateManualDraft.mockResolvedValue({ data: candidate });
     mockGetManualDraft.mockResolvedValue({ data: candidate });
     mockUpdateManualDraft.mockResolvedValue({ data: readyCandidate });
@@ -226,6 +244,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
       },
     });
     mockGetSelectableFinancialAccounts.mockImplementation(() => new Promise(() => {}));
+    mockGetSelectableCategories.mockResolvedValue(categories);
+    mockGetSelectableTags.mockResolvedValue(tags);
   });
 
   afterEach(() => {
@@ -917,6 +937,31 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
 
     expect(await screen.findByRole('option', { name: /Closed checking.*Inactive/ })).toBeTruthy();
     expect((screen.getByLabelText('Account') as HTMLSelectElement).value).toBe('3');
+  });
+
+  it('shows only active categories and tags for a new draft while retaining existing inactive classification', async () => {
+    const inactiveCategory = { id: 30, name: 'Old transport', categoryType: 'EXPENSE', active: false };
+    const inactiveTag = { id: 40, name: 'Old tag', active: false };
+    mockGetSelectableCategories.mockImplementation(includeIds =>
+      Promise.resolve(String(includeIds).split(',').includes('30') ? [...categories, inactiveCategory] : categories),
+    );
+    mockGetSelectableTags.mockImplementation(includeIds =>
+      Promise.resolve(String(includeIds).split(',').includes('40') ? [...tags, inactiveTag] : tags),
+    );
+
+    const newDraft = renderManualDraft();
+    expect(await screen.findByRole('option', { name: 'Transport' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Old transport/ })).toBeNull();
+    expect(screen.queryByRole('option', { name: /Old tag/ })).toBeNull();
+    newDraft.unmount();
+
+    mockGetManualDraft.mockResolvedValue({
+      data: { ...readyCandidate, category: inactiveCategory, tags: [inactiveTag] },
+    });
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    expect(await screen.findByRole('option', { name: /Old transport.*Inactive/ })).toBeTruthy();
+    expect(await screen.findByRole('option', { name: /Old tag.*Inactive/ })).toBeTruthy();
   });
 
   it('non-MANUAL candidate shows safe route error without rendering editable form', async () => {

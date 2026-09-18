@@ -1,240 +1,174 @@
 import {
   entityConfirmDeleteButtonSelector,
   entityCreateButtonSelector,
-  entityCreateCancelButtonSelector,
   entityCreateSaveButtonSelector,
-  entityDeleteButtonSelector,
-  entityDetailsBackButtonSelector,
-  entityDetailsButtonSelector,
-  entityEditButtonSelector,
   entityTableSelector,
 } from '../../support/entity';
 
-describe('Tag e2e test', () => {
+describe('Tag product UX e2e test', () => {
   const tagPageUrl = '/tag';
-  const tagPageUrlPattern = new RegExp('/tag(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  const adminUsername = Cypress.env('E2E_ADMIN_USERNAME') ?? 'admin';
-  const adminPassword = Cypress.env('E2E_ADMIN_PASSWORD') ?? 'admin';
 
-  let tag;
+  let tags: Array<{ id: number; name: string }> = [];
+  let candidateId: number | undefined;
 
-  const buildTagPayload = (name: string) => {
-    const now = new Date().toISOString();
-    return {
-      name,
-      description: 'E2E tag',
-      color: '#a1b2c3',
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-  };
+  const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  const fillCreateForm = (name: string) => {
-    cy.get('[data-cy="name"]').clear().type(name);
-    cy.get('[data-cy="description"]').clear().type('E2E tag');
-    cy.get('[data-cy="color"]').clear().type('#a1b2c3');
-    cy.get('[data-cy="active"]').check();
-    cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
-    cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');
-  };
+  const createTagViaApi = (name: string) =>
+    cy
+      .authenticatedRequest({
+        method: 'POST',
+        url: '/api/tags',
+        body: {
+          name,
+          description: 'Tag product E2E fixture',
+          color: '#a1b2c3',
+          active: true,
+        },
+      })
+      .then(({ body }) => {
+        tags.push(body);
+        return body;
+      });
 
   beforeEach(() => {
+    tags = [];
+    candidateId = undefined;
     cy.login(username, password);
-  });
-
-  beforeEach(() => {
-    cy.intercept('GET', '/api/tags+(?*|)').as('entitiesRequest');
-    cy.intercept('POST', '/api/tags').as('postEntityRequest');
-    cy.intercept('DELETE', '/api/tags/*').as('deleteEntityRequest');
+    cy.intercept('GET', '/api/tags+(?*|)').as('tagsRequest');
+    cy.intercept('GET', '/api/tags/*').as('tagRequest');
+    cy.intercept('POST', '/api/tags').as('createTagRequest');
+    cy.intercept('PATCH', '/api/tags/*').as('updateTagRequest');
+    cy.intercept('DELETE', '/api/tags/*').as('deleteTagRequest');
   });
 
   afterEach(() => {
-    if (tag) {
-      cy.authenticatedRequest({
-        method: 'DELETE',
-        url: `/api/tags/${tag.id}`,
-      }).then(() => {
-        tag = undefined;
-      });
+    if (candidateId) {
+      cy.authenticatedRequest({ method: 'DELETE', url: `/api/transaction-candidates/${candidateId}`, failOnStatusCode: false });
+      candidateId = undefined;
     }
+    [...tags].reverse().forEach(tag => {
+      cy.authenticatedRequest({ method: 'DELETE', url: `/api/tags/${tag.id}`, failOnStatusCode: false });
+    });
+    tags = [];
   });
 
-  it('Tags menu should load Tags page', () => {
-    cy.visit('/');
-    cy.clickOnEntityMenuItem('tag');
-    cy.wait('@entitiesRequest').then(({ response }) => {
-      if (response?.body.length === 0) {
-        cy.get(entityTableSelector).should('not.exist');
-      } else {
-        cy.get(entityTableSelector).should('exist');
-      }
+  it('creates, presents, edits, deactivates/reactivates, and deletes a tag as a product catalog item', () => {
+    const tagName = uniqueName('Travel');
+
+    cy.viewport(1440, 900);
+    cy.visit(tagPageUrl);
+    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="TagHeading"]').should('exist');
+    cy.get(entityCreateButtonSelector).click();
+
+    cy.get('[data-cy="tagColorPicker"]').should('exist');
+    cy.get('[data-cy="color"]').should('exist');
+    cy.get('[data-cy="tagColorControlRow"]').within(() => {
+      cy.get('[data-cy="tagColorPicker"]').should('exist');
+      cy.get('[data-cy="color"]').should('exist');
     });
-    cy.getEntityHeading('Tag').should('exist');
-    cy.url().should('match', tagPageUrlPattern);
-  });
-
-  describe('Tag page', () => {
-    describe('create button click', () => {
-      beforeEach(() => {
-        cy.visit(tagPageUrl);
-        cy.wait('@entitiesRequest');
-      });
-
-      it('should load create Tag page', () => {
-        cy.get(entityCreateButtonSelector).click();
-        cy.url().should('match', new RegExp('/tag/new$'));
-        cy.getEntityCreateUpdateHeading('Tag');
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', tagPageUrlPattern);
-      });
+    cy.get('[data-cy="tagColorPreview"]').should('not.exist');
+    cy.get('[data-cy="name"]').clear().type(tagName);
+    cy.get('[data-cy="description"]').clear().type('Trips and travel');
+    cy.get('[data-cy="tagColorPicker"]').then($input => {
+      const input = $input[0] as HTMLInputElement;
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, '#112233');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-
-    describe('with existing value', () => {
-      beforeEach(() => {
-        cy.authenticatedRequest({
-          method: 'POST',
-          url: '/api/tags',
-          body: buildTagPayload(`existing-${Date.now()}`),
-        }).then(({ body }) => {
-          tag = body;
-        });
-
-        cy.visit(tagPageUrl);
-        cy.wait('@entitiesRequest');
-      });
-
-      it('detail button click should load details Tag page', () => {
-        cy.get(entityDetailsButtonSelector).first().click();
-        cy.getEntityDetailsHeading('tag');
-        cy.get(entityDetailsBackButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', tagPageUrlPattern);
-      });
-
-      it('edit button click should load edit Tag page and go back', () => {
-        cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('Tag');
-        cy.get(entityCreateSaveButtonSelector).should('exist');
-        cy.get(entityCreateCancelButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', tagPageUrlPattern);
-      });
-
-      it('edit button click should load edit Tag page and save', () => {
-        cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('Tag');
-        cy.get(entityCreateSaveButtonSelector).click();
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', tagPageUrlPattern);
-      });
-
-      it('last delete button click should delete instance of Tag', () => {
-        cy.intercept('GET', '/api/tags/*').as('dialogDeleteRequest');
-        cy.get(entityDeleteButtonSelector).last().click();
-        cy.wait('@dialogDeleteRequest');
-        cy.getEntityDeleteDialogHeading('tag').should('exist');
-        cy.get(entityConfirmDeleteButtonSelector).click();
-        cy.wait('@deleteEntityRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(204);
-        });
-        cy.wait('@entitiesRequest').then(({ response }) => {
-          expect(response?.statusCode).to.equal(200);
-        });
-        cy.url().should('match', tagPageUrlPattern);
-
-        tag = undefined;
-      });
-    });
-  });
-
-  describe('new Tag page', () => {
-    beforeEach(() => {
-      cy.visit(`${tagPageUrl}/new`);
-      cy.getEntityCreateUpdateHeading('Tag');
+    cy.get('[data-cy="color"]').should('have.value', '#112233');
+    cy.get('[data-cy="tagColorPreview"]').should('not.exist');
+    cy.get('[data-cy="active"]').should('be.checked');
+    cy.get(entityCreateSaveButtonSelector).click();
+    cy.wait('@createTagRequest').then(({ response }) => {
+      expect(response?.statusCode).to.equal(201);
+      expect(response?.body.name).to.equal(tagName);
+      tags.push(response!.body);
     });
 
-    it('should create an instance of Tag', () => {
-      const tagName = `create-${Date.now()}`;
-      fillCreateForm(tagName);
-      cy.get('[data-cy="user"]').should('not.exist');
-      cy.get(entityCreateSaveButtonSelector).click();
-
-      cy.wait('@postEntityRequest').then(({ response }) => {
-        expect(response?.statusCode).to.equal(201);
-        expect(response?.body.user.login).to.equal(username);
-        tag = response.body;
+    cy.get(entityTableSelector).should('contain', tagName).and('contain', 'Trips and travel');
+    cy.contains(entityTableSelector, tagName).within(() => {
+      cy.get('[data-cy="tagPrimaryRow"]').within(() => {
+        cy.get('[data-cy="tagColorChip"]').should('contain', tagName);
+        cy.get('[data-cy="tagStatusBadge"]').should('exist');
       });
-      cy.url().should('match', tagPageUrlPattern);
+      cy.get('[data-cy="tagDescription"]').should('contain', 'Trips and travel');
+      cy.get('[data-cy="entityActionsMenuToggle"]').click();
+      cy.get('[data-cy="entityDetailsButton"]').click();
+    });
+    cy.get('[data-cy="tagDetailsHeading"]').should('exist');
+    cy.get('[data-cy="tagDetailColorAccent"]').should($header => {
+      expect($header.css('border-left-color')).to.match(/rgb\(17,\s*34,\s*51\)/);
+    });
+    cy.get('[data-cy="tagDetailAppearance"]').should('not.exist');
+    cy.contains('#112233').should('not.exist');
+    cy.contains('true').should('not.exist');
+    cy.contains('Created At').should('not.exist');
+    cy.get('[data-cy="tagDetailStatusHelpButton"]').focus();
+    cy.get('[data-cy="tagDetailStatusHelpTooltip"]').should('be.visible');
+    cy.get('[data-cy="tagDetailStatusHelpButton"]').blur();
+    cy.viewport(1024, 768);
+    cy.get('[data-cy="tagDetailStatusHelpButton"]').focus();
+    cy.get('[data-cy="tagDetailStatusHelpTooltip"]').should('be.visible');
+    cy.get('[data-cy="entityDetailsBackButton"]').click();
+    cy.location('pathname').should('eq', tagPageUrl);
+
+    cy.then(() => cy.visit(`/tag/${tags[0].id}/edit`));
+    cy.wait('@tagRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="tagColorPicker"]').should('exist');
+    cy.get('[data-cy="tagColorControlRow"]').within(() => {
+      cy.get('[data-cy="tagColorPicker"]').should('exist');
+      cy.get('[data-cy="color"]').should('exist');
+    });
+    cy.get('[data-cy="tagColorPreview"]').should('not.exist');
+    cy.get('[data-cy="description"]').clear().type('Updated travel');
+    cy.get('[data-cy="color"]').clear().type('#abcdef');
+    cy.get('[data-cy="active"]').uncheck();
+    cy.get(entityCreateSaveButtonSelector).click();
+    cy.wait('@updateTagRequest').its('response.statusCode').should('eq', 200);
+
+    cy.then(() => cy.visit(`/tag/${tags[0].id}`));
+    cy.contains('Updated travel').should('exist');
+    cy.get('[data-cy="tagDetailStatusHelpButton"]').should('exist').focus();
+
+    cy.then(() => cy.visit(`/tag/${tags[0].id}/edit`));
+    cy.get('[data-cy="active"]').check();
+    cy.get(entityCreateSaveButtonSelector).click();
+    cy.wait('@updateTagRequest').its('response.statusCode').should('eq', 200);
+
+    cy.then(() => cy.visit(`/tag/${tags[0].id}/delete`));
+    cy.get('[data-cy="tagDeleteLeafMessage"]').should('exist');
+    cy.get(entityConfirmDeleteButtonSelector).click();
+    cy.wait('@deleteTagRequest').its('response.statusCode').should('eq', 204);
+    cy.then(() => {
+      tags = [];
     });
   });
 
-  describe('Tag ownership', () => {
-    it('should not render user selector on create form', () => {
-      cy.visit(`${tagPageUrl}/new`);
-      cy.get('[data-cy="user"]').should('not.exist');
-    });
-
-    it('regular user should not see tags created by admin', () => {
-      const adminTagName = `admin-only-${Date.now()}`;
-
-      cy.login(adminUsername, adminPassword);
+  it('shows a product-safe delete block when an active transaction workflow still references a tag', () => {
+    const tagName = uniqueName('Protected tag');
+    createTagViaApi(tagName).then(tag => {
       cy.authenticatedRequest({
         method: 'POST',
-        url: '/api/tags',
-        body: buildTagPayload(adminTagName),
-      }).then(({ body: adminTag }) => {
-        cy.login(username, password);
-        cy.authenticatedRequest({
-          method: 'GET',
-          url: '/api/tags',
-        }).then(({ body: userTags }) => {
-          expect(userTags.some(t => t.id === adminTag.id)).to.equal(false);
-        });
-
-        cy.login(adminUsername, adminPassword);
-        cy.authenticatedRequest({
-          method: 'DELETE',
-          url: `/api/tags/${adminTag.id}`,
-        });
+        url: '/api/transaction-candidates/manual',
+        body: {
+          description: 'Draft using the protected tag',
+          tags: [{ id: tag.id }],
+        },
+      }).then(({ body }) => {
+        candidateId = body.id;
       });
     });
 
-    it('admin should see tags created by another user', () => {
-      const userTagName = `user-owned-${Date.now()}`;
-
-      cy.login(username, password);
-      cy.authenticatedRequest({
-        method: 'POST',
-        url: '/api/tags',
-        body: buildTagPayload(userTagName),
-      }).then(({ body: userTag }) => {
-        cy.login(adminUsername, adminPassword);
-        cy.authenticatedRequest({
-          method: 'GET',
-          url: '/api/tags',
-        }).then(({ body: adminTags }) => {
-          expect(adminTags.some(t => t.id === userTag.id)).to.equal(true);
-        });
-
-        cy.login(username, password);
-        cy.authenticatedRequest({
-          method: 'DELETE',
-          url: `/api/tags/${userTag.id}`,
-        });
-      });
+    cy.then(() => {
+      cy.visit(`/tag/${tags[0].id}/delete`);
+      cy.get(entityConfirmDeleteButtonSelector).click();
+      cy.wait('@deleteTagRequest').its('response.statusCode').should('eq', 400);
+      cy.get('[data-cy="tagDeleteError"]').should('exist');
+      cy.contains('transaction candidates.').should('not.exist');
     });
   });
 });

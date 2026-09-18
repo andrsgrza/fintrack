@@ -69,7 +69,18 @@ public class TransactionRuleEvaluationService {
 
             if (rule.getResultingCategory() != null) {
                 Category category = rule.getResultingCategory();
-                if (suggestedCategory == null) {
+                if (!Boolean.TRUE.equals(category.getActive())) {
+                    skippedOutputs.add(
+                        new SkippedRuleOutput(
+                            RuleOutputField.CATEGORY,
+                            rule.getId(),
+                            rule.getName(),
+                            RuleOutputSkipReason.OUTPUT_INACTIVE,
+                            category.getId(),
+                            category.getName()
+                        )
+                    );
+                } else if (suggestedCategory == null) {
                     boolean conflictsWithCurrentValue =
                         input.currentCategoryId() != null && !input.currentCategoryId().equals(category.getId());
                     suggestedCategory = new CategorySuggestion(
@@ -128,6 +139,20 @@ public class TransactionRuleEvaluationService {
                             rule.getName(),
                             RuleOutputSkipReason.OUTPUT_INVALID_FOR_TRANSACTION,
                             null,
+                            tag.getName()
+                        )
+                    );
+                    continue;
+                }
+
+                if (!Boolean.TRUE.equals(tag.getActive())) {
+                    skippedOutputs.add(
+                        new SkippedRuleOutput(
+                            RuleOutputField.TAGS,
+                            rule.getId(),
+                            rule.getName(),
+                            RuleOutputSkipReason.OUTPUT_INACTIVE,
+                            tag.getId(),
                             tag.getName()
                         )
                     );

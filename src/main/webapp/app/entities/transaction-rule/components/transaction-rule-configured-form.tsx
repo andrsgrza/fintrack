@@ -3,10 +3,10 @@ import { Alert, Button, Form, FormGroup, FormText, Input, Label } from 'reactstr
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { useAppDispatch, useAppSelector } from 'app/config/store';
-import { getEntities as getCategories } from 'app/entities/category/category.reducer';
-import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
-import { ICategory } from 'app/shared/model/category.model';
+import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
+import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
+import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
+import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ITransactionRuleCondition } from 'app/shared/model/transaction-rule-condition.model';
 import { ITransactionRuleConfigured } from 'app/shared/model/transaction-rule-configured.model';
 import { ContextualRuleSaveAction, IContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
@@ -36,7 +36,10 @@ const configuredCondition = (condition: LocalTransactionRuleCondition, index: nu
   position: index,
 });
 
-const asLocalConditions = (conditions: ITransactionRuleCondition[] = [], category?: ICategory | null): LocalTransactionRuleCondition[] => {
+const asLocalConditions = (
+  conditions: ITransactionRuleCondition[] = [],
+  category?: ICategorySelectable | null,
+): LocalTransactionRuleCondition[] => {
   const requiredFlow = requiredFlowForCategory(category);
   return conditions.map((condition, index) => ({
     ...condition,
@@ -65,9 +68,8 @@ const serverErrorMessage = error => error?.response?.data?.detail ?? error?.resp
 
 /** One configured TransactionRule editor shared by standalone and contextual compositions. */
 export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSaved, onCancel }: TransactionRuleConfiguredFormProps) => {
-  const dispatch = useAppDispatch();
-  const categories = useAppSelector(state => state.category.entities);
-  const tags = useAppSelector(state => state.tag.entities);
+  const [categories, setCategories] = useState<ICategorySelectable[]>([]);
+  const [tags, setTags] = useState<ITagSelectable[]>([]);
   const [ruleName, setRuleName] = useState(initialValue?.name ?? '');
   const [ruleDescription, setRuleDescription] = useState(initialValue?.description ?? '');
   const [conditions, setConditions] = useState<LocalTransactionRuleCondition[]>(
@@ -82,16 +84,42 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
   const [savingAction, setSavingAction] = useState<ContextualRuleSaveAction | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const selectedCategory = useMemo<ICategory | null>(
-    () => categories.find(category => category.id?.toString() === selectedCategoryId) ?? null,
-    [categories, selectedCategoryId],
-  );
+  const selectedCategory = useMemo<ICategorySelectable | null>(() => {
+    const selectableCategory = categories.find(category => category.id?.toString() === selectedCategoryId);
+    if (selectableCategory) {
+      return selectableCategory;
+    }
+    // Keep the persisted output's type available while the selectable list loads.
+    // Otherwise an edit can briefly remove its required FLOW condition before the
+    // historical/current category is returned by the selector endpoint.
+    if (initialValue?.resultingCategory?.id?.toString() === selectedCategoryId) {
+      return initialValue.resultingCategory as ICategorySelectable;
+    }
+    return null;
+  }, [categories, initialValue?.resultingCategory, selectedCategoryId]);
   const requiredFlow = requiredFlowForCategory(selectedCategory);
 
   useEffect(() => {
-    dispatch(getCategories({ sort: 'name,asc' }));
-    dispatch(getTags({ sort: 'name,asc' }));
-  }, [dispatch]);
+    let mounted = true;
+    const categoryIds = initialValue?.resultingCategory?.id === undefined ? [] : [initialValue.resultingCategory.id];
+    const tagIds = initialValue?.resultingTags?.map(tag => tag.id).filter((id): id is number => id !== undefined) ?? [];
+    Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
+      .then(([nextCategories, nextTags]) => {
+        if (mounted) {
+          setCategories(nextCategories);
+          setTags(nextTags);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setCategories([]);
+          setTags([]);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [initialValue?.resultingCategory?.id, initialValue?.resultingTags]);
 
   useEffect(() => {
     if (!requiredFlow) {
@@ -254,6 +282,7 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
           {categories.map(category => (
             <option value={category.id} key={category.id}>
               {category.name}
+              {category.active === false ? ` (${translate('fintrackApp.category.inactive')})` : ''}
             </option>
           ))}
         </Input>
@@ -276,6 +305,7 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
           {tags.map(tag => (
             <option value={tag.id} key={tag.id}>
               {tag.name}
+              {tag.active === false ? ` (${translate('fintrackApp.tag.inactive')})` : ''}
             </option>
           ))}
         </Input>

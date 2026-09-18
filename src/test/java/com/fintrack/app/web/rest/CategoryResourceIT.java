@@ -2410,6 +2410,78 @@ class CategoryResourceIT {
 
     @Test
     @Transactional
+    void changeCategoryTypeOfCategoryUsedByTransactionCandidateFails() throws Exception {
+        Category persistedCategory = persistCategory();
+        createCandidateWithCategory(persistedCategory, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.DRAFT);
+
+        CategoryDTO categoryDTO = categoryMapper.toDto(persistedCategory);
+        categoryDTO.setCategoryType(CategoryType.INCOME);
+
+        restCategoryMockMvc
+            .perform(
+                put(ENTITY_API_URL_ID, categoryDTO.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(categoryDTO))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("error.invalid"))
+            .andExpect(jsonPath("$.params").value("category"));
+    }
+
+    @Test
+    @Transactional
+    void selectableCategoriesReturnActiveValuesAndExplicitCurrentUsersHistoricalValue() throws Exception {
+        Category activeCategory = createEntity(em);
+        activeCategory.setName("ACTIVE_SELECTABLE_CATEGORY");
+        activeCategory.setActive(true);
+        activeCategory = categoryRepository.saveAndFlush(activeCategory);
+
+        Category inactiveCategory = createEntity(em);
+        inactiveCategory.setName("INACTIVE_SELECTABLE_CATEGORY");
+        inactiveCategory.setActive(false);
+        inactiveCategory = categoryRepository.saveAndFlush(inactiveCategory);
+
+        restCategoryMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(activeCategory.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(inactiveCategory.getId().intValue()))));
+
+        restCategoryMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable").param("includeId", inactiveCategory.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(activeCategory.getId().intValue())))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(inactiveCategory.getId().intValue())))
+            .andExpect(jsonPath("$.[?(@.id == %d)].active".formatted(inactiveCategory.getId())).value(hasItem(false)));
+
+        inactiveCategory.setActive(true);
+        categoryRepository.saveAndFlush(inactiveCategory);
+
+        restCategoryMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(hasItem(inactiveCategory.getId().intValue())))
+            .andExpect(jsonPath("$.[?(@.id == %d)].active".formatted(inactiveCategory.getId())).value(hasItem(true)));
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
+    void selectableCategoriesDoNotExposeAnotherUsersValuesToAdmin() throws Exception {
+        Category foreignCategory = createEntity(em);
+        foreignCategory.setName("FOREIGN_SELECTABLE_CATEGORY");
+        foreignCategory.setActive(true);
+        foreignCategory.setUser(createOtherUser(em));
+        foreignCategory = categoryRepository.saveAndFlush(foreignCategory);
+
+        restCategoryMockMvc
+            .perform(get(ENTITY_API_URL + "/selectable").param("includeId", foreignCategory.getId().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.[*].id").value(not(hasItem(foreignCategory.getId().intValue()))));
+    }
+
+    @Test
+    @Transactional
     void changeCategoryTypeOfUnusedLeafCategorySucceedsWhenUniquenessAndParentCompatibilityHold() throws Exception {
         Category persistedCategory = persistCategory();
 

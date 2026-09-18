@@ -151,6 +151,8 @@ Only active rules are eligible.
 
 Inactive rules are skipped.
 
+An active matching rule may still have a historical inactive category or tag output. Such an output is skipped rather than suggested or applied. The evaluator includes `OUTPUT_INACTIVE` in skipped-output metadata, allowing manual and FILE_IMPORT candidate review to explain why the rule did not supply that classification.
+
 Rules without conditions are not eligible.
 
 `priority` means evaluation order between rules. Lower priority value means earlier evaluation.
