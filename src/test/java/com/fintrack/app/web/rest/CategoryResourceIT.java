@@ -2434,6 +2434,7 @@ class CategoryResourceIT {
         Category activeCategory = createEntity(em);
         activeCategory.setName("ACTIVE_SELECTABLE_CATEGORY");
         activeCategory.setActive(true);
+        activeCategory.setColor("#2878B5");
         activeCategory = categoryRepository.saveAndFlush(activeCategory);
 
         Category inactiveCategory = createEntity(em);
@@ -2445,6 +2446,7 @@ class CategoryResourceIT {
             .perform(get(ENTITY_API_URL + "/selectable"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.[*].id").value(hasItem(activeCategory.getId().intValue())))
+            .andExpect(jsonPath("$.[?(@.id == %d)].color".formatted(activeCategory.getId())).value(hasItem("#2878B5")))
             .andExpect(jsonPath("$.[*].id").value(not(hasItem(inactiveCategory.getId().intValue()))));
 
         restCategoryMockMvc

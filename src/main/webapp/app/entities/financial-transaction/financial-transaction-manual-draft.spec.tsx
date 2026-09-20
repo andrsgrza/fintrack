@@ -74,6 +74,7 @@ const mockApplyManualDraftRules = applyManualDraftRules as jest.Mock;
 const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockGetSelectableCategories = getSelectableCategories as jest.Mock;
 const mockGetSelectableTags = getSelectableTags as jest.Mock;
+let confirmSpy: jest.SpyInstance;
 
 const accounts = [
   { id: 1, name: 'Checking', accountType: 'DEBIT', currency: 'MXN', lastFourDigits: '1234', active: true },
@@ -203,6 +204,13 @@ const flushPromises = async () => {
   });
 };
 
+const openOptionalDetails = () => {
+  const details = screen.getByTestId('manualDraftOptionalDetails') as HTMLDetailsElement;
+  if (!details.open) {
+    fireEvent.click(within(details).getByText('More details'));
+  }
+};
+
 const deferred = <T,>() => {
   let resolve: (value: T) => void;
   let reject: (reason?: unknown) => void;
@@ -246,33 +254,75 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     mockGetSelectableFinancialAccounts.mockImplementation(() => new Promise(() => {}));
     mockGetSelectableCategories.mockResolvedValue(categories);
     mockGetSelectableTags.mockResolvedValue(tags);
+    confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   afterEach(() => {
+    confirmSpy.mockRestore();
     jest.useRealTimers();
   });
 
   it('renders new manual draft form without creating a candidate on page load', () => {
     renderManualDraft();
 
-    expect(screen.getByText('Create manual transaction')).toBeTruthy();
-    expect(screen.queryByText('Start entering details to create a recoverable draft.')).toBeNull();
+    expect(screen.getByText('New transaction')).toBeTruthy();
+    expect(screen.getByText('Start entering details to create a recoverable draft.')).toBeTruthy();
     expect(screen.queryByText('Creating draft…')).toBeNull();
-    expect(screen.queryByText('Saving changes…')).toBeNull();
-    expect(screen.queryByText('Draft saved automatically.')).toBeNull();
+    expect(screen.queryByText('Saving…')).toBeNull();
+    expect(screen.queryByText('Saved automatically.')).toBeNull();
     expect(mockCreateManualDraft).not.toHaveBeenCalled();
     expect(mockGetManualDraft).not.toHaveBeenCalled();
   });
 
-  it('existing draft route does not show a normal autosave or draft banner', async () => {
+  it('existing draft route identifies the draft and shows its saved autosave state', async () => {
     mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
     renderManualDraft('/financial-transaction/drafts/77');
 
     expect(await screen.findByDisplayValue('Coffee')).toBeTruthy();
-    expect(screen.queryByText(/Unsaved/i)).toBeNull();
+    expect(screen.getByText('Edit draft')).toBeTruthy();
     expect(screen.queryByText('Start entering details to create a recoverable draft.')).toBeNull();
-    expect(screen.queryByText('Saving changes…')).toBeNull();
-    expect(screen.queryByText('Draft saved automatically.')).toBeNull();
+    expect(screen.queryByText('Saving…')).toBeNull();
+    expect(screen.getByText('Saved automatically.')).toBeTruthy();
+  });
+
+  it('composes a resumed draft into product sections with rich account and classification presentation', async () => {
+    const categorizedCandidate = {
+      ...readyCandidate,
+      category: { id: 10, name: 'Ride apps', color: '#336699', parentCategory: { id: 9, name: 'Transport' } },
+      tags: [{ id: 20, name: 'Business', color: '#663399' }],
+    };
+    mockGetManualDraft.mockResolvedValue({ data: categorizedCandidate });
+    mockGetSelectableFinancialAccounts.mockResolvedValue(accounts);
+    mockGetSelectableCategories.mockResolvedValue([
+      { id: 10, name: 'Ride apps', categoryType: 'EXPENSE', color: '#336699', parentCategoryId: 9, parentCategoryName: 'Transport' },
+    ]);
+    mockGetSelectableTags.mockResolvedValue([{ id: 20, name: 'Business', color: '#663399' }]);
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    expect(await screen.findByDisplayValue('Coffee')).toBeTruthy();
+    expect(screen.getByTestId('manualDraftAccountSection')).toBeTruthy();
+    expect(screen.getByTestId('manualDraftTransactionSection')).toBeTruthy();
+    expect(screen.getByTestId('manualDraftClassificationSection')).toBeTruthy();
+    expect(screen.getByTestId('manualDraftOptionalDetailsSection')).toBeTruthy();
+    expect(screen.getByTestId('manualDraftActionsSection')).toBeTruthy();
+    expect(screen.getByTestId('manualDraftAccountContext').textContent).toContain('Checking · Debit account · MXN · ••••1234');
+    expect(screen.getByTestId('flow-OUT').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('manualDraftCurrency').textContent).toBe('MXN');
+
+    expect(await screen.findByText('Transport › Ride apps')).toBeTruthy();
+    const categoryChip = document.querySelector('[data-cy="transactionClassification"] [data-cy="transactionCategory"]');
+    expect(categoryChip?.getAttribute('data-color-treatment')).toBe('category');
+    const tagChip = screen.getAllByText('Business').find(element => element.closest('[data-cy="transactionTagChip"]'));
+    expect(tagChip.closest('[data-cy="transactionTagChip"]')?.getAttribute('data-color-treatment')).toBe('tag');
+
+    const optionalDetails = screen.getByTestId('manualDraftOptionalDetails') as HTMLDetailsElement;
+    expect(optionalDetails.open).toBe(false);
+    fireEvent.click(within(optionalDetails).getByText('More details'));
+    expect(optionalDetails.open).toBe(true);
+
+    const ruleDetails = await screen.findByTestId('manual-draft-rule-preview');
+    expect(ruleDetails.querySelector('details')?.open).toBe(false);
+    expect(screen.getByRole('button', { name: /post transaction/i }).className).toContain('btn-primary');
   });
 
   it('does not create a candidate for non-meaningful postingDate-only changes', async () => {
@@ -287,6 +337,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
   it('does not create a candidate for externalReference-only changes', async () => {
     renderManualDraft();
 
+    openOptionalDetails();
     fireEvent.change(screen.getByLabelText('External Reference'), { target: { value: 'external-only' } });
     await flushPromises();
 
@@ -296,6 +347,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
   it('does not create a candidate for notes-only changes', async () => {
     renderManualDraft();
 
+    openOptionalDetails();
     fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'notes-only' } });
     await flushPromises();
 
@@ -314,7 +366,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
   it('does not create a candidate for default flow changes without amount', async () => {
     renderManualDraft();
 
-    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'OUT' } });
+    fireEvent.click(screen.getByTestId('flow-OUT'));
     await flushPromises();
 
     expect(mockCreateManualDraft).not.toHaveBeenCalled();
@@ -338,6 +390,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
 
     expect(mockCreateManualDraft).toHaveBeenCalledWith(expect.objectContaining({ description: 'Coffee' }));
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/financial-transaction/drafts/77'));
+    expect(await screen.findByText('Edit draft')).toBeTruthy();
+    expect((await screen.findByTestId('manualDraftAutosaveStatus')).textContent).toContain('Saved automatically.');
   });
 
   it('rapid edits create only one candidate', async () => {
@@ -355,7 +409,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await screen.findByDisplayValue('Coffee');
 
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '100' } });
-    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'OUT' } });
+    fireEvent.click(screen.getByTestId('flow-OUT'));
     act(() => {
       jest.advanceTimersByTime(700);
     });
@@ -482,7 +536,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(await screen.findByText('Could not create the draft.')).toBeTruthy();
   });
 
-  it('saving state does not show a large autosave progress banner', async () => {
+  it('saving state is rendered as compact header feedback', async () => {
     const patch = deferred<{ data: typeof readyCandidate }>();
     mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
     mockUpdateManualDraft.mockReturnValueOnce(patch.promise);
@@ -495,13 +549,14 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     });
 
     await waitFor(() => expect(mockUpdateManualDraft).toHaveBeenCalled());
-    expect(screen.queryByText('Saving changes…')).toBeNull();
-    expect(screen.queryByText('Draft saved automatically.')).toBeNull();
+    expect(screen.getByTestId('manualDraftAutosaveStatus').textContent).toContain('Saving…');
+    expect(screen.queryByText('Saved automatically.')).toBeNull();
 
     await act(async () => {
       patch.resolve({ data: { ...readyCandidate, description: 'Coffee updated' } });
       await patch.promise;
     });
+    expect(await screen.findByText('Saved automatically.')).toBeTruthy();
   });
 
   it('failed PATCH shows save error copy and disables Post', async () => {
@@ -515,7 +570,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
       jest.advanceTimersByTime(700);
     });
 
-    expect(await screen.findByText('Could not save changes.')).toBeTruthy();
+    expect((await screen.findByTestId('manual-draft-error')).textContent).toContain('Save failed.');
     expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(true);
   });
 
@@ -586,9 +641,10 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
 
     fireEvent.change(screen.getByLabelText('Account'), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '2026-07-14' } });
+    openOptionalDetails();
     fireEvent.change(screen.getByLabelText('External Reference'), { target: { value: 'ext-123' } });
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '25' } });
-    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'IN' } });
+    fireEvent.click(screen.getByTestId('flow-IN'));
     act(() => {
       jest.advanceTimersByTime(700);
     });
@@ -613,6 +669,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await screen.findByDisplayValue('Coffee');
     await waitFor(() => expect(mockPreviewManualDraftRules).toHaveBeenCalledTimes(1));
 
+    openOptionalDetails();
     fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'memo only' } });
     act(() => {
       jest.advanceTimersByTime(700);
@@ -886,7 +943,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
   it('cancel before candidate exists does not call backend', () => {
     renderManualDraft();
 
-    fireEvent.click(screen.getByRole('button', { name: /cancel draft/i }));
+    fireEvent.click(screen.getByRole('link', { name: /back to transactions/i }));
 
     expect(mockCancelManualDraft).not.toHaveBeenCalled();
     expect(screen.getByTestId('location').textContent).toBe('/financial-transaction');
@@ -911,7 +968,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await screen.findByRole('option', { name: /Checking/ });
     expect(screen.getByLabelText('Account').value).toBe('1');
     expect(screen.getByLabelText('Amount').value).toBe('12');
-    expect(screen.getByLabelText('Type').value).toBe('OUT');
+    expect(screen.getByTestId('flow-OUT').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('shows only active accounts for a new draft and retains its current inactive account for an existing draft', async () => {
@@ -950,6 +1007,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     );
 
     const newDraft = renderManualDraft();
+    fireEvent.click(screen.getByTestId('flow-OUT'));
     expect(await screen.findByRole('option', { name: 'Transport' })).toBeTruthy();
     expect(screen.queryByRole('option', { name: /Old transport/ })).toBeNull();
     expect(screen.queryByRole('option', { name: /Old tag/ })).toBeNull();

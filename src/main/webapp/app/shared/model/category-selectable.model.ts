@@ -5,6 +5,7 @@ export interface ICategorySelectable {
   id?: number;
   name?: string;
   categoryType?: keyof typeof CategoryType;
+  color?: string | null;
   parentCategoryId?: number | null;
   parentCategoryName?: string | null;
   active?: boolean;

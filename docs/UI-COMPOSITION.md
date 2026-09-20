@@ -615,6 +615,12 @@ Manual create composition:
 11. Post flushes pending autosave, requires `classificationReviewStatus` to be `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted FinancialTransaction detail.
 12. Cancel before candidate creation navigates away; cancel after candidate creation calls the candidate cancel command.
 
+The manual form uses the standard product page/section composition: **Account**, **Transaction**, **Classification**, **Optional details**, and **Actions**. New entry is titled “New transaction”; a persisted route is “Edit draft.” The header keeps autosave feedback compact (creating, saving, saved, or failed) and shows account/description context only after a candidate exists. Transaction date and posting date share a responsive row; the user enters a positive amount with account currency context and selects localized Expense/Income flow controls, while the candidate still receives only derived `signedAmount`.
+
+Classification keeps flow-compatible category options and selected Category/Tag product presentation: category is a structured, color-accented hierarchy label and tags are compact colored pills. Rule suggestions prioritize suggested category/tags plus Apply suggestions or Confirm no suggestions; matched rules, conflicts, and skipped outputs are inside a closed “Rule details” disclosure. Optional external reference and notes live under a collapsed “More details” disclosure unless either has existing content. Publish remains the primary action with a concise readiness reason; persisted-draft cancel is secondary/destructive and asks for confirmation.
+
+The manual-draft container owns loading, hydration, autosave, rule commands, post, cancel, and navigation. Its Account, Transaction, Classification, Optional details, and Actions sections are presentation-only components: they receive current values, display state, and callbacks, but do not call APIs or own candidate lifecycle state.
+
 There is intentionally no explicit Save Draft button. Recoverability comes from autosave plus the `/financial-transaction/drafts/{id}` route.
 
 TC-2D.2 adds the manual draft recovery page:

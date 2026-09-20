@@ -268,6 +268,8 @@ TC-2B.1 adds the manual TransactionCandidate product UI:
 - Cancelling before a candidate exists just navigates away; cancelling a persisted candidate calls `POST /api/transaction-candidates/{id}/cancel`.
 - TC-2B.1 does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not apply TransactionRules during candidate post.
 
+FT-POLISH-2 keeps those command and lifecycle semantics while applying the shared product-page composition to manual create/resume: Account, Transaction, Classification, Optional details, and Actions. `/financial-transaction/new` is labelled “New transaction” and a persisted `/financial-transaction/drafts/{id}` route is labelled “Edit draft.” The header renders compact creating/saving/saved/failed feedback; it never shows a false saved state before the first candidate exists. The Amount/flow controls remain a UI projection over `signedAmount`; no API contract changed. Category selectable DTOs also project their existing configured color so the shared TransactionCategory presentation can render the same color identity as lists and drafts, without introducing a new endpoint or persistence behavior.
+
 TC-2C.1a adds backend-only candidate rule commands:
 
 - `POST /api/transaction-candidates/{id}/rule-preview` evaluates active owner `TransactionRule`s against the current persisted MANUAL candidate and returns transient category/tag suggestions, matched rules, conflicts, and skipped outputs. It does not mutate the candidate.

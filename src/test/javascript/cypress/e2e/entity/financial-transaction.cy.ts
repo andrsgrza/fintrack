@@ -274,7 +274,10 @@ describe('FinancialTransaction e2e test', () => {
       it('should load manual candidate draft create page without creating a candidate on page load', () => {
         cy.get(entityCreateButtonSelector).click();
         cy.url().should('match', new RegExp('/financial-transaction/new$'));
-        cy.get('[data-cy="FinancialTransactionManualDraftHeading"]').should('exist');
+        cy.get('[data-cy="FinancialTransactionManualDraftHeading"]')
+          .invoke('text')
+          .should('match', /Nueva transacción|New transaction/);
+        cy.get('[data-cy="manualDraftAutosaveStatus"]').should('not.exist');
         cy.get('@createManualCandidateRequest.all').should('have.length', 0);
         cy.get('@rulePreviewRequest.all').should('have.length', 0);
       });
@@ -386,13 +389,46 @@ describe('FinancialTransaction e2e test', () => {
         expect(response?.body.status).to.equal('DRAFT');
       });
       cy.url().should('match', new RegExp('/financial-transaction/drafts/\\d+$'));
+      cy.get('[data-cy="FinancialTransactionManualDraftHeading"]')
+        .invoke('text')
+        .should('match', /Editar borrador|Edit draft/);
+      cy.get('[data-cy="manualDraftAutosaveStatus"]')
+        .invoke('text')
+        .should('match', /Guardado automáticamente|Saved automatically/);
 
       cy.get('[data-cy="account"]').select(String(financialAccount.id));
       cy.get('[data-cy="transactionDate"]').type('2026-07-08');
       cy.get('[data-cy="amount"]').clear().type('100.5');
-      cy.get('[data-cy="flow"]').select('OUT');
+      cy.get('[data-cy="flow-OUT"]').click().should('have.attr', 'aria-pressed', 'true');
       waitForSavedManualCandidateDraft(manualCandidateDescription);
       cy.get('[data-cy="manualDraftPostButton"]').should('be.disabled');
+
+      let suggestedCategoryId: number | null = null;
+      let suggestedCategoryName: string | null = null;
+      let suggestedTagIds: number[] = [];
+      let suggestedTagNames: string[] = [];
+      cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(200);
+        expect(response?.body.hasSuggestions).to.equal(true);
+        suggestedCategoryId = response?.body.suggestedCategory?.categoryId ?? null;
+        suggestedCategoryName = response?.body.suggestedCategory?.categoryName ?? null;
+        suggestedTagIds = (response?.body.suggestedTags ?? []).map(suggestion => suggestion.tagId);
+        suggestedTagNames = (response?.body.suggestedTags ?? []).map(suggestion => suggestion.tagName);
+      });
+      cy.get('[data-testid="manual-draft-rule-suggestions"]').should($section => {
+        if (suggestedCategoryName) {
+          expect($section.text()).to.contain(suggestedCategoryName);
+        }
+        suggestedTagNames.forEach(suggestedTagName => expect($section.text()).to.contain(suggestedTagName));
+      });
+      cy.get('[data-cy="manualDraftApplyRulesButton"]').click();
+      cy.wait('@candidateApplyRulesRequest').its('response.statusCode').should('eq', 200);
+      cy.then(() => {
+        if (suggestedCategoryId) {
+          cy.get('[data-cy="category"]').should('have.value', String(suggestedCategoryId));
+        }
+        suggestedTagIds.forEach(suggestedTagId => cy.get(`[data-cy="tags"] option[value="${suggestedTagId}"]`).should('be.selected'));
+      });
 
       cy.authenticatedRequest({
         method: 'PATCH',
@@ -413,10 +449,9 @@ describe('FinancialTransaction e2e test', () => {
         .invoke('text')
         .should('match', /Inactiv[ae]/);
       cy.get('[data-cy="amount"]').should('have.value', '100.5');
-      cy.get('[data-cy="flow"]').should('have.value', 'OUT');
+      cy.get('[data-cy="flow-OUT"]').should('have.attr', 'aria-pressed', 'true');
 
-      // Explicit manual selection avoids assuming a newly-created rule outranks pre-existing
-      // local rules. It also establishes the historical associations we must preserve.
+      // Explicit selections after applying suggestions are user-owned and must survive another preview.
       cy.get('[data-cy="category"]').select(String(category.id));
       cy.get('[data-cy="tags"]').select([String(tag.id)]);
       waitForManualCandidate(
@@ -424,6 +459,19 @@ describe('FinancialTransaction e2e test', () => {
           candidate.classificationReviewStatus === 'USER_SELECTED' &&
           candidate.category?.id === category.id &&
           candidate.tags?.some(candidateTag => candidateTag.id === tag.id) === true,
+      );
+
+      const reEvaluatedDescription = `${manualCandidateDescription} revised`;
+      cy.get('[data-cy="description"]').should('have.value', manualCandidateDescription).type(' revised');
+      manualCandidateDescription = reEvaluatedDescription;
+      waitForSavedManualCandidateDraft(manualCandidateDescription);
+      cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
+      cy.get('[data-cy="category"]').should('have.value', String(category.id));
+      cy.get('[data-cy="tags"] option:selected').should('have.value', String(tag.id));
+      cy.get('[data-cy="manualDraftApplyRulesButton"]').should('not.be.disabled').click();
+      cy.wait('@candidateApplyRulesRequest').its('response.statusCode').should('eq', 200);
+      waitForManualCandidate(candidate =>
+        ['SUGGESTED', 'USER_SELECTED', 'NOT_APPLICABLE'].includes(candidate.classificationReviewStatus ?? ''),
       );
 
       cy.authenticatedRequest({
@@ -473,6 +521,7 @@ describe('FinancialTransaction e2e test', () => {
       });
 
       const lastSecondNotes = uniqueName('latest-notes');
+      cy.get('[data-cy="manualDraftOptionalDetails"] summary').click();
       cy.get('[data-cy="notes"]').type(lastSecondNotes);
       cy.get('[data-cy="manualDraftPostButton"]').should('not.be.disabled').click();
       let postedFinancialTransactionId;
@@ -521,6 +570,7 @@ describe('FinancialTransaction e2e test', () => {
       cy.reload();
       cy.wait('@categoriesRequest');
       cy.wait('@tagsRequest');
+      cy.get('[data-cy="flow-OUT"]').click().should('have.attr', 'aria-pressed', 'true');
       cy.get('[data-cy="category"] option').should('contain', category.name);
       cy.get('[data-cy="tags"] option').should('contain', tag.name);
       cy.get('@rulePreviewRequest.all').should('have.length', 0);
@@ -530,6 +580,7 @@ describe('FinancialTransaction e2e test', () => {
       cy.get('[data-cy="description"]').type('Candidate to cancel');
       cy.wait('@createManualCandidateRequest').its('response.statusCode').should('eq', 201);
 
+      cy.on('window:confirm', () => true);
       cy.get('[data-cy="manualDraftCancelButton"]').click();
       cy.wait('@cancelManualCandidateRequest').its('response.statusCode').should('eq', 200);
       cy.url().should('match', financialTransactionPageUrlPattern);

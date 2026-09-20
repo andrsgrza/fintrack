@@ -1778,6 +1778,7 @@ Implemented TC-2B.1 coverage:
 - cancelled drafts are read-only and posted drafts redirect;
 - candidate create flow does not call `/api/financial-transactions/rule-preview`;
 - posted FinancialTransaction edit remains the existing one-step edit route.
+- FT-POLISH-2 asserts distinct New transaction/Edit draft identity, no false saved state before candidate creation, compact autosave feedback, rich account labels, responsive grouped dates and positive-amount/flow controls, color-aware Category/Tag product presentation, collapsed optional/rule-detail disclosures, concise publish readiness, and persisted-draft cancel confirmation. Cypress covers the same create-to-draft header transition, automatic preview, explicit suggestion application, later manual selection/re-preview, optional notes, post, recovery, and cancel paths.
 
 Future planned areas:
 

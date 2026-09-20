@@ -9,6 +9,7 @@ public class CategorySelectableDTO implements Serializable {
     private Long id;
     private String name;
     private CategoryType categoryType;
+    private String color;
     private Long parentCategoryId;
     private String parentCategoryName;
     private Boolean active;
@@ -35,6 +36,14 @@ public class CategorySelectableDTO implements Serializable {
 
     public void setCategoryType(CategoryType categoryType) {
         this.categoryType = categoryType;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
     }
 
     public Long getParentCategoryId() {
