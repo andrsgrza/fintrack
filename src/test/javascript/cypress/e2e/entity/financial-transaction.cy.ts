@@ -32,6 +32,7 @@ describe('FinancialTransaction e2e test', () => {
     currency: 'MXN',
     initialBalance: 1000,
     initialBalanceDate: '2026-07-08',
+    lastFourDigits: '4657',
     active: true,
   });
 
@@ -185,6 +186,7 @@ describe('FinancialTransaction e2e test', () => {
     cy.intercept('POST', '/api/transaction-candidates/*/rule-preview').as('candidateRulePreviewRequest');
     cy.intercept('POST', '/api/transaction-candidates/*/apply-rules').as('candidateApplyRulesRequest');
     cy.intercept('POST', '/api/financial-transactions/rule-preview').as('rulePreviewRequest');
+    cy.intercept('PATCH', '/api/financial-transactions/*').as('patchFinancialTransactionRequest');
     cy.intercept('DELETE', '/api/financial-transactions/*').as('deleteEntityRequest');
     cy.intercept('GET', '/api/financial-accounts/selectable*').as('selectableAccountsRequest');
     cy.intercept('GET', '/api/categories/selectable*', request => {
@@ -302,7 +304,7 @@ describe('FinancialTransaction e2e test', () => {
         cy.wait('@entitiesRequest');
       });
 
-      it('detail button click should load details FinancialTransaction page', () => {
+      it('detail button click should load the product posted transaction detail', () => {
         cy.viewport(1280, 800);
         cy.get('[data-cy="financialTransactionProductList"]').should('exist');
         cy.contains('th', 'Created').should('not.exist');
@@ -322,7 +324,15 @@ describe('FinancialTransaction e2e test', () => {
           .and('have.class', 'rounded-pill');
         cy.contains('MANUAL').should('not.exist');
         cy.get(entityDetailsButtonSelector).first().click();
-        cy.getEntityDetailsHeading('financialTransaction');
+        cy.get('[data-cy="financialTransactionDetailsHeading"]').should('contain', financialTransaction.description);
+        cy.get('[data-cy="transactionAmount"]').should('contain', '−100.50 MXN').and('contain', 'Gasto');
+        cy.get('[data-cy="transactionAccountLink"]')
+          .should('contain', financialAccount.name)
+          .and('contain', 'MXN')
+          .and('contain', '••••4657');
+        cy.get('[data-cy="financialTransactionDetailClassification"]').should('contain', category.name).and('contain', tag.name);
+        cy.contains('MANUAL').should('not.exist');
+        cy.contains('Created At').should('not.exist');
         cy.get(entityDetailsBackButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
@@ -330,9 +340,16 @@ describe('FinancialTransaction e2e test', () => {
         cy.url().should('match', financialTransactionPageUrlPattern);
       });
 
-      it('edit button click should load posted FinancialTransaction edit page and go back', () => {
+      it('edit button click should load the posted transaction product form and go back', () => {
         cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('FinancialTransaction');
+        cy.get('[data-cy="FinancialTransactionCreateUpdateHeading"]')
+          .invoke('text')
+          .should('match', /Editar transacción|Edit transaction/);
+        cy.get('[data-cy="financialTransactionEditTransactionSection"]').should('exist');
+        cy.get('[data-cy="financialTransactionEditClassificationSection"]').should('exist');
+        cy.get('[data-cy="financialTransactionEditOptionalDetails"]').should('exist');
+        cy.get('[data-cy="account"]').should('not.exist');
+        cy.get('[data-cy="transactionAccountLink"]').should('contain', financialAccount.name);
         cy.get('[data-cy="entityCreateSaveButton"]').should('exist');
         cy.get('[data-cy="entityCreateCancelButton"]').click();
         cy.wait('@entitiesRequest').then(({ response }) => {
@@ -341,19 +358,45 @@ describe('FinancialTransaction e2e test', () => {
         cy.url().should('match', financialTransactionPageUrlPattern);
       });
 
-      it('edit button click should save posted FinancialTransaction edit page', () => {
+      it('edit button saves posted transaction fields and the detail reflects them', () => {
+        const updatedDescription = `${financialTransaction.description} updated`;
         cy.get(entityEditButtonSelector).first().click();
-        cy.getEntityCreateUpdateHeading('FinancialTransaction');
+        cy.get('[data-cy="description"]').clear().type(updatedDescription);
+        cy.get('[data-cy="transactionDate"]').clear().type('2026-07-09');
+        cy.get('[data-cy="amount"]').clear().type('125.75');
+        cy.get('[data-cy="category"]').select(String(category.id));
+        cy.get('[data-cy="tags"]').select([String(tag.id)]);
+        cy.get('[data-cy="financialTransactionEditOptionalDetails"] summary').click();
+        cy.get('[data-cy="externalReference"]').type('updated-reference');
+        cy.get('[data-cy="notes"]').type('updated notes');
         cy.get('[data-cy="entityCreateSaveButton"]').click();
+        cy.wait('@patchFinancialTransactionRequest').then(({ request, response }) => {
+          expect(response?.statusCode).to.equal(200);
+          expect(request.body).to.include({
+            description: updatedDescription,
+            amount: 125.75,
+            externalReference: 'updated-reference',
+            notes: 'updated notes',
+          });
+          expect(request.body).not.to.have.property('account');
+          expect(request.body).not.to.have.property('origin');
+        });
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialTransactionPageUrlPattern);
+        cy.contains(entityTableSelector, updatedDescription).find(entityDetailsButtonSelector).click();
+        cy.get('[data-cy="financialTransactionDetailsHeading"]').should('contain', updatedDescription);
+        cy.get('[data-cy="transactionAmount"]').should('contain', '−125.75 MXN');
+        cy.contains('[data-cy="financialTransactionDetailMetadata"]', 'updated-reference').should('exist');
+        cy.get('[data-cy="financialTransactionDetailNotes"]').should('contain', 'updated notes');
       });
 
-      it('last delete button click should delete instance of FinancialTransaction', () => {
+      it('detail overflow delete should delete a posted FinancialTransaction', () => {
         cy.intercept('GET', '/api/financial-transactions/*').as('dialogDeleteRequest');
-        cy.visit(`${financialTransactionPageUrl}/${financialTransaction.id}/delete`);
+        cy.get(entityDetailsButtonSelector).first().click();
+        cy.get('[data-cy="financialTransactionDetailActionsMenuToggle"]').click();
+        cy.get('[data-cy="entityDeleteButton"]').click();
         cy.wait('@dialogDeleteRequest');
         cy.getEntityDeleteDialogHeading('financialTransaction').should('exist');
         cy.get(entityConfirmDeleteButtonSelector).click();

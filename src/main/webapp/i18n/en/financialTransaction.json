@@ -16,7 +16,7 @@
         "question": "Are you sure you want to delete Financial Transaction {{ id }}?"
       },
       "detail": {
-        "title": "Financial Transaction"
+        "title": "Transaction"
       },
       "id": "ID",
       "transactionDate": "Transaction date",
@@ -43,7 +43,18 @@
         "noCategory": "No category",
         "noTags": "No tags",
         "classification": "Classification",
-        "moreActions": "More transaction actions"
+        "moreActions": "More transaction actions",
+        "details": "Details",
+        "transaction": "Transaction",
+        "editTitle": "Edit transaction",
+        "moreDetails": "More details",
+        "optionalDetails": "Optional details",
+        "saveChanges": "Save changes",
+        "origins": {
+          "manual": "Manual",
+          "fileImport": "File import",
+          "api": "API"
+        }
       },
       "outgoingInternalTransfer": "Outgoing Internal Transfer",
       "incomingInternalTransfer": "Incoming Internal Transfer",

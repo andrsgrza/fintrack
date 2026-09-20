@@ -642,7 +642,11 @@ TC-2D.2 adds the manual draft recovery page:
 
 The header has a primary **New transaction** action and secondary **Drafts** and refresh actions. Each posted row keeps compact edit visible and places Delete in an overflow menu. Existing routes, pagination, sorting query parameters, and delete confirmation behavior remain unchanged.
 
-Edit mode for posted FinancialTransactions remains the existing one-step edit flow. It does not call rule preview and does not auto-reevaluate rules.
+## FinancialTransaction posted detail and edit — product composition
+
+`/financial-transaction/{id}` is a compact posted-transaction detail rather than a generated label/value dump. Its header combines description, signed amount/flow, account context, and transaction date. Classification reuses the category hierarchy/color treatment and tag pill/color treatment used by the posted list and drafts. A metadata grid contains only useful dates, account, external reference when present, and a localized origin (`Manual`, `File import`, or `API`); it deliberately excludes IDs, timestamps, candidate/ingestion internals, and raw enum values. Notes render only when present. Edit is visible, Back is secondary, and Delete remains in the overflow menu.
+
+`/financial-transaction/{id}/edit` remains the one-step posted `FinancialTransaction` PATCH flow. It is composed as Transaction, Classification, and More details sections with a single Cancel / Save changes footer. Account is read-only contextual product information, not a disabled selector; origin and other server-owned/technical fields are absent. It loads the product-safe selectable category/tag APIs (including existing inactive historical choices), filters category choices by flow, and uses the same classification presentation below those controls. Posted edit does not call rule preview or auto-reevaluate rules.
 
 The candidate UI does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side TransactionRules, and does not apply rules during candidate post. It only calls candidate-specific preview/apply commands through `/api/transaction-candidates/{id}/rule-preview` and `/api/transaction-candidates/{id}/apply-rules`; preview is automatic/read-only after saved rule-input changes, while apply/confirm remains explicit.
 

@@ -844,25 +844,28 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 **Stack:** Cypress, JWT via `cy.login()`, API helpers. **Prerequisite:** creates a `FinancialAccount` via API before each test (required relationship).
 
-#### 3.1 Navigation & CRUD UI (7) — ✅
+#### 3.1 Navigation, posted transaction, and draft UI (11) — ✅
 
-| Test                                                                       | What it checks                                                      |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `FinancialTransactions menu should load FinancialTransactions page`        | Menu → list route                                                   |
-| `should load create FinancialTransaction page`                             | Create → form → cancel                                              |
-| `detail button click should load details FinancialTransaction page`        | Detail view                                                         |
-| `edit button click should load edit FinancialTransaction page and go back` | Edit form cancel                                                    |
-| `edit button click should load edit FinancialTransaction page and save`    | Edit save                                                           |
-| `last delete button click should delete instance of FinancialTransaction`  | Delete dialog → `204`                                               |
-| `should create an instance of FinancialTransaction`                        | Current UI form create path → `201`; ingestion selector not covered |
+| Test                                                                                       | What it checks                                                                    |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `FinancialTransactions menu should load FinancialTransactions page`                        | Menu → posted list route                                                          |
+| `should load manual candidate draft create page without creating a candidate on page load` | New transaction → draft form; no candidate/rule preview on initial load           |
+| `detail button click should load the product posted transaction detail`                    | Signed amount, account context, classification, localized origin, overflow Delete |
+| `edit button click should load the posted transaction product form and go back`            | Immutable account context and Cancel                                              |
+| `edit button saves posted transaction fields and the detail reflects them`                 | PATCH persists transaction/classification/optional details and reloads detail     |
+| `detail overflow delete should delete a posted FinancialTransaction`                       | Product overflow → existing delete dialog → `204`                                 |
+| `keeps a draft usable after its account becomes inactive, then posts it…`                  | Manual candidate regression: recovery, suggestions, historical references         |
+| `cancels a saved candidate draft`                                                          | Candidate cancel command                                                          |
+| `lists, resumes, and cancels a recoverable manual draft…`                                  | Draft recovery route and actions                                                  |
+| `regular user should not see transactions on another users account`                        | Ownership API smoke                                                               |
+| `admin should access transactions on another users account by direct id`                   | Admin ownership API smoke                                                         |
 
-#### 3.2 Ownership smoke (3) — ✅ custom
+#### 3.2 Ownership smoke (2) — ✅ custom
 
-| Test                                                                | What it checks                                                  |
-| ------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `should not render transaction ingestion on create form`            | `[data-cy="transactionIngestion"]` absent on `/new`             |
-| `regular user should not see transactions on another users account` | API: admin creates tx on admin account → user `GET` excludes it |
-| `admin should see transactions on another users account`            | API: user creates tx → admin `GET` includes it                  |
+| Test                                                                     | What it checks                                                  |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `regular user should not see transactions on another users account`      | API: admin creates tx on admin account → user `GET` excludes it |
+| `admin should access transactions on another users account by direct id` | API: admin can read an owned user transaction by id             |
 
 ---
 

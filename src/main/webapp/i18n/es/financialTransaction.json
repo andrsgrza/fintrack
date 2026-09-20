@@ -16,7 +16,7 @@
         "question": "¿Seguro que quiere eliminar Financial Transaction {{ id }}?"
       },
       "detail": {
-        "title": "Financial Transaction"
+        "title": "Transacción"
       },
       "id": "ID",
       "transactionDate": "Fecha de la transacción",
@@ -43,7 +43,18 @@
         "noCategory": "Sin categoría",
         "noTags": "Sin etiquetas",
         "classification": "Clasificación",
-        "moreActions": "Más acciones de transacción"
+        "moreActions": "Más acciones de transacción",
+        "details": "Detalles",
+        "transaction": "Transacción",
+        "editTitle": "Editar transacción",
+        "moreDetails": "Más detalles",
+        "optionalDetails": "Detalles opcionales",
+        "saveChanges": "Guardar cambios",
+        "origins": {
+          "manual": "Manual",
+          "fileImport": "Importación de archivo",
+          "api": "API"
+        }
       },
       "outgoingInternalTransfer": "Outgoing Internal Transfer",
       "incomingInternalTransfer": "Incoming Internal Transfer",
