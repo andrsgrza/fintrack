@@ -193,13 +193,24 @@ describe('Entities reducer tests', () => {
     });
 
     it('dispatches FETCH_FINANCIALTRANSACTION_LIST actions', async () => {
-      const arg = {};
+      const arg = {
+        page: 1,
+        size: 20,
+        sort: 'transactionDate,asc',
+        query: 'description.contains=Bus+fare&flow.equals=OUT&tagsId.in=10,20',
+      };
 
       const result = await getEntities(arg)(dispatch, getState, extra);
 
       const pendingAction = dispatch.mock.calls[0][0];
       expect(pendingAction.meta.requestStatus).toBe('pending');
       expect(getEntities.fulfilled.match(result)).toBe(true);
+      const requestUrl = (axios.get as unknown as sinon.SinonStub).firstCall.args[0] as string;
+      expect(requestUrl).toContain('description.contains=Bus+fare');
+      expect(requestUrl).toContain('flow.equals=OUT');
+      expect(requestUrl).toContain('tagsId.in=10%2C20');
+      expect(requestUrl).toContain('page=1');
+      expect(requestUrl).toContain('sort=transactionDate%2Casc');
     });
 
     it('dispatches FETCH_FINANCIALTRANSACTION actions', async () => {

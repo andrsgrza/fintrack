@@ -5,20 +5,14 @@
         "title": "Transactions",
         "refreshListLabel": "Refresh",
         "createLabel": "New transaction",
-        "viewDraftsLabel": "Drafts",
-        "createOrEditLabel": "Create or edit a Financial Transaction",
-        "notFound": "No Financial Transactions found"
+        "viewDraftsLabel": "Drafts"
       },
-      "created": "A new Financial Transaction is created with identifier {{ param }}",
-      "updated": "A Financial Transaction is updated with identifier {{ param }}",
-      "deleted": "A Financial Transaction is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Financial Transaction {{ id }}?"
+        "question": "Are you sure you want to delete this transaction?"
       },
       "detail": {
         "title": "Transaction"
       },
-      "id": "ID",
       "transactionDate": "Transaction date",
       "postingDate": "Posting date",
       "description": "Description",
@@ -27,12 +21,8 @@
       "origin": "Origin",
       "externalReference": "External Reference",
       "notes": "Notes",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
       "account": "Account",
       "category": "Category",
-      "financialSubscription": "Financial Subscription",
-      "transactionIngestion": "Transaction Ingestion",
       "tags": "Tags",
       "product": {
         "loading": "Loading transactions…",
@@ -40,6 +30,12 @@
         "emptyTitle": "No transactions yet",
         "emptyDescription": "Create a transaction to start tracking your account activity.",
         "sortByDate": "Sort by transaction date",
+        "searchDescription": "Search description",
+        "search": "Search",
+        "filters": "Filters",
+        "clearFilters": "Clear filters",
+        "transactionDateFrom": "Transaction date from",
+        "transactionDateTo": "Transaction date to",
         "noCategory": "No category",
         "noTags": "No tags",
         "classification": "Classification",
@@ -50,15 +46,13 @@
         "moreDetails": "More details",
         "optionalDetails": "Optional details",
         "saveChanges": "Save changes",
+        "deleteTitle": "Delete transaction",
         "origins": {
           "manual": "Manual",
           "fileImport": "File import",
           "api": "API"
         }
       },
-      "outgoingInternalTransfer": "Outgoing Internal Transfer",
-      "incomingInternalTransfer": "Incoming Internal Transfer",
-      "ingestionRecord": "Ingestion Record",
       "manualDraft": {
         "newTitle": "New transaction",
         "editTitle": "Edit draft",
@@ -86,6 +80,7 @@
         "cancelled": "Cancelled.",
         "cancelledReadOnly": "This draft was cancelled and cannot be edited.",
         "moreDetails": "More details",
+        "samePostingDate": "Use the same posting date",
         "sections": {
           "account": "Account",
           "transaction": "Transaction",
@@ -95,6 +90,7 @@
         },
         "classificationReadiness": {
           "pending": "Classification pending",
+          "incomplete": "Complete details to evaluate",
           "updating": "Updating suggestions",
           "available": "Suggestions available",
           "suggested": "Suggestions applied",
@@ -172,24 +168,6 @@
           "suggested": "Suggestions applied",
           "userSelected": "Manually selected",
           "notApplicable": "No applicable suggestions"
-        }
-      },
-      "rulePreview": {
-        "step1": "Step 1: Transaction details",
-        "step2": "Step 2: Categorization",
-        "nextToCategorization": "Next: Categorization",
-        "backToDetails": "Back to details",
-        "suggestionsPrefilled": "Suggestions from rules were prefilled. You can change them before saving.",
-        "noSuggestions": "No rule suggestions found. Choose category/tags manually.",
-        "failed": "Rule preview failed. Review the transaction details and try again.",
-        "matchedRules": "Matched rules",
-        "categoryConflict": "A rule suggested {{ suggested }}, but the current category is {{ current }}.",
-        "validation": {
-          "accountRequired": "Account is required before previewing rules.",
-          "descriptionRequired": "Description is required before previewing rules.",
-          "amountRequired": "Amount must be greater than zero before previewing rules.",
-          "flowRequired": "Type is required before previewing rules.",
-          "transactionDateRequired": "Transaction date is required before previewing rules."
         }
       }
     }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import enAccountType from 'app/../i18n/en/accountType.json';
 import enCategory from 'app/../i18n/en/category.json';
@@ -9,9 +9,11 @@ import enFinancialAccount from 'app/../i18n/en/financialAccount.json';
 import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import enTag from 'app/../i18n/en/tag.json';
 import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
 import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 import { FinancialTransaction } from './financial-transaction';
+import { FinancialTransactionDeleteDialog } from './financial-transaction-delete-dialog';
 import { FinancialTransactionDetail } from './financial-transaction-detail';
 import { FinancialTransactionUpdate } from './financial-transaction-update';
 
@@ -22,8 +24,10 @@ const mockPartialUpdateEntity = jest.fn(entity => ({
   payload: { data: entity },
 }));
 const mockGetEntity = jest.fn(id => ({ type: 'financialTransaction/getEntity', payload: id }));
+const mockDeleteEntity = jest.fn(id => ({ type: 'financialTransaction/deleteEntity', payload: id }));
 const mockGetSelectableCategories = getSelectableCategories as jest.Mock;
 const mockGetSelectableTags = getSelectableTags as jest.Mock;
+const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
 let mockState;
 
 jest.mock('app/config/store', () => ({
@@ -35,10 +39,15 @@ jest.mock('./financial-transaction.reducer', () => ({
   getEntities: params => mockGetEntities(params),
   partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
   getEntity: id => mockGetEntity(id),
+  deleteEntity: id => mockDeleteEntity(id),
 }));
 
 jest.mock('app/entities/category/category-selectable.service', () => ({
   getSelectableCategories: jest.fn(),
+}));
+
+jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
+  getSelectableFinancialAccounts: jest.fn(),
 }));
 
 jest.mock('app/entities/tag/tag-selectable.service', () => ({
@@ -92,7 +101,7 @@ const baseState = {
     entity: existingTransaction,
     entities: [existingTransaction],
     loading: false,
-    totalItems: 1,
+    totalItems: 60,
     updating: false,
     updateSuccess: false,
     errorMessage: null,
@@ -133,11 +142,16 @@ const renderDetail = () => {
   );
 };
 
-const renderList = () => {
+const LocationDisplay = () => {
+  const location = useLocation();
+  return <output data-testid="financialTransactionLocation">{`${location.pathname}${location.search}`}</output>;
+};
+
+const renderList = (initialEntry = '/financial-transaction') => {
   mockState = baseState;
 
   return render(
-    <MemoryRouter initialEntries={['/financial-transaction']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/financial-transaction" element={<FinancialTransaction />} />
       </Routes>
@@ -153,8 +167,11 @@ describe('FinancialTransaction posted transaction UX', () => {
     mockGetEntities.mockClear();
     mockPartialUpdateEntity.mockClear();
     mockGetEntity.mockClear();
+    mockDeleteEntity.mockClear();
+    mockGetSelectableFinancialAccounts.mockClear();
     mockGetSelectableCategories.mockResolvedValue(categories);
     mockGetSelectableTags.mockResolvedValue(tags);
+    mockGetSelectableFinancialAccounts.mockResolvedValue(accounts);
   });
 
   it('renders a product transaction list without generated technical columns', () => {
@@ -166,8 +183,10 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.getByText('Groceries')).toBeTruthy();
     expect(screen.getByText('Personal')).toBeTruthy();
     expect(screen.getByText('−3.00 MXN')).toBeTruthy();
-    expect(screen.getByText('Expense')).toBeTruthy();
-    const category = document.querySelector('[data-cy="transactionCategory"]') as HTMLElement;
+    expect(document.querySelector('[data-cy="financialTransactionProductList"] [data-cy="transactionAmount"]')?.textContent).toContain(
+      'Expense',
+    );
+    const category = document.querySelector('[data-cy="transactionCategory"]');
     expect(category.className).toContain('rounded-1');
     expect(category.getAttribute('data-color-treatment')).toBe('category');
     const tagChip = screen.getByText('Personal');
@@ -177,6 +196,77 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.queryByText('Updated At')).toBeNull();
     expect(screen.queryByText('MANUAL')).toBeNull();
     expect(screen.queryByText('2501')).toBeNull();
+  });
+
+  it('loads product filter controls from the URL and sends generated criteria to the paginated server query', async () => {
+    renderList(
+      '/financial-transaction?page=2&sort=transactionDate,asc&description.contains=Bus%20fare&transactionDate.greaterThanOrEqual=2026-07-01&transactionDate.lessThanOrEqual=2026-07-31&accountId.equals=1&flow.equals=OUT&categoryId.equals=10&tagsId.in=20',
+    );
+
+    await waitFor(() =>
+      expect(mockGetEntities).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 1,
+          sort: 'transactionDate,asc',
+          query: expect.stringContaining('description.contains=Bus+fare'),
+        }),
+      ),
+    );
+    const query = mockGetEntities.mock.calls.at(-1)?.[0].query;
+    expect(query).toContain('transactionDate.greaterThanOrEqual=2026-07-01');
+    expect(query).toContain('transactionDate.lessThanOrEqual=2026-07-31');
+    expect(query).toContain('accountId.equals=1');
+    expect(query).toContain('flow.equals=OUT');
+    expect(query).toContain('categoryId.equals=10');
+    expect(query).toContain('tagsId.in=20');
+    expect(screen.getByLabelText('Search description').value).toBe('Bus fare');
+    expect(screen.getByLabelText('Transaction date from').value).toBe('2026-07-01');
+    expect(screen.getByLabelText('Account').value).toBe('1');
+    expect(screen.getByLabelText('Type').value).toBe('OUT');
+    expect(screen.getByLabelText('Category').value).toBe('10');
+    await waitFor(() => expect(screen.getByTestId('financialTransactionFilterCategoryIdentity')).toBeTruthy());
+    expect(screen.getByTestId('financialTransactionFilterTagIdentity').textContent).toContain('Personal');
+    expect(screen.queryByText('Origin')).toBeNull();
+    expect(screen.queryByText('Ingestion')).toBeNull();
+  });
+
+  it('resets to page one when applying or clearing filters and retains filters when sorting', async () => {
+    mockState = baseState;
+    render(
+      <MemoryRouter initialEntries={['/financial-transaction?page=3&sort=id,desc']}>
+        <Routes>
+          <Route
+            path="/financial-transaction"
+            element={
+              <>
+                <FinancialTransaction />
+                <LocationDisplay />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('Search description'), { target: { value: 'Bus' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('?description.contains=Bus&page=1&sort=id%2Cdesc'),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /sort by transaction date/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toContain(
+        '?description.contains=Bus&page=1&sort=transactionDate%2Casc',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toBe(
+        '/financial-transaction?page=1&sort=transactionDate%2Casc',
+      ),
+    );
   });
 
   it('keeps compact edit and overflow delete actions for a posted transaction', () => {
@@ -220,11 +310,12 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.getByTestId('financialTransactionEditClassificationSection')).toBeTruthy();
     expect(screen.getByTestId('financialTransactionEditOptionalDetails')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Expense' }).getAttribute('aria-pressed')).toBe('true');
-    await waitFor(() => expect((screen.getByLabelText('Category') as HTMLSelectElement).value).toBe('10'));
+    expect(screen.queryByLabelText('Use the same posting date')).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText('Category').value).toBe('10'));
     expect(screen.getByTestId('transactionCategoryPath').textContent).toContain('Home › Groceries');
     expect(screen.getByText('Personal')).toBeTruthy();
-    expect((screen.getByLabelText('External Reference') as HTMLInputElement).value).toBe('Receipt-48');
-    expect((screen.getByLabelText('Notes') as HTMLTextAreaElement).value).toBe('Some note');
+    expect(screen.getByLabelText('External Reference').value).toBe('Receipt-48');
+    expect(screen.getByLabelText('Notes').value).toBe('Some note');
     expect(screen.queryByLabelText('ID')).toBeNull();
     expect(screen.queryByLabelText('Origin')).toBeNull();
     expect(screen.queryByLabelText('Created At')).toBeNull();
@@ -265,7 +356,8 @@ describe('FinancialTransaction posted transaction UX', () => {
 
     expect(screen.getByRole('heading', { name: 'Bus fare' })).toBeTruthy();
     expect(screen.getByText('−3.00 MXN')).toBeTruthy();
-    expect(screen.getAllByText('Expense').length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelectorAll('[data-cy="transactionFlowBadge"]')).toHaveLength(1);
+    expect(document.querySelector('[data-cy="financialTransactionDetailAccountContext"]')?.textContent).not.toContain('Expense');
     expect(screen.getAllByText('Checking · Debit account · MXN · ••••1234 · Inactive').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('financialTransactionDetailClassification')).toBeTruthy();
     expect(screen.getByTestId('transactionCategoryPath').textContent).toContain('Home › Groceries');
@@ -281,6 +373,22 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.queryByText('Created At')).toBeNull();
     expect(screen.queryByText('Updated At')).toBeNull();
     expect(screen.queryByText('Transaction Ingestion')).toBeNull();
+    expect(screen.queryByText('2501')).toBeNull();
+  });
+
+  it('uses a product delete confirmation without exposing a transaction ID', () => {
+    mockState = baseState;
+
+    render(
+      <MemoryRouter initialEntries={['/financial-transaction/2501/delete']}>
+        <Routes>
+          <Route path="/financial-transaction/:id/delete" element={<FinancialTransactionDeleteDialog />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Delete transaction' })).toBeTruthy();
+    expect(screen.getByText('Are you sure you want to delete this transaction?')).toBeTruthy();
     expect(screen.queryByText('2501')).toBeNull();
   });
 

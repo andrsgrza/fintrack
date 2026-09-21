@@ -264,10 +264,13 @@ TC-2B.1 adds the manual TransactionCandidate product UI:
 - `/financial-transaction/drafts/{id}` is a MANUAL-only product route; non-MANUAL candidates and load failures render a safe error state with no editable form or manual draft actions.
 - Subsequent edits debounce autosave through `PATCH /api/transaction-candidates/{id}/manual-draft`.
 - There is intentionally no explicit Save Draft button.
+- Manual create/resume defaults to synchronized transaction and posting dates. This is frontend-only convenience state: while enabled, a transaction-date edit sends the same posting date in the existing autosave payload; disabling it preserves and independently persists the posting date. Draft hydration enables synchronization only when the two persisted dates are equal. Posted `FinancialTransaction` edit remains independent-date editing.
 - The UI displays amount plus flow for usability but sends only `signedAmount`; backend derives `amount` and `flow`.
 - Posting flushes pending autosave, calls `POST /api/transaction-candidates/{id}/post`, and redirects to the posted `FinancialTransaction` detail page.
 - Cancelling before a candidate exists just navigates away; cancelling a persisted candidate calls `POST /api/transaction-candidates/{id}/cancel`.
 - TC-2B.1 does not call `POST /api/financial-transactions/rule-preview`, does not run frontend-side rules, and does not apply TransactionRules during candidate post.
+
+FT-POLISH-4A adds product list filtering without a new backend endpoint: the existing paginated `GET /api/financial-transactions` generated criteria support `description.contains`, transaction-date range, `accountId.equals`, `flow.equals`, `categoryId.equals`, and `tagsId.in`. The frontend serializes only those product filters alongside page/sort in the URL, so filtering is applied by `FinancialTransactionQueryService` before paging and its existing owner constraint remains in effect.
 
 FT-POLISH-2 keeps those command and lifecycle semantics while applying the shared product-page composition to manual create/resume: Account, Transaction, Classification, Optional details, and Actions. `/financial-transaction/new` is labelled “New transaction” and a persisted `/financial-transaction/drafts/{id}` route is labelled “Edit draft.” The header renders compact creating/saving/saved/failed feedback; it never shows a false saved state before the first candidate exists. The Amount/flow controls remain a UI projection over `signedAmount`; no API contract changed. Category selectable DTOs also project their existing configured color so the shared TransactionCategory presentation can render the same color identity as lists and drafts, without introducing a new endpoint or persistence behavior.
 

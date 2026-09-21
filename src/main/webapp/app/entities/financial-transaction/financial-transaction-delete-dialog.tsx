@@ -41,11 +41,11 @@ export const FinancialTransactionDeleteDialog = () => {
   return (
     <Modal isOpen toggle={handleClose}>
       <ModalHeader toggle={handleClose} data-cy="financialTransactionDeleteDialogHeading">
-        <Translate contentKey="entity.delete.title">Confirm delete operation</Translate>
+        <Translate contentKey="fintrackApp.financialTransaction.product.deleteTitle">Delete transaction</Translate>
       </ModalHeader>
       <ModalBody id="fintrackApp.financialTransaction.delete.question">
-        <Translate contentKey="fintrackApp.financialTransaction.delete.question" interpolate={{ id: financialTransactionEntity.id }}>
-          Are you sure you want to delete this FinancialTransaction?
+        <Translate contentKey="fintrackApp.financialTransaction.delete.question">
+          Are you sure you want to delete this transaction?
         </Translate>
       </ModalBody>
       <ModalFooter>

@@ -5,20 +5,14 @@
         "title": "Transacciones",
         "refreshListLabel": "Refrescar lista",
         "createLabel": "Nueva transacción",
-        "viewDraftsLabel": "Ver borradores",
-        "createOrEditLabel": "Crear o editar Financial Transaction",
-        "notFound": "Ningún Financial Transactions encontrado"
+        "viewDraftsLabel": "Ver borradores"
       },
-      "created": "Un nuevo Financial Transaction ha sido creado con el identificador {{ param }}",
-      "updated": "Un Financial Transaction ha sido actualizado con el identificador {{ param }}",
-      "deleted": "Un Financial Transaction ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "¿Seguro que quiere eliminar Financial Transaction {{ id }}?"
+        "question": "¿Seguro que quieres eliminar esta transacción?"
       },
       "detail": {
         "title": "Transacción"
       },
-      "id": "ID",
       "transactionDate": "Fecha de la transacción",
       "postingDate": "Fecha de posteo",
       "description": "Descripción",
@@ -27,12 +21,8 @@
       "origin": "Origen",
       "externalReference": "Referencia externa",
       "notes": "Notas",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
       "account": "Cuenta",
       "category": "Categoría",
-      "financialSubscription": "Financial Subscription",
-      "transactionIngestion": "Transaction Ingestion",
       "tags": "Etiquetas",
       "product": {
         "loading": "Cargando transacciones…",
@@ -40,6 +30,12 @@
         "emptyTitle": "Aún no hay transacciones",
         "emptyDescription": "Crea una transacción para comenzar a registrar la actividad de tus cuentas.",
         "sortByDate": "Ordenar por fecha de transacción",
+        "searchDescription": "Buscar descripción",
+        "search": "Buscar",
+        "filters": "Filtros",
+        "clearFilters": "Limpiar filtros",
+        "transactionDateFrom": "Fecha de transacción desde",
+        "transactionDateTo": "Fecha de transacción hasta",
         "noCategory": "Sin categoría",
         "noTags": "Sin etiquetas",
         "classification": "Clasificación",
@@ -50,15 +46,13 @@
         "moreDetails": "Más detalles",
         "optionalDetails": "Detalles opcionales",
         "saveChanges": "Guardar cambios",
+        "deleteTitle": "Eliminar transacción",
         "origins": {
           "manual": "Manual",
           "fileImport": "Importación de archivo",
           "api": "API"
         }
       },
-      "outgoingInternalTransfer": "Outgoing Internal Transfer",
-      "incomingInternalTransfer": "Incoming Internal Transfer",
-      "ingestionRecord": "Ingestion Record",
       "manualDraft": {
         "newTitle": "Nueva transacción",
         "editTitle": "Editar borrador",
@@ -86,6 +80,7 @@
         "cancelled": "Cancelada.",
         "cancelledReadOnly": "Este borrador fue cancelado y no se puede editar.",
         "moreDetails": "Más detalles",
+        "samePostingDate": "Usar la misma fecha para el posteo",
         "sections": {
           "account": "Cuenta",
           "transaction": "Transacción",
@@ -95,6 +90,7 @@
         },
         "classificationReadiness": {
           "pending": "Clasificación pendiente",
+          "incomplete": "Completa los datos para evaluar",
           "updating": "Actualizando sugerencias",
           "available": "Sugerencias disponibles",
           "suggested": "Sugerencias aplicadas",
@@ -172,24 +168,6 @@
           "suggested": "Sugerencias aplicadas",
           "userSelected": "Seleccionada manualmente",
           "notApplicable": "Sin sugerencias aplicables"
-        }
-      },
-      "rulePreview": {
-        "step1": "Paso 1: Detalles de la transacción",
-        "step2": "Paso 2: Categorización",
-        "nextToCategorization": "Siguiente: categorización",
-        "backToDetails": "Volver a detalles",
-        "suggestionsPrefilled": "Se precargaron sugerencias de reglas. Puedes cambiarlas antes de guardar.",
-        "noSuggestions": "No se encontraron sugerencias de reglas. Elige categoría/etiquetas manualmente.",
-        "failed": "Falló la vista previa de reglas. Revisa los detalles de la transacción e intenta de nuevo.",
-        "matchedRules": "Reglas coincidentes",
-        "categoryConflict": "Una regla sugirió {{ suggested }}, pero la categoría actual es {{ current }}.",
-        "validation": {
-          "accountRequired": "La cuenta es obligatoria antes de previsualizar reglas.",
-          "descriptionRequired": "La descripción es obligatoria antes de previsualizar reglas.",
-          "amountRequired": "El monto debe ser mayor a cero antes de previsualizar reglas.",
-          "flowRequired": "El tipo es obligatorio antes de previsualizar reglas.",
-          "transactionDateRequired": "La fecha de transacción es obligatoria antes de previsualizar reglas."
         }
       }
     }

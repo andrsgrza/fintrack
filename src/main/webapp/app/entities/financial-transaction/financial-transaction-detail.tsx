@@ -9,7 +9,7 @@ import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { ProductActionsMenu, ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
 import { getEntity } from './financial-transaction.reducer';
-import { TransactionAccountLabel, TransactionAmount, TransactionClassification, TransactionFlowBadge } from './transaction-presentation';
+import { TransactionAccountLabel, TransactionAmount, TransactionClassification } from './transaction-presentation';
 
 const DetailValue = ({ label, children }: { label: React.ReactNode; children: React.ReactNode }) => (
   <div>
@@ -43,10 +43,8 @@ export const FinancialTransactionDetail = () => {
   }, [dispatch, id]);
 
   const transactionContext = (
-    <>
+    <span className="d-inline-flex flex-wrap align-items-center gap-2" data-cy="financialTransactionDetailAccountContext">
       <TransactionAccountLabel account={financialTransactionEntity.account} />
-      <span className="text-muted">·</span>
-      <TransactionFlowBadge flow={financialTransactionEntity.flow} />
       {financialTransactionEntity.transactionDate ? (
         <>
           <span className="text-muted">·</span>
@@ -55,7 +53,7 @@ export const FinancialTransactionDetail = () => {
           </span>
         </>
       ) : null}
-    </>
+    </span>
   );
 
   return (

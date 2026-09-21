@@ -763,6 +763,7 @@ Key TC-2B.1 frontend assertions:
 - Candidate create flow does not call `/api/financial-transactions/rule-preview`.
 - Rule suggestions section renders for editable manual drafts.
 - Automatic preview runs after successful autosave of rule-input fields, calls the candidate-specific `rule-preview` endpoint, renders suggested category/tags, conflicts, and matched rules, and does not mutate category/tags.
+- Incomplete rule inputs show the required-details state even when a previous persisted classification is stale; no Apply or Confirm action is exposed until a current preview exists.
 - Notes-only and category/tag-only edits autosave but do not auto-preview.
 - Stale preview responses are ignored so older suggestions cannot overwrite newer preview state.
 - Apply suggestions / Confirm no suggestions flushes pending autosave, calls the candidate-specific `apply-rules` endpoint, updates category/tags/status from the returned candidate, and keeps the status label synchronized.
@@ -844,21 +845,23 @@ Mocks: `FinancialTransactionRepository`, `FinancialTransactionMapper`, `Financia
 
 **Stack:** Cypress, JWT via `cy.login()`, API helpers. **Prerequisite:** creates a `FinancialAccount` via API before each test (required relationship).
 
-#### 3.1 Navigation, posted transaction, and draft UI (11) — ✅
+#### 3.1 Navigation, posted transaction, and draft UI (13) — ✅
 
-| Test                                                                                       | What it checks                                                                    |
-| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `FinancialTransactions menu should load FinancialTransactions page`                        | Menu → posted list route                                                          |
-| `should load manual candidate draft create page without creating a candidate on page load` | New transaction → draft form; no candidate/rule preview on initial load           |
-| `detail button click should load the product posted transaction detail`                    | Signed amount, account context, classification, localized origin, overflow Delete |
-| `edit button click should load the posted transaction product form and go back`            | Immutable account context and Cancel                                              |
-| `edit button saves posted transaction fields and the detail reflects them`                 | PATCH persists transaction/classification/optional details and reloads detail     |
-| `detail overflow delete should delete a posted FinancialTransaction`                       | Product overflow → existing delete dialog → `204`                                 |
-| `keeps a draft usable after its account becomes inactive, then posts it…`                  | Manual candidate regression: recovery, suggestions, historical references         |
-| `cancels a saved candidate draft`                                                          | Candidate cancel command                                                          |
-| `lists, resumes, and cancels a recoverable manual draft…`                                  | Draft recovery route and actions                                                  |
-| `regular user should not see transactions on another users account`                        | Ownership API smoke                                                               |
-| `admin should access transactions on another users account by direct id`                   | Admin ownership API smoke                                                         |
+| Test                                                                                         | What it checks                                                                                  |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `FinancialTransactions menu should load FinancialTransactions page`                          | Menu → posted list route                                                                        |
+| `filters posted transactions on the server by description, type, account, category, and tag` | Product filters issue generated criteria queries; result set changes and Clear removes criteria |
+| `should load manual candidate draft create page without creating a candidate on page load`   | New transaction → draft form; no candidate/rule preview on initial load                         |
+| `detail button click should load the product posted transaction detail`                      | Signed amount, account context, classification, localized origin, overflow Delete               |
+| `edit button click should load the posted transaction product form and go back`              | Immutable account context and Cancel                                                            |
+| `edit button saves posted transaction fields and the detail reflects them`                   | PATCH persists transaction/classification/optional details and reloads detail                   |
+| `detail overflow delete should delete a posted FinancialTransaction`                         | Product overflow → existing delete dialog → `204`                                               |
+| `keeps a draft usable after its account becomes inactive, then posts it…`                    | Manual candidate regression: recovery, suggestions, historical references                       |
+| `cancels a saved candidate draft`                                                            | Candidate cancel command                                                                        |
+| `synchronizes posting date by default, supports independent dates, and hydrates that choice` | Default date synchronization, opt-out, autosave, and reload semantics                           |
+| `lists, resumes, and cancels a recoverable manual draft…`                                    | Draft recovery route and actions                                                                |
+| `regular user should not see transactions on another users account`                          | Ownership API smoke                                                                             |
+| `admin should access transactions on another users account by direct id`                     | Admin ownership API smoke                                                                       |
 
 #### 3.2 Ownership smoke (2) — ✅ custom
 
@@ -1781,6 +1784,8 @@ Implemented TC-2B.1 coverage:
 - cancelled drafts are read-only and posted drafts redirect;
 - candidate create flow does not call `/api/financial-transactions/rule-preview`;
 - posted FinancialTransaction edit remains the existing one-step edit route.
+- list filter state is URL-backed, resets to page 1 on apply/clear, and retains active filters when sorting; reducer coverage asserts generated criteria serialization.
+- same-posting-date is defaulted, autosaves synchronized dates, preserves independently edited posting dates after opt-out, hydrates its toggle from persisted equality, and does not appear in posted edit.
 - FT-POLISH-2 asserts distinct New transaction/Edit draft identity, no false saved state before candidate creation, compact autosave feedback, rich account labels, responsive grouped dates and positive-amount/flow controls, color-aware Category/Tag product presentation, collapsed optional/rule-detail disclosures, concise publish readiness, and persisted-draft cancel confirmation. Cypress covers the same create-to-draft header transition, automatic preview, explicit suggestion application, later manual selection/re-preview, optional notes, post, recovery, and cancel paths.
 
 Future planned areas:

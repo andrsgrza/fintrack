@@ -22,6 +22,8 @@ describe('FinancialTransaction e2e test', () => {
   let tag;
   let transactionRule;
   let manualCandidateDescription;
+  let secondaryFinancialTransaction;
+  let secondaryCategory;
 
   const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -51,6 +53,8 @@ describe('FinancialTransaction e2e test', () => {
     predicate: (candidate: {
       description?: string;
       signedAmount?: number | string;
+      transactionDate?: string | null;
+      postingDate?: string | null;
       notes?: string | null;
       classificationReviewStatus?: string | null;
       category?: { id?: number | string } | null;
@@ -198,6 +202,24 @@ describe('FinancialTransaction e2e test', () => {
   });
 
   afterEach(() => {
+    if (secondaryFinancialTransaction) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/financial-transactions/${secondaryFinancialTransaction.id}`,
+        failOnStatusCode: false,
+      }).then(() => {
+        secondaryFinancialTransaction = undefined;
+      });
+    }
+    if (secondaryCategory) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/categories/${secondaryCategory.id}`,
+        failOnStatusCode: false,
+      }).then(() => {
+        secondaryCategory = undefined;
+      });
+    }
     if (financialTransaction) {
       cy.authenticatedRequest({
         method: 'DELETE',
@@ -326,6 +348,8 @@ describe('FinancialTransaction e2e test', () => {
         cy.get(entityDetailsButtonSelector).first().click();
         cy.get('[data-cy="financialTransactionDetailsHeading"]').should('contain', financialTransaction.description);
         cy.get('[data-cy="transactionAmount"]').should('contain', '−100.50 MXN').and('contain', 'Gasto');
+        cy.get('[data-cy="transactionFlowBadge"]').should('have.length', 1);
+        cy.get('[data-cy="financialTransactionDetailAccountContext"]').should('not.contain', 'Gasto').and('not.contain', 'Ingreso');
         cy.get('[data-cy="transactionAccountLink"]')
           .should('contain', financialAccount.name)
           .and('contain', 'MXN')
@@ -338,6 +362,99 @@ describe('FinancialTransaction e2e test', () => {
           expect(response?.statusCode).to.equal(200);
         });
         cy.url().should('match', financialTransactionPageUrlPattern);
+      });
+
+      it('filters posted transactions on the server by description, type, account, category, and tag', () => {
+        const incomeDescription = uniqueName('filter-income-transaction');
+
+        cy.authenticatedRequest({
+          method: 'POST',
+          url: '/api/categories',
+          body: {
+            name: uniqueName('filter-income-category'),
+            description: 'Income category for transaction filter E2E',
+            categoryType: 'INCOME',
+            color: '#336699',
+            active: true,
+          },
+        })
+          .then(({ body }) => {
+            secondaryCategory = body;
+            return cy.authenticatedRequest({
+              method: 'POST',
+              url: '/api/financial-transactions',
+              body: {
+                transactionDate: '2026-07-10',
+                postingDate: '2026-07-10',
+                description: incomeDescription,
+                amount: 42,
+                flow: 'IN',
+                origin: 'MANUAL',
+                account: { id: financialAccount.id },
+                category: { id: secondaryCategory.id },
+              },
+            });
+          })
+          .then(({ body }) => {
+            secondaryFinancialTransaction = body;
+          });
+
+        cy.visit(`${financialTransactionPageUrl}?page=1&sort=id,desc`);
+        cy.wait('@entitiesRequest');
+        cy.get('[data-cy="financialTransactionFiltersToggle"]').click();
+
+        cy.get('[data-cy="financialTransactionSearch"]').type(incomeDescription);
+        cy.get('[data-cy="financialTransactionSearchSubmit"]').click();
+        cy.wait('@entitiesRequest').then(({ request }) => {
+          expect(new URL(request.url).searchParams.get('description.contains')).to.equal(incomeDescription);
+          expect(new URL(request.url).searchParams.get('page')).to.equal('0');
+        });
+        cy.contains(entityTableSelector, incomeDescription).should('exist');
+        cy.contains(entityTableSelector, financialTransaction.description).should('not.exist');
+
+        cy.get('[data-cy="financialTransactionClearFilters"]').click();
+        cy.wait('@entitiesRequest');
+        cy.get('[data-cy="financialTransactionFilterFlow"]').select('IN');
+        cy.get('[data-cy="financialTransactionSearchSubmit"]').click();
+        cy.wait('@entitiesRequest').then(({ request }) => {
+          expect(new URL(request.url).searchParams.get('flow.equals')).to.equal('IN');
+        });
+        cy.contains(entityTableSelector, incomeDescription).should('exist');
+        cy.contains(entityTableSelector, financialTransaction.description).should('not.exist');
+
+        cy.get('[data-cy="financialTransactionClearFilters"]').click();
+        cy.wait('@entitiesRequest');
+        cy.get('[data-cy="financialTransactionFilterAccount"]').select(String(financialAccount.id));
+        cy.get('[data-cy="financialTransactionSearchSubmit"]').click();
+        cy.wait('@entitiesRequest').then(({ request }) => {
+          expect(new URL(request.url).searchParams.get('accountId.equals')).to.equal(String(financialAccount.id));
+        });
+        cy.contains(entityTableSelector, incomeDescription).should('exist');
+        cy.contains(entityTableSelector, financialTransaction.description).should('exist');
+
+        cy.get('[data-cy="financialTransactionClearFilters"]').click();
+        cy.wait('@entitiesRequest');
+        cy.get('[data-cy="financialTransactionFilterCategory"]').select(String(category.id));
+        cy.get('[data-cy="financialTransactionSearchSubmit"]').click();
+        cy.wait('@entitiesRequest').then(({ request }) => {
+          expect(new URL(request.url).searchParams.get('categoryId.equals')).to.equal(String(category.id));
+        });
+        cy.contains(entityTableSelector, financialTransaction.description).should('exist');
+        cy.contains(entityTableSelector, incomeDescription).should('not.exist');
+
+        cy.get('[data-cy="financialTransactionClearFilters"]').click();
+        cy.wait('@entitiesRequest');
+        cy.get('[data-cy="financialTransactionFilterTags"]').select([String(tag.id)]);
+        cy.get('[data-cy="financialTransactionSearchSubmit"]').click();
+        cy.wait('@entitiesRequest').then(({ request }) => {
+          expect(new URL(request.url).searchParams.get('tagsId.in')).to.equal(String(tag.id));
+        });
+        cy.contains(entityTableSelector, financialTransaction.description).should('exist');
+        cy.contains(entityTableSelector, incomeDescription).should('not.exist');
+
+        cy.get('[data-cy="financialTransactionClearFilters"]').click();
+        cy.wait('@entitiesRequest');
+        cy.url().should('not.contain', 'description.contains').and('not.contain', 'flow.equals').and('not.contain', 'categoryId.equals');
       });
 
       it('edit button click should load the posted transaction product form and go back', () => {
@@ -398,7 +515,12 @@ describe('FinancialTransaction e2e test', () => {
         cy.get('[data-cy="financialTransactionDetailActionsMenuToggle"]').click();
         cy.get('[data-cy="entityDeleteButton"]').click();
         cy.wait('@dialogDeleteRequest');
-        cy.getEntityDeleteDialogHeading('financialTransaction').should('exist');
+        cy.get('[data-cy="financialTransactionDeleteDialogHeading"]')
+          .invoke('text')
+          .should('match', /Delete transaction|Eliminar transacción/);
+        cy.get('#fintrackApp\\.financialTransaction\\.delete\\.question')
+          .invoke('text')
+          .should('match', /Are you sure you want to delete this transaction\?|¿Seguro que quieres eliminar esta transacción\?/);
         cy.get(entityConfirmDeleteButtonSelector).click();
         cy.wait('@deleteEntityRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(204);
@@ -441,6 +563,8 @@ describe('FinancialTransaction e2e test', () => {
 
       cy.get('[data-cy="account"]').select(String(financialAccount.id));
       cy.get('[data-cy="transactionDate"]').type('2026-07-08');
+      cy.get('[data-cy="samePostingDate"]').should('be.checked');
+      cy.get('[data-cy="postingDate"]').should('be.disabled').and('have.value', '2026-07-08');
       cy.get('[data-cy="amount"]').clear().type('100.5');
       cy.get('[data-cy="flow-OUT"]').click().should('have.attr', 'aria-pressed', 'true');
       waitForSavedManualCandidateDraft(manualCandidateDescription);
@@ -585,6 +709,8 @@ describe('FinancialTransaction e2e test', () => {
           financialTransaction = body;
           expect(body.description).to.equal(manualCandidateDescription);
           expect(body.notes).to.equal(lastSecondNotes);
+          expect(body.transactionDate).to.equal('2026-07-08');
+          expect(body.postingDate).to.equal('2026-07-08');
           expect(body.category.id).to.equal(category.id);
           expect(body.tags.map(transactionTag => transactionTag.id)).to.include(tag.id);
         });
@@ -627,6 +753,33 @@ describe('FinancialTransaction e2e test', () => {
       cy.get('[data-cy="manualDraftCancelButton"]').click();
       cy.wait('@cancelManualCandidateRequest').its('response.statusCode').should('eq', 200);
       cy.url().should('match', financialTransactionPageUrlPattern);
+    });
+
+    it('synchronizes posting date by default, supports independent dates, and hydrates that choice', () => {
+      const draftDescription = uniqueName('same-posting-date-draft');
+
+      cy.get('[data-cy="description"]').type(draftDescription);
+      cy.wait('@createManualCandidateRequest').its('response.statusCode').should('eq', 201);
+      cy.get('[data-cy="account"]').select(String(financialAccount.id));
+      cy.get('[data-cy="transactionDate"]').type('2026-07-08');
+      cy.get('[data-cy="samePostingDate"]').should('be.checked');
+      cy.get('[data-cy="postingDate"]').should('be.disabled').and('have.value', '2026-07-08');
+
+      cy.get('[data-cy="samePostingDate"]').uncheck();
+      cy.get('[data-cy="postingDate"]').should('not.be.disabled').clear().type('2026-07-09');
+      cy.get('[data-cy="transactionDate"]').clear().type('2026-07-10');
+      cy.get('[data-cy="postingDate"]').should('have.value', '2026-07-09');
+      waitForManualCandidate(candidate => candidate.transactionDate === '2026-07-10' && candidate.postingDate === '2026-07-09');
+
+      cy.reload();
+      cy.wait('@getManualCandidateRequest');
+      cy.get('[data-cy="samePostingDate"]').should('not.be.checked');
+      cy.get('[data-cy="transactionDate"]').should('have.value', '2026-07-10');
+      cy.get('[data-cy="postingDate"]').should('have.value', '2026-07-09').and('not.be.disabled');
+
+      cy.on('window:confirm', () => true);
+      cy.get('[data-cy="manualDraftCancelButton"]').click();
+      cy.wait('@cancelManualCandidateRequest').its('response.statusCode').should('eq', 200);
     });
 
     it('lists, resumes, and cancels a recoverable manual draft from the draft recovery page', () => {

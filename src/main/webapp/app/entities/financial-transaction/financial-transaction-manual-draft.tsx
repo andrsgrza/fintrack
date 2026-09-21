@@ -274,7 +274,9 @@ const ClassificationReadiness = ({
 }) => {
   let key = 'pending';
   let color = 'secondary';
-  if (rulePreviewState === 'UPDATING') {
+  if (rulePreviewState === 'UNAVAILABLE') {
+    key = 'incomplete';
+  } else if (rulePreviewState === 'UPDATING') {
     key = 'updating';
     color = 'light';
   } else if (rulePreviewState === 'UPDATED' && rulePreview?.hasSuggestions && !isClassificationReadyToPost(status)) {
@@ -669,13 +671,17 @@ const ManualTransactionMovementSection = ({
   draft,
   currency,
   readOnly,
+  samePostingDate,
   onFieldChange,
+  onSamePostingDateChange,
   onFlowChange,
 }: {
   draft: ManualDraftFormState;
   currency?: string | null;
   readOnly: boolean;
+  samePostingDate: boolean;
   onFieldChange: DraftFieldChangeHandler;
+  onSamePostingDateChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onFlowChange: (flow: keyof typeof TransactionFlow) => void;
 }) => (
   <ProductSection
@@ -705,6 +711,19 @@ const ManualTransactionMovementSection = ({
           <Label for="financial-transaction-postingDate">
             <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting date</Translate>
           </Label>
+          <FormGroup check className="mb-2">
+            <Input
+              id="financial-transaction-samePostingDate"
+              data-cy="samePostingDate"
+              type="checkbox"
+              checked={samePostingDate}
+              onChange={onSamePostingDateChange}
+              disabled={readOnly}
+            />
+            <Label check for="financial-transaction-samePostingDate">
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.samePostingDate">Use the same posting date</Translate>
+            </Label>
+          </FormGroup>
           <Input
             id="financial-transaction-postingDate"
             name="postingDate"
@@ -712,7 +731,7 @@ const ManualTransactionMovementSection = ({
             type="date"
             value={draft.postingDate}
             onChange={onFieldChange('postingDate')}
-            disabled={readOnly}
+            disabled={readOnly || samePostingDate}
           />
         </FormGroup>
       </Col>
@@ -1001,6 +1020,7 @@ export const FinancialTransactionManualDraft = () => {
   const [ruleErrorMessage, setRuleErrorMessage] = useState('');
   const [loadingCandidate, setLoadingCandidate] = useState(!!draftId);
   const [optionalDetailsOpen, setOptionalDetailsOpen] = useState(false);
+  const [samePostingDate, setSamePostingDate] = useState(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creatingRef = useRef(false);
   const savingRef = useRef<Promise<ITransactionCandidate | null> | null>(null);
@@ -1012,6 +1032,7 @@ export const FinancialTransactionManualDraft = () => {
   const lastSavedRuleInputSignatureRef = useRef('');
   const lastPreviewedRuleInputSignatureRef = useRef('');
   const latestPreviewRequestIdRef = useRef(0);
+  const samePostingDateRef = useRef(true);
 
   const readOnly =
     candidate?.status === 'POSTED' || candidate?.status === 'CANCELLED' || saveState === 'POSTED' || saveState === 'CANCELLED';
@@ -1125,6 +1146,9 @@ export const FinancialTransactionManualDraft = () => {
         const loadedDraft = draftFromCandidate(response.data);
         setDraft(loadedDraft);
         latestDraftRef.current = loadedDraft;
+        const shouldUseSamePostingDate = loadedDraft.transactionDate === loadedDraft.postingDate;
+        samePostingDateRef.current = shouldUseSamePostingDate;
+        setSamePostingDate(shouldUseSamePostingDate);
         setOptionalDetailsOpen(!!loadedDraft.externalReference || !!loadedDraft.notes);
         setSaveState(response.data.status === 'CANCELLED' ? 'CANCELLED' : response.data.status === 'POSTED' ? 'POSTED' : 'SAVED');
         void runAutoPreviewForSavedDraft(response.data, loadedDraft);
@@ -1301,12 +1325,35 @@ export const FinancialTransactionManualDraft = () => {
   const updateDraftField = (field: keyof ManualDraftFormState) => event => {
     const value = event.target.value;
     setDraft(current => {
-      const nextDraft = { ...current, [field]: value };
+      const nextDraft = {
+        ...current,
+        [field]: value,
+        ...(field === 'transactionDate' && samePostingDateRef.current ? { postingDate: value } : {}),
+      };
       latestDraftRef.current = nextDraft;
       if (ruleInputFields.has(field) && rulePreview) {
         setRulePreviewState('STALE');
       }
       scheduleAutosave(nextDraft, field === 'category');
+      return nextDraft;
+    });
+  };
+
+  const updateSamePostingDate = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const shouldUseSamePostingDate = event.target.checked;
+    samePostingDateRef.current = shouldUseSamePostingDate;
+    setSamePostingDate(shouldUseSamePostingDate);
+    if (!shouldUseSamePostingDate) {
+      return;
+    }
+
+    setDraft(current => {
+      const nextDraft = { ...current, postingDate: current.transactionDate };
+      latestDraftRef.current = nextDraft;
+      if (rulePreview) {
+        setRulePreviewState('STALE');
+      }
+      scheduleAutosave(nextDraft);
       return nextDraft;
     });
   };
@@ -1527,7 +1574,9 @@ export const FinancialTransactionManualDraft = () => {
           draft={draft}
           currency={selectedAccount?.currency}
           readOnly={readOnly}
+          samePostingDate={samePostingDate}
           onFieldChange={updateDraftField}
+          onSamePostingDateChange={updateSamePostingDate}
           onFlowChange={updateFlow}
         />
 
