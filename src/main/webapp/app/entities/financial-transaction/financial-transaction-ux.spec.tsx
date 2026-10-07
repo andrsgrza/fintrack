@@ -1,7 +1,7 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TranslatorContext } from 'react-jhipster';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 
 import enAccountType from 'app/../i18n/en/accountType.json';
 import enCategory from 'app/../i18n/en/category.json';
@@ -76,7 +76,10 @@ const categories = [
     active: false,
   },
 ];
-const tags = [{ id: 20, name: 'Personal', color: '#E31B23', active: false }];
+const tags = [
+  { id: 20, name: 'Personal', color: '#E31B23', active: false },
+  { id: 21, name: 'Weekend', color: '#5B8C3C', active: true },
+];
 
 const existingTransaction = {
   id: 2501,
@@ -147,13 +150,30 @@ const LocationDisplay = () => {
   return <output data-testid="financialTransactionLocation">{`${location.pathname}${location.search}`}</output>;
 };
 
-const renderList = (initialEntry = '/financial-transaction') => {
-  mockState = baseState;
+const HistoryBackButton = () => {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      Back
+    </button>
+  );
+};
+
+const renderList = (initialEntry = '/financial-transaction', state = baseState) => {
+  mockState = state;
 
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/financial-transaction" element={<FinancialTransaction />} />
+        <Route
+          path="/financial-transaction"
+          element={
+            <>
+              <FinancialTransaction />
+              <LocationDisplay />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -163,6 +183,7 @@ describe('FinancialTransaction posted transaction UX', () => {
   beforeAll(registerTranslations);
 
   beforeEach(() => {
+    jest.useRealTimers();
     mockDispatch.mockClear();
     mockGetEntities.mockClear();
     mockPartialUpdateEntity.mockClear();
@@ -233,7 +254,8 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.queryByText('Ingestion')).toBeNull();
   });
 
-  it('resets to page one when applying or clearing filters and retains filters when sorting', async () => {
+  it('applies the final description after a debounce, resets to page one, and preserves sort', async () => {
+    jest.useFakeTimers();
     mockState = baseState;
     render(
       <MemoryRouter initialEntries={['/financial-transaction?page=3&sort=id,desc']}>
@@ -251,11 +273,26 @@ describe('FinancialTransaction posted transaction UX', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByLabelText('Search description'), { target: { value: 'Bus' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    const description = screen.getByLabelText('Search description');
+    fireEvent.change(description, { target: { value: 'B' } });
+    fireEvent.change(description, { target: { value: 'Bu' } });
+    fireEvent.change(description, { target: { value: 'Bus' } });
+
+    expect(screen.getByTestId('financialTransactionLocation').textContent).toBe('/financial-transaction?page=3&sort=id,desc');
+    expect(screen.getByTestId('financialTransactionFiltersUpdating')).toBeTruthy();
+
+    act(() => {
+      jest.advanceTimersByTime(349);
+    });
+    expect(screen.getByTestId('financialTransactionLocation').textContent).toBe('/financial-transaction?page=3&sort=id,desc');
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
     await waitFor(() =>
       expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('?description.contains=Bus&page=1&sort=id%2Cdesc'),
     );
+    expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /sort by transaction date/i }));
     await waitFor(() =>
@@ -264,12 +301,193 @@ describe('FinancialTransaction posted transaction UX', () => {
       ),
     );
 
+    jest.useRealTimers();
+  });
+
+  it('debounces each date bound and applies discrete filters immediately', async () => {
+    jest.useFakeTimers();
+    mockState = baseState;
+    render(
+      <MemoryRouter initialEntries={['/financial-transaction?page=3&sort=id,desc']}>
+        <Routes>
+          <Route
+            path="/financial-transaction"
+            element={
+              <>
+                <FinancialTransaction />
+                <LocationDisplay />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    fireEvent.change(screen.getByLabelText('Transaction date from'), { target: { value: '2026-07-01' } });
+    act(() => {
+      jest.advanceTimersByTime(299);
+    });
+    expect(screen.getByTestId('financialTransactionLocation').textContent).toBe('/financial-transaction?page=3&sort=id,desc');
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toContain(
+        'transactionDate.greaterThanOrEqual=2026-07-01&page=1&sort=id%2Cdesc',
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText('Transaction date to'), { target: { value: '2026-07-31' } });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('transactionDate.lessThanOrEqual=2026-07-31'),
+    );
+
+    fireEvent.change(screen.getByLabelText('Account'), { target: { value: '1' } });
+    await waitFor(() => expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('accountId.equals=1'));
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'OUT' } });
+    await waitFor(() => expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('flow.equals=OUT'));
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: '10' } });
+    await waitFor(() => expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('categoryId.equals=10'));
+
+    jest.useRealTimers();
+  });
+
+  it('preserves applied filters when pagination changes', async () => {
+    renderList('/financial-transaction?page=1&sort=id,desc&description.contains=Bus');
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toBe(
+        '/financial-transaction?description.contains=Bus&page=2&sort=id%2Cdesc',
+      ),
+    );
+  });
+
+  it('applies tag selection and removal immediately without making the tag picker search a transaction query', async () => {
+    mockState = baseState;
+    render(
+      <MemoryRouter initialEntries={['/financial-transaction?page=2&sort=id,desc']}>
+        <Routes>
+          <Route
+            path="/financial-transaction"
+            element={
+              <>
+                <FinancialTransaction />
+                <LocationDisplay />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    await screen.findByTestId('financialTransactionFilterTagsAdd');
+    await waitFor(() => expect((screen.getByTestId('financialTransactionFilterTagsAdd') as HTMLButtonElement).disabled).toBe(false));
+    const callsBeforePickerSearch = mockGetEntities.mock.calls.length;
+    fireEvent.click(screen.getByTestId('financialTransactionFilterTagsAdd'));
+    await screen.findByTestId('financialTransactionFilterTagsSearch');
+    fireEvent.change(screen.getByTestId('financialTransactionFilterTagsSearch'), { target: { value: 'Week' } });
+    expect(mockGetEntities).toHaveBeenCalledTimes(callsBeforePickerSearch);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weekend' }));
+    await waitFor(() => expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('tagsId.in=21&page=1'));
+
+    fireEvent.click(screen.getByTestId('financialTransactionFilterTagsRemove'));
+    await waitFor(() => expect(screen.getByTestId('financialTransactionLocation').textContent).not.toContain('tagsId.in'));
+  });
+
+  it('flushes a pending description debounce when Enter submits the filter form', async () => {
+    jest.useFakeTimers();
+    renderList('/financial-transaction?page=3&sort=id,desc');
+
+    const description = screen.getByLabelText('Search description');
+    fireEvent.change(description, { target: { value: 'Bus' } });
+    fireEvent.submit(description.closest('form')!);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('?description.contains=Bus&page=1&sort=id%2Cdesc'),
+    );
+    act(() => {
+      jest.advanceTimersByTime(350);
+    });
+    expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('?description.contains=Bus&page=1&sort=id%2Cdesc');
+
+    jest.useRealTimers();
+  });
+
+  it('cancels a pending debounce when browser history restores an earlier URL', async () => {
+    jest.useFakeTimers();
+    mockState = baseState;
+    render(
+      <MemoryRouter
+        initialEntries={['/financial-transaction?page=1&sort=id,desc', '/financial-transaction?page=2&sort=transactionDate,asc']}
+        initialIndex={1}
+      >
+        <Routes>
+          <Route
+            path="/financial-transaction"
+            element={
+              <>
+                <HistoryBackButton />
+                <FinancialTransaction />
+                <LocationDisplay />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('Search description'), { target: { value: 'Bus' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('financialTransactionLocation').textContent).toBe('/financial-transaction?page=1&sort=id,desc'),
+    );
+    expect(screen.getByLabelText('Search description').value).toBe('');
+
+    act(() => {
+      jest.advanceTimersByTime(350);
+    });
+    expect(screen.getByTestId('financialTransactionLocation').textContent).toBe('/financial-transaction?page=1&sort=id,desc');
+
+    jest.useRealTimers();
+  });
+
+  it('keeps the existing list visible and shows compact updating feedback during a live refresh', () => {
+    const loadingState = {
+      ...baseState,
+      financialTransaction: { ...baseState.financialTransaction, loading: true },
+    };
+    renderList('/financial-transaction', loadingState);
+
+    expect(screen.getByText('Bus fare')).toBeTruthy();
+    expect(screen.getByTestId('financialTransactionFiltersUpdating')).toBeTruthy();
+    expect(screen.queryByTestId('financialTransactionListLoading')).toBeNull();
+  });
+
+  it('clears a pending debounce and all URL filters immediately', async () => {
+    jest.useFakeTimers();
+    renderList('/financial-transaction?page=3&sort=transactionDate,asc&flow.equals=OUT');
+
+    fireEvent.change(screen.getByLabelText('Search description'), { target: { value: 'Bus' } });
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
     await waitFor(() =>
       expect(screen.getByTestId('financialTransactionLocation').textContent).toBe(
         '/financial-transaction?page=1&sort=transactionDate%2Casc',
       ),
     );
+    act(() => {
+      jest.advanceTimersByTime(350);
+    });
+    expect(screen.getByTestId('financialTransactionLocation').textContent).toBe('/financial-transaction?page=1&sort=transactionDate%2Casc');
+
+    jest.useRealTimers();
   });
 
   it('keeps compact edit and overflow delete actions for a posted transaction', () => {

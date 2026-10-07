@@ -26,6 +26,7 @@
       "tags": "Tags",
       "product": {
         "loading": "Loading transactions…",
+        "updating": "Updating…",
         "loadFailed": "Transactions could not be loaded.",
         "emptyTitle": "No transactions yet",
         "emptyDescription": "Create a transaction to start tracking your account activity.",

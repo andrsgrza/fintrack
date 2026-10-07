@@ -26,6 +26,7 @@
       "tags": "Etiquetas",
       "product": {
         "loading": "Cargando transacciones…",
+        "updating": "Actualizando…",
         "loadFailed": "No se pudieron cargar las transacciones.",
         "emptyTitle": "Aún no hay transacciones",
         "emptyDescription": "Crea una transacción para comenzar a registrar la actividad de tus cuentas.",

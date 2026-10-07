@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Button, Col, Collapse, DropdownItem, Form, FormGroup, Input, Label, Row, Spinner } from 'reactstrap';
 import { JhiItemCount, JhiPagination, TextFormat, Translate, getPaginationState, translate } from 'react-jhipster';
@@ -41,6 +41,9 @@ const emptyFilters: TransactionListFilters = {
   categoryId: '',
   tagIds: [],
 };
+
+const DESCRIPTION_FILTER_DEBOUNCE_MS = 350;
+const DATE_FILTER_DEBOUNCE_MS = 300;
 
 const filtersFromSearch = (search: string): TransactionListFilters => {
   const params = new URLSearchParams(search);
@@ -129,13 +132,16 @@ export const FinancialTransaction = () => {
   const [selectableTags, setSelectableTags] = useState<ITagSelectable[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagsLoadError, setTagsLoadError] = useState(false);
+  const [filterUpdatePending, setFilterUpdatePending] = useState(false);
+  const filterDraftRef = useRef(filterDraft);
+  const filterDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const financialTransactionList = useAppSelector(state => state.financialTransaction.entities);
   const loading = useAppSelector(state => state.financialTransaction.loading);
   const errorMessage = useAppSelector(state => state.financialTransaction.errorMessage);
   const totalItems = useAppSelector(state => state.financialTransaction.totalItems);
 
-  const getAllEntities = () => {
+  const getAllEntities = useCallback(() => {
     dispatch(
       getEntities({
         page: paginationState.activePage - 1,
@@ -144,32 +150,95 @@ export const FinancialTransaction = () => {
         query: appliedFilterQuery,
       }),
     );
-  };
+  }, [appliedFilterQuery, dispatch, paginationState.activePage, paginationState.itemsPerPage, paginationState.order, paginationState.sort]);
 
-  const navigateToList = (
-    filters = appliedFilters,
-    page = paginationState.activePage,
-    sort = paginationState.sort,
-    order = paginationState.order,
-  ) => {
-    const nextSearch = listSearch(filters, page, sort, order);
-    if (pageLocation.search !== nextSearch) {
-      navigate(`${pageLocation.pathname}${nextSearch}`);
-    } else {
-      getAllEntities();
+  const clearPendingFilterApply = useCallback(() => {
+    if (filterDebounceRef.current) {
+      clearTimeout(filterDebounceRef.current);
+      filterDebounceRef.current = null;
     }
-  };
+  }, []);
+
+  const navigateToList = useCallback(
+    (
+      filters = appliedFilters,
+      page = paginationState.activePage,
+      sort = paginationState.sort,
+      order = paginationState.order,
+      replace = false,
+    ) => {
+      const nextSearch = listSearch(filters, page, sort, order);
+      if (pageLocation.search !== nextSearch) {
+        navigate(`${pageLocation.pathname}${nextSearch}`, { replace });
+      }
+    },
+    [
+      appliedFilters,
+      navigate,
+      pageLocation.pathname,
+      pageLocation.search,
+      paginationState.activePage,
+      paginationState.order,
+      paginationState.sort,
+    ],
+  );
+
+  const applyFilterDraft = useCallback(
+    (nextFilters: TransactionListFilters) => {
+      clearPendingFilterApply();
+      setFilterUpdatePending(false);
+      navigateToList(nextFilters, 1, paginationState.sort, paginationState.order, true);
+    },
+    [clearPendingFilterApply, navigateToList, paginationState.order, paginationState.sort],
+  );
+
+  const scheduleFilterDraftApply = useCallback(
+    (nextFilters: TransactionListFilters, delay: number) => {
+      clearPendingFilterApply();
+      setFilterUpdatePending(true);
+      filterDebounceRef.current = setTimeout(() => {
+        filterDebounceRef.current = null;
+        setFilterUpdatePending(false);
+        navigateToList(nextFilters, 1, paginationState.sort, paginationState.order, true);
+      }, delay);
+    },
+    [clearPendingFilterApply, navigateToList, paginationState.order, paginationState.sort],
+  );
+
+  const updateFilterDraft = useCallback(
+    (updater: (current: TransactionListFilters) => TransactionListFilters, debounceMs?: number) => {
+      const nextFilters = updater(filterDraftRef.current);
+      filterDraftRef.current = nextFilters;
+      setFilterDraft(nextFilters);
+      if (debounceMs === undefined) {
+        applyFilterDraft(nextFilters);
+      } else {
+        scheduleFilterDraftApply(nextFilters, debounceMs);
+      }
+    },
+    [applyFilterDraft, scheduleFilterDraftApply],
+  );
 
   useEffect(() => {
     getAllEntities();
-  }, [appliedFilterQuery, dispatch, paginationState.activePage, paginationState.itemsPerPage, paginationState.order, paginationState.sort]);
+  }, [getAllEntities]);
 
   useEffect(() => {
+    clearPendingFilterApply();
+    setFilterUpdatePending(false);
+    filterDraftRef.current = appliedFilters;
     setFilterDraft(appliedFilters);
     if (hasFilters(appliedFilters)) {
       setFiltersOpen(true);
     }
-  }, [pageLocation.search]);
+  }, [appliedFilters, clearPendingFilterApply, pageLocation.search]);
+
+  useEffect(
+    () => () => {
+      clearPendingFilterApply();
+    },
+    [clearPendingFilterApply],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -218,12 +287,15 @@ export const FinancialTransaction = () => {
 
   const submitFilters = event => {
     event.preventDefault();
-    navigateToList(filterDraft, 1);
+    applyFilterDraft(filterDraftRef.current);
   };
 
   const clearFilters = () => {
+    clearPendingFilterApply();
+    filterDraftRef.current = emptyFilters;
     setFilterDraft(emptyFilters);
-    navigateToList(emptyFilters, 1);
+    setFilterUpdatePending(false);
+    navigateToList(emptyFilters, 1, paginationState.sort, paginationState.order, true);
   };
 
   const selectedCategory = selectableCategories.find(category => category.id?.toString() === filterDraft.categoryId);
@@ -270,13 +342,12 @@ export const FinancialTransaction = () => {
               type="search"
               placeholder={translate('fintrackApp.financialTransaction.product.searchDescription')}
               value={filterDraft.description}
-              onChange={event => setFilterDraft(current => ({ ...current, description: event.target.value }))}
+              onChange={event =>
+                updateFilterDraft(current => ({ ...current, description: event.target.value }), DESCRIPTION_FILTER_DEBOUNCE_MS)
+              }
             />
           </FormGroup>
           <div className="d-flex flex-wrap gap-2">
-            <Button color="primary" size="sm" type="submit" data-cy="financialTransactionSearchSubmit">
-              <Translate contentKey="fintrackApp.financialTransaction.product.search">Search</Translate>
-            </Button>
             <Button
               color="secondary"
               outline
@@ -313,7 +384,9 @@ export const FinancialTransaction = () => {
                 data-cy="financialTransactionFilterDateFrom"
                 type="date"
                 value={filterDraft.transactionDateFrom}
-                onChange={event => setFilterDraft(current => ({ ...current, transactionDateFrom: event.target.value }))}
+                onChange={event =>
+                  updateFilterDraft(current => ({ ...current, transactionDateFrom: event.target.value }), DATE_FILTER_DEBOUNCE_MS)
+                }
               />
             </Col>
             <Col md="6" lg="3">
@@ -325,7 +398,9 @@ export const FinancialTransaction = () => {
                 data-cy="financialTransactionFilterDateTo"
                 type="date"
                 value={filterDraft.transactionDateTo}
-                onChange={event => setFilterDraft(current => ({ ...current, transactionDateTo: event.target.value }))}
+                onChange={event =>
+                  updateFilterDraft(current => ({ ...current, transactionDateTo: event.target.value }), DATE_FILTER_DEBOUNCE_MS)
+                }
               />
             </Col>
             <Col md="6" lg="3">
@@ -337,7 +412,7 @@ export const FinancialTransaction = () => {
                 data-cy="financialTransactionFilterAccount"
                 type="select"
                 value={filterDraft.accountId}
-                onChange={event => setFilterDraft(current => ({ ...current, accountId: event.target.value }))}
+                onChange={event => updateFilterDraft(current => ({ ...current, accountId: event.target.value }))}
               >
                 <option value="" />
                 {selectableAccounts.map(account => (
@@ -356,7 +431,7 @@ export const FinancialTransaction = () => {
                 data-cy="financialTransactionFilterFlow"
                 type="select"
                 value={filterDraft.flow}
-                onChange={event => setFilterDraft(current => ({ ...current, flow: event.target.value }))}
+                onChange={event => updateFilterDraft(current => ({ ...current, flow: event.target.value }))}
               >
                 <option value="" />
                 <option value="IN">{translate('fintrackApp.TransactionFlow.IN')}</option>
@@ -372,7 +447,7 @@ export const FinancialTransaction = () => {
                 data-cy="financialTransactionFilterCategory"
                 type="select"
                 value={filterDraft.categoryId}
-                onChange={event => setFilterDraft(current => ({ ...current, categoryId: event.target.value }))}
+                onChange={event => updateFilterDraft(current => ({ ...current, categoryId: event.target.value }))}
               >
                 <option value="" />
                 {selectableCategories.map(category => (
@@ -411,7 +486,7 @@ export const FinancialTransaction = () => {
                 loading={tagsLoading}
                 error={tagsLoadError}
                 onChange={nextTags =>
-                  setFilterDraft(current => ({
+                  updateFilterDraft(current => ({
                     ...current,
                     tagIds: nextTags.map(tag => tag.id?.toString()).filter((tagId): tagId is string => !!tagId),
                   }))
@@ -421,6 +496,19 @@ export const FinancialTransaction = () => {
           </Row>
         </Collapse>
       </Form>
+
+      {financialTransactionList.length > 0 && (filterUpdatePending || loading) ? (
+        <div
+          className="d-flex align-items-center gap-2 small text-muted mb-3"
+          role="status"
+          aria-live="polite"
+          data-cy="financialTransactionFiltersUpdating"
+          data-testid="financialTransactionFiltersUpdating"
+        >
+          <Spinner size="sm" />
+          <Translate contentKey="fintrackApp.financialTransaction.product.updating">Updating…</Translate>
+        </div>
+      ) : null}
 
       {loading && !financialTransactionList.length ? (
         <div className="d-flex align-items-center gap-2 text-muted py-4" data-cy="financialTransactionListLoading">

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { createAsyncThunk, isFulfilled, isPending } from '@reduxjs/toolkit';
 import { cleanEntity } from 'app/shared/util/entity-utils';
-import { EntityState, IQueryParams, createEntitySlice, serializeAxiosError } from 'app/shared/reducers/reducer.utils';
+import { EntityState, IQueryParams, createEntitySlice, isRejectedAction, serializeAxiosError } from 'app/shared/reducers/reducer.utils';
 import { IFinancialTransaction, defaultValue } from 'app/shared/model/financial-transaction.model';
 
 const initialState = {
@@ -14,6 +14,7 @@ const initialState = {
   updateSuccess: false,
   ingestionRecordParentCandidates: [] as IFinancialTransaction[],
   loadingIngestionRecordParentCandidates: false,
+  currentListRequestId: null as string | null,
 };
 
 export type FinancialTransactionState = typeof initialState;
@@ -101,6 +102,33 @@ export const FinancialTransactionSlice = createEntitySlice({
   initialState: initialState as EntityState<IFinancialTransaction>,
   extraReducers(builder) {
     builder
+      .addCase(getEntities.pending, (state, action) => {
+        const typedState = state as FinancialTransactionState;
+        typedState.errorMessage = null;
+        typedState.updateSuccess = false;
+        typedState.loading = true;
+        typedState.currentListRequestId = action.meta?.requestId ?? null;
+      })
+      .addCase(getEntities.fulfilled, (state, action) => {
+        const typedState = state as FinancialTransactionState;
+        const requestId = action.meta?.requestId;
+        if (requestId && typedState.currentListRequestId !== requestId) {
+          return;
+        }
+        const { data, headers } = action.payload;
+        typedState.loading = false;
+        typedState.currentListRequestId = null;
+        typedState.entities = data;
+        typedState.totalItems = parseInt(headers['x-total-count'], 10);
+      })
+      .addCase(getEntities.rejected, (state, action) => {
+        const typedState = state as FinancialTransactionState;
+        const requestId = action.meta?.requestId;
+        if (!requestId || typedState.currentListRequestId === requestId) {
+          typedState.loading = false;
+          typedState.currentListRequestId = null;
+        }
+      })
       .addCase(getEntity.fulfilled, (state, action) => {
         state.loading = false;
         state.entity = action.payload.data;
@@ -121,23 +149,13 @@ export const FinancialTransactionSlice = createEntitySlice({
       .addCase(getEntitiesWhereIngestionRecordIsNull.rejected, state => {
         (state as FinancialTransactionState).loadingIngestionRecordParentCandidates = false;
       })
-      .addMatcher(isFulfilled(getEntities), (state, action) => {
-        const { data, headers } = action.payload;
-
-        return {
-          ...state,
-          loading: false,
-          entities: data,
-          totalItems: parseInt(headers['x-total-count'], 10),
-        };
-      })
       .addMatcher(isFulfilled(createEntity, updateEntity, partialUpdateEntity), (state, action) => {
         state.updating = false;
         state.loading = false;
         state.updateSuccess = true;
         state.entity = action.payload.data;
       })
-      .addMatcher(isPending(getEntities, getEntity), state => {
+      .addMatcher(isPending(getEntity), state => {
         state.errorMessage = null;
         state.updateSuccess = false;
         state.loading = true;
@@ -146,8 +164,18 @@ export const FinancialTransactionSlice = createEntitySlice({
         state.errorMessage = null;
         state.updateSuccess = false;
         state.updating = true;
+      })
+      .addMatcher(isRejectedAction, (state, action) => {
+        if (action.type === getEntities.rejected.type) {
+          return;
+        }
+        state.loading = false;
+        state.updating = false;
+        state.updateSuccess = false;
+        state.errorMessage = null;
       });
   },
+  skipRejectionHandling: true,
 });
 
 export const { reset } = FinancialTransactionSlice.actions;
