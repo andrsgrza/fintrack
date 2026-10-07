@@ -88,6 +88,49 @@ a {
   text-transform: none;
 }
 
+.manual-draft-date-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    'transaction-header posting-header'
+    'transaction-input posting-input'
+    '. same-posting';
+  column-gap: 1.5rem;
+  row-gap: 0.5rem;
+}
+
+.manual-draft-date-header {
+  grid-area: transaction-header;
+}
+
+.manual-draft-posting-date-header {
+  grid-area: posting-header;
+}
+
+.manual-draft-date-input {
+  grid-area: transaction-input;
+}
+
+.manual-draft-date-input + .manual-draft-date-input {
+  grid-area: posting-input;
+}
+
+.manual-draft-same-posting-date {
+  grid-area: same-posting;
+}
+
+@media (max-width: 991.98px) {
+  .manual-draft-date-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'transaction-header'
+      'transaction-input'
+      'posting-header'
+      'posting-input'
+      'same-posting';
+  }
+}
+
 * {
   -moz-box-sizing: border-box;
   box-sizing: border-box;

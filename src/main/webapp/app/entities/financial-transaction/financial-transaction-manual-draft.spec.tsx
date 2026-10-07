@@ -348,6 +348,9 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await screen.findByDisplayValue('Coffee');
 
     const samePostingDateControl = screen.getByLabelText('Use the same posting date');
+    expect(screen.getByTestId('manualDraftDateGrid').className).toContain('manual-draft-date-grid');
+    expect(screen.getByTestId('manualDraftTransactionDateHeader').className).toContain('manual-draft-date-header');
+    expect(screen.getByTestId('manualDraftPostingDateHeader').className).toContain('manual-draft-posting-date-header');
     expect(samePostingDateControl.checked).toBe(true);
     fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '2026-07-14' } });
     expect(screen.getByLabelText('Posting date').value).toBe('2026-07-14');

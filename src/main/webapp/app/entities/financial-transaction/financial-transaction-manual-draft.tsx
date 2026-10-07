@@ -685,53 +685,54 @@ const ManualTransactionMovementSection = ({
     dataCy="manualDraftTransactionSection"
     className="mb-3"
   >
-    <Row>
-      <Col md="6">
-        <FormGroup>
-          <Label for="financial-transaction-transactionDate">
-            <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>
-          </Label>
-          <Input
-            id="financial-transaction-transactionDate"
-            name="transactionDate"
-            data-cy="transactionDate"
-            type="date"
-            value={draft.transactionDate}
-            onChange={onFieldChange('transactionDate')}
-            disabled={readOnly}
-          />
-        </FormGroup>
-      </Col>
-      <Col md="6">
-        <FormGroup>
-          <Label for="financial-transaction-postingDate">
-            <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting date</Translate>
-          </Label>
-          <FormGroup check className="mb-2">
-            <Input
-              id="financial-transaction-samePostingDate"
-              data-cy="samePostingDate"
-              type="checkbox"
-              checked={samePostingDate}
-              onChange={onSamePostingDateChange}
-              disabled={readOnly}
-            />
-            <Label check for="financial-transaction-samePostingDate">
-              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.samePostingDate">Use the same posting date</Translate>
-            </Label>
-          </FormGroup>
-          <Input
-            id="financial-transaction-postingDate"
-            name="postingDate"
-            data-cy="postingDate"
-            type="date"
-            value={draft.postingDate}
-            onChange={onFieldChange('postingDate')}
-            disabled={readOnly || samePostingDate}
-          />
-        </FormGroup>
-      </Col>
-    </Row>
+    <div className="manual-draft-date-grid mb-3" data-testid="manualDraftDateGrid">
+      <div className="manual-draft-date-header" data-testid="manualDraftTransactionDateHeader">
+        <Label className="mb-0" for="financial-transaction-transactionDate">
+          <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>
+        </Label>
+      </div>
+      <div className="manual-draft-date-header manual-draft-posting-date-header" data-testid="manualDraftPostingDateHeader">
+        <Label className="mb-0" for="financial-transaction-postingDate">
+          <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting date</Translate>
+        </Label>
+      </div>
+      <div className="manual-draft-date-input">
+        <Input
+          id="financial-transaction-transactionDate"
+          name="transactionDate"
+          data-cy="transactionDate"
+          type="date"
+          value={draft.transactionDate}
+          onChange={onFieldChange('transactionDate')}
+          disabled={readOnly}
+        />
+      </div>
+      <div className="manual-draft-date-input">
+        <Input
+          id="financial-transaction-postingDate"
+          name="postingDate"
+          data-cy="postingDate"
+          type="date"
+          value={draft.postingDate}
+          onChange={onFieldChange('postingDate')}
+          disabled={readOnly || samePostingDate}
+        />
+      </div>
+      <FormGroup check className="manual-draft-same-posting-date d-flex align-items-center gap-1 mb-0">
+        <Input
+          className="mt-0"
+          id="financial-transaction-samePostingDate"
+          data-cy="samePostingDate"
+          type="checkbox"
+          checked={samePostingDate}
+          onChange={onSamePostingDateChange}
+          disabled={readOnly}
+        />
+        <Label check className="mb-0" for="financial-transaction-samePostingDate">
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.samePostingDate">Use the same posting date</Translate>
+        </Label>
+      </FormGroup>
+    </div>
     <FormGroup>
       <Label for="financial-transaction-description">
         <Translate contentKey="fintrackApp.financialTransaction.description">Description</Translate>
