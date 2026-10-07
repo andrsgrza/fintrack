@@ -45,6 +45,17 @@ public interface IngestionRecordRepository extends JpaRepository<IngestionRecord
 
     List<IngestionRecord> findAllByTransactionIngestionIdOrderByRecordIndexAsc(Long transactionIngestionId);
 
+    @Query(
+        "select ingestionRecord from IngestionRecord ingestionRecord " +
+        "left join fetch ingestionRecord.transactionIngestion transactionIngestion " +
+        "left join fetch transactionIngestion.account account " +
+        "left join fetch ingestionRecord.financialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account financialTransactionAccount " +
+        "left join fetch financialTransaction.transactionIngestion financialTransactionIngestion " +
+        "where transactionIngestion.account.id = :accountId"
+    )
+    List<IngestionRecord> findAllForAccountDeletionPreview(@Param("accountId") Long accountId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
         "update IngestionRecord ingestionRecord set ingestionRecord.financialTransaction = null where ingestionRecord.financialTransaction.id in (select financialTransaction.id from FinancialTransaction financialTransaction where financialTransaction.transactionIngestion.id = :transactionIngestionId)"

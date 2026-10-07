@@ -110,6 +110,17 @@ public interface FinancialTransactionRepository
 
     List<FinancialTransaction> findByAccountIdInAndTransactionDateLessThanEqual(Collection<Long> accountIds, LocalDate asOfDate);
 
+    /** Loads account-owned transactions plus transactions under its ingestions so inconsistent links are visible to preflight. */
+    @Query(
+        "select distinct financialTransaction from FinancialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account account " +
+        "left join fetch financialTransaction.transactionIngestion transactionIngestion " +
+        "left join fetch transactionIngestion.account transactionIngestionAccount " +
+        "where financialTransaction.account.id = :accountId " +
+        "or financialTransaction.transactionIngestion.account.id = :accountId"
+    )
+    List<FinancialTransaction> findAllForAccountDeletionPreview(@Param("accountId") Long accountId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
         value = "delete from rel_financial_transaction__tags where financial_transaction_id in (select id from financial_transaction where account_id = :accountId)",

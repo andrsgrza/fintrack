@@ -721,7 +721,19 @@ describe('FinancialAccount opening-position labels', () => {
       'api/financial-transactions?accountId.equals=1&sort=transactionDate,desc&sort=id,desc&size=5',
     );
     expect(within(section).getByText('No transactions yet.')).toBeTruthy();
-    expect(within(section).getByText('View all transactions')).toBeTruthy();
+    expect(within(section).getByRole('link', { name: 'View all transactions' }).getAttribute('href')).toBe(
+      '/financial-transaction?accountId.equals=1&page=1&sort=transactionDate%2Cdesc',
+    );
+  });
+
+  it('keeps inactive account history navigation scoped to that account', async () => {
+    renderDetail('DEBIT', {}, { transactions: [], account: { active: false } });
+
+    const section = await screen.findByTestId('accountRecentTransactionsSection');
+
+    expect(within(section).getByRole('link', { name: 'View all transactions' }).getAttribute('href')).toBe(
+      '/financial-transaction?accountId.equals=1&page=1&sort=transactionDate%2Cdesc',
+    );
   });
 
   it('shows recent transactions returned by API without edit or delete controls', async () => {
@@ -760,6 +772,8 @@ describe('FinancialAccount opening-position labels', () => {
     expect(within(section).getByText('Refund')).toBeTruthy();
     expect(within(section).getByText('Income')).toBeTruthy();
     expect(within(section).getByText('+5.00 MXN')).toBeTruthy();
+    expect(within(section).getByRole('link', { name: 'Bus fare' }).getAttribute('href')).toBe('/financial-transaction/2501');
+    expect(within(section).getByRole('link', { name: 'Refund' }).getAttribute('href')).toBe('/financial-transaction/2502');
     expect(within(section).queryByRole('link', { name: /edit/i })).toBeNull();
     expect(within(section).queryByRole('button', { name: /delete/i })).toBeNull();
   });

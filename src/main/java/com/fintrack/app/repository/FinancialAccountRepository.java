@@ -1,6 +1,7 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.FinancialAccount;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -21,6 +22,18 @@ public interface FinancialAccountRepository extends JpaRepository<FinancialAccou
         "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.id = :id and financialAccount.user.login = :login"
     )
     Optional<FinancialAccount> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.id = :id and financialAccount.user.login = :login"
+    )
+    Optional<FinancialAccount> findOneForHardDeleteByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.id = :id"
+    )
+    Optional<FinancialAccount> findOneForHardDelete(@Param("id") Long id);
 
     @Query(
         value = "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.user.login = :login",

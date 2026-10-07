@@ -222,6 +222,9 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.getByLabelText('Search description').value).toBe('Bus fare');
     expect(screen.getByLabelText('Transaction date from').value).toBe('2026-07-01');
     expect(screen.getByLabelText('Account').value).toBe('1');
+    expect(screen.getByLabelText('Account').closest('.collapse')?.className).toContain('show');
+    expect(mockGetSelectableFinancialAccounts).toHaveBeenCalledWith(1);
+    expect(screen.getByRole('option', { name: /Checking.*Inactive/i })).toBeTruthy();
     expect(screen.getByLabelText('Type').value).toBe('OUT');
     expect(screen.getByLabelText('Category').value).toBe('10');
     await waitFor(() => expect(screen.getByTestId('financialTransactionFilterCategoryIdentity')).toBeTruthy());
