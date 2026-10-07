@@ -19,6 +19,14 @@ export const getRecentTransactionsForAccount = (accountId: string | number) =>
     `api/financial-transactions?accountId.equals=${accountId}&sort=transactionDate,desc&sort=id,desc&size=5`,
   );
 
+export const getAccountTransactionsListUrl = (accountId: string | number) => {
+  const params = new URLSearchParams();
+  params.set('accountId.equals', String(accountId));
+  params.set('page', '1');
+  params.set('sort', 'transactionDate,desc');
+  return `/financial-transaction?${params.toString()}`;
+};
+
 export const AccountRecentTransactionsSection = ({ accountId, currency }: AccountRecentTransactionsSectionProps) => {
   const [transactions, setTransactions] = useState<IFinancialTransaction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,7 +107,19 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
                     <TextFormat value={transaction.transactionDate as unknown as string} type="date" format={APP_LOCAL_DATE_FORMAT} />
                   ) : null}
                 </td>
-                <td>{transaction.description}</td>
+                <td>
+                  {transaction.id ? (
+                    <Link
+                      to={`/financial-transaction/${transaction.id}`}
+                      className="account-recent-transaction-link"
+                      data-cy="accountRecentTransactionLink"
+                    >
+                      {transaction.description}
+                    </Link>
+                  ) : (
+                    transaction.description
+                  )}
+                </td>
                 <td>
                   <TransactionClassification category={transaction.category} tags={transaction.tags} />
                 </td>
@@ -111,7 +131,14 @@ export const AccountRecentTransactionsSection = ({ accountId, currency }: Accoun
           </tbody>
         </Table>
       ) : null}
-      <Button tag={Link} to="/financial-transaction" color="link" size="sm" className="p-0 text-decoration-none">
+      <Button
+        tag={Link}
+        to={accountId ? getAccountTransactionsListUrl(accountId) : '/financial-transaction'}
+        color="link"
+        size="sm"
+        className="p-0 text-decoration-none"
+        data-cy="accountViewAllTransactions"
+      >
         <FontAwesomeIcon icon="list" />{' '}
         <Translate contentKey="fintrackApp.financialAccount.viewAllTransactions">View all transactions</Translate>
       </Button>

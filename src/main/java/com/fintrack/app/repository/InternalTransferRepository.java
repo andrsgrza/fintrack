@@ -21,6 +21,23 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
     )
     boolean existsByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
 
+    @Query(
+        "select internalTransfer from InternalTransfer internalTransfer " +
+        "left join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "left join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "left join fetch incomingTransaction.account incomingAccount " +
+        "where outgoingAccount.id = :accountId or incomingAccount.id = :accountId"
+    )
+    List<InternalTransfer> findAllForAccountDeletionPreview(@Param("accountId") Long accountId);
+
+    /** Deletes only transfers whose two legs are inside one account deletion aggregate. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.account.id = :accountId and internalTransfer.incomingTransaction.account.id = :accountId"
+    )
+    void deleteLocalByAccountId(@Param("accountId") Long accountId);
+
     @Modifying
     @Query(
         "delete from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.id = :transactionId or internalTransfer.incomingTransaction.id = :transactionId"

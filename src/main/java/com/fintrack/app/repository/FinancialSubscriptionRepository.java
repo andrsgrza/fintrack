@@ -88,6 +88,8 @@ public interface FinancialSubscriptionRepository
     )
     boolean existsFinancialTransactionByFinancialSubscriptionId(@Param("subscriptionId") Long subscriptionId);
 
+    long countByAccountId(Long accountId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update FinancialTransaction ft set ft.financialSubscription = null where ft.financialSubscription.id = :subscriptionId")
     void clearFinancialTransactionSubscriptionReferences(@Param("subscriptionId") Long subscriptionId);

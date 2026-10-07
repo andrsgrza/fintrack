@@ -4,6 +4,7 @@ import static com.fintrack.app.domain.FinancialAccountAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.*;
@@ -16,6 +17,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.ApiIngestion;
 import com.fintrack.app.domain.Budget;
+import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.CreditAccountDetails;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
@@ -26,6 +28,8 @@ import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.TransactionRule;
+import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
@@ -33,6 +37,8 @@ import com.fintrack.app.domain.enumeration.ImportFileType;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
+import com.fintrack.app.domain.enumeration.RuleConditionLogic;
+import com.fintrack.app.domain.enumeration.RuleOperator;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
@@ -40,11 +46,14 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.domain.enumeration.TransactionRuleField;
+import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
+import com.fintrack.app.service.FinancialAccountHardDeleteService;
 import com.fintrack.app.service.FinancialAccountService;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialAccountOverviewDTO;
@@ -72,9 +81,12 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Integration tests for the {@link FinancialAccountResource} REST controller.
@@ -146,7 +158,16 @@ class FinancialAccountResourceIT {
     private FinancialAccountRepository financialAccountRepository;
 
     @Autowired
+    private BudgetRepository budgetRepository;
+
+    @MockitoSpyBean
     private CreditAccountDetailsRepository creditAccountDetailsRepository;
+
+    @Autowired
+    private FinancialAccountHardDeleteService financialAccountHardDeleteService;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Autowired
     private UserRepository userRepository;
@@ -347,6 +368,7 @@ class FinancialAccountResourceIT {
             .fileType(ImportFileType.CSV)
             .createdAt(DEFAULT_CREATED_AT)
             .transactionIngestion(ingestion);
+        ingestion.setFileIngestion(fileIngestion);
         em.persist(fileIngestion);
         em.flush();
         return fileIngestion;
@@ -377,6 +399,19 @@ class FinancialAccountResourceIT {
             .createdAt(DEFAULT_CREATED_AT)
             .transactionIngestion(ingestion)
             .financialTransaction(transaction);
+        em.persist(record);
+        em.flush();
+        return record;
+    }
+
+    private IngestionRecord createPreparedIngestionRecord(TransactionIngestion ingestion) {
+        IngestionRecord record = new IngestionRecord()
+            .recordIndex(0)
+            .externalRecordId("prepared-record-" + ingestion.getId())
+            .status(IngestionRecordStatus.VALID)
+            .rawData("{\"source\":\"test\"}")
+            .createdAt(DEFAULT_CREATED_AT)
+            .transactionIngestion(ingestion);
         em.persist(record);
         em.flush();
         return record;
@@ -430,6 +465,51 @@ class FinancialAccountResourceIT {
         candidate = em.merge(candidate);
         em.flush();
         return candidate;
+    }
+
+    private TransactionCandidate createPreparedFileImportCandidate(
+        FinancialAccount account,
+        TransactionIngestion ingestion,
+        IngestionRecord record,
+        Tag tag
+    ) {
+        TransactionCandidate candidate = createCandidate(
+            account,
+            TransactionCandidateSource.FILE_IMPORT,
+            TransactionCandidateStatus.READY_TO_POST
+        );
+        candidate
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED)
+            .transactionIngestion(ingestion)
+            .ingestionRecord(record)
+            .addTags(tag);
+        candidate = em.merge(candidate);
+        em.flush();
+        return candidate;
+    }
+
+    private TransactionRuleCondition createAccountRuleCondition(FinancialAccount account) {
+        TransactionRule rule = new TransactionRule()
+            .name("Account-reference rule")
+            .priority(1)
+            .conditionLogic(RuleConditionLogic.ALL)
+            .active(false)
+            .createdAt(DEFAULT_CREATED_AT)
+            .updatedAt(DEFAULT_UPDATED_AT)
+            .user(account.getUser());
+        em.persist(rule);
+        em.flush();
+
+        TransactionRuleCondition condition = new TransactionRuleCondition()
+            .field(TransactionRuleField.ACCOUNT)
+            .operator(RuleOperator.IN)
+            .value(account.getId().toString())
+            .caseSensitive(false)
+            .position(0)
+            .transactionRule(rule);
+        em.persist(condition);
+        em.flush();
+        return condition;
     }
 
     private InternalTransfer createInternalTransfer(FinancialTransaction outgoingTransaction, FinancialTransaction incomingTransaction) {
@@ -2617,6 +2697,394 @@ class FinancialAccountResourceIT {
 
         assertThat(TestUtil.findAll(em, CreditAccountDetails.class).stream().noneMatch(cad -> detailsId.equals(cad.getId()))).isTrue();
         insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void getDeletionPreviewForEmptyAccessibleAccountIsReadOnlyAndSafe() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        Long accountId = financialAccount.getId();
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/deletion-preview", accountId).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accountId").value(accountId))
+            .andExpect(jsonPath("$.accountName").value(DEFAULT_NAME))
+            .andExpect(jsonPath("$.canHardDelete").value(true))
+            .andExpect(jsonPath("$.blockers").isEmpty())
+            .andExpect(jsonPath("$.counts.financialTransactions").value(0))
+            .andExpect(jsonPath("$.counts.transactionIngestions").value(0));
+
+        assertThat(financialAccountRepository.existsById(accountId)).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void getDeletionPreviewReportsBudgetScopeBlockerWithoutMutatingTheBudget() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        Budget budget = BudgetResourceIT.createEntity(em);
+        budget.addAccounts(financialAccount);
+        em.persist(budget);
+        em.flush();
+        Long budgetId = budget.getId();
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/deletion-preview", financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.canHardDelete").value(false))
+            .andExpect(jsonPath("$.counts.budgetLinks").value(1))
+            .andExpect(jsonPath("$.blockers[0].code").value("BUDGET_SCOPE_WOULD_BROADEN"))
+            .andExpect(jsonPath("$.blockers[0].count").value(1));
+
+        em.clear();
+        Budget persistedBudget = em.find(Budget.class, budgetId);
+        assertThat(persistedBudget).isNotNull();
+        assertThat(persistedBudget.getAccounts()).extracting(FinancialAccount::getId).containsExactly(financialAccount.getId());
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+    }
+
+    @Test
+    @Transactional
+    void getDeletionPreviewReturnsNotFoundForInaccessibleAccount() throws Exception {
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/deletion-preview", Long.MAX_VALUE).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void getDeletionPreviewReturnsNotFoundForAnotherUsersAccount() throws Exception {
+        financialAccount.setUser(createOtherUser(em));
+        financialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+
+        restFinancialAccountMockMvc
+            .perform(get(ENTITY_API_URL_ID + "/deletion-preview", financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountRemovesOnlyTheApprovedAggregateAndPreservesSharedEntities() throws Exception {
+        financialAccount.setAccountType(AccountType.CREDIT_CARD);
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        FinancialAccount otherAccount = createAccount("HARD_DELETE_OTHER_ACCOUNT");
+
+        Category category = CategoryResourceIT.createEntity(em);
+        em.persist(category);
+        Tag tag = TagResourceIT.createEntity(em);
+        em.persist(tag);
+        em.flush();
+
+        FinancialTransaction directTransaction = createTransaction(financialAccount, LocalDate.parse("2026-01-10"));
+        directTransaction.setCategory(category);
+        directTransaction.addTags(tag);
+        directTransaction = em.merge(directTransaction);
+
+        TransactionCandidate draft = createCandidate(financialAccount, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.DRAFT);
+        TransactionCandidate ready = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.READY_TO_POST
+        );
+        TransactionCandidate cancelled = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.CANCELLED
+        );
+        TransactionCandidate failed = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.FAILED
+        );
+        FinancialTransaction postedManualTransaction = createTransaction(financialAccount, LocalDate.parse("2026-01-11"));
+        postedManualTransaction.addTags(tag);
+        postedManualTransaction = em.merge(postedManualTransaction);
+        TransactionCandidate postedManual = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.POSTED
+        );
+        postedManual.setFinancialTransaction(postedManualTransaction);
+        postedManual.addTags(tag);
+        postedManual = em.merge(postedManual);
+
+        TransactionIngestion preparedIngestion = createTransactionIngestion(financialAccount, IngestionType.FILE);
+        FileIngestion preparedMetadata = createFileIngestion(preparedIngestion);
+        IngestionRecord preparedRecord = createPreparedIngestionRecord(preparedIngestion);
+        TransactionCandidate preparedCandidate = createPreparedFileImportCandidate(
+            financialAccount,
+            preparedIngestion,
+            preparedRecord,
+            tag
+        );
+
+        TransactionIngestion completedIngestion = createTransactionIngestion(financialAccount, IngestionType.FILE);
+        FileIngestion completedMetadata = createFileIngestion(completedIngestion);
+        FinancialTransaction importedTransaction = createTransaction(financialAccount, LocalDate.parse("2026-01-12"));
+        importedTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
+        importedTransaction.setTransactionIngestion(completedIngestion);
+        importedTransaction.addTags(tag);
+        importedTransaction = em.merge(importedTransaction);
+        IngestionRecord importedRecord = createIngestionRecord(completedIngestion, importedTransaction);
+        TransactionCandidate importedCandidate = createFileImportCandidate(
+            financialAccount,
+            completedIngestion,
+            importedRecord,
+            importedTransaction,
+            tag
+        );
+
+        CreditAccountDetails creditDetails = createCreditAccountDetails(financialAccount, new BigDecimal("5000.00"));
+        Budget budget = BudgetResourceIT.createEntity(em);
+        budget.addAccounts(financialAccount);
+        budget.addAccounts(otherAccount);
+        em.persist(budget);
+        FinancialSubscription subscription = FinancialSubscriptionResourceIT.createEntity(em);
+        subscription.setAccount(financialAccount);
+        em.persist(subscription);
+        em.flush();
+
+        Long accountId = financialAccount.getId();
+        Long otherAccountId = otherAccount.getId();
+        Long categoryId = category.getId();
+        Long tagId = tag.getId();
+        Long budgetId = budget.getId();
+        Long subscriptionId = subscription.getId();
+        Long creditDetailsId = creditDetails.getId();
+        List<Long> candidateIds = List.of(
+            draft.getId(),
+            ready.getId(),
+            cancelled.getId(),
+            failed.getId(),
+            postedManual.getId(),
+            preparedCandidate.getId(),
+            importedCandidate.getId()
+        );
+        List<Long> transactionIds = List.of(directTransaction.getId(), postedManualTransaction.getId(), importedTransaction.getId());
+        List<Long> ingestionIds = List.of(preparedIngestion.getId(), completedIngestion.getId());
+        List<Long> metadataIds = List.of(preparedMetadata.getId(), completedMetadata.getId());
+        List<Long> recordIds = List.of(preparedRecord.getId(), importedRecord.getId());
+
+        restFinancialAccountMockMvc
+            .perform(delete(ENTITY_API_URL_ID + "/hard-delete", accountId).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        em.flush();
+        em.clear();
+        assertThat(financialAccountRepository.existsById(accountId)).isFalse();
+        assertThat(financialAccountRepository.existsById(otherAccountId)).isTrue();
+        assertThat(TestUtil.findAll(em, TransactionCandidate.class).stream().map(TransactionCandidate::getId)).doesNotContainAnyElementsOf(
+            candidateIds
+        );
+        assertThat(TestUtil.findAll(em, FinancialTransaction.class).stream().map(FinancialTransaction::getId)).doesNotContainAnyElementsOf(
+            transactionIds
+        );
+        assertThat(TestUtil.findAll(em, TransactionIngestion.class).stream().map(TransactionIngestion::getId)).doesNotContainAnyElementsOf(
+            ingestionIds
+        );
+        assertThat(TestUtil.findAll(em, FileIngestion.class).stream().map(FileIngestion::getId)).doesNotContainAnyElementsOf(metadataIds);
+        assertThat(TestUtil.findAll(em, IngestionRecord.class).stream().map(IngestionRecord::getId)).doesNotContainAnyElementsOf(recordIds);
+        assertThat(TestUtil.findAll(em, CreditAccountDetails.class).stream().map(CreditAccountDetails::getId)).doesNotContain(
+            creditDetailsId
+        );
+        assertThat(em.find(Category.class, categoryId)).isNotNull();
+        assertThat(em.find(Tag.class, tagId)).isNotNull();
+        assertThat(em.find(Budget.class, budgetId).getAccounts()).extracting(FinancialAccount::getId).containsExactly(otherAccountId);
+        assertThat(em.find(FinancialSubscription.class, subscriptionId).getAccount()).isNull();
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountReturnsNotFoundWhenTheAccountIsNotAccessible() throws Exception {
+        restFinancialAccountMockMvc
+            .perform(delete(ENTITY_API_URL_ID + "/hard-delete", Long.MAX_VALUE).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountBlocksCrossAccountTransferWithoutMutatingEitherSide() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        FinancialAccount otherAccount = createAccount("HARD_DELETE_TRANSFER_OTHER_ACCOUNT");
+        FinancialTransaction outgoing = createTransaction(financialAccount, LocalDate.parse("2026-01-10"));
+        FinancialTransaction incoming = createTransaction(
+            otherAccount,
+            LocalDate.parse("2026-01-10"),
+            TransactionFlow.IN,
+            new BigDecimal("10.00")
+        );
+        InternalTransfer transfer = createInternalTransfer(outgoing, incoming);
+
+        assertHardDeleteBlocked(financialAccount.getId(), "CROSS_ACCOUNT_TRANSFER");
+
+        em.clear();
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+        assertThat(em.find(FinancialTransaction.class, outgoing.getId())).isNotNull();
+        assertThat(em.find(FinancialTransaction.class, incoming.getId())).isNotNull();
+        assertThat(em.find(InternalTransfer.class, transfer.getId())).isNotNull();
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountBlocksSingleAccountBudgetWithoutRemovingItsLink() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        Budget budget = BudgetResourceIT.createEntity(em);
+        budget.addAccounts(financialAccount);
+        em.persist(budget);
+        em.flush();
+
+        assertHardDeleteBlocked(financialAccount.getId(), "BUDGET_SCOPE_WOULD_BROADEN");
+
+        em.clear();
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+        assertThat(em.find(Budget.class, budget.getId()).getAccounts())
+            .extracting(FinancialAccount::getId)
+            .containsExactly(financialAccount.getId());
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountBlocksRuleAccountReferenceWithoutModifyingTheRule() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        TransactionRuleCondition condition = createAccountRuleCondition(financialAccount);
+
+        assertHardDeleteBlocked(financialAccount.getId(), "RULE_ACCOUNT_CONDITION_REFERENCE");
+
+        em.clear();
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+        assertThat(em.find(TransactionRuleCondition.class, condition.getId())).isNotNull();
+        assertThat(em.find(TransactionRule.class, condition.getTransactionRule().getId())).isNotNull();
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountBlocksCorruptManualCandidateWithoutMutation() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        TransactionCandidate candidate = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.MANUAL,
+            TransactionCandidateStatus.POSTED
+        );
+
+        assertHardDeleteBlocked(financialAccount.getId(), "CORRUPT_CANDIDATE");
+
+        em.clear();
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isPresent();
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountBlocksCorruptIngestionGraphWithoutMutation() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        TransactionCandidate candidate = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.FILE_IMPORT,
+            TransactionCandidateStatus.READY_TO_POST
+        );
+
+        assertHardDeleteBlocked(financialAccount.getId(), "CORRUPT_INGESTION_GRAPH");
+
+        em.clear();
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isPresent();
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    @Transactional
+    void hardDeleteFinancialAccountBlocksUnsupportedApiImportCandidateWithoutMutation() throws Exception {
+        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
+        TransactionCandidate candidate = createCandidate(
+            financialAccount,
+            TransactionCandidateSource.API_IMPORT,
+            TransactionCandidateStatus.DRAFT
+        );
+
+        assertHardDeleteBlocked(financialAccount.getId(), "UNSUPPORTED_API_IMPORT_CANDIDATE");
+
+        em.clear();
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isPresent();
+        insertedFinancialAccount = null;
+    }
+
+    @Test
+    void hardDeleteFinancialAccountRollsBackEveryEarlierCleanupWhenLateCleanupFails() {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        Long[] aggregateIds = transactionTemplate.execute(status -> {
+            FinancialAccount targetAccount = createEntity(em);
+            targetAccount = financialAccountRepository.saveAndFlush(targetAccount);
+            FinancialAccount otherAccount = createAccount("HARD_DELETE_ROLLBACK_OTHER_ACCOUNT");
+            FinancialTransaction transaction = createTransaction(targetAccount, LocalDate.parse("2026-01-10"));
+            TransactionIngestion ingestion = createTransactionIngestion(targetAccount, IngestionType.FILE);
+            createFileIngestion(ingestion);
+            IngestionRecord record = createPreparedIngestionRecord(ingestion);
+            Tag tag = TagResourceIT.createEntity(em);
+            em.persist(tag);
+            TransactionCandidate candidate = createPreparedFileImportCandidate(targetAccount, ingestion, record, tag);
+            Budget budget = BudgetResourceIT.createEntity(em);
+            budget.addAccounts(targetAccount);
+            budget.addAccounts(otherAccount);
+            em.persist(budget);
+            FinancialSubscription subscription = FinancialSubscriptionResourceIT.createEntity(em);
+            subscription.setAccount(targetAccount);
+            em.persist(subscription);
+            em.flush();
+            return new Long[] {
+                targetAccount.getId(),
+                otherAccount.getId(),
+                transaction.getId(),
+                candidate.getId(),
+                ingestion.getId(),
+                record.getId(),
+                budget.getId(),
+                subscription.getId(),
+            };
+        });
+        Long accountId = aggregateIds[0];
+
+        doThrow(new IllegalStateException("forced late hard-delete cleanup failure"))
+            .when(creditAccountDetailsRepository)
+            .deleteByAccountId(accountId);
+
+        try {
+            assertThatThrownBy(() -> financialAccountHardDeleteService.hardDelete(accountId))
+                .isInstanceOf(org.springframework.dao.InvalidDataAccessApiUsageException.class)
+                .hasRootCauseMessage("forced late hard-delete cleanup failure");
+        } finally {
+            reset(creditAccountDetailsRepository);
+        }
+
+        transactionTemplate.executeWithoutResult(status -> {
+            em.clear();
+            assertThat(financialAccountRepository.existsById(accountId)).isTrue();
+            assertThat(em.find(FinancialTransaction.class, aggregateIds[2])).isNotNull();
+            assertThat(transactionCandidateRepository.findById(aggregateIds[3])).isPresent();
+            assertThat(em.find(TransactionIngestion.class, aggregateIds[4])).isNotNull();
+            assertThat(em.find(IngestionRecord.class, aggregateIds[5])).isNotNull();
+            assertThat(em.find(Budget.class, aggregateIds[6]).getAccounts()).extracting(FinancialAccount::getId).contains(accountId);
+            assertThat(em.find(FinancialSubscription.class, aggregateIds[7]).getAccount().getId()).isEqualTo(accountId);
+        });
+
+        transactionTemplate.executeWithoutResult(status -> {
+            assertThat(financialAccountHardDeleteService.hardDelete(accountId)).isTrue();
+            budgetRepository.deleteAccountLinksByAccountId(aggregateIds[1]);
+            financialAccountRepository.deleteById(aggregateIds[1]);
+        });
+    }
+
+    private void assertHardDeleteBlocked(Long accountId, String blockerCode) throws Exception {
+        restFinancialAccountMockMvc
+            .perform(delete(ENTITY_API_URL_ID + "/hard-delete", accountId).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ACCOUNT_HARD_DELETE_BLOCKED"))
+            .andExpect(jsonPath("$.blockers[*].code", hasItem(blockerCode)));
     }
 
     @Test

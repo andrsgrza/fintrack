@@ -308,7 +308,9 @@ The overview does not display database ids, audit timestamps, ownership fields, 
 
 An inactive account shows a clear status badge and a concise historical-only explanation: history and balances remain available, existing work may finish, and the account becomes selectable for new transactions, imports, and rules only after reactivation. Credit-card details stay inline; a missing detail record offers the parent Account edit route rather than a child CRUD route.
 
-The account delete dialog identifies the account by name and explains the real behavior in product terms. The existing backend orchestration may clean eligible workflow/import data, while protected candidate/provenance references block deletion. A blocked response is rendered as contextual product copy, never as the raw server exception; successful delete returns to the account overview.
+The account delete dialog is a product hard-delete flow, not the generated CRUD delete path. It loads a read-only deletion preview before enabling the destructive action, identifies the account without exposing its ID, lists only meaningful consequences, and makes clear that shared categories/tags remain. Typed blockers render as contextual product copy; the primary action stays disabled until none remain. A race-time `409 ACCOUNT_HARD_DELETE_BLOCKED` updates the same modal locally rather than creating a generic error toast. The dialog also provides **Deactivate instead**, which opens the existing account-edit route so the user can preserve the complete history.
+
+Recent activity keeps its compact account-detail table, but it is also navigation: each transaction description is a keyboard-accessible product link to its canonical FinancialTransaction detail. **View all transactions** opens `/financial-transaction` with the current account's `accountId.equals` filter, page 1, and transaction-date descending sort. The FinancialTransaction list hydrates that URL into its open account filter, including the existing historical inactive-account `includeId` behavior; clearing the filter returns to the normal unfiltered list.
 
 ### Relationship type
 

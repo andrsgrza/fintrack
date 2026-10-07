@@ -65,6 +65,16 @@ public interface BudgetRepository
     @Query("select budget from Budget budget left join fetch budget.user where budget.user.login = :login")
     List<Budget> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
 
+    /**
+     * Fetches every linked account for budgets that contain the target account. The full set is needed because an
+     * empty set broadens a budget to all active accounts.
+     */
+    @Query(
+        "select distinct budget from Budget budget left join fetch budget.accounts " +
+        "where budget.id in (select scopedBudget.id from Budget scopedBudget join scopedBudget.accounts scopedAccount where scopedAccount.id = :accountId)"
+    )
+    List<Budget> findAllWithAccountsByAccountId(@Param("accountId") Long accountId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "delete from rel_budget__accounts where budget_id = :budgetId", nativeQuery = true)
     void deleteAccountLinksByBudgetId(@Param("budgetId") Long budgetId);

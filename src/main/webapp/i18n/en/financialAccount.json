@@ -14,11 +14,57 @@
       "updated": "A Financial Account is updated with identifier {{ param }}",
       "deleted": "A Financial Account is deleted with identifier {{ param }}",
       "delete": {
-        "title": "Delete account",
-        "question": "Are you sure you want to permanently delete {{ accountName }}?",
-        "consequences": "Related imported or workflow data is removed only when it can be cleaned up safely. Deletion can be blocked by protected transaction data.",
-        "protectedReferences": "This account cannot be deleted because it is still referenced by protected transaction data. Resolve those references first.",
-        "failed": "This account could not be deleted. Try again."
+        "title": "Permanently delete account",
+        "accountFallback": "Account",
+        "warning": "This permanently deletes the financial data associated with this account and cannot be undone.",
+        "loading": "Loading deletion information...",
+        "previewFailed": "Could not load deletion information. Close this dialog and try again.",
+        "disabledExplanation": "Permanent deletion is available only after deletion information has loaded and blockers are resolved.",
+        "action": "Permanently delete",
+        "deleting": "Deleting...",
+        "failed": "This account could not be deleted. Try again.",
+        "removes": {
+          "title": "Will be permanently deleted",
+          "transactions": {
+            "one": "{{count}} transaction",
+            "other": "{{count}} transactions"
+          },
+          "manualDrafts": {
+            "one": "{{count}} manual draft",
+            "other": "{{count}} manual drafts"
+          },
+          "imports": {
+            "one": "{{count}} import",
+            "other": "{{count}} imports"
+          },
+          "importRecords": {
+            "one": "{{count}} import record",
+            "other": "{{count}} import records"
+          },
+          "creditDetails": "This account's card details",
+          "empty": "This account has no associated financial history."
+        },
+        "preserves": {
+          "title": "Will be preserved",
+          "copy": "Your categories and tags are not deleted. Budgets, subscriptions, and rules are preserved; anything requiring your attention before deletion appears below."
+        },
+        "deactivate": {
+          "title": "Only want to stop using it?",
+          "copy": "You can deactivate the account and keep all of its history.",
+          "action": "Deactivate instead"
+        },
+        "blockers": {
+          "title": "This account cannot be deleted yet",
+          "crossAccountTransfer": {
+            "one": "This account participates in 1 transfer with another account. Resolve that transfer before deleting it.",
+            "other": "This account participates in {{count}} transfers with other accounts. Resolve those transfers before deleting it."
+          },
+          "budgetScopeWouldBroaden": "A budget uses this account as its only specific account. Deleting it would broaden that budget to all active accounts. Edit the budget first.",
+          "ruleAccountConditionReference": "A rule uses this account as a condition. Edit or remove that condition before deleting the account.",
+          "corruptCandidate": "Fintrack detected inconsistent transaction data associated with this account. It cannot be deleted safely.",
+          "corruptIngestionGraph": "Fintrack detected inconsistent import data associated with this account. It cannot be deleted safely.",
+          "unsupportedApiImportCandidate": "This account contains API import data that does not yet support permanent deletion."
+        }
       },
       "detail": {
         "title": "Account details",

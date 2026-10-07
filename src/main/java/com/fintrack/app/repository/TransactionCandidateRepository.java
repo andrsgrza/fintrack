@@ -233,6 +233,44 @@ public interface TransactionCandidateRepository
 
     boolean existsByAccountId(Long accountId);
 
+    /**
+     * Loads every candidate that could be part of an account deletion aggregate, including malformed links that
+     * point at the account through an ingestion or posted transaction instead of through candidate.account.
+     */
+    @EntityGraph(
+        attributePaths = {
+            "account",
+            "transactionIngestion",
+            "transactionIngestion.account",
+            "ingestionRecord",
+            "ingestionRecord.transactionIngestion",
+            "ingestionRecord.transactionIngestion.account",
+            "ingestionRecord.financialTransaction",
+            "ingestionRecord.financialTransaction.account",
+            "financialTransaction",
+            "financialTransaction.account",
+            "financialTransaction.transactionIngestion",
+        }
+    )
+    @Query(
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate " +
+        "where transactionCandidate.account.id = :accountId " +
+        "or transactionCandidate.financialTransaction.account.id = :accountId " +
+        "or transactionCandidate.transactionIngestion.account.id = :accountId"
+    )
+    List<TransactionCandidate> findAllForAccountDeletionPreview(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select id from transaction_candidate where account_id = :accountId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from TransactionCandidate transactionCandidate where transactionCandidate.account.id = :accountId")
+    void deleteByAccountId(@Param("accountId") Long accountId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
         value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select id from transaction_candidate where transaction_ingestion_id = :transactionIngestionId)",

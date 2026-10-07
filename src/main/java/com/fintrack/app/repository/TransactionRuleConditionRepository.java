@@ -92,4 +92,15 @@ public interface TransactionRuleConditionRepository extends JpaRepository<Transa
         "select transactionRuleCondition from TransactionRuleCondition transactionRuleCondition left join fetch transactionRuleCondition.transactionRule transactionRule left join fetch transactionRule.user where transactionRule.user.login = :login"
     )
     List<TransactionRuleCondition> findAllWithToOneRelationshipsByRuleUserLogin(@Param("login") String login);
+
+    @Query(
+        "select transactionRuleCondition from TransactionRuleCondition transactionRuleCondition " +
+        "left join fetch transactionRuleCondition.transactionRule transactionRule " +
+        "left join fetch transactionRule.user ruleUser " +
+        "where transactionRuleCondition.field = :field and ruleUser.id = :userId"
+    )
+    List<TransactionRuleCondition> findAllAccountConditionsByRuleUserId(
+        @Param("field") TransactionRuleField field,
+        @Param("userId") Long userId
+    );
 }

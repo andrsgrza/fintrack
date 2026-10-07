@@ -14,11 +14,57 @@
       "updated": "Se actualizó la cuenta con el identificador {{ param }}",
       "deleted": "Se eliminó la cuenta con el identificador {{ param }}",
       "delete": {
-        "title": "Eliminar cuenta",
-        "question": "¿Seguro que quieres eliminar permanentemente {{ accountName }}?",
-        "consequences": "Los datos importados o de flujos relacionados se eliminan sólo cuando se pueden limpiar de forma segura. La eliminación puede bloquearse por datos de transacciones protegidos.",
-        "protectedReferences": "Esta cuenta no se puede eliminar porque todavía está referenciada por datos de transacciones protegidos. Resuelve esas referencias primero.",
-        "failed": "No se pudo eliminar esta cuenta. Inténtalo de nuevo."
+        "title": "Eliminar cuenta permanentemente",
+        "accountFallback": "Cuenta",
+        "warning": "Esta acción eliminará permanentemente los datos financieros asociados a esta cuenta y no se puede deshacer.",
+        "loading": "Cargando información de eliminación...",
+        "previewFailed": "No se pudo cargar la información de eliminación. Cierra este diálogo e inténtalo de nuevo.",
+        "disabledExplanation": "La eliminación permanente estará disponible cuando la información se haya cargado y no queden bloqueos.",
+        "action": "Eliminar permanentemente",
+        "deleting": "Eliminando...",
+        "failed": "No se pudo eliminar esta cuenta. Inténtalo de nuevo.",
+        "removes": {
+          "title": "Se eliminará permanentemente",
+          "transactions": {
+            "one": "{{count}} transacción",
+            "other": "{{count}} transacciones"
+          },
+          "manualDrafts": {
+            "one": "{{count}} borrador manual",
+            "other": "{{count}} borradores manuales"
+          },
+          "imports": {
+            "one": "{{count}} importación",
+            "other": "{{count}} importaciones"
+          },
+          "importRecords": {
+            "one": "{{count}} registro de importación",
+            "other": "{{count}} registros de importación"
+          },
+          "creditDetails": "Los detalles de esta cuenta o tarjeta",
+          "empty": "Esta cuenta no tiene historial financiero asociado."
+        },
+        "preserves": {
+          "title": "Se conservará",
+          "copy": "Tus categorías y etiquetas no se eliminan. Los presupuestos, suscripciones y reglas se conservan; cualquier elemento que requiera atención antes de eliminar aparecerá abajo."
+        },
+        "deactivate": {
+          "title": "¿Sólo quieres dejar de usarla?",
+          "copy": "Puedes desactivar la cuenta y conservar todo su historial.",
+          "action": "Desactivar en su lugar"
+        },
+        "blockers": {
+          "title": "No se puede eliminar esta cuenta todavía",
+          "crossAccountTransfer": {
+            "one": "Esta cuenta participa en 1 transferencia con otra cuenta. Resuelve esa transferencia antes de eliminarla.",
+            "other": "Esta cuenta participa en {{count}} transferencias con otras cuentas. Resuelve esas transferencias antes de eliminarla."
+          },
+          "budgetScopeWouldBroaden": "Un presupuesto usa esta cuenta como su única cuenta específica. Eliminarla cambiaría automáticamente el alcance del presupuesto a todas las cuentas activas. Edita ese presupuesto primero.",
+          "ruleAccountConditionReference": "Una regla usa esta cuenta como condición. Edita o elimina esa condición antes de eliminar la cuenta.",
+          "corruptCandidate": "Fintrack detectó datos de transacción inconsistentes asociados a esta cuenta. No se puede eliminar de forma segura.",
+          "corruptIngestionGraph": "Fintrack detectó datos de importación inconsistentes asociados a esta cuenta. No se puede eliminar de forma segura.",
+          "unsupportedApiImportCandidate": "Esta cuenta contiene datos de una importación por API que todavía no admite borrado permanente."
+        }
       },
       "detail": {
         "title": "Detalles de la cuenta",

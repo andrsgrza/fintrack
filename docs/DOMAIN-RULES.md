@@ -1485,6 +1485,18 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 **Confirmed:** allowed even with txs + ingestions; cleans up via delegation. Single transaction.
 
+### Account aggregate hard-delete (ACC-HARD-DELETE-2) ✅
+
+`GET /api/financial-accounts/{id}/deletion-preview` remains an owner-safe, read-only preview. It reports account-owned data counts and `canHardDelete`; a blocked preview is still `200`, while an inaccessible account is `404`. It never deletes, unlinks, cancels, updates provenance, or changes `rawData`.
+
+`DELETE /api/financial-accounts/{id}/hard-delete` is the separate permanent aggregate command. It locks the accessible account, reruns the same preflight inside its write transaction, then either deletes the complete approved aggregate or rolls all work back. A blocked command returns `409` with `code: ACCOUNT_HARD_DELETE_BLOCKED` and typed blockers; an inaccessible/nonexistent account returns `404`; success returns `204`.
+
+The approved blockers are `CROSS_ACCOUNT_TRANSFER`, `BUDGET_SCOPE_WOULD_BROADEN`, `RULE_ACCOUNT_CONDITION_REFERENCE`, `CORRUPT_CANDIDATE`, `CORRUPT_INGESTION_GRAPH`, and `UNSUPPORTED_API_IMPORT_CANDIDATE`. Valid direct transactions, valid MANUAL candidates (including posted same-account provenance), valid FILE_IMPORT graphs, ingestion records, credit details, subscriptions, categories, and tags are not blockers by themselves. Any blocker aborts before cleanup starts; corrupt data is not repaired.
+
+On success, the command deletes the account-owned FinancialTransactions, valid MANUAL and FILE_IMPORT candidates, candidate/transaction tag links, ingestion metadata/records/`rawData`, and credit details. It preserves Category, Tag, Budget, FinancialSubscription, TransactionRule, and other accounts: it removes only the target link from a multi-account budget and sets `FinancialSubscription.account` to `null`. It deletes an InternalTransfer only when both legs belong to the removed aggregate; cross-account transfers block. API_IMPORT candidates still block because API_IMPORT cleanup is not implemented.
+
+This does **not** replace the transitional `DELETE /api/financial-accounts/{id}` orchestration. Nor does it weaken direct `FinancialTransaction` deletion: a candidate-backed posted transaction remains protected outside this command.
+
 ### UPDATE / PATCH
 
 | Rule                                                     | Decision                                                                                                              | Status   |

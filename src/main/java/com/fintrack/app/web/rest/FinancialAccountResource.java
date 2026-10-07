@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.FinancialAccountBalanceService;
 import com.fintrack.app.service.FinancialAccountConfigurationService;
+import com.fintrack.app.service.FinancialAccountHardDeleteBlockedException;
+import com.fintrack.app.service.FinancialAccountHardDeleteService;
 import com.fintrack.app.service.FinancialAccountOverviewService;
 import com.fintrack.app.service.FinancialAccountQueryService;
 import com.fintrack.app.service.FinancialAccountService;
@@ -12,6 +14,8 @@ import com.fintrack.app.service.dto.FinancialAccountBalanceDTO;
 import com.fintrack.app.service.dto.FinancialAccountConfiguredRequestDTO;
 import com.fintrack.app.service.dto.FinancialAccountConfiguredResponseDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.FinancialAccountDeletionPreviewDTO;
+import com.fintrack.app.service.dto.FinancialAccountHardDeleteBlockedDTO;
 import com.fintrack.app.service.dto.FinancialAccountOverviewDTO;
 import com.fintrack.app.service.dto.FinancialAccountSelectableDTO;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
@@ -26,6 +30,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tech.jhipster.web.util.HeaderUtil;
@@ -55,6 +60,8 @@ public class FinancialAccountResource {
 
     private final FinancialAccountOverviewService financialAccountOverviewService;
 
+    private final FinancialAccountHardDeleteService financialAccountHardDeleteService;
+
     private final ObjectMapper objectMapper;
 
     public FinancialAccountResource(
@@ -63,6 +70,7 @@ public class FinancialAccountResource {
         FinancialAccountBalanceService financialAccountBalanceService,
         FinancialAccountConfigurationService financialAccountConfigurationService,
         FinancialAccountOverviewService financialAccountOverviewService,
+        FinancialAccountHardDeleteService financialAccountHardDeleteService,
         ObjectMapper objectMapper
     ) {
         this.financialAccountService = financialAccountService;
@@ -70,6 +78,7 @@ public class FinancialAccountResource {
         this.financialAccountBalanceService = financialAccountBalanceService;
         this.financialAccountConfigurationService = financialAccountConfigurationService;
         this.financialAccountOverviewService = financialAccountOverviewService;
+        this.financialAccountHardDeleteService = financialAccountHardDeleteService;
         this.objectMapper = objectMapper;
     }
 
@@ -306,6 +315,35 @@ public class FinancialAccountResource {
         LOG.debug("REST request to get FinancialAccount balance : {}, asOfDate: {}", id, asOfDate);
         Optional<FinancialAccountBalanceDTO> financialAccountBalanceDTO = financialAccountBalanceService.calculateBalance(id, asOfDate);
         return ResponseUtil.wrapOrNotFound(financialAccountBalanceDTO);
+    }
+
+    /**
+     * {@code GET /financial-accounts/:id/deletion-preview} : inspect the read-only preflight for a future
+     * permanent account deletion. This endpoint never deletes, unlinks, or otherwise changes account data.
+     */
+    @GetMapping("/{id}/deletion-preview")
+    public ResponseEntity<FinancialAccountDeletionPreviewDTO> getFinancialAccountDeletionPreview(@PathVariable("id") Long id) {
+        LOG.debug("REST request to get FinancialAccount deletion preview : {}", id);
+        return ResponseUtil.wrapOrNotFound(financialAccountHardDeleteService.preview(id));
+    }
+
+    /**
+     * {@code DELETE /financial-accounts/:id/hard-delete} : permanently delete one account aggregate.
+     *
+     * <p>This is deliberately separate from the transitional generic account delete endpoint. A blocked preflight
+     * returns a product-safe {@code 409} body; an inaccessible account remains a {@code 404}.</p>
+     */
+    @DeleteMapping("/{id}/hard-delete")
+    public ResponseEntity<FinancialAccountHardDeleteBlockedDTO> hardDeleteFinancialAccount(@PathVariable("id") Long id) {
+        LOG.debug("REST request to hard-delete FinancialAccount : {}", id);
+        try {
+            if (!financialAccountHardDeleteService.hardDelete(id)) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.noContent().build();
+        } catch (FinancialAccountHardDeleteBlockedException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(new FinancialAccountHardDeleteBlockedDTO(e.getBlockers()));
+        }
     }
 
     /**

@@ -17,6 +17,8 @@ import org.springframework.stereotype.Repository;
 public interface CreditAccountDetailsRepository extends JpaRepository<CreditAccountDetails, Long> {
     boolean existsByAccountId(Long accountId);
 
+    long countByAccountId(Long accountId);
+
     List<CreditAccountDetails> findAllByAccount_IdIn(Collection<Long> accountIds);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
