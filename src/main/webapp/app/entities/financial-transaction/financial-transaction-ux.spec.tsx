@@ -225,7 +225,7 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.getByLabelText('Type').value).toBe('OUT');
     expect(screen.getByLabelText('Category').value).toBe('10');
     await waitFor(() => expect(screen.getByTestId('financialTransactionFilterCategoryIdentity')).toBeTruthy());
-    expect(screen.getByTestId('financialTransactionFilterTagIdentity').textContent).toContain('Personal');
+    expect(screen.getByTestId('financialTransactionFilterTagsSelected').textContent).toContain('Personal');
     expect(screen.queryByText('Origin')).toBeNull();
     expect(screen.queryByText('Ingestion')).toBeNull();
   });
@@ -349,6 +349,26 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(payload).not.toHaveProperty('transactionIngestion');
     expect(payload).not.toHaveProperty('createdAt');
     expect(payload).not.toHaveProperty('updatedAt');
+  });
+
+  it('uses one product tag selector to remove and add tags before saving a posted transaction', async () => {
+    const workTag = { id: 21, name: 'Work', color: '#2463A5', active: true };
+    mockGetSelectableTags.mockResolvedValue([...tags, workTag]);
+    renderEditForm();
+
+    await screen.findByTestId('financialTransactionTagsChip');
+    expect(screen.getByTestId('financialTransactionTagsChip').textContent).toContain('Personal');
+    expect(screen.getByTestId('financialTransactionTagsInactive')).toBeTruthy();
+    expect(document.querySelector('select[multiple][name="tags"]')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('financialTransactionTagsRemove'));
+    fireEvent.click(screen.getByTestId('financialTransactionTagsAdd'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Work' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(mockPartialUpdateEntity).toHaveBeenCalled());
+    expect(mockPartialUpdateEntity.mock.calls.at(-1)?.[0].tags).toEqual([{ id: '21' }]);
+    expect(screen.queryByTestId('financialTransactionTagsChip')).not.toBeNull();
   });
 
   it('renders a posted detail hero, localized origin, product classification, and overflow delete', () => {

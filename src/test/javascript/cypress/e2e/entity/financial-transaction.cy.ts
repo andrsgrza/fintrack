@@ -444,7 +444,9 @@ describe('FinancialTransaction e2e test', () => {
 
         cy.get('[data-cy="financialTransactionClearFilters"]').click();
         cy.wait('@entitiesRequest');
-        cy.get('[data-cy="financialTransactionFilterTags"]').select([String(tag.id)]);
+        cy.get('[data-cy="financialTransactionFilterTagsAdd"]').click();
+        cy.get('[data-cy="financialTransactionFilterTagsSearch"]').type(tag.name);
+        cy.contains('[data-cy="financialTransactionFilterTagsOption"]', tag.name).click();
         cy.get('[data-cy="financialTransactionSearchSubmit"]').click();
         cy.wait('@entitiesRequest').then(({ request }) => {
           expect(new URL(request.url).searchParams.get('tagsId.in')).to.equal(String(tag.id));
@@ -452,8 +454,14 @@ describe('FinancialTransaction e2e test', () => {
         cy.contains(entityTableSelector, financialTransaction.description).should('exist');
         cy.contains(entityTableSelector, incomeDescription).should('not.exist');
 
-        cy.get('[data-cy="financialTransactionClearFilters"]').click();
-        cy.wait('@entitiesRequest');
+        cy.contains('[data-cy="financialTransactionFilterTagsChip"]', tag.name)
+          .find('[data-cy="financialTransactionFilterTagsRemove"]')
+          .click();
+        cy.get('[data-cy="financialTransactionSearchSubmit"]').click();
+        cy.wait('@entitiesRequest').then(({ request }) => {
+          expect(new URL(request.url).searchParams.get('tagsId.in')).to.be.null;
+        });
+
         cy.url().should('not.contain', 'description.contains').and('not.contain', 'flow.equals').and('not.contain', 'categoryId.equals');
       });
 
@@ -482,7 +490,10 @@ describe('FinancialTransaction e2e test', () => {
         cy.get('[data-cy="transactionDate"]').clear().type('2026-07-09');
         cy.get('[data-cy="amount"]').clear().type('125.75');
         cy.get('[data-cy="category"]').select(String(category.id));
-        cy.get('[data-cy="tags"]').select([String(tag.id)]);
+        cy.contains('[data-cy="financialTransactionTagsChip"]', tag.name).find('[data-cy="financialTransactionTagsRemove"]').click();
+        cy.get('[data-cy="financialTransactionTagsAdd"]').click();
+        cy.get('[data-cy="financialTransactionTagsSearch"]').type(tag.name);
+        cy.contains('[data-cy="financialTransactionTagsOption"]', tag.name).click();
         cy.get('[data-cy="financialTransactionEditOptionalDetails"] summary').click();
         cy.get('[data-cy="externalReference"]').type('updated-reference');
         cy.get('[data-cy="notes"]').type('updated notes');
@@ -572,14 +583,12 @@ describe('FinancialTransaction e2e test', () => {
 
       let suggestedCategoryId: number | null = null;
       let suggestedCategoryName: string | null = null;
-      let suggestedTagIds: number[] = [];
       let suggestedTagNames: string[] = [];
       cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
         expect(response?.statusCode).to.equal(200);
         expect(response?.body.hasSuggestions).to.equal(true);
         suggestedCategoryId = response?.body.suggestedCategory?.categoryId ?? null;
         suggestedCategoryName = response?.body.suggestedCategory?.categoryName ?? null;
-        suggestedTagIds = (response?.body.suggestedTags ?? []).map(suggestion => suggestion.tagId);
         suggestedTagNames = (response?.body.suggestedTags ?? []).map(suggestion => suggestion.tagName);
       });
       cy.get('[data-testid="manual-draft-rule-suggestions"]').should($section => {
@@ -594,7 +603,7 @@ describe('FinancialTransaction e2e test', () => {
         if (suggestedCategoryId) {
           cy.get('[data-cy="category"]').should('have.value', String(suggestedCategoryId));
         }
-        suggestedTagIds.forEach(suggestedTagId => cy.get(`[data-cy="tags"] option[value="${suggestedTagId}"]`).should('be.selected'));
+        suggestedTagNames.forEach(suggestedTagName => cy.get('[data-cy="manualDraftTagsChip"]').should('contain', suggestedTagName));
       });
 
       cy.authenticatedRequest({
@@ -620,7 +629,10 @@ describe('FinancialTransaction e2e test', () => {
 
       // Explicit selections after applying suggestions are user-owned and must survive another preview.
       cy.get('[data-cy="category"]').select(String(category.id));
-      cy.get('[data-cy="tags"]').select([String(tag.id)]);
+      cy.contains('[data-cy="manualDraftTagsChip"]', tag.name).find('[data-cy="manualDraftTagsRemove"]').click();
+      cy.get('[data-cy="manualDraftTagsAdd"]').click();
+      cy.get('[data-cy="manualDraftTagsSearch"]').type(tag.name);
+      cy.contains('[data-cy="manualDraftTagsOption"]', tag.name).click();
       waitForManualCandidate(
         candidate =>
           candidate.classificationReviewStatus === 'USER_SELECTED' &&
@@ -634,7 +646,7 @@ describe('FinancialTransaction e2e test', () => {
       waitForSavedManualCandidateDraft(manualCandidateDescription);
       cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
       cy.get('[data-cy="category"]').should('have.value', String(category.id));
-      cy.get('[data-cy="tags"] option:selected').should('have.value', String(tag.id));
+      cy.get('[data-cy="manualDraftTagsChip"]').should('contain', tag.name);
       cy.get('[data-cy="manualDraftApplyRulesButton"]').should('not.be.disabled').click();
       cy.wait('@candidateApplyRulesRequest').its('response.statusCode').should('eq', 200);
       waitForManualCandidate(candidate =>
@@ -658,10 +670,12 @@ describe('FinancialTransaction e2e test', () => {
 
       cy.reload();
       cy.wait('@getManualCandidateRequest');
-      cy.wait('@currentCategoryRequest').then(({ response }) => {
+      cy.get('@currentCategoryRequest.all').should(interceptions => {
+        const response = interceptions.at(-1)?.response;
         expect(response?.body.map(selectableCategory => selectableCategory.id)).to.include(category.id);
       });
-      cy.wait('@currentTagRequest').then(({ response }) => {
+      cy.get('@currentTagRequest.all').should(interceptions => {
+        const response = interceptions.at(-1)?.response;
         expect(response?.body.map(selectableTag => selectableTag.id)).to.include(tag.id);
       });
       cy.contains('[data-cy="category"] option', category.name)
@@ -669,11 +683,7 @@ describe('FinancialTransaction e2e test', () => {
         .invoke('text')
         .should('match', /Inactiv[ae]/);
       cy.get('[data-cy="category"]').should('have.value', String(category.id));
-      cy.contains('[data-cy="tags"] option', tag.name)
-        .should('have.value', String(tag.id))
-        .invoke('text')
-        .should('match', /Inactiv[ae]/);
-      cy.get('[data-cy="tags"] option:selected').should('have.value', String(tag.id));
+      cy.contains('[data-cy="manualDraftTagsChip"]', tag.name).should('exist');
 
       cy.location('pathname').then(pathname => {
         const candidateId = pathname.match(/\/financial-transaction\/drafts\/(\d+)$/)?.[1];
@@ -727,7 +737,8 @@ describe('FinancialTransaction e2e test', () => {
       cy.wait('@categoriesRequest');
       cy.wait('@tagsRequest');
       cy.get('[data-cy="category"] option').should('not.contain', category.name);
-      cy.get('[data-cy="tags"] option').should('not.contain', tag.name);
+      cy.get('[data-cy="manualDraftTagsAdd"]').click();
+      cy.get('body').find('[data-cy="manualDraftTagsOption"]').should('not.contain', tag.name);
 
       cy.authenticatedRequest({ method: 'PATCH', url: `/api/categories/${category.id}`, body: { active: true } })
         .its('status')
@@ -741,7 +752,8 @@ describe('FinancialTransaction e2e test', () => {
       cy.wait('@tagsRequest');
       cy.get('[data-cy="flow-OUT"]').click().should('have.attr', 'aria-pressed', 'true');
       cy.get('[data-cy="category"] option').should('contain', category.name);
-      cy.get('[data-cy="tags"] option').should('contain', tag.name);
+      cy.get('[data-cy="manualDraftTagsAdd"]').click();
+      cy.get('[data-cy="manualDraftTagsOption"]').should('contain', tag.name);
       cy.get('@rulePreviewRequest.all').should('have.length', 0);
     });
 

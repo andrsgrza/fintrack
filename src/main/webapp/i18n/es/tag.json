@@ -36,6 +36,17 @@
       "noDescription": "No se proporcionó una descripción.",
       "active": "Activa",
       "inactive": "Inactiva",
+      "selector": {
+        "label": "Etiquetas",
+        "add": "Agregar etiqueta",
+        "search": "Buscar etiquetas",
+        "empty": "Sin etiquetas",
+        "inactive": "Inactiva",
+        "remove": "Quitar etiqueta {{ name }}",
+        "loading": "Cargando etiquetas…",
+        "loadError": "No se pudieron cargar las etiquetas. Las etiquetas actuales no cambiaron.",
+        "noMatches": "No se encontraron etiquetas"
+      },
       "status": {
         "label": "Estado",
         "active": "Activa",

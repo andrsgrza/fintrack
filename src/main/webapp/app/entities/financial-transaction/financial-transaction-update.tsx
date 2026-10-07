@@ -16,9 +16,10 @@ import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 import { ProductValidatedField, ProductValidatedForm } from 'app/shared/ui/product-validated-form';
+import { ProductTagSelector } from 'app/shared/ui/product-tag-selector';
 
 import { getEntity, partialUpdateEntity } from './financial-transaction.reducer';
-import { TransactionAccountLabel, TransactionCategory, TransactionTagChips } from './transaction-presentation';
+import { TransactionAccountLabel, TransactionCategory } from './transaction-presentation';
 
 const toOptionalNumber = (value: unknown) => (value === undefined || value === null || value === '' ? undefined : Number(value));
 
@@ -34,9 +35,6 @@ const categoryOptionLabel = (category: ICategorySelectable) =>
     .filter(Boolean)
     .join(' › ');
 
-const tagOptionLabel = (tag: ITagSelectable) =>
-  [tag.name, tag.active === false ? `(${translate('fintrackApp.tag.status.inactive')})` : undefined].filter(Boolean).join(' ');
-
 const toCategoryPresentation = (category?: ICategorySelectable | ICategory | null): ICategory | null => {
   if (!category?.name) {
     return null;
@@ -51,11 +49,6 @@ const toCategoryPresentation = (category?: ICategorySelectable | ICategory | nul
         : (category as ICategory).parentCategory,
   } as ICategory;
 };
-
-const getSelectedTagIds = (event: React.ChangeEvent<HTMLInputElement>) =>
-  Array.from((event.target as unknown as HTMLSelectElement).selectedOptions)
-    .map(option => option.value)
-    .filter(Boolean);
 
 const getDefaultValues = financialTransactionEntity => ({
   ...financialTransactionEntity,
@@ -79,6 +72,8 @@ export const FinancialTransactionUpdate = () => {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectableCategories, setSelectableCategories] = useState<ICategorySelectable[]>([]);
   const [selectableTags, setSelectableTags] = useState<ITagSelectable[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsLoadError, setTagsLoadError] = useState(false);
   const [optionalDetailsOpen, setOptionalDetailsOpen] = useState(false);
 
   useEffect(() => {
@@ -103,6 +98,8 @@ export const FinancialTransactionUpdate = () => {
     const categoryIds = financialTransactionEntity.category?.id === undefined ? [] : [financialTransactionEntity.category.id];
     const tagIds = financialTransactionEntity.tags?.map(tag => tag.id).filter((tagId): tagId is number => tagId !== undefined) ?? [];
 
+    setTagsLoading(true);
+    setTagsLoadError(false);
     Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
       .then(([categories, tags]) => {
         if (mounted) {
@@ -114,6 +111,12 @@ export const FinancialTransactionUpdate = () => {
         if (mounted) {
           setSelectableCategories([]);
           setSelectableTags([]);
+          setTagsLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setTagsLoading(false);
         }
       });
 
@@ -334,27 +337,20 @@ export const FinancialTransactionUpdate = () => {
                 </div>
               </Col>
               <Col md="6">
-                <Label for="financial-transaction-tags">
+                <div className="small fw-semibold mb-2">
                   <Translate contentKey="fintrackApp.financialTransaction.tags">Tags</Translate>
-                </Label>
-                <Input
-                  id="financial-transaction-tags"
-                  name="tags"
-                  data-cy="tags"
-                  type="select"
-                  multiple
-                  value={selectedTagIds}
-                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSelectedTagIds(getSelectedTagIds(event))}
-                >
-                  {selectableTags.map(tag => (
-                    <option value={tag.id} key={tag.id}>
-                      {tagOptionLabel(tag)}
-                    </option>
-                  ))}
-                </Input>
-                <div className="pt-2">
-                  <TransactionTagChips tags={selectedTags} showEmpty />
                 </div>
+                <ProductTagSelector
+                  id="financial-transaction-tags"
+                  dataCy="financialTransactionTags"
+                  selectedTags={selectedTags}
+                  availableTags={selectableTags}
+                  loading={tagsLoading}
+                  error={tagsLoadError}
+                  onChange={nextTags =>
+                    setSelectedTagIds(nextTags.map(tag => tag.id?.toString()).filter((tagId): tagId is string => !!tagId))
+                  }
+                />
               </Col>
             </Row>
           </ProductSection>

@@ -33,6 +33,7 @@ import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.
 import { ICategory } from 'app/shared/model/category.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
 import {
   applyManualDraftRules,
   cancelManualDraft,
@@ -83,11 +84,6 @@ const toOptionalNumber = (value: string | number | null | undefined) => {
   }
   return typeof value === 'number' ? value : Number(value);
 };
-
-const selectedOptions = (event: React.ChangeEvent<HTMLInputElement>): string[] =>
-  Array.from((event.target as unknown as HTMLSelectElement).selectedOptions)
-    .map((option: HTMLOptionElement) => option.value)
-    .filter(Boolean);
 
 const signedAmountFromDraft = (draft: ManualDraftFormState) => {
   const amount = toOptionalNumber(draft.amount);
@@ -809,16 +805,20 @@ const ManualTransactionClassificationSection = ({
   readOnly,
   onFieldChange,
   onTagsChange,
+  tagsLoading,
+  tagsLoadError,
   ruleSuggestions,
 }: {
   draft: ManualDraftFormState;
   categories: ICategorySelectable[];
   tags: ITagSelectable[];
   selectedCategory: ICategory | null;
-  selectedTags: ITag[];
+  selectedTags: Array<ITagSelectable | ITag>;
   readOnly: boolean;
   onFieldChange: DraftFieldChangeHandler;
-  onTagsChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onTagsChange: (tags: ProductTagSelectorTag[]) => void;
+  tagsLoading: boolean;
+  tagsLoadError: boolean;
   ruleSuggestions: React.ReactNode;
 }) => (
   <ProductSection
@@ -853,30 +853,22 @@ const ManualTransactionClassificationSection = ({
       </Col>
       <Col md="6">
         <FormGroup>
-          <Label for="financial-transaction-tags">
+          <div className="small fw-semibold mb-2">
             <Translate contentKey="fintrackApp.financialTransaction.tags">Tags</Translate>
-          </Label>
-          <Input
+          </div>
+          <ProductTagSelector
             id="financial-transaction-tags"
-            name="tags"
-            data-cy="tags"
-            type="select"
-            multiple
-            value={draft.tags}
+            dataCy="manualDraftTags"
+            selectedTags={selectedTags}
+            availableTags={tags}
             onChange={onTagsChange}
             disabled={readOnly}
-          >
-            {tags.map(tag => (
-              <option value={tag.id} key={tag.id}>
-                {tag.name}
-                {tag.active === false ? ` (${translate('fintrackApp.tag.inactive')})` : ''}
-              </option>
-            ))}
-          </Input>
+            loading={tagsLoading}
+            error={tagsLoadError}
+          />
         </FormGroup>
       </Col>
     </Row>
-    <TransactionClassification category={selectedCategory} tags={selectedTags} showEmptyTags />
     <div className="mt-3">{ruleSuggestions}</div>
   </ProductSection>
 );
@@ -1007,6 +999,8 @@ export const FinancialTransactionManualDraft = () => {
   const [candidate, setCandidate] = useState<ITransactionCandidate | null>(null);
   const [selectableCategories, setSelectableCategories] = useState<ICategorySelectable[]>([]);
   const [selectableTags, setSelectableTags] = useState<ITagSelectable[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsLoadError, setTagsLoadError] = useState(false);
   const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
   const [classificationReviewStatus, setClassificationReviewStatus] = useState<
     keyof typeof TransactionCandidateClassificationReviewStatus | null
@@ -1071,6 +1065,8 @@ export const FinancialTransactionManualDraft = () => {
     let mounted = true;
     const categoryIds = candidate?.category?.id === undefined ? [] : [candidate.category.id];
     const tagIds = candidate?.tags?.map(tag => tag.id).filter((id): id is number => id !== undefined) ?? [];
+    setTagsLoading(true);
+    setTagsLoadError(false);
     Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
       .then(([categories, tags]) => {
         if (mounted) {
@@ -1082,6 +1078,12 @@ export const FinancialTransactionManualDraft = () => {
         if (mounted) {
           setSelectableCategories([]);
           setSelectableTags([]);
+          setTagsLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setTagsLoading(false);
         }
       });
     return () => {
@@ -1358,8 +1360,8 @@ export const FinancialTransactionManualDraft = () => {
     });
   };
 
-  const updateTags = event => {
-    const value = selectedOptions(event);
+  const updateTags = (tags: ProductTagSelectorTag[]) => {
+    const value = tags.map(tag => tag.id?.toString()).filter((tagId): tagId is string => !!tagId);
     setDraft(current => {
       const nextDraft = { ...current, tags: value };
       latestDraftRef.current = nextDraft;
@@ -1585,10 +1587,12 @@ export const FinancialTransactionManualDraft = () => {
           categories={compatibleCategories}
           tags={selectableTags}
           selectedCategory={toCategoryPresentation(selectedCategory)}
-          selectedTags={selectedTags.map(toTagPresentation).filter((tag): tag is ITag => tag !== null)}
+          selectedTags={selectedTags}
           readOnly={readOnly}
           onFieldChange={updateDraftField}
           onTagsChange={updateTags}
+          tagsLoading={tagsLoading}
+          tagsLoadError={tagsLoadError}
           ruleSuggestions={
             <ManualTransactionRuleSuggestions
               candidate={candidate}

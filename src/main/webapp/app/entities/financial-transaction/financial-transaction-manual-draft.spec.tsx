@@ -211,6 +211,11 @@ const openOptionalDetails = () => {
   }
 };
 
+const addManualDraftTag = async (name = 'Business') => {
+  fireEvent.click(screen.getByTestId('manualDraftTagsAdd'));
+  fireEvent.click(await screen.findByRole('button', { name }));
+};
+
 const deferred = <T,>() => {
   let resolve: (value: T) => void = () => undefined;
   let reject: (reason?: unknown) => void = () => undefined;
@@ -485,10 +490,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await screen.findByDisplayValue('Coffee');
 
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: '10' } });
-    const tagsSelect = screen.getByLabelText('Tags');
-    const tagOption = within(tagsSelect).getByRole('option', { name: 'Business' });
-    tagOption.selected = true;
-    fireEvent.change(tagsSelect);
+    await addManualDraftTag();
     act(() => {
       jest.advanceTimersByTime(700);
     });
@@ -699,7 +701,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(screen.getByText('Suggested category')).toBeTruthy();
     expect(screen.getAllByText('Transport').length).toBeGreaterThan(1);
     expect(screen.getByText('Suggested tags')).toBeTruthy();
-    expect(screen.getAllByText('Business').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Business').length).toBeGreaterThan(0);
     expect(screen.getByText('Uber rule')).toBeTruthy();
   });
 
@@ -758,10 +760,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await waitFor(() => expect(mockPreviewManualDraftRules).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: '10' } });
-    const tagsSelect = screen.getByLabelText('Tags');
-    const tagOption = within(tagsSelect).getByRole('option', { name: 'Business' });
-    tagOption.selected = true;
-    fireEvent.change(tagsSelect);
+    await addManualDraftTag();
     act(() => {
       jest.advanceTimersByTime(700);
     });
@@ -918,7 +917,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(mockUpdateManualDraft).not.toHaveBeenCalled();
     await waitFor(() => expect(mockApplyManualDraftRules).toHaveBeenCalledWith(77));
     await waitFor(() => expect(screen.getByLabelText('Category').value).toBe('10'));
-    expect(screen.getByLabelText('Tags').selectedOptions[0].value).toBe('20');
+    expect(screen.getByTestId('manualDraftTagsSelected').textContent).toContain('Business');
     await waitFor(() =>
       expect(screen.getByTestId('manual-draft-classification-status').textContent).toContain(
         'Classification reviewed with suggestions applied.',
@@ -1082,7 +1081,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     fireEvent.click(screen.getByTestId('flow-OUT'));
     expect(await screen.findByRole('option', { name: 'Transport' })).toBeTruthy();
     expect(screen.queryByRole('option', { name: /Old transport/ })).toBeNull();
-    expect(screen.queryByRole('option', { name: /Old tag/ })).toBeNull();
+    fireEvent.click(screen.getByTestId('manualDraftTagsAdd'));
+    expect(screen.queryByRole('button', { name: /Old tag/ })).toBeNull();
     newDraft.unmount();
 
     mockGetManualDraft.mockResolvedValue({
@@ -1091,7 +1091,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     renderManualDraft('/financial-transaction/drafts/77');
 
     expect(await screen.findByRole('option', { name: /Old transport.*Inactive/ })).toBeTruthy();
-    expect(await screen.findByRole('option', { name: /Old tag.*Inactive/ })).toBeTruthy();
+    expect(await screen.findByTestId('manualDraftTagsInactive')).toBeTruthy();
   });
 
   it('non-MANUAL candidate shows safe route error without rendering editable form', async () => {
