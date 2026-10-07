@@ -1787,6 +1787,7 @@ Implemented TC-2B.1 coverage:
 - list filter state is URL-backed, resets to page 1 on apply/clear, and retains active filters when sorting; reducer coverage asserts generated criteria serialization.
 - same-posting-date is defaulted, autosaves synchronized dates, preserves independently edited posting dates after opt-out, hydrates its toggle from persisted equality, and does not appear in posted edit.
 - FT-POLISH-2 asserts distinct New transaction/Edit draft identity, no false saved state before candidate creation, compact autosave feedback, rich account labels, responsive grouped dates and positive-amount/flow controls, color-aware Category/Tag product presentation, collapsed optional/rule-detail disclosures, concise publish readiness, and persisted-draft cancel confirmation. Cypress covers the same create-to-draft header transition, automatic preview, explicit suggestion application, later manual selection/re-preview, optional notes, post, recovery, and cancel paths.
+- FT-POLISH-4B adds `product-tag-selector.spec.tsx`: colored removable chips, inactive selected history, active-only searchable choices, duplicate prevention, loading/error-safe presentation, and no native multi-select. FinancialTransaction Jest and Cypress cover posted edit remove/add/save, manual-draft remove/add/autosave/post, and URL-backed filter add/remove through the same selector.
 
 Future planned areas:
 
@@ -2893,6 +2894,7 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - A READY review with valid rows missing candidates automatically prepares FILE_IMPORT candidates once for the missing-row set, reloads the workflow, calls candidate rule preview, and keeps row review plus classification in one table.
 - The unified table displays transient suggestions only for rows returned by candidate preview, filters category options by row flow, and persists user/apply/no-suggestion review decisions on `TransactionCandidate`.
 - Unified category/tag decisions survive refresh because workflow row candidate summaries reload persisted selections.
+- Transaction Ingestion tag-selector coverage uses the shared `ProductTagSelector`: no native tag multi-select remains; persisted tags render as color-accented removable pills; active-only Add tag search prevents duplicates; inactive historical selections remain visible/removable but are unavailable for new assignment. The existing ingestion-scoped classification PATCH remains the only persistence path. Jest and Cypress keep transient rule suggestions distinct from persisted pills, cover remove/add/reload, per-row and batch apply, reevaluate, auto-apply, and protected manual selections.
 - Cypress coverage for the real workflow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
   Run it with a dedicated clean user so existing manual TransactionRules cannot influence suggestions:
   `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.

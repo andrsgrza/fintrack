@@ -30,6 +30,7 @@ import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
+import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
 import { getEntity } from './transaction-ingestion.reducer';
 import {
   applyFileImportCandidateRules,
@@ -382,10 +383,21 @@ const categoryCompatibleWithFlow = (category: ICategorySelectable, flow?: string
   return (flow === 'OUT' && category.categoryType === 'EXPENSE') || (flow === 'IN' && category.categoryType === 'INCOME');
 };
 
-const selectedOptions = (options: HTMLCollectionOf<HTMLOptionElement>) =>
-  Array.from(options)
-    .filter(option => option.selected)
-    .map(option => option.value);
+const candidateSelectedTags = (
+  candidate: IFileImportCandidateWorkflowSummary | null | undefined,
+  selectableTags: ITagSelectable[],
+): ProductTagSelectorTag[] =>
+  (candidate?.tagIds ?? []).map((tagId, index) => {
+    const selectableTag = selectableTags.find(tag => tag.id === tagId);
+    const selectedTag = candidate?.selectedTags?.find(tag => tag.tagId === tagId);
+
+    return (
+      selectableTag ?? {
+        id: tagId,
+        name: selectedTag?.tagName ?? candidate?.tagNames?.[index] ?? '',
+      }
+    );
+  });
 
 const candidatePreviewRowsById = (rows: IFileImportCandidateRulePreviewRow[] = []) =>
   rows.reduce<Record<number, IFileImportCandidateRulePreviewRow>>((acc, row) => {
@@ -546,6 +558,8 @@ export const TransactionIngestionWorkflowDetail = () => {
   const [categories, setCategories] = useState<ICategorySelectable[]>([]);
   const [tags, setTags] = useState<ITagSelectable[]>([]);
   const [selectableAccountsLoading, setSelectableAccountsLoading] = useState(false);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsLoadError, setTagsLoadError] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -1047,6 +1061,8 @@ export const TransactionIngestionWorkflowDetail = () => {
     const tagIds = candidates
       .flatMap(candidate => candidate.tagIds ?? [])
       .filter((tagId): tagId is number => tagId !== undefined && tagId !== null);
+    setTagsLoading(true);
+    setTagsLoadError(false);
     Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
       .then(([nextCategories, nextTags]) => {
         if (mounted) {
@@ -1057,7 +1073,12 @@ export const TransactionIngestionWorkflowDetail = () => {
       .catch(() => {
         if (mounted) {
           setCategories([]);
-          setTags([]);
+          setTagsLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setTagsLoading(false);
         }
       });
     return () => {
@@ -1924,33 +1945,29 @@ export const TransactionIngestionWorkflowDetail = () => {
     rowBlocked: string | null,
   ) => {
     const candidateId = candidate?.id;
-    const selectedTagIds = (candidate?.tagIds ?? []).map(tagId => String(tagId));
+    const selectedTags = candidateSelectedTags(candidate, tags);
     const tagSuggestionApplicable = hasApplicableSuggestedTags(candidate, preview);
     const editable = reviewActionsEnabled && row.status === 'VALID' && Boolean(candidateId) && !rowBlocked;
 
     return (
       <td>
         {editable ? (
-          <Input
-            bsSize="sm"
-            type="select"
-            multiple
-            aria-label={`${translate('fintrackApp.transactionIngestion.workflow.classification.tags')} ${row.recordIndex}`}
-            value={selectedTagIds}
+          <ProductTagSelector
+            id={`classification-tags-${candidateId}`}
+            dataCy={`classificationTags-${candidateId}`}
+            selectedTags={selectedTags}
+            availableTags={tags}
+            loading={tagsLoading}
+            error={tagsLoadError}
             disabled={actionBusy}
-            onChange={event =>
+            onChange={nextTags =>
               candidateId !== undefined &&
-              updateClassificationTags(candidateId, selectedOptions((event.currentTarget as unknown as HTMLSelectElement).options))
+              updateClassificationTags(
+                candidateId,
+                nextTags.map(tag => tag.id?.toString()).filter((tagId): tagId is string => tagId !== undefined),
+              )
             }
-            data-testid={`classificationTags-${candidateId}`}
-          >
-            {tags.map(tag => (
-              <option value={tag.id} key={tag.id}>
-                {tag.name}
-                {tag.active === false ? ` (${translate('fintrackApp.tag.inactive')})` : ''}
-              </option>
-            ))}
-          </Input>
+          />
         ) : candidateId ? (
           <span data-testid={`classificationTagsReadOnly-${candidateId}`}>{(candidate?.tagNames ?? []).join(', ')}</span>
         ) : row.status === 'VALID' ? (

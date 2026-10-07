@@ -412,13 +412,14 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.get('@outClassificationRow').within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('have.length', 0);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
+      cy.get('[data-testid^="classificationTags-"] select[multiple]').should('not.exist');
       cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name as string);
       cy.contains(expenseCategory?.name as string).should('be.visible');
     });
     cy.get('@secondOutClassificationRow').within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('have.length', 0);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
       cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name as string);
     });
     cy.get('@inClassificationRow').within(() => {
@@ -432,11 +433,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.get('@outClassificationRow').within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]')
+        .should('contain', tag?.name as string)
+        .and('have.attr', 'data-color-treatment', 'tag');
     });
     cy.get('@secondOutClassificationRow').within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
     });
     cy.then(() => {
       expect(candidateApplyCalled).to.equal(true);
@@ -469,11 +472,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@candidateRulePreviewAfterReloadRequest').its('response.statusCode').should('eq', 200);
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
     });
     cy.contains('[data-cy="workflowRows"] tr', secondOutDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
     });
     cy.contains('[data-cy="workflowRows"] tr', inDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(incomeCategory?.id));
@@ -605,14 +608,32 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'TAGS', automatic: true, protectManualChanges: true });
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
       cy.get('[data-testid^="classificationCategory-"]').select(manualExpenseCategory?.name as string);
     });
-    cy.wait('@manualClassificationRequest').its('response.statusCode').should('eq', 200);
-    cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationTags-"]').select([manualTag?.name as string]);
+    cy.wait('@manualClassificationRequest').then(({ response }) => {
+      expect(response?.statusCode).to.equal(200);
     });
-    cy.wait('@manualClassificationRequest').its('response.statusCode').should('eq', 200);
+    cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
+      cy.contains('[data-testid^="classificationTags-"][data-testid$="Chip"]', tag?.name as string)
+        .find('[data-testid$="Remove"]')
+        .click();
+    });
+    cy.wait('@manualClassificationRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body.tagIds).to.deep.equal([]);
+    });
+    cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Add"]').click();
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Picker"]').within(() => {
+        cy.get('[data-testid$="Search"]').type('Manual');
+        cy.contains('button', manualTag?.name as string).click();
+      });
+    });
+    cy.wait('@manualClassificationRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body.tagIds).to.deep.equal([manualTag?.id]);
+    });
 
     cy.get('[data-cy="workflowReevaluateAll"]').click();
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
@@ -625,7 +646,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(manualExpenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', manualTag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', manualTag?.name as string);
     });
 
     cy.get('[data-cy="workflowProtectManualChanges"]').uncheck();
@@ -640,7 +661,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
     });
 
     cy.get('[data-cy="workflowConfirmImport"]').click();
@@ -715,7 +736,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       cy.get('[data-testid^="descriptionReview-reevaluationSuggestion-"]').should('contain', normalizedDescription);
       cy.get('[data-testid^="workflowApplyDescriptionSuggestion-"]').should('be.visible');
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
-      cy.get('[data-testid^="classificationTags-"] option:selected').should('have.length', 0);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
     });
     workflowRowFor(firstExternalReference).within(() => {
       cy.get('[data-testid^="workflowApplyDescriptionSuggestion-"]').click();
@@ -733,7 +754,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
           .invoke('text')
           .should('match', /Auto-normalized|Normalizada automáticamente/);
         cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
-        cy.get('[data-testid^="classificationTags-"] option:selected').should('have.length', 0);
+        cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
       });
 
     cy.get('[data-cy="workflowApplyAllDescriptionSuggestions"]').should('be.enabled').click();
