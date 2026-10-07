@@ -142,6 +142,24 @@ const expectRowStatus = (recordId: number, status: string) => {
   expect(screen.getByTestId(`workflowRowStatus-${recordId}`).textContent).toBe(status);
 };
 
+const selectedTagNames = (candidateId: number) =>
+  within(screen.getByTestId(`classificationTags-${candidateId}`))
+    .queryAllByTestId(`classificationTags-${candidateId}Chip`)
+    .map(chip => chip.querySelector('span')?.textContent);
+
+const expectSelectedTagNames = (candidateId: number, names: string[]) => {
+  expect(selectedTagNames(candidateId)).toEqual(names);
+};
+
+const addCandidateTag = async (candidateId: number, name: string, search = name) => {
+  const addButton = screen.getByTestId(`classificationTags-${candidateId}Add`) as HTMLButtonElement;
+  await waitFor(() => expect(addButton.disabled).toBe(false));
+  fireEvent.click(addButton);
+  const picker = await screen.findByTestId(`classificationTags-${candidateId}Picker`);
+  fireEvent.change(within(picker).getByTestId(`classificationTags-${candidateId}Search`), { target: { value: search } });
+  fireEvent.click(within(picker).getByRole('button', { name }));
+};
+
 const persistedReviewResponse = {
   data: {
     transactionIngestionId: 100,
@@ -920,7 +938,7 @@ describe('TransactionIngestion file workflow', () => {
       },
     });
     const historicalCategory = { id: 77, name: 'Historical salary', categoryType: 'INCOME', active: false };
-    const historicalTag = { id: 66, name: 'Historical payroll', active: false };
+    const historicalTag = { id: 66, name: 'Historical payroll', color: '#7a405d', active: false };
     mockGetSelectableCategories.mockImplementation(includeIds =>
       Promise.resolve(includeIds?.includes(77) ? [...baseState.category.entities, historicalCategory] : baseState.category.entities),
     );
@@ -932,11 +950,17 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     const categorySelect = (await screen.findByTestId('classificationCategory-400')) as HTMLSelectElement;
-    const tagsSelect = screen.getByTestId('classificationTags-400') as HTMLSelectElement;
+    const tagsSelector = screen.getByTestId('classificationTags-400');
     expect(categorySelect.value).toBe('77');
     expect(Array.from(categorySelect.options).map(option => option.textContent)).toContain('Historical salary (Inactive)');
-    expect(Array.from(tagsSelect.selectedOptions).map(option => option.value)).toEqual(['66']);
-    expect(Array.from(tagsSelect.options).map(option => option.textContent)).toContain('Historical payroll (Inactive)');
+    expectSelectedTagNames(400, ['Historical payroll']);
+    expect(within(tagsSelector).getByTestId('classificationTags-400Inactive')).toBeTruthy();
+    expect(within(tagsSelector).getByTestId('classificationTags-400Chip').getAttribute('style')).toContain(
+      'border-inline-start: 0.3rem solid #7a405d',
+    );
+    fireEvent.click(within(tagsSelector).getByTestId('classificationTags-400Add'));
+    expect(screen.getByTestId('classificationTags-400Picker')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Historical payroll' })).toBeNull();
     expect(mockGetSelectableCategories).toHaveBeenCalledWith([77]);
     expect(mockGetSelectableTags).toHaveBeenCalledWith([66]);
   });
@@ -1377,11 +1401,9 @@ describe('TransactionIngestion file workflow', () => {
 
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
     await waitFor(() => expect((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).value).toBe('7'));
-    expect(Array.from((screen.getByTestId('classificationTags-411') as HTMLSelectElement).selectedOptions)).toHaveLength(0);
+    expectSelectedTagNames(411, []);
     expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('9');
-    expect(
-      Array.from((screen.getByTestId('classificationTags-410') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['5']);
+    expectSelectedTagNames(410, ['Business']);
     expect(screen.queryByTestId('classificationSuggestedCategory-411')).toBeNull();
     expect(screen.getByTestId('classificationSuggestedTags-411').textContent).toContain('Ride share');
   });
@@ -1448,11 +1470,7 @@ describe('TransactionIngestion file workflow', () => {
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', { scope: 'TAGS' }),
     );
-    await waitFor(() =>
-      expect(
-        Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
-      ).toEqual(['5']),
-    );
+    await waitFor(() => expectSelectedTagNames(400, ['Business']));
     expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('');
     expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Salary');
     expect(confirmImportCalls()).toHaveLength(0);
@@ -1486,9 +1504,7 @@ describe('TransactionIngestion file workflow', () => {
 
     await screen.findByText('Could not apply all pending category or tag suggestions. Existing selections were preserved.');
     expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('');
-    expect(
-      Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['5']);
+    expectSelectedTagNames(400, ['Business']);
     expect(confirmImportCalls()).toHaveLength(0);
   });
 
@@ -1591,9 +1607,7 @@ describe('TransactionIngestion file workflow', () => {
     );
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
     expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
-    expect(
-      Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['5']);
+    expectSelectedTagNames(400, ['Business']);
     expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
     expect(confirmImportCalls()).toHaveLength(0);
   });
@@ -1878,9 +1892,7 @@ describe('TransactionIngestion file workflow', () => {
     await screen.findByTestId('descriptionReview-badge-300');
     expect(within(rowForRecord(300)).getAllByText('UBER').length).toBeGreaterThan(0);
     expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
-    expect(
-      Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['5']);
+    expectSelectedTagNames(400, ['Business']);
     expect(screen.getByTestId('classificationSuggestedCategory-400')).toBeTruthy();
     expect(screen.getByTestId('classificationSuggestedTags-400')).toBeTruthy();
     expect(screen.queryByTestId('workflowApplyDescriptionSuggestion-300')).toBeNull();
@@ -2036,6 +2048,16 @@ describe('TransactionIngestion file workflow', () => {
         tagNames: ['Ride share', 'Cash'],
       },
     });
+    const candidateAfterTagRemoval = withCandidates(readyResponse, {
+      300: {
+        id: 400,
+        classificationReviewStatus: 'USER_SELECTED',
+        categoryId: 9,
+        categoryName: 'Salary',
+        tagIds: [3],
+        tagNames: ['Ride share'],
+      },
+    });
     mockAxiosGet
       .mockResolvedValueOnce(readyResponse)
       .mockResolvedValueOnce(candidateResponse)
@@ -2064,11 +2086,24 @@ describe('TransactionIngestion file workflow', () => {
     await waitFor(() =>
       expect(mockAxiosPatch).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/400/classification', { categoryId: 9 }),
     );
-    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
-    const tagSelect = screen.getByTestId('classificationTags-400') as HTMLSelectElement;
-    Array.from(tagSelect.options).forEach(option => {
-      option.selected = ['3', '6'].includes(option.value);
+    await waitFor(() => expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9'));
+    await waitFor(() => expectSelectedTagNames(400, ['Ride share', 'Cash']));
+    expect(screen.getByTestId('classificationSuggestedTags-400').textContent).toContain('Business');
+    expect(screen.getByTestId('classificationTags-400').querySelector('select[multiple]')).toBeNull();
+    mockAxiosPatch.mockResolvedValueOnce({
+      data: {
+        transactionIngestionId: 100,
+        ingestionRecordId: 300,
+        recordIndex: 1,
+        candidate: candidateAfterTagRemoval.data.rows[0].candidate,
+      },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Cash' }));
+    await waitFor(() =>
+      expect(mockAxiosPatch).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/400/classification', { tagIds: [3] }),
+    );
+    await waitFor(() => expectSelectedTagNames(400, ['Ride share']));
+
     mockAxiosPatch.mockResolvedValueOnce({
       data: {
         transactionIngestionId: 100,
@@ -2077,10 +2112,11 @@ describe('TransactionIngestion file workflow', () => {
         candidate: selectedCandidateResponse.data.rows[0].candidate,
       },
     });
-    fireEvent.change(tagSelect);
+    await addCandidateTag(400, 'Cash');
     await waitFor(() =>
       expect(mockAxiosPatch).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/400/classification', { tagIds: [3, 6] }),
     );
+    await waitFor(() => expectSelectedTagNames(400, ['Ride share', 'Cash']));
 
     mockAxiosPost.mockResolvedValueOnce({
       data: {
@@ -2281,9 +2317,7 @@ describe('TransactionIngestion file workflow', () => {
         scope: 'TAGS',
       }),
     );
-    expect(
-      Array.from((screen.getByTestId('classificationTags-410') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['3']);
+    expectSelectedTagNames(410, ['Ride share']);
 
     mockAxiosPost.mockResolvedValueOnce({
       data: {
@@ -2341,9 +2375,7 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect(((await screen.findByTestId('classificationCategory-400')) as HTMLSelectElement).value).toBe('9');
-    expect(
-      Array.from((screen.getByTestId('classificationTags-400') as HTMLSelectElement).selectedOptions).map(option => option.value),
-    ).toEqual(['5']);
+    expectSelectedTagNames(400, ['Business']);
   });
 
   it('candidate-backed classification blocks VALID rows without candidates', async () => {

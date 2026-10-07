@@ -2,23 +2,17 @@
   "fintrackApp": {
     "financialTransaction": {
       "home": {
-        "title": "Financial Transactions",
-        "refreshListLabel": "Refresh list",
-        "createLabel": "Create a new Financial Transaction",
-        "viewDraftsLabel": "View drafts",
-        "createOrEditLabel": "Create or edit a Financial Transaction",
-        "notFound": "No Financial Transactions found"
+        "title": "Transactions",
+        "refreshListLabel": "Refresh",
+        "createLabel": "New transaction",
+        "viewDraftsLabel": "Drafts"
       },
-      "created": "A new Financial Transaction is created with identifier {{ param }}",
-      "updated": "A Financial Transaction is updated with identifier {{ param }}",
-      "deleted": "A Financial Transaction is deleted with identifier {{ param }}",
       "delete": {
-        "question": "Are you sure you want to delete Financial Transaction {{ id }}?"
+        "question": "Are you sure you want to delete this transaction?"
       },
       "detail": {
-        "title": "Financial Transaction"
+        "title": "Transaction"
       },
-      "id": "ID",
       "transactionDate": "Transaction date",
       "postingDate": "Posting date",
       "description": "Description",
@@ -27,26 +21,52 @@
       "origin": "Origin",
       "externalReference": "External Reference",
       "notes": "Notes",
-      "createdAt": "Created At",
-      "updatedAt": "Updated At",
       "account": "Account",
       "category": "Category",
-      "financialSubscription": "Financial Subscription",
-      "transactionIngestion": "Transaction Ingestion",
       "tags": "Tags",
-      "outgoingInternalTransfer": "Outgoing Internal Transfer",
-      "incomingInternalTransfer": "Incoming Internal Transfer",
-      "ingestionRecord": "Ingestion Record",
+      "product": {
+        "loading": "Loading transactions…",
+        "loadFailed": "Transactions could not be loaded.",
+        "emptyTitle": "No transactions yet",
+        "emptyDescription": "Create a transaction to start tracking your account activity.",
+        "sortByDate": "Sort by transaction date",
+        "searchDescription": "Search description",
+        "search": "Search",
+        "filters": "Filters",
+        "clearFilters": "Clear filters",
+        "transactionDateFrom": "Transaction date from",
+        "transactionDateTo": "Transaction date to",
+        "noCategory": "No category",
+        "noTags": "No tags",
+        "classification": "Classification",
+        "moreActions": "More transaction actions",
+        "details": "Details",
+        "transaction": "Transaction",
+        "editTitle": "Edit transaction",
+        "moreDetails": "More details",
+        "optionalDetails": "Optional details",
+        "saveChanges": "Save changes",
+        "deleteTitle": "Delete transaction",
+        "origins": {
+          "manual": "Manual",
+          "fileImport": "File import",
+          "api": "API"
+        }
+      },
       "manualDraft": {
-        "title": "Create manual transaction",
+        "newTitle": "New transaction",
+        "editTitle": "Edit draft",
         "unsaved": "Start entering details to create a recoverable draft.",
         "creating": "Creating draft…",
-        "saving": "Saving changes…",
-        "saved": "Draft saved automatically.",
-        "saveFailed": "Could not save changes.",
+        "saving": "Saving…",
+        "saved": "Saved automatically.",
+        "saveFailed": "Save failed.",
         "createFailed": "Could not create the draft.",
         "loadFailed": "Could not load the draft.",
+        "loading": "Loading draft…",
         "notManual": "This draft cannot be edited in the manual transaction flow.",
+        "backToTransactions": "Back to transactions",
+        "backToDrafts": "Back to drafts",
         "ready": "Ready to post.",
         "incomplete": "Cannot post yet — complete the required transaction details.",
         "cannotPost": "This draft is not ready to post yet.",
@@ -55,20 +75,31 @@
         "postFailed": "Could not post the transaction.",
         "posted": "Posted.",
         "cancel": "Cancel draft",
+        "cancelConfirm": "Cancel this draft? Its saved changes will be removed.",
         "cancelFailed": "Could not cancel the draft.",
         "cancelled": "Cancelled.",
         "cancelledReadOnly": "This draft was cancelled and cannot be edited.",
+        "moreDetails": "More details",
+        "samePostingDate": "Use the same posting date",
+        "sections": {
+          "account": "Account",
+          "transaction": "Transaction",
+          "classification": "Classification",
+          "optionalDetails": "Optional details",
+          "actions": "Actions"
+        },
+        "classificationReadiness": {
+          "pending": "Classification pending",
+          "incomplete": "Complete details to evaluate",
+          "updating": "Updating suggestions",
+          "available": "Suggestions available",
+          "suggested": "Suggestions applied",
+          "manual": "Manual selection",
+          "notApplicable": "No suggestions confirmed",
+          "stale": "Suggestions need updating"
+        },
         "ruleSuggestions": {
           "title": "Rule suggestions",
-          "statusLabel": "Status",
-          "status": {
-            "notEvaluated": "Not evaluated",
-            "stale": "Suggestions are stale",
-            "suggested": "Suggestions applied",
-            "userSelected": "Manually selected",
-            "notApplicable": "No applicable suggestions"
-          },
-          "refresh": "Refresh suggestions",
           "retry": "Retry suggestions",
           "apply": "Apply suggestions",
           "confirmNoSuggestions": "Confirm no suggestions",
@@ -95,28 +126,36 @@
           "noSuggestions": "No rule suggestions found.",
           "conflicts": "Some suggestions conflict with existing selections.",
           "matchedRules": "Matched rules",
+          "details": "Rule details",
+          "skippedOutputs": "Skipped outputs",
           "notEvaluatedPostBlock": "Review classification before posting.",
           "stalePostBlock": "Details changed. Wait for suggestions to update and review classification before posting."
         }
       },
       "manualDraftList": {
-        "title": "Manual transaction drafts",
-        "loading": "Loading manual drafts…",
-        "loadFailed": "Could not load manual drafts.",
-        "empty": "No manual drafts.",
-        "createManualTransaction": "Create manual transaction",
-        "untitledDraft": "Untitled draft",
+        "title": "Transaction drafts",
+        "subtitle": "Continue a saved transaction whenever you are ready.",
+        "loading": "Loading drafts…",
+        "loadFailed": "Could not load drafts.",
+        "emptyTitle": "No saved drafts",
+        "empty": "No transaction drafts are waiting for you.",
+        "viewTransactions": "View transactions",
+        "createManualTransaction": "New transaction",
+        "untitledDraft": "No description",
+        "noDescription": "No description",
         "noAccount": "No account",
         "noDate": "No date",
         "noAmount": "No amount",
         "draftStatus": "Draft status",
         "classificationStatus": "Classification",
         "lastUpdated": "Last updated",
+        "updated": "Updated",
         "noCategory": "No category",
         "noTags": "No tags",
         "unknown": "Unknown",
         "resume": "Resume",
         "cancelDraft": "Cancel draft",
+        "moreActions": "More draft actions",
         "cancelConfirm": "Cancel this draft?",
         "cancelFailed": "Could not cancel the draft.",
         "status": {
@@ -129,24 +168,6 @@
           "suggested": "Suggestions applied",
           "userSelected": "Manually selected",
           "notApplicable": "No applicable suggestions"
-        }
-      },
-      "rulePreview": {
-        "step1": "Step 1: Transaction details",
-        "step2": "Step 2: Categorization",
-        "nextToCategorization": "Next: Categorization",
-        "backToDetails": "Back to details",
-        "suggestionsPrefilled": "Suggestions from rules were prefilled. You can change them before saving.",
-        "noSuggestions": "No rule suggestions found. Choose category/tags manually.",
-        "failed": "Rule preview failed. Review the transaction details and try again.",
-        "matchedRules": "Matched rules",
-        "categoryConflict": "A rule suggested {{ suggested }}, but the current category is {{ current }}.",
-        "validation": {
-          "accountRequired": "Account is required before previewing rules.",
-          "descriptionRequired": "Description is required before previewing rules.",
-          "amountRequired": "Amount must be greater than zero before previewing rules.",
-          "flowRequired": "Type is required before previewing rules.",
-          "transactionDateRequired": "Transaction date is required before previewing rules."
         }
       }
     }

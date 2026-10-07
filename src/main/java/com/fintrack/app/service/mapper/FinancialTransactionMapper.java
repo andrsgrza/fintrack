@@ -51,13 +51,28 @@ public interface FinancialTransactionMapper extends EntityMapper<FinancialTransa
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")
     @Mapping(target = "name", source = "name")
+    @Mapping(target = "accountType", source = "accountType")
+    @Mapping(target = "currency", source = "currency")
+    @Mapping(target = "lastFourDigits", source = "lastFourDigits")
+    @Mapping(target = "active", source = "active")
     FinancialAccountDTO toDtoFinancialAccountName(FinancialAccount financialAccount);
 
     @Named("categoryName")
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")
     @Mapping(target = "name", source = "name")
+    @Mapping(target = "color", source = "color")
+    @Mapping(target = "active", source = "active")
+    @Mapping(target = "parentCategory", source = "parentCategory", qualifiedByName = "categoryParent")
     CategoryDTO toDtoCategoryName(Category category);
+
+    @Named("categoryParent")
+    @BeanMapping(ignoreByDefault = true)
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "name", source = "name")
+    @Mapping(target = "color", source = "color")
+    @Mapping(target = "active", source = "active")
+    CategoryDTO toDtoCategoryParent(Category category);
 
     @Named("financialSubscriptionName")
     @BeanMapping(ignoreByDefault = true)
@@ -74,6 +89,8 @@ public interface FinancialTransactionMapper extends EntityMapper<FinancialTransa
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")
     @Mapping(target = "name", source = "name")
+    @Mapping(target = "color", source = "color")
+    @Mapping(target = "active", source = "active")
     TagDTO toDtoTagName(Tag tag);
 
     @Named("tagNameSet")

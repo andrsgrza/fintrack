@@ -29,6 +29,7 @@ import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
+import com.fintrack.app.service.dto.ManualTransactionDraftTagSummaryDTO;
 import com.fintrack.app.service.dto.RuleMatchResultDTO;
 import com.fintrack.app.service.dto.RuleOutputConflictDTO;
 import com.fintrack.app.service.dto.SkippedRuleOutputDTO;
@@ -531,6 +532,9 @@ public class TransactionCandidateService {
         if (candidate.getAccount() != null) {
             summary.setAccountId(candidate.getAccount().getId());
             summary.setAccountName(candidate.getAccount().getName());
+            summary.setAccountType(candidate.getAccount().getAccountType());
+            summary.setAccountLastFourDigits(candidate.getAccount().getLastFourDigits());
+            summary.setAccountActive(candidate.getAccount().getActive());
         }
         summary.setTransactionDate(candidate.getTransactionDate());
         summary.setDescription(candidate.getDescription());
@@ -541,9 +545,31 @@ public class TransactionCandidateService {
         summary.setUpdatedAt(candidate.getUpdatedAt());
         if (candidate.getCategory() != null) {
             summary.setCategoryName(candidate.getCategory().getName());
+            summary.setCategoryId(candidate.getCategory().getId());
+            summary.setCategoryParentName(
+                candidate.getCategory().getParentCategory() == null ? null : candidate.getCategory().getParentCategory().getName()
+            );
+            summary.setCategoryColor(candidate.getCategory().getColor());
+            summary.setCategoryActive(candidate.getCategory().getActive());
         }
         summary.setTagNames(
             candidate.getTags().stream().filter(Objects::nonNull).map(Tag::getName).filter(Objects::nonNull).sorted().toList()
+        );
+        summary.setTags(
+            candidate
+                .getTags()
+                .stream()
+                .filter(Objects::nonNull)
+                .sorted(java.util.Comparator.comparing(Tag::getName, java.util.Comparator.nullsLast(String::compareTo)))
+                .map(tag -> {
+                    ManualTransactionDraftTagSummaryDTO tagSummary = new ManualTransactionDraftTagSummaryDTO();
+                    tagSummary.setId(tag.getId());
+                    tagSummary.setName(tag.getName());
+                    tagSummary.setColor(tag.getColor());
+                    tagSummary.setActive(tag.getActive());
+                    return tagSummary;
+                })
+                .toList()
         );
         return summary;
     }

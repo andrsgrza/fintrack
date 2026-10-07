@@ -1,675 +1,413 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { Alert, Button, Col, FormText, Row, Spinner } from 'reactstrap';
-import { Translate, ValidatedField, ValidatedForm, isNumber, translate } from 'react-jhipster';
+import { Button, ButtonGroup, Col, Input, Label, Row } from 'reactstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { Translate, isNumber, translate } from 'react-jhipster';
 
-import { mapIdList } from 'app/shared/util/entity-utils';
+import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
+import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
-
-import { getEntities as getFinancialAccounts } from 'app/entities/financial-account/financial-account.reducer';
-import { getEntities as getCategories } from 'app/entities/category/category.reducer';
-import { getEntities as getTags } from 'app/entities/tag/tag.reducer';
-import {
-  IFinancialTransactionRulePreviewRequest,
-  IFinancialTransactionRulePreviewResponse,
-} from 'app/shared/model/financial-transaction.model';
+import { ICategory } from 'app/shared/model/category.model';
+import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
+import { ITag } from 'app/shared/model/tag.model';
+import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
-import { createEntity, getEntity, partialUpdateEntity, reset } from './financial-transaction.reducer';
+import { mapIdList } from 'app/shared/util/entity-utils';
+import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { ProductValidatedField, ProductValidatedForm } from 'app/shared/ui/product-validated-form';
+import { ProductTagSelector } from 'app/shared/ui/product-tag-selector';
 
-const isCategoryCompatibleWithFlow = (category, flow) => {
-  if (!category?.categoryType || !flow) {
-    return true;
+import { getEntity, partialUpdateEntity } from './financial-transaction.reducer';
+import { TransactionAccountLabel, TransactionCategory } from './transaction-presentation';
+
+const toOptionalNumber = (value: unknown) => (value === undefined || value === null || value === '' ? undefined : Number(value));
+
+const categoryCompatibleWithFlow = (category: ICategorySelectable, flow: keyof typeof TransactionFlow) =>
+  category.categoryType === 'BOTH' || (flow === 'OUT' ? category.categoryType === 'EXPENSE' : category.categoryType === 'INCOME');
+
+const categoryOptionLabel = (category: ICategorySelectable) =>
+  [
+    category.parentCategoryName,
+    category.name,
+    category.active === false ? `(${translate('fintrackApp.category.status.inactive')})` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' › ');
+
+const toCategoryPresentation = (category?: ICategorySelectable | ICategory | null): ICategory | null => {
+  if (!category?.name) {
+    return null;
   }
-  if (flow === 'OUT') {
-    return category.categoryType === 'EXPENSE' || category.categoryType === 'BOTH';
-  }
-  if (flow === 'IN') {
-    return category.categoryType === 'INCOME' || category.categoryType === 'BOTH';
-  }
-  return true;
+
+  const selectableCategory = category as ICategorySelectable;
+  return {
+    ...category,
+    parentCategory:
+      'parentCategoryName' in selectableCategory && selectableCategory.parentCategoryName
+        ? { id: selectableCategory.parentCategoryId ?? undefined, name: selectableCategory.parentCategoryName }
+        : (category as ICategory).parentCategory,
+  } as ICategory;
 };
 
-const toOptionalNumber = value => {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-  return typeof value === 'number' ? value : Number(value);
-};
-
-const RULE_PREVIEW_URL = 'api/financial-transactions/rule-preview';
-
-const emptyCreateDraft = {
-  account: '',
-  transactionDate: '',
-  postingDate: '',
-  description: '',
-  amount: '',
-  externalReference: '',
-  notes: '',
-};
-
-const getSelectedTagIds = event =>
-  Array.from(event.target.selectedOptions)
-    .map((option: HTMLOptionElement) => option.value)
-    .filter(Boolean);
-
-const getCreateDefaultValues = () => ({ flow: 'IN' });
-
-const getEditDefaultValues = financialTransactionEntity => ({
-  flow: 'IN',
+const getDefaultValues = financialTransactionEntity => ({
   ...financialTransactionEntity,
-  account: financialTransactionEntity?.account?.id,
-  category: financialTransactionEntity?.category?.id,
-  tags: financialTransactionEntity?.tags?.map(e => e.id.toString()),
+  transactionDate: financialTransactionEntity.transactionDate ? dayjs(financialTransactionEntity.transactionDate).format('YYYY-MM-DD') : '',
+  postingDate: financialTransactionEntity.postingDate ? dayjs(financialTransactionEntity.postingDate).format('YYYY-MM-DD') : '',
+  externalReference: financialTransactionEntity.externalReference ?? '',
+  notes: financialTransactionEntity.notes ?? '',
 });
-
-const hasSuggestedOutputs = (previewResponse: IFinancialTransactionRulePreviewResponse | null) =>
-  !!previewResponse?.suggestedCategory || !!previewResponse?.suggestedTags?.some(suggestion => !suggestion.alreadyPresent);
-
-const getCategoryConflict = (previewResponse: IFinancialTransactionRulePreviewResponse | null) =>
-  previewResponse?.conflicts?.find(conflict => conflict.field === 'CATEGORY');
-
-const validateStepOneDraft = (createDraft, selectedAccountId, selectedFlow) => {
-  if (!selectedAccountId && !createDraft.account) {
-    return translate('fintrackApp.financialTransaction.rulePreview.validation.accountRequired');
-  }
-  if (!createDraft.description?.trim()) {
-    return translate('fintrackApp.financialTransaction.rulePreview.validation.descriptionRequired');
-  }
-  const amount = toOptionalNumber(createDraft.amount);
-  if (!amount || amount <= 0) {
-    return translate('fintrackApp.financialTransaction.rulePreview.validation.amountRequired');
-  }
-  if (!selectedFlow) {
-    return translate('fintrackApp.financialTransaction.rulePreview.validation.flowRequired');
-  }
-  if (!createDraft.transactionDate) {
-    return translate('fintrackApp.financialTransaction.rulePreview.validation.transactionDateRequired');
-  }
-  return '';
-};
-
-const buildRulePreviewPayload = (
-  createDraft,
-  selectedAccountId,
-  selectedFlow,
-  selectedCategoryId,
-  selectedTagIds,
-): IFinancialTransactionRulePreviewRequest => ({
-  accountId: toOptionalNumber(selectedAccountId || createDraft.account),
-  description: createDraft.description,
-  amount: toOptionalNumber(createDraft.amount),
-  flow: selectedFlow,
-  origin: 'MANUAL',
-  transactionDate: createDraft.transactionDate,
-  postingDate: createDraft.postingDate || null,
-  externalReference: createDraft.externalReference || null,
-  categoryId: selectedCategoryId ? Number(selectedCategoryId) : null,
-  tagIds: selectedTagIds.map(Number),
-});
-
-const buildCreateEntityPayload = (createDraft, selectedFlow, selectedCategoryId, selectedTagIds, categories, tags, financialAccounts) => ({
-  transactionDate: createDraft.transactionDate ? dayjs(createDraft.transactionDate) : undefined,
-  postingDate: createDraft.postingDate ? dayjs(createDraft.postingDate) : null,
-  description: createDraft.description,
-  amount: toOptionalNumber(createDraft.amount),
-  flow: selectedFlow,
-  category: selectedCategoryId ? categories.find(it => it.id?.toString() === selectedCategoryId) : null,
-  tags: selectedTagIds.map(tagId => tags.find(it => it.id?.toString() === tagId)).filter(Boolean),
-  externalReference: createDraft.externalReference || null,
-  notes: createDraft.notes || null,
-  account: financialAccounts.find(it => it.id?.toString() === createDraft.account),
-  origin: 'MANUAL' as const,
-});
-
-const buildUpdateEntityPayload = (values, selectedFlow, selectedCategoryId, categories) => ({
-  id: values.id,
-  transactionDate: values.transactionDate ? dayjs(values.transactionDate) : undefined,
-  postingDate: values.postingDate ? dayjs(values.postingDate) : null,
-  description: values.description,
-  amount: toOptionalNumber(values.amount),
-  flow: selectedFlow,
-  category: selectedCategoryId ? categories.find(it => it.id?.toString() === selectedCategoryId) : null,
-  tags: mapIdList(values.tags),
-  notes: values.notes || null,
-});
-
-const RulePreviewAlerts = ({
-  isNew,
-  createStep,
-  stepValidationError,
-  previewError,
-  previewResponse,
-  hasPreviewSuggestions,
-  categoryConflict,
-}) => (
-  <>
-    {isNew ? (
-      <Alert color="info" fade={false} data-testid="transaction-create-step">
-        {translate(
-          createStep === 1 ? 'fintrackApp.financialTransaction.rulePreview.step1' : 'fintrackApp.financialTransaction.rulePreview.step2',
-        )}
-      </Alert>
-    ) : null}
-    {stepValidationError ? (
-      <Alert color="danger" fade={false} data-testid="step-validation-error">
-        {stepValidationError}
-      </Alert>
-    ) : null}
-    {previewError ? (
-      <Alert color="danger" fade={false} data-testid="preview-error">
-        {previewError}
-      </Alert>
-    ) : null}
-    {isNew && createStep === 2 ? (
-      <Alert color={hasPreviewSuggestions ? 'success' : 'secondary'} fade={false} data-testid="preview-summary">
-        <Translate
-          contentKey={
-            hasPreviewSuggestions
-              ? 'fintrackApp.financialTransaction.rulePreview.suggestionsPrefilled'
-              : 'fintrackApp.financialTransaction.rulePreview.noSuggestions'
-          }
-        >
-          Suggestions from rules were prefilled. You can change them before saving.
-        </Translate>
-      </Alert>
-    ) : null}
-    {isNew && createStep === 2 && categoryConflict ? (
-      <Alert color="warning" fade={false} data-testid="preview-conflict">
-        {translate('fintrackApp.financialTransaction.rulePreview.categoryConflict', {
-          suggested: categoryConflict.suggestedValueLabel,
-          current: categoryConflict.currentValueLabel,
-        })}
-      </Alert>
-    ) : null}
-    {isNew && createStep === 2 && previewResponse?.matchedRules?.length ? (
-      <Alert color="light" fade={false} data-testid="matched-rules">
-        <Translate contentKey="fintrackApp.financialTransaction.rulePreview.matchedRules">Matched rules</Translate>
-        {': '}
-        {previewResponse.matchedRules.map(rule => rule.ruleName).join(', ')}
-      </Alert>
-    ) : null}
-  </>
-);
-
-const TransactionDetailsFields = ({
-  isNew,
-  createStep,
-  financialTransactionEntity,
-  financialAccounts,
-  selectedAccount,
-  selectedFlow,
-  transactionFlowValues,
-  createDraft,
-  onDraftChange,
-  onAccountChange,
-  onFlowChange,
-}) => {
-  if (isNew && createStep !== 1) {
-    return null;
-  }
-
-  return [
-    <ValidatedField
-      key="account"
-      id="financial-transaction-account"
-      name="account"
-      data-cy="account"
-      label={translate('fintrackApp.financialTransaction.account')}
-      type={isNew ? 'select' : 'text'}
-      readOnly={!isNew}
-      disabled={!isNew}
-      value={!isNew ? (financialTransactionEntity.account?.name ?? '') : createDraft.account}
-      onChange={isNew ? onDraftChange('account') : onAccountChange}
-    >
-      {isNew ? (
-        <>
-          <option value="" key="0" />
-          {financialAccounts?.map(otherEntity => (
-            <option value={otherEntity.id} key={otherEntity.id}>
-              {otherEntity.name}
-            </option>
-          ))}
-        </>
-      ) : null}
-    </ValidatedField>,
-    isNew ? (
-      <FormText key="accountRequired">
-        <Translate contentKey="entity.validation.required">This field is required.</Translate>
-      </FormText>
-    ) : null,
-    <ValidatedField
-      key="transactionDate"
-      label={translate('fintrackApp.financialTransaction.transactionDate')}
-      id="financial-transaction-transactionDate"
-      name="transactionDate"
-      data-cy="transactionDate"
-      type="date"
-      value={isNew ? createDraft.transactionDate : undefined}
-      onChange={isNew ? onDraftChange('transactionDate') : undefined}
-      validate={{
-        required: { value: true, message: translate('entity.validation.required') },
-      }}
-    />,
-    <ValidatedField
-      key="postingDate"
-      label={translate('fintrackApp.financialTransaction.postingDate')}
-      id="financial-transaction-postingDate"
-      name="postingDate"
-      data-cy="postingDate"
-      type="date"
-      value={isNew ? createDraft.postingDate : undefined}
-      onChange={isNew ? onDraftChange('postingDate') : undefined}
-    />,
-    <ValidatedField
-      key="description"
-      label={translate('fintrackApp.financialTransaction.description')}
-      id="financial-transaction-description"
-      name="description"
-      data-cy="description"
-      type="text"
-      value={isNew ? createDraft.description : undefined}
-      onChange={isNew ? onDraftChange('description') : undefined}
-      validate={{
-        required: { value: true, message: translate('entity.validation.required') },
-        minLength: { value: 1, message: translate('entity.validation.minlength', { min: 1 }) },
-        maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
-      }}
-    />,
-    <ValidatedField
-      key="flow"
-      label={translate('fintrackApp.financialTransaction.flow')}
-      id="financial-transaction-flow"
-      name="flow"
-      data-cy="flow"
-      type="select"
-      value={selectedFlow}
-      onChange={onFlowChange}
-    >
-      {transactionFlowValues.map(transactionFlow => (
-        <option value={transactionFlow} key={transactionFlow}>
-          {translate(`fintrackApp.TransactionFlow.${transactionFlow}`)}
-        </option>
-      ))}
-    </ValidatedField>,
-    <ValidatedField
-      key="amount"
-      label={translate('fintrackApp.financialTransaction.amount')}
-      id="financial-transaction-amount"
-      name="amount"
-      data-cy="amount"
-      type="text"
-      value={isNew ? createDraft.amount : undefined}
-      onChange={isNew ? onDraftChange('amount') : undefined}
-      validate={{
-        required: { value: true, message: translate('entity.validation.required') },
-        min: { value: 0.01, message: translate('entity.validation.min', { min: 0.01 }) },
-        validate: v => (isNumber(v) && Number(v) > 0) || translate('entity.validation.min', { min: 0.01 }),
-      }}
-    />,
-    selectedAccount?.currency ? <FormText key="currency">{selectedAccount.currency}</FormText> : null,
-    isNew ? (
-      <ValidatedField
-        key="externalReference"
-        label={translate('fintrackApp.financialTransaction.externalReference')}
-        id="financial-transaction-externalReference"
-        name="externalReference"
-        data-cy="externalReference"
-        type="text"
-        value={createDraft.externalReference}
-        onChange={onDraftChange('externalReference')}
-        validate={{
-          maxLength: { value: 150, message: translate('entity.validation.maxlength', { max: 150 }) },
-        }}
-      />
-    ) : null,
-    <ValidatedField
-      key="notes"
-      label={translate('fintrackApp.financialTransaction.notes')}
-      id="financial-transaction-notes"
-      name="notes"
-      data-cy="notes"
-      type="text"
-      value={isNew ? createDraft.notes : undefined}
-      onChange={isNew ? onDraftChange('notes') : undefined}
-      validate={{
-        maxLength: { value: 1000, message: translate('entity.validation.maxlength', { max: 1000 }) },
-      }}
-    />,
-  ];
-};
-
-const CategorizationFields = ({
-  isNew,
-  createStep,
-  selectedCategoryId,
-  selectedTagIds,
-  filteredCategories,
-  tags,
-  onCategoryChange,
-  onTagsChange,
-}) => {
-  if (isNew && createStep !== 2) {
-    return null;
-  }
-
-  return [
-    <ValidatedField
-      key="category"
-      id="financial-transaction-category"
-      name="category"
-      data-cy="category"
-      label={translate('fintrackApp.financialTransaction.category')}
-      type="select"
-      value={selectedCategoryId}
-      onChange={onCategoryChange}
-    >
-      <option value="" key="0" />
-      {filteredCategories?.map(otherEntity => (
-        <option value={otherEntity.id} key={otherEntity.id}>
-          {otherEntity.name}
-        </option>
-      ))}
-    </ValidatedField>,
-    <ValidatedField
-      key="tags"
-      label={translate('fintrackApp.financialTransaction.tags')}
-      id="financial-transaction-tags"
-      data-cy="tags"
-      type="select"
-      multiple
-      name="tags"
-      value={isNew ? selectedTagIds : undefined}
-      onChange={isNew ? onTagsChange : undefined}
-    >
-      <option value="" key="0" />
-      {tags?.map(otherEntity => (
-        <option value={otherEntity.id} key={otherEntity.id}>
-          {otherEntity.name}
-        </option>
-      ))}
-    </ValidatedField>,
-  ];
-};
-
-const FormActions = ({ isNew, createStep, updating, previewLoading, onBackToDetails, onPreviewNext }) => (
-  <>
-    <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/financial-transaction" replace color="info">
-      <FontAwesomeIcon icon="arrow-left" />
-      &nbsp;
-      <span className="d-none d-md-inline">
-        <Translate contentKey="entity.action.back">Back</Translate>
-      </span>
-    </Button>
-    &nbsp;
-    {isNew && createStep === 2 ? (
-      <>
-        <Button color="secondary" id="back-to-details" type="button" onClick={onBackToDetails}>
-          <FontAwesomeIcon icon="arrow-left" />
-          &nbsp;
-          <Translate contentKey="fintrackApp.financialTransaction.rulePreview.backToDetails">Back to details</Translate>
-        </Button>
-        &nbsp;
-      </>
-    ) : null}
-    {isNew && createStep === 1 ? (
-      <Button color="primary" id="preview-rules" type="button" disabled={previewLoading} onClick={onPreviewNext}>
-        {previewLoading ? <Spinner size="sm" /> : <FontAwesomeIcon icon="search" />}
-        &nbsp;
-        <Translate contentKey="fintrackApp.financialTransaction.rulePreview.nextToCategorization">Next</Translate>
-      </Button>
-    ) : null}
-    {(!isNew || createStep === 2) && (
-      <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
-        <FontAwesomeIcon icon="save" />
-        &nbsp;
-        <Translate contentKey="entity.action.save">Save</Translate>
-      </Button>
-    )}
-  </>
-);
 
 export const FinancialTransactionUpdate = () => {
   const dispatch = useAppDispatch();
-
   const navigate = useNavigate();
-
+  const location = useLocation();
   const { id } = useParams<'id'>();
-  const isNew = id === undefined;
-
-  const financialAccounts = useAppSelector(state => state.financialAccount.entities);
-  const categories = useAppSelector(state => state.category.entities);
-  const tags = useAppSelector(state => state.tag.entities);
   const financialTransactionEntity = useAppSelector(state => state.financialTransaction.entity);
   const loading = useAppSelector(state => state.financialTransaction.loading);
   const updating = useAppSelector(state => state.financialTransaction.updating);
   const updateSuccess = useAppSelector(state => state.financialTransaction.updateSuccess);
-  const transactionFlowValues = Object.keys(TransactionFlow);
-  const [selectedFlow, setSelectedFlow] = useState<keyof typeof TransactionFlow>('IN');
+  const [selectedFlow, setSelectedFlow] = useState<keyof typeof TransactionFlow>('OUT');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState('');
-  const [createStep, setCreateStep] = useState<1 | 2>(1);
-  const [createDraft, setCreateDraft] = useState(emptyCreateDraft);
-  const [previewResponse, setPreviewResponse] = useState<IFinancialTransactionRulePreviewResponse | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState('');
-  const [stepValidationError, setStepValidationError] = useState('');
-
-  const handleClose = () => {
-    navigate(`/financial-transaction${location.search}`);
-  };
+  const [selectableCategories, setSelectableCategories] = useState<ICategorySelectable[]>([]);
+  const [selectableTags, setSelectableTags] = useState<ITagSelectable[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsLoadError, setTagsLoadError] = useState(false);
+  const [optionalDetailsOpen, setOptionalDetailsOpen] = useState(false);
 
   useEffect(() => {
-    if (isNew) {
-      dispatch(reset());
-    } else {
-      dispatch(getEntity(id));
-    }
-
-    dispatch(getFinancialAccounts({}));
-    dispatch(getCategories({}));
-    dispatch(getTags({}));
-  }, []);
+    dispatch(getEntity(id));
+  }, [dispatch, id]);
 
   useEffect(() => {
-    if (isNew) {
-      setSelectedFlow('IN');
-      setSelectedCategoryId('');
-      setSelectedTagIds([]);
-      setSelectedAccountId('');
-      setCreateStep(1);
-      setCreateDraft(emptyCreateDraft);
-      setPreviewResponse(null);
-      setPreviewError('');
-      setStepValidationError('');
+    if (!financialTransactionEntity.id) {
       return;
     }
-    if (financialTransactionEntity?.id) {
-      setSelectedFlow((financialTransactionEntity.flow as keyof typeof TransactionFlow) ?? 'IN');
-      setSelectedCategoryId(financialTransactionEntity.category?.id?.toString() ?? '');
-      setSelectedTagIds(financialTransactionEntity.tags?.map(tag => tag.id?.toString()).filter(Boolean) ?? []);
-      setSelectedAccountId(financialTransactionEntity.account?.id?.toString() ?? '');
-    }
-  }, [isNew, financialTransactionEntity?.id]);
+    setSelectedFlow((financialTransactionEntity.flow as keyof typeof TransactionFlow) ?? 'OUT');
+    setSelectedCategoryId(financialTransactionEntity.category?.id?.toString() ?? '');
+    setSelectedTagIds(financialTransactionEntity.tags?.map(tag => tag.id?.toString()).filter((tagId): tagId is string => !!tagId) ?? []);
+  }, [financialTransactionEntity.id]);
+
+  useEffect(() => {
+    setOptionalDetailsOpen(Boolean(financialTransactionEntity.externalReference || financialTransactionEntity.notes));
+  }, [financialTransactionEntity.id]);
+
+  useEffect(() => {
+    let mounted = true;
+    const categoryIds = financialTransactionEntity.category?.id === undefined ? [] : [financialTransactionEntity.category.id];
+    const tagIds = financialTransactionEntity.tags?.map(tag => tag.id).filter((tagId): tagId is number => tagId !== undefined) ?? [];
+
+    setTagsLoading(true);
+    setTagsLoadError(false);
+    Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
+      .then(([categories, tags]) => {
+        if (mounted) {
+          setSelectableCategories(categories);
+          setSelectableTags(tags);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSelectableCategories([]);
+          setSelectableTags([]);
+          setTagsLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setTagsLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [financialTransactionEntity.category?.id, financialTransactionEntity.tags]);
 
   useEffect(() => {
     if (updateSuccess) {
-      handleClose();
+      navigate(`/financial-transaction${location.search}`);
     }
-  }, [updateSuccess]);
+  }, [location.search, navigate, updateSuccess]);
 
-  const selectedAccount = useMemo(
+  const compatibleCategories = useMemo(
+    () => selectableCategories.filter(category => categoryCompatibleWithFlow(category, selectedFlow)),
+    [selectableCategories, selectedFlow],
+  );
+  const selectedCategory = useMemo(
     () =>
-      financialAccounts.find(it => it.id?.toString() === selectedAccountId) ?? (!isNew ? financialTransactionEntity.account : undefined),
-    [financialAccounts, selectedAccountId, financialTransactionEntity.account, isNew],
+      selectedCategoryId
+        ? (selectableCategories.find(category => category.id?.toString() === selectedCategoryId) ??
+          (financialTransactionEntity.category?.id?.toString() === selectedCategoryId ? financialTransactionEntity.category : null))
+        : null,
+    [financialTransactionEntity.category, selectableCategories, selectedCategoryId],
   );
-
-  const filteredCategories = useMemo(
-    () => categories.filter(category => isCategoryCompatibleWithFlow(category, selectedFlow)),
-    [categories, selectedFlow],
+  const selectedTags = useMemo(
+    () =>
+      selectedTagIds
+        .map(
+          tagId =>
+            selectableTags.find(tag => tag.id?.toString() === tagId) ??
+            financialTransactionEntity.tags?.find(tag => tag.id?.toString() === tagId),
+        )
+        .filter((tag): tag is ITagSelectable | ITag => !!tag),
+    [financialTransactionEntity.tags, selectableTags, selectedTagIds],
   );
+  const defaultValues = useMemo(() => getDefaultValues(financialTransactionEntity), [financialTransactionEntity]);
 
-  const handleFlowChange = event => {
-    const nextFlow = event.target.value as keyof typeof TransactionFlow;
+  const changeFlow = (nextFlow: keyof typeof TransactionFlow) => {
     setSelectedFlow(nextFlow);
-    const currentCategory = categories.find(category => category.id?.toString() === selectedCategoryId);
-    if (currentCategory && !isCategoryCompatibleWithFlow(currentCategory, nextFlow)) {
+    const currentCategory = selectableCategories.find(category => category.id?.toString() === selectedCategoryId);
+    if (currentCategory && !categoryCompatibleWithFlow(currentCategory, nextFlow)) {
       setSelectedCategoryId('');
-    }
-  };
-
-  const updateCreateDraft = field => event => {
-    const value = event.target.value;
-    setCreateDraft(draft => ({ ...draft, [field]: value }));
-    if (field === 'account') {
-      setSelectedAccountId(value);
-    }
-  };
-
-  const handleCategoryChange = event => {
-    setSelectedCategoryId(event.target.value);
-  };
-
-  const handleTagsChange = event => {
-    setSelectedTagIds(getSelectedTagIds(event));
-  };
-
-  const applyPreviewSuggestions = (preview: IFinancialTransactionRulePreviewResponse) => {
-    if (!selectedCategoryId && preview.suggestedCategory?.categoryId && !preview.suggestedCategory.conflictsWithCurrentValue) {
-      setSelectedCategoryId(preview.suggestedCategory.categoryId.toString());
-    }
-
-    const nextTagIds = new Set(selectedTagIds);
-    preview.suggestedTags
-      ?.filter(suggestion => suggestion.tagId && !suggestion.alreadyPresent && !suggestion.duplicateOfEarlierSuggestion)
-      .forEach(suggestion => nextTagIds.add(suggestion.tagId.toString()));
-    setSelectedTagIds(Array.from(nextTagIds));
-  };
-
-  const handlePreviewNext = async () => {
-    setPreviewError('');
-    setStepValidationError('');
-    const validationError = validateStepOneDraft(createDraft, selectedAccountId, selectedFlow);
-    if (validationError) {
-      setStepValidationError(validationError);
-      return;
-    }
-
-    setPreviewLoading(true);
-    try {
-      const response = await axios.post<IFinancialTransactionRulePreviewResponse>(
-        RULE_PREVIEW_URL,
-        buildRulePreviewPayload(createDraft, selectedAccountId, selectedFlow, selectedCategoryId, selectedTagIds),
-      );
-      setPreviewResponse(response.data);
-      applyPreviewSuggestions(response.data);
-      setCreateStep(2);
-    } catch (error) {
-      setPreviewError(translate('fintrackApp.financialTransaction.rulePreview.failed'));
-      setCreateStep(1);
-    } finally {
-      setPreviewLoading(false);
     }
   };
 
   const saveEntity = values => {
-    if (values.id !== undefined && typeof values.id !== 'number') {
-      values.id = Number(values.id);
+    if (!financialTransactionEntity.id) {
+      return;
     }
 
-    if (isNew) {
-      dispatch(
-        createEntity(
-          buildCreateEntityPayload(createDraft, selectedFlow, selectedCategoryId, selectedTagIds, categories, tags, financialAccounts),
-        ),
-      );
-    } else {
-      dispatch(partialUpdateEntity(buildUpdateEntityPayload(values, selectedFlow, selectedCategoryId, categories)));
-    }
+    dispatch(
+      partialUpdateEntity({
+        id: financialTransactionEntity.id,
+        transactionDate: values.transactionDate ? dayjs(values.transactionDate) : undefined,
+        postingDate: values.postingDate ? dayjs(values.postingDate) : null,
+        description: values.description,
+        amount: toOptionalNumber(values.amount),
+        flow: selectedFlow,
+        category: selectedCategoryId ? { id: Number(selectedCategoryId) } : null,
+        tags: mapIdList(selectedTagIds),
+        externalReference: values.externalReference || null,
+        notes: values.notes || null,
+      }),
+    );
   };
 
-  const defaultValues = () => (isNew ? getCreateDefaultValues() : getEditDefaultValues(financialTransactionEntity));
-
-  const hasPreviewSuggestions = hasSuggestedOutputs(previewResponse);
-
-  const categoryConflict = getCategoryConflict(previewResponse);
+  if (loading && !financialTransactionEntity.id) {
+    return (
+      <ProductPage>
+        <p className="text-muted mb-0">
+          <Translate contentKey="fintrackApp.financialTransaction.product.loading">Loading transactions…</Translate>
+        </p>
+      </ProductPage>
+    );
+  }
 
   return (
-    <div>
-      <Row className="justify-content-center">
-        <Col md="8">
-          <h2 id="fintrackApp.financialTransaction.home.createOrEditLabel" data-cy="FinancialTransactionCreateUpdateHeading">
-            <Translate contentKey="fintrackApp.financialTransaction.home.createOrEditLabel">
-              Create or edit a FinancialTransaction
-            </Translate>
-          </h2>
-        </Col>
-      </Row>
-      <Row className="justify-content-center">
-        <Col md="8">
-          {loading ? (
-            <p>Loading...</p>
-          ) : (
-            <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
-              {!isNew ? (
-                <ValidatedField
-                  name="id"
-                  required
-                  readOnly
-                  id="financial-transaction-id"
-                  label={translate('global.field.id')}
-                  validate={{ required: true }}
+    <ProductPage>
+      <ProductValidatedForm formKey={financialTransactionEntity.id ?? 'loading'} defaultValues={defaultValues} onSubmit={saveEntity}>
+        <ProductPageHeader
+          headingId="financial-transaction-edit-heading"
+          dataCy="FinancialTransactionCreateUpdateHeading"
+          accentColor={financialTransactionEntity.account?.color}
+          accentDataCy="financialTransactionEditColorAccent"
+          title={<Translate contentKey="fintrackApp.financialTransaction.product.editTitle">Edit transaction</Translate>}
+          subtitle={
+            financialTransactionEntity.description || financialTransactionEntity.account ? (
+              <>
+                {financialTransactionEntity.description ? `${financialTransactionEntity.description} · ` : null}
+                <TransactionAccountLabel account={financialTransactionEntity.account} />
+              </>
+            ) : undefined
+          }
+        />
+
+        <div className="vstack gap-3">
+          <ProductSection
+            title={<Translate contentKey="fintrackApp.financialTransaction.product.transaction">Transaction</Translate>}
+            dataCy="financialTransactionEditTransactionSection"
+          >
+            <Row className="g-3">
+              <Col xs="12">
+                <div className="text-muted small mb-1">
+                  <Translate contentKey="fintrackApp.financialTransaction.account">Account</Translate>
+                </div>
+                <TransactionAccountLabel account={financialTransactionEntity.account} className="fw-semibold" />
+              </Col>
+              <Col xs="12">
+                <ProductValidatedField
+                  label={translate('fintrackApp.financialTransaction.description')}
+                  id="financial-transaction-description"
+                  name="description"
+                  data-cy="description"
+                  type="text"
+                  validate={{
+                    required: { value: true, message: translate('entity.validation.required') },
+                    minLength: { value: 1, message: translate('entity.validation.minlength', { min: 1 }) },
+                    maxLength: { value: 500, message: translate('entity.validation.maxlength', { max: 500 }) },
+                  }}
                 />
-              ) : null}
-              <RulePreviewAlerts
-                isNew={isNew}
-                createStep={createStep}
-                stepValidationError={stepValidationError}
-                previewError={previewError}
-                previewResponse={previewResponse}
-                hasPreviewSuggestions={hasPreviewSuggestions}
-                categoryConflict={categoryConflict}
-              />
-              {TransactionDetailsFields({
-                isNew,
-                createStep,
-                financialTransactionEntity,
-                financialAccounts,
-                selectedAccount,
-                selectedFlow,
-                transactionFlowValues,
-                createDraft,
-                onDraftChange: updateCreateDraft,
-                onAccountChange: event => setSelectedAccountId(event.target.value),
-                onFlowChange: handleFlowChange,
-              })}
-              {CategorizationFields({
-                isNew,
-                createStep,
-                selectedCategoryId,
-                selectedTagIds,
-                filteredCategories,
-                tags,
-                onCategoryChange: handleCategoryChange,
-                onTagsChange: handleTagsChange,
-              })}
-              <FormActions
-                isNew={isNew}
-                createStep={createStep}
-                updating={updating}
-                previewLoading={previewLoading}
-                onBackToDetails={() => setCreateStep(1)}
-                onPreviewNext={handlePreviewNext}
-              />
-            </ValidatedForm>
-          )}
-        </Col>
-      </Row>
-    </div>
+              </Col>
+              <Col md="5">
+                <div className="form-label mb-2">
+                  <Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>
+                </div>
+                <ButtonGroup
+                  role="group"
+                  aria-label={translate('fintrackApp.financialTransaction.flow')}
+                  data-cy="financialTransactionFlowControl"
+                >
+                  <Button
+                    type="button"
+                    color={selectedFlow === 'OUT' ? 'primary' : 'secondary'}
+                    outline={selectedFlow !== 'OUT'}
+                    aria-pressed={selectedFlow === 'OUT'}
+                    data-cy="financialTransactionFlowOut"
+                    onClick={() => changeFlow('OUT')}
+                  >
+                    <Translate contentKey="fintrackApp.TransactionFlow.OUT">Expense</Translate>
+                  </Button>
+                  <Button
+                    type="button"
+                    color={selectedFlow === 'IN' ? 'primary' : 'secondary'}
+                    outline={selectedFlow !== 'IN'}
+                    aria-pressed={selectedFlow === 'IN'}
+                    data-cy="financialTransactionFlowIn"
+                    onClick={() => changeFlow('IN')}
+                  >
+                    <Translate contentKey="fintrackApp.TransactionFlow.IN">Income</Translate>
+                  </Button>
+                </ButtonGroup>
+              </Col>
+              <Col md="7">
+                <ProductValidatedField
+                  label={translate('fintrackApp.financialTransaction.amount')}
+                  id="financial-transaction-amount"
+                  name="amount"
+                  data-cy="amount"
+                  type="number"
+                  step="0.01"
+                  validate={{
+                    required: { value: true, message: translate('entity.validation.required') },
+                    min: { value: 0.01, message: translate('entity.validation.min', { min: 0.01 }) },
+                    validate: value => (isNumber(value) && Number(value) > 0) || translate('entity.validation.min', { min: 0.01 }),
+                  }}
+                />
+              </Col>
+              <Col md="6">
+                <ProductValidatedField
+                  label={translate('fintrackApp.financialTransaction.transactionDate')}
+                  id="financial-transaction-transactionDate"
+                  name="transactionDate"
+                  data-cy="transactionDate"
+                  type="date"
+                  validate={{ required: { value: true, message: translate('entity.validation.required') } }}
+                />
+              </Col>
+              <Col md="6">
+                <ProductValidatedField
+                  label={translate('fintrackApp.financialTransaction.postingDate')}
+                  id="financial-transaction-postingDate"
+                  name="postingDate"
+                  data-cy="postingDate"
+                  type="date"
+                />
+              </Col>
+            </Row>
+          </ProductSection>
+
+          <ProductSection
+            title={<Translate contentKey="fintrackApp.financialTransaction.product.classification">Classification</Translate>}
+            dataCy="financialTransactionEditClassificationSection"
+          >
+            <Row className="g-3">
+              <Col md="6">
+                <Label for="financial-transaction-category">
+                  <Translate contentKey="fintrackApp.financialTransaction.category">Category</Translate>
+                </Label>
+                <Input
+                  id="financial-transaction-category"
+                  name="category"
+                  data-cy="category"
+                  type="select"
+                  value={selectedCategoryId}
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSelectedCategoryId(event.target.value)}
+                >
+                  <option value="" />
+                  {compatibleCategories.map(category => (
+                    <option value={category.id} key={category.id}>
+                      {categoryOptionLabel(category)}
+                    </option>
+                  ))}
+                </Input>
+                <div className="pt-2">
+                  <TransactionCategory category={toCategoryPresentation(selectedCategory)} />
+                </div>
+              </Col>
+              <Col md="6">
+                <div className="small fw-semibold mb-2">
+                  <Translate contentKey="fintrackApp.financialTransaction.tags">Tags</Translate>
+                </div>
+                <ProductTagSelector
+                  id="financial-transaction-tags"
+                  dataCy="financialTransactionTags"
+                  selectedTags={selectedTags}
+                  availableTags={selectableTags}
+                  loading={tagsLoading}
+                  error={tagsLoadError}
+                  onChange={nextTags =>
+                    setSelectedTagIds(nextTags.map(tag => tag.id?.toString()).filter((tagId): tagId is string => !!tagId))
+                  }
+                />
+              </Col>
+            </Row>
+          </ProductSection>
+
+          <ProductSection
+            title={<Translate contentKey="fintrackApp.financialTransaction.product.moreDetails">More details</Translate>}
+            dataCy="financialTransactionEditOptionalDetails"
+          >
+            <details open={optionalDetailsOpen} onToggle={event => setOptionalDetailsOpen(event.currentTarget.open)}>
+              <summary className="small fw-semibold text-body">
+                <Translate contentKey="fintrackApp.financialTransaction.product.optionalDetails">Optional details</Translate>
+              </summary>
+              <Row className="g-3 pt-3">
+                <Col md="6">
+                  <ProductValidatedField
+                    label={translate('fintrackApp.financialTransaction.externalReference')}
+                    id="financial-transaction-externalReference"
+                    name="externalReference"
+                    data-cy="externalReference"
+                    type="text"
+                    validate={{ maxLength: { value: 150, message: translate('entity.validation.maxlength', { max: 150 }) } }}
+                  />
+                </Col>
+                <Col md="6">
+                  <ProductValidatedField
+                    label={translate('fintrackApp.financialTransaction.notes')}
+                    id="financial-transaction-notes"
+                    name="notes"
+                    data-cy="notes"
+                    type="textarea"
+                    validate={{ maxLength: { value: 1000, message: translate('entity.validation.maxlength', { max: 1000 }) } }}
+                  />
+                </Col>
+              </Row>
+            </details>
+          </ProductSection>
+
+          <div className="d-flex flex-wrap justify-content-end gap-2 pt-1" data-cy="financialTransactionEditActions">
+            <Button
+              tag={Link}
+              id="cancel-save"
+              data-cy="entityCreateCancelButton"
+              to={`/financial-transaction${location.search}`}
+              replace
+              color="secondary"
+              outline
+            >
+              <Translate contentKey="entity.action.cancel">Cancel</Translate>
+            </Button>
+            <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
+              <FontAwesomeIcon icon="save" />{' '}
+              <Translate contentKey="fintrackApp.financialTransaction.product.saveChanges">Save changes</Translate>
+            </Button>
+          </div>
+        </div>
+      </ProductValidatedForm>
+    </ProductPage>
   );
 };
 

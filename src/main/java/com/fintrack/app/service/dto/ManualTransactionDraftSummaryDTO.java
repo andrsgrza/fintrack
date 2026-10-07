@@ -1,5 +1,6 @@
 package com.fintrack.app.service.dto;
 
+import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -27,6 +28,12 @@ public class ManualTransactionDraftSummaryDTO implements Serializable {
 
     private String accountName;
 
+    private AccountType accountType;
+
+    private String accountLastFourDigits;
+
+    private Boolean accountActive;
+
     private LocalDate transactionDate;
 
     private String description;
@@ -43,7 +50,17 @@ public class ManualTransactionDraftSummaryDTO implements Serializable {
 
     private String categoryName;
 
+    private Long categoryId;
+
+    private String categoryParentName;
+
+    private String categoryColor;
+
+    private Boolean categoryActive;
+
     private List<String> tagNames = new ArrayList<>();
+
+    private List<ManualTransactionDraftTagSummaryDTO> tags = new ArrayList<>();
 
     public Long getId() {
         return id;
@@ -83,6 +100,30 @@ public class ManualTransactionDraftSummaryDTO implements Serializable {
 
     public void setAccountName(String accountName) {
         this.accountName = accountName;
+    }
+
+    public AccountType getAccountType() {
+        return accountType;
+    }
+
+    public void setAccountType(AccountType accountType) {
+        this.accountType = accountType;
+    }
+
+    public String getAccountLastFourDigits() {
+        return accountLastFourDigits;
+    }
+
+    public void setAccountLastFourDigits(String accountLastFourDigits) {
+        this.accountLastFourDigits = accountLastFourDigits;
+    }
+
+    public Boolean getAccountActive() {
+        return accountActive;
+    }
+
+    public void setAccountActive(Boolean accountActive) {
+        this.accountActive = accountActive;
     }
 
     public LocalDate getTransactionDate() {
@@ -149,11 +190,51 @@ public class ManualTransactionDraftSummaryDTO implements Serializable {
         this.categoryName = categoryName;
     }
 
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryId) {
+        this.categoryId = categoryId;
+    }
+
+    public String getCategoryParentName() {
+        return categoryParentName;
+    }
+
+    public void setCategoryParentName(String categoryParentName) {
+        this.categoryParentName = categoryParentName;
+    }
+
+    public String getCategoryColor() {
+        return categoryColor;
+    }
+
+    public void setCategoryColor(String categoryColor) {
+        this.categoryColor = categoryColor;
+    }
+
+    public Boolean getCategoryActive() {
+        return categoryActive;
+    }
+
+    public void setCategoryActive(Boolean categoryActive) {
+        this.categoryActive = categoryActive;
+    }
+
     public List<String> getTagNames() {
         return tagNames;
     }
 
     public void setTagNames(List<String> tagNames) {
         this.tagNames = Objects.requireNonNullElseGet(tagNames, ArrayList::new);
+    }
+
+    public List<ManualTransactionDraftTagSummaryDTO> getTags() {
+        return tags;
+    }
+
+    public void setTags(List<ManualTransactionDraftTagSummaryDTO> tags) {
+        this.tags = Objects.requireNonNullElseGet(tags, ArrayList::new);
     }
 }

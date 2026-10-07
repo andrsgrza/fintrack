@@ -24,8 +24,15 @@ const apiUrl = 'api/financial-transactions';
 
 export const getEntities = createAsyncThunk(
   'financialTransaction/fetch_entity_list',
-  async ({ page, size, sort }: IQueryParams) => {
-    const requestUrl = `${apiUrl}?${sort ? `page=${page}&size=${size}&sort=${sort}&` : ''}cacheBuster=${new Date().getTime()}`;
+  async ({ page, size, sort, query }: IQueryParams) => {
+    const queryParameters = new URLSearchParams(query);
+    if (sort) {
+      queryParameters.set('page', String(page));
+      queryParameters.set('size', String(size));
+      queryParameters.set('sort', sort);
+    }
+    queryParameters.set('cacheBuster', String(new Date().getTime()));
+    const requestUrl = `${apiUrl}?${queryParameters.toString()}`;
     return axios.get<IFinancialTransaction[]>(requestUrl);
   },
   { serializeError: serializeAxiosError },

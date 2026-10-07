@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert, Badge, Button, Spinner, Table } from 'reactstrap';
+import { Alert, Badge, Button, DropdownItem, Spinner } from 'reactstrap';
 import { TextFormat, Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { APP_DATE_FORMAT, APP_LOCAL_DATE_FORMAT } from 'app/config/constants';
+import { ProductActionsMenu, ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { TransactionAccountLabel, TransactionAmount, TransactionClassification } from './transaction-presentation';
 import { cancelManualDraft, getManualDrafts, IManualTransactionDraftSummary } from './services/manual-transaction-candidate.service';
 
 const statusLabelKey = (status?: string | null) => {
@@ -36,26 +38,37 @@ const classificationLabelKey = (status?: string | null) => {
   return null;
 };
 
-const renderTranslatedOrFallback = (contentKey: string | null, fallback?: string | null) => {
+const renderTranslatedStatus = (contentKey: string | null) => {
   if (contentKey) {
-    return <Translate contentKey={contentKey}>{fallback}</Translate>;
+    return <Translate contentKey={contentKey}>Unknown</Translate>;
   }
-  return fallback || <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.unknown">Unknown</Translate>;
+  return <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.unknown">Unknown</Translate>;
 };
 
 const hasAmount = (draft: IManualTransactionDraftSummary) =>
   draft.amount !== undefined && draft.amount !== null && !!draft.flow && !!draft.currencySnapshot;
 
-const renderAmount = (draft: IManualTransactionDraftSummary) => {
-  if (!hasAmount(draft)) {
-    return <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noAmount">No amount</Translate>;
+const DraftAccount = ({ draft }: { draft: IManualTransactionDraftSummary }) => {
+  if (!draft.accountName) {
+    return (
+      <span className="text-muted">
+        <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noAccount">No account</Translate>
+      </span>
+    );
   }
-  const knownFlow = draft.flow === 'IN' || draft.flow === 'OUT';
+
   return (
-    <>
-      {draft.amount} {knownFlow ? <Translate contentKey={`fintrackApp.TransactionFlow.${draft.flow}`}>{draft.flow}</Translate> : draft.flow}{' '}
-      {draft.currencySnapshot}
-    </>
+    <TransactionAccountLabel
+      account={{
+        id: draft.accountId ?? undefined,
+        name: draft.accountName,
+        accountType: draft.accountType,
+        currency: draft.currencySnapshot,
+        lastFourDigits: draft.accountLastFourDigits,
+        active: draft.accountActive,
+      }}
+      className="text-muted"
+    />
   );
 };
 
@@ -109,30 +122,40 @@ export const FinancialTransactionManualDraftList = () => {
   };
 
   return (
-    <div>
-      <h2 id="manual-transaction-drafts-heading" data-cy="ManualTransactionDraftsHeading">
-        <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.title">Manual transaction drafts</Translate>
-        <div className="d-flex justify-content-end">
-          <Button tag={Link} to="/financial-transaction/new" color="primary" data-cy="manualDraftCreateButton">
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.createManualTransaction">
-              Create manual transaction
-            </Translate>
-          </Button>
-        </div>
-      </h2>
+    <ProductPage wide>
+      <ProductPageHeader
+        headingId="manual-transaction-drafts-heading"
+        dataCy="ManualTransactionDraftsHeading"
+        title={<Translate contentKey="fintrackApp.financialTransaction.manualDraftList.title">Transaction drafts</Translate>}
+        subtitle={
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.subtitle">
+            Continue a saved transaction whenever you are ready.
+          </Translate>
+        }
+        actions={
+          <>
+            <Button tag={Link} to="/financial-transaction" color="secondary" outline size="sm" data-cy="manualDraftBackToTransactions">
+              <FontAwesomeIcon icon="arrow-left" />{' '}
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.viewTransactions">View transactions</Translate>
+            </Button>
+            <Button tag={Link} to="/financial-transaction/new" color="primary" size="sm" data-cy="manualDraftCreateButton">
+              <FontAwesomeIcon icon="plus" />{' '}
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.createManualTransaction">New transaction</Translate>
+            </Button>
+          </>
+        }
+      />
 
       {loading ? (
-        <div data-cy="manualDraftsLoading">
-          <Spinner size="sm" />{' '}
-          <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.loading">Loading manual drafts…</Translate>
+        <div className="d-flex align-items-center gap-2 text-muted py-4" data-cy="manualDraftsLoading">
+          <Spinner size="sm" />
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.loading">Loading drafts…</Translate>
         </div>
       ) : null}
 
       {loadError ? (
         <Alert color="danger" fade={false} data-cy="manualDraftsLoadError">
-          <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.loadFailed">Could not load manual drafts.</Translate>
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.loadFailed">Could not load drafts.</Translate>
         </Alert>
       ) : null}
 
@@ -143,132 +166,118 @@ export const FinancialTransactionManualDraftList = () => {
       ) : null}
 
       {!loading && !loadError && drafts.length === 0 ? (
-        <Alert color="warning" fade={false} data-cy="manualDraftsEmpty">
-          <p className="mb-2">
-            <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.empty">No manual drafts.</Translate>
+        <ProductSection
+          title={<Translate contentKey="fintrackApp.financialTransaction.manualDraftList.emptyTitle">No saved drafts</Translate>}
+        >
+          <p className="text-muted mb-3">
+            <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.empty">
+              No transaction drafts are waiting for you.
+            </Translate>
           </p>
           <Button tag={Link} to="/financial-transaction/new" color="primary" size="sm" data-cy="manualDraftEmptyCreateButton">
-            <FontAwesomeIcon icon="plus" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.createManualTransaction">
-              Create manual transaction
-            </Translate>
+            <FontAwesomeIcon icon="plus" />{' '}
+            <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.createManualTransaction">New transaction</Translate>
           </Button>
-        </Alert>
+        </ProductSection>
       ) : null}
 
       {!loading && !loadError && drafts.length > 0 ? (
-        <div className="table-responsive">
-          <Table responsive>
-            <thead>
-              <tr>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.description">Description</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.account">Account</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.amount">Amount</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.draftStatus">Draft status</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.classificationStatus">Classification</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.category">Category</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.tags">Tags</Translate>
-                </th>
-                <th>
-                  <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.lastUpdated">Last updated</Translate>
-                </th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {drafts.map(draft => (
-                <tr key={draft.id} data-cy="manualDraftRow">
-                  <td>
+        <div className="vstack gap-2" data-cy="manualDraftProductList">
+          {drafts.map(draft => (
+            <article key={draft.id} className="border rounded-3 bg-white p-3 p-md-4" data-cy="manualDraftRow">
+              <div className="d-flex flex-column flex-md-row align-items-md-start gap-3">
+                <div className="flex-grow-1 min-w-0">
+                  <Link
+                    to={`/financial-transaction/drafts/${draft.id}`}
+                    className="h5 d-inline-block mb-2 text-decoration-none text-body"
+                    data-cy="manualDraftResumeLink"
+                  >
                     {draft.description?.trim() || (
-                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.untitledDraft">Untitled draft</Translate>
+                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noDescription">No description</Translate>
                     )}
-                  </td>
-                  <td>
-                    {draft.accountName || (
-                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noAccount">No account</Translate>
-                    )}
-                  </td>
-                  <td>
+                  </Link>
+                  <div className="d-flex flex-wrap gap-2 small text-muted mb-3">
+                    <DraftAccount draft={draft} />
+                    {draft.accountName && draft.transactionDate ? <span>·</span> : null}
                     {draft.transactionDate ? (
-                      <TextFormat type="date" value={draft.transactionDate} format={APP_LOCAL_DATE_FORMAT} />
+                      <span>
+                        <TextFormat type="date" value={draft.transactionDate} format={APP_LOCAL_DATE_FORMAT} />
+                      </span>
                     ) : (
-                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noDate">No date</Translate>
+                      <span>
+                        <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noDate">No date</Translate>
+                      </span>
                     )}
-                  </td>
-                  <td>{renderAmount(draft)}</td>
-                  <td>
-                    <Badge color={draft.status === 'READY_TO_POST' ? 'success' : 'secondary'}>
-                      {renderTranslatedOrFallback(statusLabelKey(draft.status), draft.status)}
+                  </div>
+                  <TransactionClassification
+                    draftCategory={{
+                      id: draft.categoryId ?? undefined,
+                      name: draft.categoryName,
+                      parentName: draft.categoryParentName,
+                      color: draft.categoryColor,
+                      active: draft.categoryActive,
+                    }}
+                    tags={draft.tags}
+                    tagNames={draft.tagNames}
+                    showEmptyTags
+                  />
+                  <div className="d-flex flex-wrap gap-2 align-items-center mt-3 small">
+                    <Badge color={draft.status === 'READY_TO_POST' ? 'success' : 'secondary'} pill data-cy="manualDraftStatus">
+                      {renderTranslatedStatus(statusLabelKey(draft.status))}
                     </Badge>
-                  </td>
-                  <td>
-                    {renderTranslatedOrFallback(classificationLabelKey(draft.classificationReviewStatus), draft.classificationReviewStatus)}
-                  </td>
-                  <td>
-                    {draft.categoryName || (
-                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noCategory">No category</Translate>
-                    )}
-                  </td>
-                  <td>
-                    {draft.tagNames?.length ? (
-                      draft.tagNames.join(', ')
-                    ) : (
-                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noTags">No tags</Translate>
-                    )}
-                  </td>
-                  <td>{draft.updatedAt ? <TextFormat type="date" value={draft.updatedAt} format={APP_DATE_FORMAT} /> : null}</td>
-                  <td className="text-end">
-                    <div className="btn-group flex-btn-group-container">
-                      <Button
-                        tag={Link}
-                        to={`/financial-transaction/drafts/${draft.id}`}
-                        color="info"
-                        size="sm"
-                        data-cy="manualDraftResumeButton"
-                      >
-                        <FontAwesomeIcon icon="pencil-alt" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.resume">Resume</Translate>
-                        </span>
-                      </Button>
-                      <Button
-                        color="danger"
-                        size="sm"
+                    <Badge color="light" className="border text-dark fw-normal" pill data-cy="manualDraftClassification">
+                      {renderTranslatedStatus(classificationLabelKey(draft.classificationReviewStatus))}
+                    </Badge>
+                    {draft.updatedAt ? (
+                      <span className="text-muted">
+                        <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.updated">Updated</Translate>{' '}
+                        <TextFormat type="date" value={draft.updatedAt} format={APP_DATE_FORMAT} />
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="d-flex align-items-start justify-content-between gap-3 flex-shrink-0">
+                  {hasAmount(draft) ? (
+                    <TransactionAmount amount={draft.amount} currency={draft.currencySnapshot} flow={draft.flow} />
+                  ) : (
+                    <span className="text-muted small">
+                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.noAmount">No amount</Translate>
+                    </span>
+                  )}
+                  <div className="d-flex align-items-center gap-1">
+                    <Button
+                      tag={Link}
+                      to={`/financial-transaction/drafts/${draft.id}`}
+                      color="primary"
+                      size="sm"
+                      data-cy="manualDraftResumeButton"
+                    >
+                      <FontAwesomeIcon icon="pencil-alt" />{' '}
+                      <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.resume">Continue</Translate>
+                    </Button>
+                    <ProductActionsMenu
+                      label={translate('fintrackApp.financialTransaction.manualDraftList.moreActions')}
+                      dataCy="manualDraftActionsMenu"
+                    >
+                      <DropdownItem
+                        className="text-danger"
                         onClick={() => handleCancel(draft)}
                         disabled={cancellingId === draft.id}
                         data-cy="manualDraftCancelListButton"
                       >
-                        <FontAwesomeIcon icon="ban" />{' '}
-                        <span className="d-none d-md-inline">
-                          <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.cancelDraft">Cancel draft</Translate>
-                        </span>
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+                        <FontAwesomeIcon icon="ban" className="me-2" />
+                        <Translate contentKey="fintrackApp.financialTransaction.manualDraftList.cancelDraft">Cancel draft</Translate>
+                      </DropdownItem>
+                    </ProductActionsMenu>
+                  </div>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       ) : null}
-    </div>
+    </ProductPage>
   );
 };
 

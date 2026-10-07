@@ -349,6 +349,7 @@ public class CategoryService {
         dto.setId(category.getId());
         dto.setName(category.getName());
         dto.setCategoryType(category.getCategoryType());
+        dto.setColor(category.getColor());
         dto.setActive(category.getActive());
         if (category.getParentCategory() != null) {
             dto.setParentCategoryId(category.getParentCategory().getId());

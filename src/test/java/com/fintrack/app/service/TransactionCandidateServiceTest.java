@@ -1421,6 +1421,7 @@ class TransactionCandidateServiceTest {
         category.setName("Category");
         category.setCategoryType(categoryType);
         category.setUser(owner);
+        category.setActive(true);
         return category;
     }
 

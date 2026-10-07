@@ -482,6 +482,42 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
+    void getFinancialTransactionIncludesCompactAccountAndClassificationDisplayData() throws Exception {
+        User user = financialTransaction.getAccount().getUser();
+        financialTransaction.getAccount().setLastFourDigits("1234");
+
+        Category parentCategory = persistCategory("Display parent", user);
+        parentCategory.setColor("#123456");
+        Category category = persistCategory("Display category", user);
+        category.setColor("#654321");
+        category.setParentCategory(parentCategory);
+        Tag tag = persistTag("Display tag", user);
+        tag.setColor("#abcdef");
+
+        financialTransaction.setCategory(category);
+        financialTransaction.addTags(tag);
+        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+
+        restFinancialTransactionMockMvc
+            .perform(get(ENTITY_API_URL_ID, financialTransaction.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.name").value(financialTransaction.getAccount().getName()))
+            .andExpect(jsonPath("$.account.accountType").value(financialTransaction.getAccount().getAccountType().name()))
+            .andExpect(jsonPath("$.account.currency").value(financialTransaction.getAccount().getCurrency().name()))
+            .andExpect(jsonPath("$.account.lastFourDigits").value("1234"))
+            .andExpect(jsonPath("$.account.active").value(true))
+            .andExpect(jsonPath("$.category.name").value("Display category"))
+            .andExpect(jsonPath("$.category.color").value("#654321"))
+            .andExpect(jsonPath("$.category.active").value(true))
+            .andExpect(jsonPath("$.category.parentCategory.name").value("Display parent"))
+            .andExpect(jsonPath("$.category.parentCategory.color").value("#123456"))
+            .andExpect(jsonPath("$.tags[0].name").value("Display tag"))
+            .andExpect(jsonPath("$.tags[0].color").value("#abcdef"))
+            .andExpect(jsonPath("$.tags[0].active").value(true));
+    }
+
+    @Test
+    @Transactional
     void getFinancialTransactionsByIdFiltering() throws Exception {
         // Initialize the database
         insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);

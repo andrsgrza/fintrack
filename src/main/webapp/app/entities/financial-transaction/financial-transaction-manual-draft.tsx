@@ -1,8 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Button, Col, Form, FormGroup, FormText, Input, Label, Row, Spinner } from 'reactstrap';
+import {
+  Alert,
+  Badge,
+  Button,
+  ButtonGroup,
+  Col,
+  Form,
+  FormGroup,
+  FormText,
+  Input,
+  InputGroup,
+  InputGroupText,
+  Label,
+  Row,
+  Spinner,
+} from 'reactstrap';
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { IconProp } from '@fortawesome/fontawesome-svg-core';
 
 import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
@@ -14,6 +30,10 @@ import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
+import { ICategory } from 'app/shared/model/category.model';
+import { ITag } from 'app/shared/model/tag.model';
+import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
 import {
   applyManualDraftRules,
   cancelManualDraft,
@@ -24,6 +44,7 @@ import {
   previewManualDraftRules,
   updateManualDraft,
 } from './services/manual-transaction-candidate.service';
+import { TransactionClassification } from './transaction-presentation';
 
 const AUTOSAVE_DELAY_MS = 700;
 
@@ -63,11 +84,6 @@ const toOptionalNumber = (value: string | number | null | undefined) => {
   }
   return typeof value === 'number' ? value : Number(value);
 };
-
-const selectedOptions = (event: React.ChangeEvent<HTMLSelectElement>): string[] =>
-  Array.from(event.target.selectedOptions)
-    .map((option: HTMLOptionElement) => option.value)
-    .filter(Boolean);
 
 const signedAmountFromDraft = (draft: ManualDraftFormState) => {
   const amount = toOptionalNumber(draft.amount);
@@ -170,46 +186,210 @@ const postClassificationBlockKey = (status?: keyof typeof TransactionCandidateCl
   return '';
 };
 
-const RulePreviewDetails = ({ rulePreview }: { rulePreview: ITransactionCandidateRulePreviewResponse }) => (
-  <div data-testid="manual-draft-rule-preview">
-    {rulePreview.suggestedCategory ? (
-      <p className="mb-1">
-        <strong>
-          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.suggestedCategory">
-            Suggested category
-          </Translate>
-          :
-        </strong>{' '}
-        {rulePreview.suggestedCategory.categoryName}
-      </p>
-    ) : null}
-    {rulePreview.suggestedTags?.length ? (
-      <p className="mb-1">
-        <strong>
-          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.suggestedTags">Suggested tags</Translate>:
-        </strong>{' '}
-        {rulePreview.suggestedTags.map(tag => tag.tagName).join(', ')}
-      </p>
-    ) : null}
-    {rulePreview.hasConflicts || rulePreview.conflicts?.length ? (
-      <Alert color="warning" fade={false} className="mt-2 mb-2" data-testid="manual-draft-rule-conflicts">
-        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.conflicts">
-          Some suggestions conflict with existing selections.
-        </Translate>
-      </Alert>
-    ) : null}
-    {rulePreview.matchedRules?.length ? (
-      <p className="mb-0">
-        <strong>
-          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.matchedRules">Matched rules</Translate>:
-        </strong>{' '}
-        {rulePreview.matchedRules.map(rule => rule.ruleName).join(', ')}
-      </p>
-    ) : null}
-  </div>
-);
+const categoryOptionLabel = (category: ICategorySelectable) => [category.parentCategoryName, category.name].filter(Boolean).join(' › ');
 
-interface RuleSuggestionsSectionProps {
+const categoryCompatibleWithFlow = (category: ICategorySelectable, flow: keyof typeof TransactionFlow) =>
+  category.categoryType === 'BOTH' || (flow === 'OUT' ? category.categoryType === 'EXPENSE' : category.categoryType === 'INCOME');
+
+const toCategoryPresentation = (category?: ICategorySelectable | ICategory | null): ICategory | null => {
+  if (!category?.name) {
+    return null;
+  }
+
+  const selectableCategory = category as ICategorySelectable;
+  return {
+    ...category,
+    parentCategory:
+      'parentCategoryName' in selectableCategory && selectableCategory.parentCategoryName
+        ? { id: selectableCategory.parentCategoryId ?? undefined, name: selectableCategory.parentCategoryName }
+        : (category as ICategory).parentCategory,
+  } as ICategory;
+};
+
+const toTagPresentation = (tag?: ITagSelectable | ITag | null): ITag | null => (tag?.name ? ({ ...tag } as ITag) : null);
+
+const AutosaveStatus = ({ saveState, hasCandidate }: { saveState: SaveState; hasCandidate: boolean }) => {
+  const states: Partial<Record<SaveState, { icon: IconProp; key: string; fallback: string; className: string }>> = {
+    CREATING: {
+      icon: 'sync',
+      key: 'fintrackApp.financialTransaction.manualDraft.creating',
+      fallback: 'Creating draft…',
+      className: 'text-muted',
+    },
+    SAVING: {
+      icon: 'sync',
+      key: 'fintrackApp.financialTransaction.manualDraft.saving',
+      fallback: 'Saving…',
+      className: 'text-muted',
+    },
+    SAVED: {
+      icon: 'save',
+      key: 'fintrackApp.financialTransaction.manualDraft.saved',
+      fallback: 'Saved automatically.',
+      className: 'text-success',
+    },
+    FAILED: {
+      icon: 'times-circle',
+      key: 'fintrackApp.financialTransaction.manualDraft.saveFailed',
+      fallback: 'Could not save changes.',
+      className: 'text-danger',
+    },
+    POSTING: {
+      icon: 'sync',
+      key: 'fintrackApp.financialTransaction.manualDraft.posting',
+      fallback: 'Posting transaction…',
+      className: 'text-muted',
+    },
+  };
+  const status = states[saveState];
+
+  if (!status || (saveState === 'SAVED' && !hasCandidate)) {
+    return null;
+  }
+
+  return (
+    <span
+      className={`small d-inline-flex align-items-center gap-1 ${status.className}`}
+      data-cy="manualDraftAutosaveStatus"
+      data-testid="manualDraftAutosaveStatus"
+    >
+      <FontAwesomeIcon icon={status.icon} spin={saveState === 'CREATING' || saveState === 'SAVING' || saveState === 'POSTING'} />
+      {translate(status.key)}
+    </span>
+  );
+};
+
+const ClassificationReadiness = ({
+  status,
+  rulePreview,
+  rulePreviewState,
+}: {
+  status?: keyof typeof TransactionCandidateClassificationReviewStatus | null;
+  rulePreview: ITransactionCandidateRulePreviewResponse | null;
+  rulePreviewState: RulePreviewState;
+}) => {
+  let key = 'pending';
+  let color = 'secondary';
+  if (rulePreviewState === 'UNAVAILABLE') {
+    key = 'incomplete';
+  } else if (rulePreviewState === 'UPDATING') {
+    key = 'updating';
+    color = 'light';
+  } else if (rulePreviewState === 'UPDATED' && rulePreview?.hasSuggestions && !isClassificationReadyToPost(status)) {
+    key = 'available';
+    color = 'info';
+  } else if (status === 'SUGGESTED') {
+    key = 'suggested';
+    color = 'success';
+  } else if (status === 'USER_SELECTED') {
+    key = 'manual';
+    color = 'primary';
+  } else if (status === 'NOT_APPLICABLE') {
+    key = 'notApplicable';
+    color = 'success';
+  } else if (status === 'STALE') {
+    key = 'stale';
+    color = 'warning';
+  }
+
+  return (
+    <Badge color={color} pill className="fw-normal" data-cy="manualDraftClassificationReadiness">
+      <Translate key={key} contentKey={`fintrackApp.financialTransaction.manualDraft.classificationReadiness.${key}`}>
+        Classification pending
+      </Translate>
+    </Badge>
+  );
+};
+
+const RulePreviewDetails = ({
+  rulePreview,
+  categories,
+  tags,
+}: {
+  rulePreview: ITransactionCandidateRulePreviewResponse;
+  categories: ICategorySelectable[];
+  tags: ITagSelectable[];
+}) => {
+  const suggestedCategory = rulePreview.suggestedCategory
+    ? (categories.find(category => category.id === rulePreview.suggestedCategory?.categoryId) ?? {
+        id: rulePreview.suggestedCategory.categoryId,
+        name: rulePreview.suggestedCategory.categoryName,
+      })
+    : null;
+  const suggestedTags = (rulePreview.suggestedTags ?? []).map(
+    suggestion => tags.find(tag => tag.id === suggestion.tagId) ?? { id: suggestion.tagId, name: suggestion.tagName },
+  );
+
+  return (
+    <div data-testid="manual-draft-rule-preview">
+      {rulePreview.hasSuggestions ? (
+        <div className="mb-3">
+          <span className="visually-hidden">
+            {rulePreview.suggestedCategory ? (
+              <>
+                <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.suggestedCategory">
+                  Suggested category
+                </Translate>
+                : {rulePreview.suggestedCategory.categoryName}
+              </>
+            ) : null}
+            {rulePreview.suggestedTags?.length ? (
+              <>
+                {' '}
+                <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.suggestedTags">
+                  Suggested tags
+                </Translate>
+                : {rulePreview.suggestedTags.map(tag => tag.tagName).join(', ')}
+              </>
+            ) : null}
+          </span>
+          <TransactionClassification
+            category={toCategoryPresentation(suggestedCategory)}
+            tags={suggestedTags.map(toTagPresentation).filter((tag): tag is ITag => tag !== null)}
+          />
+        </div>
+      ) : null}
+      <details data-cy="manualDraftRuleDetails">
+        <summary className="small fw-semibold text-body">
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.details">Rule details</Translate>
+        </summary>
+        <div className="pt-2 small text-muted">
+          {rulePreview.matchedRules?.length ? (
+            <p className="mb-2">
+              <strong>
+                <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.matchedRules">Matched rules</Translate>:
+              </strong>{' '}
+              {rulePreview.matchedRules.map(rule => rule.ruleName).join(', ')}
+            </p>
+          ) : null}
+          {rulePreview.hasConflicts || rulePreview.conflicts?.length ? (
+            <Alert color="warning" fade={false} className="mb-2 small" data-testid="manual-draft-rule-conflicts">
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.conflicts">
+                Some suggestions conflict with existing selections.
+              </Translate>
+            </Alert>
+          ) : null}
+          {rulePreview.skippedOutputs?.length ? (
+            <p className="mb-0">
+              <strong>
+                <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.skippedOutputs">
+                  Skipped outputs
+                </Translate>
+                :
+              </strong>{' '}
+              {rulePreview.skippedOutputs
+                .map(output => output.reason ?? output.valueLabel ?? output.sourceRuleName)
+                .filter(Boolean)
+                .join(', ')}
+            </p>
+          ) : null}
+        </div>
+      </details>
+    </div>
+  );
+};
+
+interface ManualTransactionRuleSuggestionsProps {
   candidate: ITransactionCandidate | null;
   readOnly: boolean;
   saveState: SaveState;
@@ -220,12 +400,14 @@ interface RuleSuggestionsSectionProps {
   onPreviewRules: () => void;
   onApplyRules: () => void;
   rulePreviewState: RulePreviewState;
+  categories: ICategorySelectable[];
+  tags: ITagSelectable[];
 }
 
 const isRuleActionDisabled = (ruleActionState: RuleActionState, saveState: SaveState) =>
   ruleActionState === 'PREVIEWING' || ruleActionState === 'APPLYING' || saveState === 'CREATING' || saveState === 'SAVING';
 
-const RuleSuggestionsSection = ({
+const ManualTransactionRuleSuggestions = ({
   candidate,
   readOnly,
   saveState,
@@ -236,7 +418,9 @@ const RuleSuggestionsSection = ({
   onPreviewRules,
   onApplyRules,
   rulePreviewState,
-}: RuleSuggestionsSectionProps) => {
+  categories,
+  tags,
+}: ManualTransactionRuleSuggestionsProps) => {
   if (!candidate || readOnly) {
     return null;
   }
@@ -271,11 +455,18 @@ const RuleSuggestionsSection = ({
   const applyFallback = showConfirmNoSuggestionsButton ? 'Confirm no suggestions' : 'Apply suggestions';
 
   return (
-    <section className="border rounded p-3 mb-3" data-testid="manual-draft-rule-suggestions">
-      <h4>
-        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.title">Rule suggestions</Translate>
-      </h4>
-      <p className="mb-2" data-testid="manual-draft-rule-preview-state">
+    <section className="rounded border bg-light-subtle p-3" data-testid="manual-draft-rule-suggestions">
+      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h4 className="h6 mb-0">
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.title">Rule suggestions</Translate>
+        </h4>
+        <ClassificationReadiness
+          status={effectiveClassificationReviewStatus}
+          rulePreview={rulePreview}
+          rulePreviewState={rulePreviewState}
+        />
+      </div>
+      <p className="small text-muted mb-2" data-testid="manual-draft-rule-preview-state">
         <Translate
           key={previewStateKey}
           contentKey={`fintrackApp.financialTransaction.manualDraft.ruleSuggestions.previewState.${previewStateKey}`}
@@ -284,7 +475,7 @@ const RuleSuggestionsSection = ({
         </Translate>
       </p>
       {reviewMessageKey ? (
-        <p className="mb-2" data-testid="manual-draft-classification-status">
+        <p className="small mb-2" data-testid="manual-draft-classification-status">
           <Translate key={reviewMessageKey} contentKey={reviewMessageKey}>
             Review pending: apply suggestions before posting.
           </Translate>
@@ -328,10 +519,477 @@ const RuleSuggestionsSection = ({
           {ruleErrorMessage}
         </Alert>
       ) : null}
-      {rulePreview && rulePreviewState !== 'UNAVAILABLE' ? <RulePreviewDetails rulePreview={rulePreview} /> : null}
+      {rulePreview && rulePreviewState !== 'UNAVAILABLE' ? (
+        <RulePreviewDetails rulePreview={rulePreview} categories={categories} tags={tags} />
+      ) : null}
     </section>
   );
 };
+
+const ManualDraftPageHeader = ({
+  candidate,
+  draft,
+  draftId,
+  selectedAccountLabel,
+  saveState,
+}: {
+  candidate: ITransactionCandidate | null;
+  draft: ManualDraftFormState;
+  draftId?: string;
+  selectedAccountLabel: string;
+  saveState: SaveState;
+}) => {
+  const isPersistedDraft = !!candidate?.id || !!draftId;
+  const titleKey = isPersistedDraft
+    ? 'fintrackApp.financialTransaction.manualDraft.editTitle'
+    : 'fintrackApp.financialTransaction.manualDraft.newTitle';
+
+  return (
+    <ProductPageHeader
+      title={
+        <Translate key={titleKey} contentKey={titleKey}>
+          {isPersistedDraft ? 'Edit draft' : 'New transaction'}
+        </Translate>
+      }
+      dataCy="FinancialTransactionManualDraftHeading"
+      metadata={<AutosaveStatus saveState={saveState} hasCandidate={!!candidate?.id} />}
+      subtitle={
+        candidate?.id ? (
+          <span data-cy="manualDraftContext">
+            {selectedAccountLabel ? `${selectedAccountLabel}${draft.description ? ' · ' : ''}` : ''}
+            {draft.description || null}
+          </span>
+        ) : (
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.unsaved">
+            Start entering details to create a recoverable draft.
+          </Translate>
+        )
+      }
+      actions={
+        <Button
+          tag={Link}
+          to={isPersistedDraft ? '/financial-transaction/drafts' : '/financial-transaction'}
+          color="secondary"
+          outline
+          data-cy={isPersistedDraft ? 'manualDraftBackToDrafts' : 'manualDraftBackToTransactions'}
+        >
+          <FontAwesomeIcon icon="arrow-left" />
+          &nbsp;
+          <Translate
+            key={
+              isPersistedDraft
+                ? 'fintrackApp.financialTransaction.manualDraft.backToDrafts'
+                : 'fintrackApp.financialTransaction.manualDraft.backToTransactions'
+            }
+            contentKey={
+              isPersistedDraft
+                ? 'fintrackApp.financialTransaction.manualDraft.backToDrafts'
+                : 'fintrackApp.financialTransaction.manualDraft.backToTransactions'
+            }
+          >
+            {isPersistedDraft ? 'Back to drafts' : 'Back to transactions'}
+          </Translate>
+        </Button>
+      }
+    />
+  );
+};
+
+const ManualDraftAlerts = ({ errorMessage, isCancelled }: { errorMessage: string; isCancelled: boolean }) => (
+  <>
+    {errorMessage ? (
+      <Alert color="danger" fade={false} data-testid="manual-draft-error">
+        {errorMessage}
+      </Alert>
+    ) : null}
+    {isCancelled ? (
+      <Alert color="warning" fade={false}>
+        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.cancelledReadOnly">
+          This draft was cancelled and cannot be edited.
+        </Translate>
+      </Alert>
+    ) : null}
+  </>
+);
+
+type DraftFieldChangeHandler = (field: keyof ManualDraftFormState) => (event: React.ChangeEvent<HTMLInputElement>) => void;
+
+const ManualTransactionAccountSection = ({
+  draft,
+  accounts,
+  hasSelectedAccount,
+  selectedAccountLabel,
+  readOnly,
+  onFieldChange,
+}: {
+  draft: ManualDraftFormState;
+  accounts: IFinancialAccountSelectable[];
+  hasSelectedAccount: boolean;
+  selectedAccountLabel: string;
+  readOnly: boolean;
+  onFieldChange: DraftFieldChangeHandler;
+}) => (
+  <ProductSection
+    title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.sections.account">Account</Translate>}
+    dataCy="manualDraftAccountSection"
+    className="mb-3"
+  >
+    <FormGroup>
+      <Label for="financial-transaction-account">
+        <Translate contentKey="fintrackApp.financialTransaction.account">Account</Translate>
+      </Label>
+      <Input
+        id="financial-transaction-account"
+        name="account"
+        data-cy="account"
+        type="select"
+        value={draft.account}
+        onChange={onFieldChange('account')}
+        disabled={readOnly}
+      >
+        <option value="" key="0" />
+        {accounts.map(account => (
+          <option value={account.id} key={account.id}>
+            {formatFinancialAccountLabel(account)}
+          </option>
+        ))}
+      </Input>
+      {hasSelectedAccount ? (
+        <FormText data-cy="manualDraftAccountContext" data-testid="manualDraftAccountContext">
+          {selectedAccountLabel}
+        </FormText>
+      ) : null}
+    </FormGroup>
+  </ProductSection>
+);
+
+const ManualTransactionMovementSection = ({
+  draft,
+  currency,
+  readOnly,
+  samePostingDate,
+  onFieldChange,
+  onSamePostingDateChange,
+  onFlowChange,
+}: {
+  draft: ManualDraftFormState;
+  currency?: string | null;
+  readOnly: boolean;
+  samePostingDate: boolean;
+  onFieldChange: DraftFieldChangeHandler;
+  onSamePostingDateChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onFlowChange: (flow: keyof typeof TransactionFlow) => void;
+}) => (
+  <ProductSection
+    title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.sections.transaction">Transaction</Translate>}
+    dataCy="manualDraftTransactionSection"
+    className="mb-3"
+  >
+    <Row>
+      <Col md="6">
+        <FormGroup>
+          <Label for="financial-transaction-transactionDate">
+            <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>
+          </Label>
+          <Input
+            id="financial-transaction-transactionDate"
+            name="transactionDate"
+            data-cy="transactionDate"
+            type="date"
+            value={draft.transactionDate}
+            onChange={onFieldChange('transactionDate')}
+            disabled={readOnly}
+          />
+        </FormGroup>
+      </Col>
+      <Col md="6">
+        <FormGroup>
+          <Label for="financial-transaction-postingDate">
+            <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting date</Translate>
+          </Label>
+          <FormGroup check className="mb-2">
+            <Input
+              id="financial-transaction-samePostingDate"
+              data-cy="samePostingDate"
+              type="checkbox"
+              checked={samePostingDate}
+              onChange={onSamePostingDateChange}
+              disabled={readOnly}
+            />
+            <Label check for="financial-transaction-samePostingDate">
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.samePostingDate">Use the same posting date</Translate>
+            </Label>
+          </FormGroup>
+          <Input
+            id="financial-transaction-postingDate"
+            name="postingDate"
+            data-cy="postingDate"
+            type="date"
+            value={draft.postingDate}
+            onChange={onFieldChange('postingDate')}
+            disabled={readOnly || samePostingDate}
+          />
+        </FormGroup>
+      </Col>
+    </Row>
+    <FormGroup>
+      <Label for="financial-transaction-description">
+        <Translate contentKey="fintrackApp.financialTransaction.description">Description</Translate>
+      </Label>
+      <Input
+        id="financial-transaction-description"
+        name="description"
+        data-cy="description"
+        type="text"
+        value={draft.description}
+        onChange={onFieldChange('description')}
+        disabled={readOnly}
+      />
+    </FormGroup>
+    <Row className="align-items-end">
+      <Col md="6">
+        <FormGroup>
+          <Label id="financial-transaction-flow-label">
+            <Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>
+          </Label>
+          <ButtonGroup className="d-flex" role="group" aria-labelledby="financial-transaction-flow-label" data-cy="flow">
+            {Object.keys(TransactionFlow).map(transactionFlow => (
+              <Button
+                key={transactionFlow}
+                type="button"
+                color={draft.flow === transactionFlow ? (transactionFlow === 'OUT' ? 'secondary' : 'success') : 'light'}
+                outline={draft.flow !== transactionFlow}
+                aria-pressed={draft.flow === transactionFlow}
+                data-cy={`flow-${transactionFlow}`}
+                data-testid={`flow-${transactionFlow}`}
+                onClick={() => onFlowChange(transactionFlow as keyof typeof TransactionFlow)}
+                disabled={readOnly}
+              >
+                {translate(`fintrackApp.TransactionFlow.${transactionFlow}`)}
+              </Button>
+            ))}
+          </ButtonGroup>
+        </FormGroup>
+      </Col>
+      <Col md="6">
+        <FormGroup>
+          <Label for="financial-transaction-amount">
+            <Translate contentKey="fintrackApp.financialTransaction.amount">Amount</Translate>
+          </Label>
+          <InputGroup>
+            <Input
+              id="financial-transaction-amount"
+              name="amount"
+              data-cy="amount"
+              type="text"
+              value={draft.amount}
+              onChange={onFieldChange('amount')}
+              disabled={readOnly}
+            />
+            <InputGroupText data-cy="manualDraftCurrency" data-testid="manualDraftCurrency">
+              {currency ?? '—'}
+            </InputGroupText>
+          </InputGroup>
+        </FormGroup>
+      </Col>
+    </Row>
+  </ProductSection>
+);
+
+const ManualTransactionClassificationSection = ({
+  draft,
+  categories,
+  tags,
+  selectedCategory,
+  selectedTags,
+  readOnly,
+  onFieldChange,
+  onTagsChange,
+  tagsLoading,
+  tagsLoadError,
+  ruleSuggestions,
+}: {
+  draft: ManualDraftFormState;
+  categories: ICategorySelectable[];
+  tags: ITagSelectable[];
+  selectedCategory: ICategory | null;
+  selectedTags: Array<ITagSelectable | ITag>;
+  readOnly: boolean;
+  onFieldChange: DraftFieldChangeHandler;
+  onTagsChange: (tags: ProductTagSelectorTag[]) => void;
+  tagsLoading: boolean;
+  tagsLoadError: boolean;
+  ruleSuggestions: React.ReactNode;
+}) => (
+  <ProductSection
+    title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.sections.classification">Classification</Translate>}
+    dataCy="manualDraftClassificationSection"
+    className="mb-3"
+  >
+    <Row>
+      <Col md="6">
+        <FormGroup>
+          <Label for="financial-transaction-category">
+            <Translate contentKey="fintrackApp.financialTransaction.category">Category</Translate>
+          </Label>
+          <Input
+            id="financial-transaction-category"
+            name="category"
+            data-cy="category"
+            type="select"
+            value={draft.category}
+            onChange={onFieldChange('category')}
+            disabled={readOnly}
+          >
+            <option value="" key="0" />
+            {categories.map(category => (
+              <option value={category.id} key={category.id}>
+                {categoryOptionLabel(category)}
+                {category.active === false ? ` (${translate('fintrackApp.category.inactive')})` : ''}
+              </option>
+            ))}
+          </Input>
+        </FormGroup>
+      </Col>
+      <Col md="6">
+        <FormGroup>
+          <div className="small fw-semibold mb-2">
+            <Translate contentKey="fintrackApp.financialTransaction.tags">Tags</Translate>
+          </div>
+          <ProductTagSelector
+            id="financial-transaction-tags"
+            dataCy="manualDraftTags"
+            selectedTags={selectedTags}
+            availableTags={tags}
+            onChange={onTagsChange}
+            disabled={readOnly}
+            loading={tagsLoading}
+            error={tagsLoadError}
+          />
+        </FormGroup>
+      </Col>
+    </Row>
+    <div className="mt-3">{ruleSuggestions}</div>
+  </ProductSection>
+);
+
+const ManualTransactionOptionalDetails = ({
+  draft,
+  open,
+  readOnly,
+  onOpenChange,
+  onFieldChange,
+}: {
+  draft: ManualDraftFormState;
+  open: boolean;
+  readOnly: boolean;
+  onOpenChange: (open: boolean) => void;
+  onFieldChange: DraftFieldChangeHandler;
+}) => (
+  <ProductSection
+    title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.sections.optionalDetails">Optional details</Translate>}
+    dataCy="manualDraftOptionalDetailsSection"
+    className="mb-3"
+  >
+    <details
+      open={open}
+      onToggle={event => onOpenChange((event.target as HTMLDetailsElement).open)}
+      data-cy="manualDraftOptionalDetails"
+      data-testid="manualDraftOptionalDetails"
+    >
+      <summary className="fw-semibold">
+        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.moreDetails">More details</Translate>
+      </summary>
+      <Row className="pt-3">
+        <Col md="6">
+          <FormGroup>
+            <Label for="financial-transaction-externalReference">
+              <Translate contentKey="fintrackApp.financialTransaction.externalReference">External Reference</Translate>
+            </Label>
+            <Input
+              id="financial-transaction-externalReference"
+              name="externalReference"
+              data-cy="externalReference"
+              type="text"
+              value={draft.externalReference}
+              onChange={onFieldChange('externalReference')}
+              disabled={readOnly}
+            />
+          </FormGroup>
+        </Col>
+        <Col md="6">
+          <FormGroup>
+            <Label for="financial-transaction-notes">
+              <Translate contentKey="fintrackApp.financialTransaction.notes">Notes</Translate>
+            </Label>
+            <Input
+              id="financial-transaction-notes"
+              name="notes"
+              data-cy="notes"
+              type="text"
+              value={draft.notes}
+              onChange={onFieldChange('notes')}
+              disabled={readOnly}
+            />
+          </FormGroup>
+        </Col>
+      </Row>
+    </details>
+  </ProductSection>
+);
+
+const ManualTransactionActions = ({
+  hasCandidate,
+  postReasonKey,
+  postDisabled,
+  cancelDisabled,
+  posting,
+  onCancel,
+  onPost,
+}: {
+  hasCandidate: boolean;
+  postReasonKey: string;
+  postDisabled: boolean;
+  cancelDisabled: boolean;
+  posting: boolean;
+  onCancel: () => void;
+  onPost: () => void;
+}) => (
+  <ProductSection
+    title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.sections.actions">Actions</Translate>}
+    dataCy="manualDraftActionsSection"
+  >
+    {postReasonKey ? (
+      <p className="small text-muted mb-3" data-cy="manualDraftPostReason">
+        <Translate key={postReasonKey} contentKey={postReasonKey}>
+          Complete the required transaction details.
+        </Translate>
+      </p>
+    ) : null}
+    <div className="d-flex flex-wrap justify-content-end gap-2">
+      {hasCandidate ? (
+        <Button
+          color="danger"
+          outline
+          id="cancel-draft"
+          data-cy="manualDraftCancelButton"
+          type="button"
+          onClick={onCancel}
+          disabled={cancelDisabled}
+        >
+          <FontAwesomeIcon icon="ban" />
+          &nbsp;
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.cancel">Cancel draft</Translate>
+        </Button>
+      ) : null}
+      <Button color="primary" id="post-draft" data-cy="manualDraftPostButton" type="button" disabled={postDisabled} onClick={onPost}>
+        {posting ? <Spinner size="sm" /> : <FontAwesomeIcon icon="save" />}
+        &nbsp;
+        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.post">Post transaction</Translate>
+      </Button>
+    </div>
+  </ProductSection>
+);
 
 export const FinancialTransactionManualDraft = () => {
   const navigate = useNavigate();
@@ -341,6 +999,8 @@ export const FinancialTransactionManualDraft = () => {
   const [candidate, setCandidate] = useState<ITransactionCandidate | null>(null);
   const [selectableCategories, setSelectableCategories] = useState<ICategorySelectable[]>([]);
   const [selectableTags, setSelectableTags] = useState<ITagSelectable[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsLoadError, setTagsLoadError] = useState(false);
   const [selectableAccounts, setSelectableAccounts] = useState<IFinancialAccountSelectable[]>([]);
   const [classificationReviewStatus, setClassificationReviewStatus] = useState<
     keyof typeof TransactionCandidateClassificationReviewStatus | null
@@ -353,6 +1013,8 @@ export const FinancialTransactionManualDraft = () => {
   const [ruleActionState, setRuleActionState] = useState<RuleActionState>('IDLE');
   const [ruleErrorMessage, setRuleErrorMessage] = useState('');
   const [loadingCandidate, setLoadingCandidate] = useState(!!draftId);
+  const [optionalDetailsOpen, setOptionalDetailsOpen] = useState(false);
+  const [samePostingDate, setSamePostingDate] = useState(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creatingRef = useRef(false);
   const savingRef = useRef<Promise<ITransactionCandidate | null> | null>(null);
@@ -364,6 +1026,7 @@ export const FinancialTransactionManualDraft = () => {
   const lastSavedRuleInputSignatureRef = useRef('');
   const lastPreviewedRuleInputSignatureRef = useRef('');
   const latestPreviewRequestIdRef = useRef(0);
+  const samePostingDateRef = useRef(true);
 
   const readOnly =
     candidate?.status === 'POSTED' || candidate?.status === 'CANCELLED' || saveState === 'POSTED' || saveState === 'CANCELLED';
@@ -384,11 +1047,26 @@ export const FinancialTransactionManualDraft = () => {
     () => selectableAccounts.find(account => account.id?.toString() === draft.account) ?? candidate?.account,
     [candidate?.account, draft.account, selectableAccounts],
   );
+  const selectedCategory = useMemo(
+    () => selectableCategories.find(category => category.id?.toString() === draft.category) ?? candidate?.category ?? null,
+    [candidate?.category, draft.category, selectableCategories],
+  );
+  const selectedTags = useMemo(
+    () =>
+      draft.tags
+        .map(
+          tagId => selectableTags.find(tag => tag.id?.toString() === tagId) ?? candidate?.tags?.find(tag => tag.id?.toString() === tagId),
+        )
+        .filter((tag): tag is ITagSelectable | ITag => !!tag),
+    [candidate?.tags, draft.tags, selectableTags],
+  );
 
   useEffect(() => {
     let mounted = true;
     const categoryIds = candidate?.category?.id === undefined ? [] : [candidate.category.id];
     const tagIds = candidate?.tags?.map(tag => tag.id).filter((id): id is number => id !== undefined) ?? [];
+    setTagsLoading(true);
+    setTagsLoadError(false);
     Promise.all([getSelectableCategories(categoryIds), getSelectableTags(tagIds)])
       .then(([categories, tags]) => {
         if (mounted) {
@@ -400,6 +1078,12 @@ export const FinancialTransactionManualDraft = () => {
         if (mounted) {
           setSelectableCategories([]);
           setSelectableTags([]);
+          setTagsLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setTagsLoading(false);
         }
       });
     return () => {
@@ -464,6 +1148,10 @@ export const FinancialTransactionManualDraft = () => {
         const loadedDraft = draftFromCandidate(response.data);
         setDraft(loadedDraft);
         latestDraftRef.current = loadedDraft;
+        const shouldUseSamePostingDate = loadedDraft.transactionDate === loadedDraft.postingDate;
+        samePostingDateRef.current = shouldUseSamePostingDate;
+        setSamePostingDate(shouldUseSamePostingDate);
+        setOptionalDetailsOpen(!!loadedDraft.externalReference || !!loadedDraft.notes);
         setSaveState(response.data.status === 'CANCELLED' ? 'CANCELLED' : response.data.status === 'POSTED' ? 'POSTED' : 'SAVED');
         void runAutoPreviewForSavedDraft(response.data, loadedDraft);
         if (response.data.status === 'POSTED' && response.data.financialTransaction?.id) {
@@ -639,7 +1327,11 @@ export const FinancialTransactionManualDraft = () => {
   const updateDraftField = (field: keyof ManualDraftFormState) => event => {
     const value = event.target.value;
     setDraft(current => {
-      const nextDraft = { ...current, [field]: value };
+      const nextDraft = {
+        ...current,
+        [field]: value,
+        ...(field === 'transactionDate' && samePostingDateRef.current ? { postingDate: value } : {}),
+      };
       latestDraftRef.current = nextDraft;
       if (ruleInputFields.has(field) && rulePreview) {
         setRulePreviewState('STALE');
@@ -649,14 +1341,46 @@ export const FinancialTransactionManualDraft = () => {
     });
   };
 
-  const updateTags = event => {
-    const value = selectedOptions(event);
+  const updateSamePostingDate = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const shouldUseSamePostingDate = event.target.checked;
+    samePostingDateRef.current = shouldUseSamePostingDate;
+    setSamePostingDate(shouldUseSamePostingDate);
+    if (!shouldUseSamePostingDate) {
+      return;
+    }
+
+    setDraft(current => {
+      const nextDraft = { ...current, postingDate: current.transactionDate };
+      latestDraftRef.current = nextDraft;
+      if (rulePreview) {
+        setRulePreviewState('STALE');
+      }
+      scheduleAutosave(nextDraft);
+      return nextDraft;
+    });
+  };
+
+  const updateTags = (tags: ProductTagSelectorTag[]) => {
+    const value = tags.map(tag => tag.id?.toString()).filter((tagId): tagId is string => !!tagId);
     setDraft(current => {
       const nextDraft = { ...current, tags: value };
       latestDraftRef.current = nextDraft;
       scheduleAutosave(nextDraft, true);
       return nextDraft;
     });
+  };
+
+  const updateFlow = (flow: keyof typeof TransactionFlow) => {
+    if (readOnly || draft.flow === flow) {
+      return;
+    }
+    const nextDraft = { ...latestDraftRef.current, flow };
+    setDraft(nextDraft);
+    latestDraftRef.current = nextDraft;
+    if (rulePreview) {
+      setRulePreviewState('STALE');
+    }
+    scheduleAutosave(nextDraft);
   };
 
   const flushPendingSave = async () => {
@@ -768,6 +1492,9 @@ export const FinancialTransactionManualDraft = () => {
       navigate('/financial-transaction');
       return;
     }
+    if (!window.confirm(translate('fintrackApp.financialTransaction.manualDraft.cancelConfirm'))) {
+      return;
+    }
     try {
       await cancelManualDraft(candidateIdRef.current);
       setSaveState('CANCELLED');
@@ -779,273 +1506,130 @@ export const FinancialTransactionManualDraft = () => {
   };
 
   if (loadingCandidate) {
-    return <p>Loading...</p>;
+    return (
+      <ProductPage>
+        <ProductPageHeader
+          title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.editTitle">Edit draft</Translate>}
+          dataCy="FinancialTransactionManualDraftHeading"
+        />
+        <div className="d-flex align-items-center gap-2 text-muted" data-cy="manualDraftLoading">
+          <Spinner size="sm" />
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.loading">Loading draft…</Translate>
+        </div>
+      </ProductPage>
+    );
   }
 
   if (routeErrorKey) {
     return (
-      <Row className="justify-content-center">
-        <Col md="8">
-          <h2 data-cy="FinancialTransactionManualDraftHeading">
-            <Translate contentKey="fintrackApp.financialTransaction.manualDraft.title">Create manual transaction</Translate>
-          </h2>
-          <Alert color="danger" fade={false} data-testid="manual-draft-route-error">
-            <Translate contentKey={routeErrorKey}>This draft cannot be edited in the manual transaction flow.</Translate>
-          </Alert>
-          <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/financial-transaction" replace color="info">
-            <FontAwesomeIcon icon="arrow-left" />
-            &nbsp;
-            <span className="d-none d-md-inline">
-              <Translate contentKey="entity.action.back">Back</Translate>
-            </span>
-          </Button>
-        </Col>
-      </Row>
+      <ProductPage>
+        <ProductPageHeader
+          title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.editTitle">Edit draft</Translate>}
+          dataCy="FinancialTransactionManualDraftHeading"
+          actions={
+            <Button tag={Link} data-cy="manualDraftBackToTransactions" to="/financial-transaction" color="secondary" outline>
+              <FontAwesomeIcon icon="arrow-left" />
+              &nbsp;
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.backToTransactions">Back to transactions</Translate>
+            </Button>
+          }
+        />
+        <Alert color="danger" fade={false} data-testid="manual-draft-route-error">
+          <Translate contentKey={routeErrorKey}>This draft cannot be edited in the manual transaction flow.</Translate>
+        </Alert>
+      </ProductPage>
     );
   }
 
+  const selectedAccountLabel = formatFinancialAccountLabel(selectedAccount);
+  const compatibleCategories = selectableCategories.filter(
+    category => category.id?.toString() === draft.category || categoryCompatibleWithFlow(category, draft.flow),
+  );
+  const postReasonKey = !isObviouslyComplete(draft)
+    ? 'fintrackApp.financialTransaction.manualDraft.incomplete'
+    : classificationBlockKey ||
+      (!isClassificationReadyToPost(effectiveClassificationReviewStatus)
+        ? 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.notEvaluatedPostBlock'
+        : '');
+
   return (
-    <Row className="justify-content-center">
-      <Col md="8">
-        <h2 data-cy="FinancialTransactionManualDraftHeading">
-          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.title">Create manual transaction</Translate>
-        </h2>
-        {errorMessage ? (
-          <Alert color="danger" fade={false} data-testid="manual-draft-error">
-            {errorMessage}
-          </Alert>
-        ) : null}
-        {candidate?.status === 'CANCELLED' ? (
-          <Alert color="warning" fade={false}>
-            <Translate contentKey="fintrackApp.financialTransaction.manualDraft.cancelledReadOnly">
-              This draft was cancelled and cannot be edited.
-            </Translate>
-          </Alert>
-        ) : null}
-        {classificationBlockKey ? (
-          <Alert color="warning" fade={false} data-testid="manual-draft-classification-block">
-            <Translate contentKey={classificationBlockKey}>Refresh or apply rule suggestions before posting.</Translate>
-          </Alert>
-        ) : null}
-        <Form>
-          <FormGroup>
-            <Label for="financial-transaction-account">
-              <Translate contentKey="fintrackApp.financialTransaction.account">Account</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-account"
-              name="account"
-              data-cy="account"
-              type="select"
-              value={draft.account}
-              onChange={updateDraftField('account')}
-              disabled={readOnly}
-            >
-              <option value="" key="0" />
-              {selectableAccounts.map(account => (
-                <option value={account.id} key={account.id}>
-                  {formatFinancialAccountLabel(account)}
-                </option>
-              ))}
-            </Input>
-            {selectedAccount ? <FormText>{formatFinancialAccountLabel(selectedAccount)}</FormText> : null}
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-transactionDate">
-              <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-transactionDate"
-              name="transactionDate"
-              data-cy="transactionDate"
-              type="date"
-              value={draft.transactionDate}
-              onChange={updateDraftField('transactionDate')}
-              disabled={readOnly}
+    <ProductPage>
+      <ManualDraftPageHeader
+        candidate={candidate}
+        draft={draft}
+        draftId={draftId}
+        selectedAccountLabel={selectedAccountLabel}
+        saveState={saveState}
+      />
+      <ManualDraftAlerts errorMessage={errorMessage} isCancelled={candidate?.status === 'CANCELLED'} />
+      <Form>
+        <ManualTransactionAccountSection
+          draft={draft}
+          accounts={selectableAccounts}
+          hasSelectedAccount={!!selectedAccount}
+          selectedAccountLabel={selectedAccountLabel}
+          readOnly={readOnly}
+          onFieldChange={updateDraftField}
+        />
+
+        <ManualTransactionMovementSection
+          draft={draft}
+          currency={selectedAccount?.currency}
+          readOnly={readOnly}
+          samePostingDate={samePostingDate}
+          onFieldChange={updateDraftField}
+          onSamePostingDateChange={updateSamePostingDate}
+          onFlowChange={updateFlow}
+        />
+
+        <ManualTransactionClassificationSection
+          draft={draft}
+          categories={compatibleCategories}
+          tags={selectableTags}
+          selectedCategory={toCategoryPresentation(selectedCategory)}
+          selectedTags={selectedTags}
+          readOnly={readOnly}
+          onFieldChange={updateDraftField}
+          onTagsChange={updateTags}
+          tagsLoading={tagsLoading}
+          tagsLoadError={tagsLoadError}
+          ruleSuggestions={
+            <ManualTransactionRuleSuggestions
+              candidate={candidate}
+              readOnly={readOnly}
+              saveState={saveState}
+              ruleActionState={ruleActionState}
+              ruleErrorMessage={ruleErrorMessage}
+              rulePreview={rulePreview}
+              effectiveClassificationReviewStatus={effectiveClassificationReviewStatus}
+              onPreviewRules={handlePreviewRules}
+              onApplyRules={handleApplyRules}
+              rulePreviewState={rulePreviewState}
+              categories={selectableCategories}
+              tags={selectableTags}
             />
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-postingDate">
-              <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting date</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-postingDate"
-              name="postingDate"
-              data-cy="postingDate"
-              type="date"
-              value={draft.postingDate}
-              onChange={updateDraftField('postingDate')}
-              disabled={readOnly}
-            />
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-description">
-              <Translate contentKey="fintrackApp.financialTransaction.description">Description</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-description"
-              name="description"
-              data-cy="description"
-              type="text"
-              value={draft.description}
-              onChange={updateDraftField('description')}
-              disabled={readOnly}
-            />
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-flow">
-              <Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-flow"
-              name="flow"
-              data-cy="flow"
-              type="select"
-              value={draft.flow}
-              onChange={updateDraftField('flow')}
-              disabled={readOnly}
-            >
-              {Object.keys(TransactionFlow).map(transactionFlow => (
-                <option value={transactionFlow} key={transactionFlow}>
-                  {translate(`fintrackApp.TransactionFlow.${transactionFlow}`)}
-                </option>
-              ))}
-            </Input>
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-amount">
-              <Translate contentKey="fintrackApp.financialTransaction.amount">Amount</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-amount"
-              name="amount"
-              data-cy="amount"
-              type="text"
-              value={draft.amount}
-              onChange={updateDraftField('amount')}
-              disabled={readOnly}
-            />
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-externalReference">
-              <Translate contentKey="fintrackApp.financialTransaction.externalReference">External Reference</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-externalReference"
-              name="externalReference"
-              data-cy="externalReference"
-              type="text"
-              value={draft.externalReference}
-              onChange={updateDraftField('externalReference')}
-              disabled={readOnly}
-            />
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-notes">
-              <Translate contentKey="fintrackApp.financialTransaction.notes">Notes</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-notes"
-              name="notes"
-              data-cy="notes"
-              type="text"
-              value={draft.notes}
-              onChange={updateDraftField('notes')}
-              disabled={readOnly}
-            />
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-category">
-              <Translate contentKey="fintrackApp.financialTransaction.category">Category</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-category"
-              name="category"
-              data-cy="category"
-              type="select"
-              value={draft.category}
-              onChange={updateDraftField('category')}
-              disabled={readOnly}
-            >
-              <option value="" key="0" />
-              {selectableCategories.map(category => (
-                <option value={category.id} key={category.id}>
-                  {category.name}
-                  {category.active === false ? ` (${translate('fintrackApp.category.inactive')})` : ''}
-                </option>
-              ))}
-            </Input>
-          </FormGroup>
-          <FormGroup>
-            <Label for="financial-transaction-tags">
-              <Translate contentKey="fintrackApp.financialTransaction.tags">Tags</Translate>
-            </Label>
-            <Input
-              id="financial-transaction-tags"
-              name="tags"
-              data-cy="tags"
-              type="select"
-              multiple
-              value={draft.tags}
-              onChange={updateTags}
-              disabled={readOnly}
-            >
-              {selectableTags.map(tag => (
-                <option value={tag.id} key={tag.id}>
-                  {tag.name}
-                  {tag.active === false ? ` (${translate('fintrackApp.tag.inactive')})` : ''}
-                </option>
-              ))}
-            </Input>
-          </FormGroup>
-          <RuleSuggestionsSection
-            candidate={candidate}
-            readOnly={readOnly}
-            saveState={saveState}
-            ruleActionState={ruleActionState}
-            ruleErrorMessage={ruleErrorMessage}
-            rulePreview={rulePreview}
-            effectiveClassificationReviewStatus={effectiveClassificationReviewStatus}
-            onPreviewRules={handlePreviewRules}
-            onApplyRules={handleApplyRules}
-            rulePreviewState={rulePreviewState}
-          />
-          <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/financial-transaction" replace color="info">
-            <FontAwesomeIcon icon="arrow-left" />
-            &nbsp;
-            <span className="d-none d-md-inline">
-              <Translate contentKey="entity.action.back">Back</Translate>
-            </span>
-          </Button>
-          &nbsp;
-          <Button
-            color="secondary"
-            id="cancel-draft"
-            data-cy="manualDraftCancelButton"
-            type="button"
-            onClick={handleCancel}
-            disabled={readOnly || saveState === 'CREATING' || saveState === 'SAVING' || saveState === 'POSTING'}
-          >
-            <FontAwesomeIcon icon="ban" />
-            &nbsp;
-            <Translate contentKey="fintrackApp.financialTransaction.manualDraft.cancel">Cancel draft</Translate>
-          </Button>
-          &nbsp;
-          <Button
-            color="primary"
-            id="post-draft"
-            data-cy="manualDraftPostButton"
-            type="button"
-            disabled={postDisabled}
-            onClick={handlePost}
-          >
-            {saveState === 'POSTING' ? <Spinner size="sm" /> : <FontAwesomeIcon icon="save" />}
-            &nbsp;
-            <Translate contentKey="fintrackApp.financialTransaction.manualDraft.post">Post transaction</Translate>
-          </Button>
-        </Form>
-      </Col>
-    </Row>
+          }
+        />
+
+        <ManualTransactionOptionalDetails
+          draft={draft}
+          open={optionalDetailsOpen}
+          readOnly={readOnly}
+          onOpenChange={setOptionalDetailsOpen}
+          onFieldChange={updateDraftField}
+        />
+
+        <ManualTransactionActions
+          hasCandidate={!!candidate?.id}
+          postReasonKey={postReasonKey}
+          postDisabled={postDisabled}
+          cancelDisabled={readOnly || saveState === 'CREATING' || saveState === 'SAVING' || saveState === 'POSTING'}
+          posting={saveState === 'POSTING'}
+          onCancel={handleCancel}
+          onPost={handlePost}
+        />
+      </Form>
+    </ProductPage>
   );
 };
 

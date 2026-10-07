@@ -36,6 +36,17 @@
       "noDescription": "No description provided.",
       "active": "Active",
       "inactive": "Inactive",
+      "selector": {
+        "label": "Tags",
+        "add": "Add tag",
+        "search": "Search tags",
+        "empty": "No tags",
+        "inactive": "Inactive",
+        "remove": "Remove {{ name }}",
+        "loading": "Loading tags…",
+        "loadError": "Tags could not be loaded. Existing tags are unchanged.",
+        "noMatches": "No tags found"
+      },
       "status": {
         "label": "Status",
         "active": "Active",
