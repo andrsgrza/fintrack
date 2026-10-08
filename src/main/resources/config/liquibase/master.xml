@@ -58,5 +58,6 @@
     <include file="config/liquibase/changelog/20260726120000_added_description_normalization_rules.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260728120000_added_entity_TransactionCandidate.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260915160000_transaction_candidate_classification_provenance.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261008143000_remove_transaction_candidate_posted_lifecycle.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

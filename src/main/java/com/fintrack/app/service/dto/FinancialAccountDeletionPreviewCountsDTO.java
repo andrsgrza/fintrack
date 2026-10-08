@@ -7,8 +7,6 @@ public class FinancialAccountDeletionPreviewCountsDTO implements Serializable {
 
     private Long financialTransactions = 0L;
     private Long manualCandidates = 0L;
-    private Long manualDraftCandidates = 0L;
-    private Long manualPostedCandidates = 0L;
     private Long transactionIngestions = 0L;
     private Long ingestionRecords = 0L;
     private Long fileImportCandidates = 0L;
@@ -32,22 +30,6 @@ public class FinancialAccountDeletionPreviewCountsDTO implements Serializable {
 
     public void setManualCandidates(Long value) {
         this.manualCandidates = value;
-    }
-
-    public Long getManualDraftCandidates() {
-        return manualDraftCandidates;
-    }
-
-    public void setManualDraftCandidates(Long value) {
-        this.manualDraftCandidates = value;
-    }
-
-    public Long getManualPostedCandidates() {
-        return manualPostedCandidates;
-    }
-
-    public void setManualPostedCandidates(Long value) {
-        this.manualPostedCandidates = value;
     }
 
     public Long getTransactionIngestions() {

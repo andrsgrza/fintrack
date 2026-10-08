@@ -52,7 +52,6 @@ public class TransactionCandidateWorkflowSummaryMapper {
                 .map(this::toTagSelection)
                 .toList()
         );
-        summary.setFinancialTransactionId(candidate.getFinancialTransaction() == null ? null : candidate.getFinancialTransaction().getId());
         summary.setCreatedAt(candidate.getCreatedAt());
         summary.setUpdatedAt(candidate.getUpdatedAt());
         return summary;

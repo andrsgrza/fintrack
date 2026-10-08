@@ -6,7 +6,6 @@ package com.fintrack.app.domain.enumeration;
 public enum TransactionCandidateStatus {
     DRAFT,
     READY_TO_POST,
-    POSTED,
     CANCELLED,
     FAILED,
 }

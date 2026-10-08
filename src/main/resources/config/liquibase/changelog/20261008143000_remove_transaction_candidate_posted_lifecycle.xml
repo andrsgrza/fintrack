@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20261008143000-1" author="codex">
+        <preConditions onFail="HALT" onError="HALT"
+                       onFailMessage="Cannot remove TransactionCandidate POSTED lifecycle fields while POSTED candidates remain. On the preceding release, run GET /api/admin/legacy-posted-transaction-candidates/cleanup-preview, then POST /api/admin/legacy-posted-transaction-candidates/cleanup; resolve every unsupported or corrupt row, verify zero POSTED rows, then rerun this migration."
+                       onErrorMessage="Could not verify whether legacy TransactionCandidate POSTED rows remain; no lifecycle schema cleanup was applied.">
+            <sqlCheck expectedResult="0">select count(*) from transaction_candidate where status = 'POSTED'</sqlCheck>
+        </preConditions>
+
+        <dropForeignKeyConstraint baseTableName="transaction_candidate"
+                                  constraintName="fk_transaction_candidate__financial_transaction_id"/>
+        <dropUniqueConstraint tableName="transaction_candidate"
+                              constraintName="ux_transaction_candidate__financial_transaction_id"/>
+        <dropColumn tableName="transaction_candidate" columnName="financial_transaction_id"/>
+        <dropColumn tableName="transaction_candidate" columnName="posted_at"/>
+    </changeSet>
+</databaseChangeLog>

@@ -246,7 +246,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     mockGetManualDraft.mockResolvedValue({ data: candidate });
     mockUpdateManualDraft.mockResolvedValue({ data: readyCandidate });
     mockCancelManualDraft.mockResolvedValue({ data: { ...candidate, status: 'CANCELLED' } });
-    mockPostManualDraft.mockResolvedValue({ data: { ...readyCandidate, status: 'POSTED', financialTransaction: { id: 9001 } } });
+    mockPostManualDraft.mockResolvedValue({ data: { id: 9001 } });
     mockPreviewManualDraftRules.mockResolvedValue({ data: suggestionsPreview });
     mockApplyManualDraftRules.mockResolvedValue({
       data: {
@@ -348,6 +348,9 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await screen.findByDisplayValue('Coffee');
 
     const samePostingDateControl = screen.getByLabelText('Use the same posting date');
+    expect(screen.getByTestId('manualDraftDateGrid').className).toContain('manual-draft-date-grid');
+    expect(screen.getByTestId('manualDraftTransactionDateHeader').className).toContain('manual-draft-date-header');
+    expect(screen.getByTestId('manualDraftPostingDateHeader').className).toContain('manual-draft-posting-date-header');
     expect(samePostingDateControl.checked).toBe(true);
     fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '2026-07-14' } });
     expect(screen.getByLabelText('Posting date').value).toBe('2026-07-14');
@@ -989,9 +992,9 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(false);
   });
 
-  it('already-posted idempotent post response redirects safely without retry', async () => {
+  it('successful post uses the final FinancialTransaction response and redirects safely', async () => {
     mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
-    mockPostManualDraft.mockResolvedValue({ data: { ...readyCandidate, status: 'POSTED', financialTransaction: { id: 9001 } } });
+    mockPostManualDraft.mockResolvedValue({ data: { id: 9001 } });
     renderManualDraft('/financial-transaction/drafts/77');
     await screen.findByDisplayValue('Coffee');
 
@@ -1000,6 +1003,19 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     await waitFor(() => expect(mockPostManualDraft).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/financial-transaction/9001'));
     expect(screen.queryByTestId('manual-draft-error')).toBeNull();
+  });
+
+  it('shows a safe error when a post retry no longer finds the deleted draft', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    mockPostManualDraft.mockRejectedValue({ response: { status: 404, data: { detail: 'This draft is no longer available.' } } });
+    renderManualDraft('/financial-transaction/drafts/77');
+    await screen.findByDisplayValue('Coffee');
+
+    fireEvent.click(screen.getByRole('button', { name: /post transaction/i }));
+
+    expect(await screen.findByText('This draft is no longer available.')).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toBe('/financial-transaction/drafts/77');
+    expect(screen.getByRole('button', { name: /post transaction/i }).disabled).toBe(true);
   });
 
   it('incomplete draft cannot post', async () => {
@@ -1147,13 +1163,6 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
 
     expect(mockUpdateManualDraft).not.toHaveBeenCalled();
     expect(mockPostManualDraft).not.toHaveBeenCalled();
-  });
-
-  it('posted draft redirects to FinancialTransaction detail', async () => {
-    mockGetManualDraft.mockResolvedValue({ data: { ...readyCandidate, status: 'POSTED', financialTransaction: { id: 9001 } } });
-    renderManualDraft('/financial-transaction/drafts/77');
-
-    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/financial-transaction/9001'));
   });
 
   it('candidate flow does not call FinancialTransaction rule-preview', async () => {

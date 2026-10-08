@@ -63,6 +63,10 @@ public interface FinancialTransactionRepository
         return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByAccountUserLogin(login));
     }
 
+    default List<FinancialTransaction> findAllWithEagerRelationshipsByTransactionIngestionId(Long transactionIngestionId) {
+        return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByTransactionIngestionId(transactionIngestionId));
+    }
+
     @Query(
         value = "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category category left join fetch category.parentCategory left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.account.user.login = :login",
         countQuery = "select count(financialTransaction) from FinancialTransaction financialTransaction where financialTransaction.account.user.login = :login"
@@ -73,6 +77,21 @@ public interface FinancialTransactionRepository
         "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category category left join fetch category.parentCategory left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.account.user.login = :login"
     )
     List<FinancialTransaction> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
+
+    @Query(
+        "select financialTransaction from FinancialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account account " +
+        "left join fetch account.user " +
+        "left join fetch financialTransaction.category category " +
+        "left join fetch category.parentCategory " +
+        "left join fetch financialTransaction.financialSubscription " +
+        "left join fetch financialTransaction.transactionIngestion transactionIngestion " +
+        "left join fetch transactionIngestion.account transactionIngestionAccount " +
+        "where transactionIngestion.id = :transactionIngestionId"
+    )
+    List<FinancialTransaction> findAllWithToOneRelationshipsByTransactionIngestionId(
+        @Param("transactionIngestionId") Long transactionIngestionId
+    );
 
     @Query(
         "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category category left join fetch category.parentCategory left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.id = :id and financialTransaction.account.user.login = :login"

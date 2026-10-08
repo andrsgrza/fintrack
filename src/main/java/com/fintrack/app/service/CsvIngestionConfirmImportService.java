@@ -29,6 +29,7 @@ import com.fintrack.app.service.dto.CsvIngestionConfirmImportResponseDTO;
 import com.fintrack.app.service.dto.CsvIngestionDescriptionReviewDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
+import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper;
 import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
@@ -58,6 +59,7 @@ public class CsvIngestionConfirmImportService {
     private final CsvIngestionReadinessService csvIngestionReadinessService;
     private final TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper;
     private final TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper;
+    private final FinancialTransactionMapper financialTransactionMapper;
     private final ObjectMapper objectMapper;
 
     public CsvIngestionConfirmImportService(
@@ -70,6 +72,7 @@ public class CsvIngestionConfirmImportService {
         CsvIngestionReadinessService csvIngestionReadinessService,
         TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper,
         TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper,
+        FinancialTransactionMapper financialTransactionMapper,
         ObjectMapper objectMapper
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
@@ -81,16 +84,18 @@ public class CsvIngestionConfirmImportService {
         this.csvIngestionReadinessService = csvIngestionReadinessService;
         this.transactionCandidateFinancialTransactionMapper = transactionCandidateFinancialTransactionMapper;
         this.transactionCandidateWorkflowSummaryMapper = transactionCandidateWorkflowSummaryMapper;
+        this.financialTransactionMapper = financialTransactionMapper;
         this.objectMapper = objectMapper;
     }
 
     @Transactional(noRollbackFor = IngestionNotReadyException.class)
     public CsvIngestionConfirmImportResponseDTO confirm(Long transactionIngestionId) {
-        TransactionIngestion ingestion = resolveAccessibleFileIngestion(transactionIngestionId);
+        TransactionIngestion ingestion = lockAccessibleFileIngestionForConfirm(transactionIngestionId);
         List<IngestionRecord> records = records(ingestion);
         validateNoCorruptFinancialTransactionLinks(records);
 
         if (ingestion.getStatus() == IngestionStatus.COMPLETED) {
+            validateCompletedIngestionState(ingestion, records);
             return response(ingestion, records, 0);
         }
         validateNoCorruptPreCompletedCandidates(ingestion, records);
@@ -106,6 +111,7 @@ public class CsvIngestionConfirmImportService {
 
         Map<Long, TransactionCandidate> candidatesByRecordId = validateAndResolveCandidates(ingestion, records);
 
+        List<TransactionCandidate> candidatesToDelete = new java.util.ArrayList<>();
         int createdNow = 0;
         Instant now = Instant.now();
         for (IngestionRecord record : records) {
@@ -116,22 +122,20 @@ public class CsvIngestionConfirmImportService {
                         .toFinancialTransaction(candidate, TransactionOrigin.FILE_IMPORT, now)
                         .transactionIngestion(ingestion)
                 );
-                candidate.setFinancialTransaction(financialTransaction);
-                candidate.setStatus(TransactionCandidateStatus.POSTED);
-                candidate.setPostedAt(now);
-                candidate.setUpdatedAt(now);
-                transactionCandidateRepository.save(candidate);
                 record.setStatus(IngestionRecordStatus.IMPORTED);
                 record.setFinancialTransaction(financialTransaction);
                 record.setErrorCode(null);
                 record.setErrorMessage(null);
                 ingestionRecordRepository.save(record);
+                candidatesToDelete.add(candidate);
                 createdNow++;
             }
         }
 
         CsvIngestionWorkflowCountsDTO counts = csvIngestionReadinessService.snapshot(records).counts();
         csvIngestionReadinessService.applyCounts(ingestion, counts);
+        deletePrePostCandidates(candidatesToDelete);
+
         ingestion.setStatus(IngestionStatus.COMPLETED);
         ingestion.setCompletedAt(now);
         transactionIngestionRepository.save(ingestion);
@@ -170,9 +174,6 @@ public class CsvIngestionConfirmImportService {
     ) {
         if (candidate.getSource() != TransactionCandidateSource.FILE_IMPORT) {
             throw new IllegalArgumentException("Only FILE_IMPORT transaction candidates can be confirmed from file ingestion");
-        }
-        if (candidate.getStatus() == TransactionCandidateStatus.POSTED || candidate.getFinancialTransaction() != null) {
-            throw new IllegalArgumentException("Transaction candidate is already posted before ingestion completed");
         }
         if (candidate.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
             throw new IllegalArgumentException("Transaction candidate is not ready to post");
@@ -276,12 +277,17 @@ public class CsvIngestionConfirmImportService {
         }
     }
 
-    private TransactionIngestion resolveAccessibleFileIngestion(Long transactionIngestionId) {
+    /**
+     * Resolves and locks the ingestion before any record or candidate state is read for Confirm Import.
+     * The lock ordering is parent ingestion first, then child records/candidates, so concurrent confirms for the
+     * same ingestion serialize without a global or account-wide lock.
+     */
+    private TransactionIngestion lockAccessibleFileIngestionForConfirm(Long transactionIngestionId) {
         if (transactionIngestionId == null) {
             throw new IllegalArgumentException("Transaction ingestion is required");
         }
         TransactionIngestion ingestion = transactionIngestionRepository
-            .findOneWithToOneRelationshipsByIdAndAccountUserLogin(transactionIngestionId, currentUserService.getCurrentUserLogin())
+            .findOneByIdAndAccountUserLoginForConfirm(transactionIngestionId, currentUserService.getCurrentUserLogin())
             .orElseThrow(() -> new IllegalArgumentException("Transaction ingestion is not accessible"));
         if (ingestion.getIngestionType() != IngestionType.FILE) {
             throw new IllegalArgumentException("Only file ingestions can be confirmed");
@@ -309,14 +315,39 @@ public class CsvIngestionConfirmImportService {
             if (record.getStatus() == IngestionRecordStatus.IMPORTED && record.getFinancialTransaction() == null) {
                 throw new IllegalArgumentException("Imported ingestion record is missing its financial transaction");
             }
+            if (record.getStatus() == IngestionRecordStatus.DELETED_AFTER_IMPORT && record.getFinancialTransaction() != null) {
+                throw new IllegalArgumentException("Deleted-after-import ingestion record cannot have a financial transaction");
+            }
             if (record.getStatus() == IngestionRecordStatus.VALID && record.getFinancialTransaction() != null) {
                 throw new IllegalArgumentException("Valid ingestion record is already linked to a financial transaction");
             }
         }
     }
 
+    /**
+     * Completed imports are historical and never repaired by a retry. Confirm Import deletes every pre-post
+     * candidate, so post-completion authority is the record and final transaction graph alone.
+     */
+    private void validateCompletedIngestionState(TransactionIngestion ingestion, List<IngestionRecord> records) {
+        for (IngestionRecord record : records) {
+            if (record.getStatus() == IngestionRecordStatus.VALID) {
+                throw new IllegalArgumentException("Completed ingestion contains a valid record");
+            }
+            if (record.getStatus() == IngestionRecordStatus.REJECTED || record.getStatus() == IngestionRecordStatus.FAILED) {
+                throw new IllegalArgumentException("Completed ingestion contains a rejected or failed record");
+            }
+        }
+
+        if (transactionCandidateRepository.existsByTransactionIngestionId(ingestion.getId())) {
+            throw new IllegalArgumentException("Completed ingestion cannot retain transaction candidates");
+        }
+    }
+
     private void validateNoCorruptPreCompletedCandidates(TransactionIngestion ingestion, List<IngestionRecord> records) {
         String userLogin = currentUserService.getCurrentUserLogin();
+        if (transactionCandidateRepository.existsByTransactionIngestionIdAndUserLoginNot(ingestion.getId(), userLogin)) {
+            throw new IllegalArgumentException("Transaction candidate is not accessible");
+        }
         Map<Long, IngestionRecord> recordsById = new HashMap<>();
         records.forEach(record -> recordsById.put(record.getId(), record));
 
@@ -340,38 +371,16 @@ public class CsvIngestionConfirmImportService {
             }
 
             IngestionRecord persistedRecord = recordsById.get(record.getId());
-            if (candidate.getStatus() == TransactionCandidateStatus.POSTED) {
-                validatePostedCandidateMatchesImportedRecord(candidate, persistedRecord);
-            } else {
-                validateUnpostedCandidateMatchesPreImportRecord(candidate, persistedRecord);
-            }
-        }
-    }
-
-    private void validatePostedCandidateMatchesImportedRecord(TransactionCandidate candidate, IngestionRecord record) {
-        if (record.getStatus() != IngestionRecordStatus.IMPORTED) {
-            throw new IllegalArgumentException("Posted transaction candidate requires an imported ingestion record");
-        }
-        if (candidate.getFinancialTransaction() == null) {
-            throw new IllegalArgumentException("Posted transaction candidate is missing its financial transaction");
-        }
-        if (
-            record.getFinancialTransaction() == null ||
-            !Objects.equals(candidate.getFinancialTransaction().getId(), record.getFinancialTransaction().getId())
-        ) {
-            throw new IllegalArgumentException("Posted transaction candidate financial transaction must match ingestion record");
+            validateUnpostedCandidateMatchesPreImportRecord(candidate, persistedRecord);
         }
     }
 
     private void validateUnpostedCandidateMatchesPreImportRecord(TransactionCandidate candidate, IngestionRecord record) {
         if (record.getStatus() == IngestionRecordStatus.IMPORTED) {
-            throw new IllegalArgumentException("Imported ingestion record requires a posted transaction candidate");
+            throw new IllegalArgumentException("Imported ingestion record cannot retain a transaction candidate");
         }
         if (record.getStatus() != IngestionRecordStatus.VALID) {
             throw new IllegalArgumentException("Transaction candidate is linked to a non-valid ingestion record");
-        }
-        if (candidate.getFinancialTransaction() != null) {
-            throw new IllegalArgumentException("Unposted transaction candidate cannot be linked to a financial transaction");
         }
     }
 
@@ -381,13 +390,30 @@ public class CsvIngestionConfirmImportService {
         response.setTransactionIngestionId(ingestion.getId());
         response.setStatus(ingestion.getStatus());
         response.setCreatedNow(createdNow);
-        response.setAlreadyImported(count(records, IngestionRecordStatus.IMPORTED) - createdNow);
+        response.setAlreadyImported(
+            count(records, IngestionRecordStatus.IMPORTED) + count(records, IngestionRecordStatus.DELETED_AFTER_IMPORT) - createdNow
+        );
         response.setSkipped(count(records, IngestionRecordStatus.DISABLED) + count(records, IngestionRecordStatus.SKIPPED_DUPLICATE));
         response.setRejected(count(records, IngestionRecordStatus.REJECTED));
         response.setFailed(count(records, IngestionRecordStatus.FAILED));
         response.setCounts(counts);
         Map<Long, TransactionCandidate> candidatesByRecordId = currentUserCandidateByRecordId(ingestion);
-        response.setRows(records.stream().map(record -> toRowDto(record, candidatesByRecordId.get(record.getId()))).toList());
+        Map<Long, FinancialTransaction> financialTransactionsById = financialTransactionRepository
+            .findAllWithEagerRelationshipsByTransactionIngestionId(ingestion.getId())
+            .stream()
+            .collect(java.util.stream.Collectors.toMap(FinancialTransaction::getId, financialTransaction -> financialTransaction));
+        response.setRows(
+            records
+                .stream()
+                .map(record ->
+                    toRowDto(
+                        record,
+                        candidatesByRecordId.get(record.getId()),
+                        financialTransactionsById.get(financialTransactionId(record))
+                    )
+                )
+                .toList()
+        );
         return response;
     }
 
@@ -408,28 +434,72 @@ public class CsvIngestionConfirmImportService {
         return (int) records.stream().filter(record -> record.getStatus() == status).count();
     }
 
-    private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record, TransactionCandidate candidate) {
+    private void deletePrePostCandidates(List<TransactionCandidate> candidates) {
+        if (candidates.isEmpty()) {
+            return;
+        }
+        // Clear explicit candidate-tag provenance first. Flushing before deleting candidates preserves FK ordering and
+        // makes a cleanup failure roll back every FinancialTransaction, record and parent transition atomically.
+        candidates.forEach(candidate -> candidate.setTagAssociations(Set.of()));
+        transactionCandidateRepository.flush();
+        transactionCandidateRepository.deleteAll(candidates);
+        transactionCandidateRepository.flush();
+    }
+
+    private CsvIngestionWorkflowRecordDTO toRowDto(
+        IngestionRecord record,
+        TransactionCandidate candidate,
+        FinancialTransaction financialTransaction
+    ) {
         JsonNode rawData = rawData(record);
         JsonNode normalized = rawData.path("normalized");
         CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());
-        dto.setFinancialTransactionId(record.getFinancialTransaction() == null ? null : record.getFinancialTransaction().getId());
-        dto.setTransactionDate(optionalLocalDate(normalized, "transactionDate"));
-        dto.setPostingDate(optionalLocalDate(normalized, "postingDate"));
-        dto.setDescription(optionalText(normalized, "description"));
-        dto.setSignedAmount(optionalText(normalized, "signedAmount"));
-        dto.setAmount(optionalText(normalized, "amount"));
-        dto.setFlow(optionalFlow(normalized, "flow"));
-        dto.setCurrency(optionalCurrency(normalized, "currency"));
-        dto.setExternalReference(optionalText(normalized, "externalReference"));
-        dto.setNotes(optionalText(normalized, "notes"));
+        dto.setFinancialTransactionId(financialTransactionId(record));
+        if (financialTransaction != null) {
+            dto.setFinancialTransaction(financialTransactionMapper.toDto(financialTransaction));
+            dto.setTransactionDate(financialTransaction.getTransactionDate());
+            dto.setPostingDate(financialTransaction.getPostingDate());
+            dto.setDescription(financialTransaction.getDescription());
+            dto.setSignedAmount(signedAmount(financialTransaction));
+            dto.setAmount(financialTransaction.getAmount() == null ? null : financialTransaction.getAmount().toPlainString());
+            dto.setFlow(financialTransaction.getFlow());
+            dto.setCurrency(financialTransaction.getAccount() == null ? null : financialTransaction.getAccount().getCurrency());
+            dto.setExternalReference(financialTransaction.getExternalReference());
+            dto.setNotes(financialTransaction.getNotes());
+        } else {
+            dto.setTransactionDate(optionalLocalDate(normalized, "transactionDate"));
+            dto.setPostingDate(optionalLocalDate(normalized, "postingDate"));
+            dto.setDescription(optionalText(normalized, "description"));
+            dto.setSignedAmount(optionalText(normalized, "signedAmount"));
+            dto.setAmount(optionalText(normalized, "amount"));
+            dto.setFlow(optionalFlow(normalized, "flow"));
+            dto.setCurrency(optionalCurrency(normalized, "currency"));
+            dto.setExternalReference(optionalText(normalized, "externalReference"));
+            dto.setNotes(optionalText(normalized, "notes"));
+        }
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
         dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(rawData));
         dto.setCandidate(transactionCandidateWorkflowSummaryMapper.toDto(candidate));
         return dto;
+    }
+
+    private Long financialTransactionId(IngestionRecord record) {
+        return record.getFinancialTransaction() == null ? null : record.getFinancialTransaction().getId();
+    }
+
+    private String signedAmount(FinancialTransaction financialTransaction) {
+        if (financialTransaction.getAmount() == null || financialTransaction.getFlow() == null) {
+            return null;
+        }
+        return (
+            financialTransaction.getFlow() == TransactionFlow.OUT
+                ? financialTransaction.getAmount().negate()
+                : financialTransaction.getAmount()
+        ).toPlainString();
     }
 
     private JsonNode rawData(IngestionRecord record) {

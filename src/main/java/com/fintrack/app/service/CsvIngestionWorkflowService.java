@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
@@ -31,6 +32,7 @@ import com.fintrack.app.service.dto.CsvIngestionFileMetadataDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowCountsDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowRecordDTO;
 import com.fintrack.app.service.dto.CsvIngestionWorkflowResponseDTO;
+import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateWorkflowSummaryMapper;
 import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationResult;
 import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationService;
@@ -70,6 +72,7 @@ public class CsvIngestionWorkflowService {
     private final CsvIngestionReadinessService csvIngestionReadinessService;
     private final DescriptionNormalizationRuleEvaluationService descriptionNormalizationRuleEvaluationService;
     private final TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper;
+    private final FinancialTransactionMapper financialTransactionMapper;
 
     public CsvIngestionWorkflowService(
         FinancialAccountRepository financialAccountRepository,
@@ -83,7 +86,8 @@ public class CsvIngestionWorkflowService {
         ObjectMapper objectMapper,
         CsvIngestionReadinessService csvIngestionReadinessService,
         DescriptionNormalizationRuleEvaluationService descriptionNormalizationRuleEvaluationService,
-        TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper
+        TransactionCandidateWorkflowSummaryMapper transactionCandidateWorkflowSummaryMapper,
+        FinancialTransactionMapper financialTransactionMapper
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
@@ -97,6 +101,7 @@ public class CsvIngestionWorkflowService {
         this.csvIngestionReadinessService = csvIngestionReadinessService;
         this.descriptionNormalizationRuleEvaluationService = descriptionNormalizationRuleEvaluationService;
         this.transactionCandidateWorkflowSummaryMapper = transactionCandidateWorkflowSummaryMapper;
+        this.financialTransactionMapper = financialTransactionMapper;
     }
 
     public CsvIngestionWorkflowResponseDTO createWorkflow(Long accountId, MultipartFile file) {
@@ -206,6 +211,10 @@ public class CsvIngestionWorkflowService {
             .stream()
             .filter(candidate -> candidate.getIngestionRecord() != null && candidate.getIngestionRecord().getId() != null)
             .collect(Collectors.toMap(candidate -> candidate.getIngestionRecord().getId(), Function.identity(), (first, second) -> first));
+        Map<Long, FinancialTransaction> financialTransactionsById = financialTransactionRepository
+            .findAllWithEagerRelationshipsByTransactionIngestionId(transactionIngestionId)
+            .stream()
+            .collect(Collectors.toMap(FinancialTransaction::getId, Function.identity()));
 
         CsvIngestionWorkflowResponseDTO response = new CsvIngestionWorkflowResponseDTO();
         response.setTransactionIngestionId(transactionIngestion.getId());
@@ -215,7 +224,18 @@ public class CsvIngestionWorkflowService {
         response.setCounts(csvIngestionReadinessService.snapshot(records).counts());
         response.setWarnings(List.of());
         response.setFileMetadata(fileMetadata(fileIngestion));
-        response.setRows(records.stream().map(record -> toRowDto(record, candidatesByRecordId.get(record.getId()))).toList());
+        response.setRows(
+            records
+                .stream()
+                .map(record ->
+                    toRowDto(
+                        record,
+                        candidatesByRecordId.get(record.getId()),
+                        financialTransactionsById.get(financialTransactionId(record))
+                    )
+                )
+                .toList()
+        );
         return response;
     }
 
@@ -376,32 +396,68 @@ public class CsvIngestionWorkflowService {
     }
 
     private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record) {
-        return toRowDto(record, (TransactionCandidate) null);
+        return toRowDto(record, null, null);
     }
 
     private CsvIngestionWorkflowRecordDTO toRowDto(IngestionRecord record, TransactionCandidate candidate) {
+        return toRowDto(record, candidate, null);
+    }
+
+    private CsvIngestionWorkflowRecordDTO toRowDto(
+        IngestionRecord record,
+        TransactionCandidate candidate,
+        FinancialTransaction financialTransaction
+    ) {
         JsonNode root = rawDataNode(record);
         JsonNode normalized = root.path("normalized");
         CsvIngestionWorkflowRecordDTO dto = new CsvIngestionWorkflowRecordDTO();
         dto.setIngestionRecordId(record.getId());
         dto.setRecordIndex(record.getRecordIndex());
         dto.setStatus(record.getStatus());
-        dto.setFinancialTransactionId(record.getFinancialTransaction() == null ? null : record.getFinancialTransaction().getId());
-        dto.setTransactionDate(parseLocalDate(normalized, "transactionDate"));
-        dto.setPostingDate(parseLocalDate(normalized, "postingDate"));
-        dto.setDescription(textOrNull(normalized, "description"));
-        dto.setSignedAmount(textOrNull(normalized, "signedAmount"));
-        dto.setAmount(textOrNull(normalized, "amount"));
-        dto.setFlow(parseFlow(normalized));
-        dto.setCurrency(parseCurrency(normalized));
-        dto.setExternalReference(textOrNull(normalized, "externalReference"));
-        dto.setNotes(textOrNull(normalized, "notes"));
+        dto.setFinancialTransactionId(financialTransactionId(record));
+        if (financialTransaction != null) {
+            dto.setFinancialTransaction(financialTransactionMapper.toDto(financialTransaction));
+            dto.setTransactionDate(financialTransaction.getTransactionDate());
+            dto.setPostingDate(financialTransaction.getPostingDate());
+            dto.setDescription(financialTransaction.getDescription());
+            dto.setSignedAmount(signedAmount(financialTransaction));
+            dto.setAmount(financialTransaction.getAmount() == null ? null : financialTransaction.getAmount().toPlainString());
+            dto.setFlow(financialTransaction.getFlow());
+            dto.setCurrency(financialTransaction.getAccount() == null ? null : financialTransaction.getAccount().getCurrency());
+            dto.setExternalReference(financialTransaction.getExternalReference());
+            dto.setNotes(financialTransaction.getNotes());
+        } else {
+            dto.setTransactionDate(parseLocalDate(normalized, "transactionDate"));
+            dto.setPostingDate(parseLocalDate(normalized, "postingDate"));
+            dto.setDescription(textOrNull(normalized, "description"));
+            dto.setSignedAmount(textOrNull(normalized, "signedAmount"));
+            dto.setAmount(textOrNull(normalized, "amount"));
+            dto.setFlow(parseFlow(normalized));
+            dto.setCurrency(parseCurrency(normalized));
+            dto.setExternalReference(textOrNull(normalized, "externalReference"));
+            dto.setNotes(textOrNull(normalized, "notes"));
+        }
         dto.setErrorCode(record.getErrorCode());
         dto.setErrorMessage(record.getErrorMessage());
         dto.setDescriptionReview(CsvIngestionDescriptionReviewDTO.fromRawData(root));
         dto.setCandidate(transactionCandidateWorkflowSummaryMapper.toDto(candidate));
         dto.setWarnings(messages(root.path("warnings")));
         return dto;
+    }
+
+    private Long financialTransactionId(IngestionRecord record) {
+        return record.getFinancialTransaction() == null ? null : record.getFinancialTransaction().getId();
+    }
+
+    private String signedAmount(FinancialTransaction financialTransaction) {
+        if (financialTransaction.getAmount() == null || financialTransaction.getFlow() == null) {
+            return null;
+        }
+        return (
+            financialTransaction.getFlow() == com.fintrack.app.domain.enumeration.TransactionFlow.OUT
+                ? financialTransaction.getAmount().negate()
+                : financialTransaction.getAmount()
+        ).toPlainString();
     }
 
     private JsonNode rawDataNode(IngestionRecord record) {

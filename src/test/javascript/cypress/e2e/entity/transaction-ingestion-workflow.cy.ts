@@ -311,6 +311,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     let secondOutCandidateId: number;
     let inCandidateId: number;
     let outRecordId: number;
+    let outFinancialTransactionId: number;
     cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
       expect(response?.statusCode).to.equal(200);
       const rows = response?.body.rows ?? [];
@@ -520,6 +521,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
         const secondOutTransaction = transactions.find(transaction => transaction.description === secondOutDescription);
         const inTransaction = transactions.find(transaction => transaction.description === inDescription);
 
+        expect(outTransaction?.id).to.be.a('number');
         expect(outTransaction?.flow).to.equal('OUT');
         expect(outTransaction?.category?.id).to.equal(expenseCategory?.id);
         expect(outTransaction?.tags?.map(transactionTag => transactionTag.id)).to.include(tag?.id);
@@ -529,6 +531,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
         expect(inTransaction?.flow).to.equal('IN');
         expect(inTransaction?.category?.id).to.equal(incomeCategory?.id);
         expect(inTransaction?.tags ?? []).to.have.length(0);
+        outFinancialTransactionId = outTransaction.id;
       });
 
       cy.authenticatedRequest({
@@ -545,6 +548,33 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
           expect(rawData.review ?? {}).not.to.have.property('category');
           expect(rawData.review ?? {}).not.to.have.property('tags');
         });
+      });
+
+      cy.then(() => {
+        cy.intercept('DELETE', `/api/financial-transactions/${outFinancialTransactionId}`).as('fileImportDeleteRequest');
+        cy.visit(`/financial-transaction/${outFinancialTransactionId}/delete`);
+        cy.get('[data-cy="entityConfirmDeleteButton"]').should('be.visible').click();
+        cy.wait('@fileImportDeleteRequest').its('response.statusCode').should('eq', 204);
+        cy.contains(/translation-not-found\[error\.invalid\]/i).should('not.exist');
+        cy.authenticatedRequest({ method: 'GET', url: `/api/financial-transactions/${outFinancialTransactionId}`, failOnStatusCode: false })
+          .its('status')
+          .should('eq', 404);
+        cy.authenticatedRequest({ method: 'GET', url: `/api/transaction-ingestions/${transactionIngestionId}/workflow` }).then(
+          ({ body }) => {
+            expect(body.status).to.equal('COMPLETED');
+            const deletedRow = body.rows.find(row => row.ingestionRecordId === outRecordId);
+            expect(deletedRow.status).to.equal('DELETED_AFTER_IMPORT');
+            expect(deletedRow.financialTransactionId).to.equal(null);
+            expect(deletedRow.candidate).to.equal(null);
+          },
+        );
+        cy.authenticatedRequest({ method: 'POST', url: `/api/transaction-ingestions/${transactionIngestionId}/confirm` }).then(
+          ({ body }) => {
+            expect(body.status).to.equal('COMPLETED');
+            expect(body.createdNow).to.equal(0);
+            expect(body.rows.find(row => row.ingestionRecordId === outRecordId).status).to.equal('DELETED_AFTER_IMPORT');
+          },
+        );
       });
     });
   });

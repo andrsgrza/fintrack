@@ -4,13 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
@@ -246,9 +250,9 @@ class FinancialTransactionServiceTest {
         assertThat(financialTransactionService.delete(30L)).isTrue();
         verify(ingestionRecordRepository).markFinancialTransactionDeleted(
             eq(30L),
-            any(),
-            eq("FINANCIAL_TRANSACTION_DELETED"),
-            eq("Financial transaction was deleted manually.")
+            eq(IngestionRecordStatus.DELETED_AFTER_IMPORT),
+            isNull(),
+            isNull()
         );
         verify(internalTransferRepository).deleteByTransactionIdInEitherRole(30L);
         verify(financialTransactionRepository).deleteTagLinksByFinancialTransactionId(30L);

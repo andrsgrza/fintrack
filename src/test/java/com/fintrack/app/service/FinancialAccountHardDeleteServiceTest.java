@@ -25,6 +25,7 @@ import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
+import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.repository.BudgetRepository;
@@ -149,7 +150,8 @@ class FinancialAccountHardDeleteServiceTest {
 
     @Test
     void hardDeleteAbortsBeforeCleanupWhenPreflightFindsABlocker() {
-        TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.POSTED);
+        TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.READY_TO_POST);
+        candidate.setTransactionIngestion(ingestion(account));
         when(financialAccountRepository.findOneForHardDeleteByIdAndUserLogin(ACCOUNT_ID, USER_LOGIN)).thenReturn(Optional.of(account));
         when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
 
@@ -211,8 +213,10 @@ class FinancialAccountHardDeleteServiceTest {
     }
 
     @Test
-    void previewCountsDirectLegacyFinancialTransactionWithoutBlocking() {
-        when(financialTransactionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(transaction(account)));
+    void previewAllowsNewManualFinalTransactionWithoutCandidate() {
+        FinancialTransaction transaction = transaction(account);
+        transaction.setOrigin(TransactionOrigin.MANUAL);
+        when(financialTransactionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(transaction));
 
         FinancialAccountDeletionPreviewDTO preview = preview();
 
@@ -231,46 +235,6 @@ class FinancialAccountHardDeleteServiceTest {
         assertThat(preview.getCanHardDelete()).isTrue();
         assertThat(preview.getCounts().getManualCandidates()).isEqualTo(1L);
         assertThat(preview.getBlockers()).isEmpty();
-    }
-
-    @Test
-    void previewAllowsPostedManualCandidateWithFinancialTransactionFromSameAccount() {
-        TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.POSTED);
-        candidate.setFinancialTransaction(transaction(account));
-        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
-
-        FinancialAccountDeletionPreviewDTO preview = preview();
-
-        assertThat(preview.getCanHardDelete()).isTrue();
-        assertThat(preview.getCounts().getManualPostedCandidates()).isEqualTo(1L);
-        assertThat(preview.getBlockers()).isEmpty();
-    }
-
-    @Test
-    void previewBlocksPostedManualCandidateWithoutFinancialTransaction() {
-        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(
-            List.of(manualCandidate(TransactionCandidateStatus.POSTED))
-        );
-
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE);
-    }
-
-    @Test
-    void previewBlocksManualCandidateWithUnexpectedFinancialTransaction() {
-        TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.READY_TO_POST);
-        candidate.setFinancialTransaction(transaction(account));
-        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
-
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE);
-    }
-
-    @Test
-    void previewBlocksPostedManualCandidateWhoseFinancialTransactionBelongsToAnotherAccount() {
-        TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.POSTED);
-        candidate.setFinancialTransaction(transaction(account(20L, account.getUser())));
-        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
-
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE);
     }
 
     @Test
@@ -296,15 +260,40 @@ class FinancialAccountHardDeleteServiceTest {
     }
 
     @Test
-    void previewAllowsPostedFileImportCandidateWithConsistentGraph() {
+    void previewAllowsCompletedFileImportRecordWithFinalTransactionAndNoCandidate() {
         TransactionIngestion ingestion = fileIngestion(account);
         FinancialTransaction transaction = transaction(account);
+        transaction.setOrigin(TransactionOrigin.FILE_IMPORT);
         transaction.setTransactionIngestion(ingestion);
         IngestionRecord record = record(ingestion, IngestionRecordStatus.IMPORTED, transaction);
-        TransactionCandidate candidate = fileCandidate(ingestion, record, TransactionCandidateStatus.POSTED, transaction);
-        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
+        when(financialTransactionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(transaction));
+        when(transactionIngestionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(ingestion));
+        when(ingestionRecordRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(record));
 
-        assertThat(preview().getCanHardDelete()).isTrue();
+        FinancialAccountDeletionPreviewDTO preview = preview();
+
+        assertThat(preview.getCanHardDelete()).isTrue();
+        assertThat(preview.getCounts().getFinancialTransactions()).isEqualTo(1L);
+        assertThat(preview.getCounts().getTransactionIngestions()).isEqualTo(1L);
+        assertThat(preview.getCounts().getIngestionRecords()).isEqualTo(1L);
+        assertThat(preview.getCounts().getFileImportCandidates()).isZero();
+    }
+
+    @Test
+    void previewAllowsDeletedAfterImportRecordWithoutFinalTransactionOrCandidate() {
+        TransactionIngestion ingestion = fileIngestion(account);
+        IngestionRecord record = record(ingestion, IngestionRecordStatus.DELETED_AFTER_IMPORT, null);
+        when(transactionIngestionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(ingestion));
+        when(ingestionRecordRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(record));
+
+        FinancialAccountDeletionPreviewDTO preview = preview();
+
+        assertThat(preview.getCanHardDelete()).isTrue();
+        assertThat(preview.getCounts().getFinancialTransactions()).isZero();
+        assertThat(preview.getCounts().getTransactionIngestions()).isEqualTo(1L);
+        assertThat(preview.getCounts().getIngestionRecords()).isEqualTo(1L);
+        assertThat(preview.getCounts().getFileImportCandidates()).isZero();
+        assertThat(preview.getBlockers()).isEmpty();
     }
 
     @Test
@@ -323,19 +312,6 @@ class FinancialAccountHardDeleteServiceTest {
         IngestionRecord record = record(ingestion, IngestionRecordStatus.VALID, null);
         TransactionCandidate candidate = fileCandidate(ingestion, record, TransactionCandidateStatus.READY_TO_POST, null);
         candidate.setAccount(account);
-        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
-
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_INGESTION_GRAPH);
-    }
-
-    @Test
-    void previewBlocksPostedFileImportCandidateWithFinancialTransactionFromAnotherAccount() {
-        FinancialAccount otherAccount = account(20L, account.getUser());
-        TransactionIngestion ingestion = fileIngestion(account);
-        FinancialTransaction otherAccountTransaction = transaction(otherAccount);
-        otherAccountTransaction.setTransactionIngestion(ingestion);
-        IngestionRecord record = record(ingestion, IngestionRecordStatus.IMPORTED, otherAccountTransaction);
-        TransactionCandidate candidate = fileCandidate(ingestion, record, TransactionCandidateStatus.POSTED, otherAccountTransaction);
         when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
 
         assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_INGESTION_GRAPH);
@@ -502,7 +478,6 @@ class FinancialAccountHardDeleteServiceTest {
         candidate.setAccount(ingestion.getAccount());
         candidate.setTransactionIngestion(ingestion);
         candidate.setIngestionRecord(record);
-        candidate.setFinancialTransaction(transaction);
         return candidate;
     }
 }

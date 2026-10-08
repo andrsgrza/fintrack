@@ -33,9 +33,6 @@ public interface TransactionCandidateRepository
             "ingestionRecord.transactionIngestion",
             "ingestionRecord.transactionIngestion.account",
             "ingestionRecord.transactionIngestion.account.user",
-            "financialTransaction",
-            "financialTransaction.account",
-            "financialTransaction.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -58,9 +55,6 @@ public interface TransactionCandidateRepository
             "ingestionRecord.transactionIngestion",
             "ingestionRecord.transactionIngestion.account",
             "ingestionRecord.transactionIngestion.account.user",
-            "financialTransaction",
-            "financialTransaction.account",
-            "financialTransaction.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -86,9 +80,6 @@ public interface TransactionCandidateRepository
             "ingestionRecord.transactionIngestion",
             "ingestionRecord.transactionIngestion.account",
             "ingestionRecord.transactionIngestion.account.user",
-            "financialTransaction",
-            "financialTransaction.account",
-            "financialTransaction.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -137,9 +128,6 @@ public interface TransactionCandidateRepository
             "ingestionRecord.transactionIngestion",
             "ingestionRecord.transactionIngestion.account",
             "ingestionRecord.transactionIngestion.account.user",
-            "financialTransaction",
-            "financialTransaction.account",
-            "financialTransaction.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -164,9 +152,6 @@ public interface TransactionCandidateRepository
             "ingestionRecord.transactionIngestion",
             "ingestionRecord.transactionIngestion.account",
             "ingestionRecord.transactionIngestion.account.user",
-            "financialTransaction",
-            "financialTransaction.account",
-            "financialTransaction.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -194,9 +179,6 @@ public interface TransactionCandidateRepository
             "ingestionRecord.transactionIngestion",
             "ingestionRecord.transactionIngestion.account",
             "ingestionRecord.transactionIngestion.account.user",
-            "financialTransaction",
-            "financialTransaction.account",
-            "financialTransaction.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -210,13 +192,23 @@ public interface TransactionCandidateRepository
         @Param("login") String login
     );
 
+    boolean existsByTransactionIngestionId(Long transactionIngestionId);
+
+    @Query(
+        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
+        "where transactionCandidate.transactionIngestion.id = :transactionIngestionId " +
+        "and (transactionCandidate.user is null or transactionCandidate.user.login <> :login)"
+    )
+    boolean existsByTransactionIngestionIdAndUserLoginNot(
+        @Param("transactionIngestionId") Long transactionIngestionId,
+        @Param("login") String login
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
     )
     Optional<TransactionCandidate> findOneByIdAndUserLoginForPosting(@Param("id") Long id, @Param("login") String login);
-
-    Optional<TransactionCandidate> findFirstByFinancialTransactionId(Long financialTransactionId);
 
     boolean existsByCategoryId(Long categoryId);
 
@@ -235,7 +227,7 @@ public interface TransactionCandidateRepository
 
     /**
      * Loads every candidate that could be part of an account deletion aggregate, including malformed links that
-     * point at the account through an ingestion or posted transaction instead of through candidate.account.
+     * point at the account through an ingestion instead of through candidate.account.
      */
     @EntityGraph(
         attributePaths = {
@@ -245,17 +237,11 @@ public interface TransactionCandidateRepository
             "ingestionRecord",
             "ingestionRecord.transactionIngestion",
             "ingestionRecord.transactionIngestion.account",
-            "ingestionRecord.financialTransaction",
-            "ingestionRecord.financialTransaction.account",
-            "financialTransaction",
-            "financialTransaction.account",
-            "financialTransaction.transactionIngestion",
         }
     )
     @Query(
         "select distinct transactionCandidate from TransactionCandidate transactionCandidate " +
         "where transactionCandidate.account.id = :accountId " +
-        "or transactionCandidate.financialTransaction.account.id = :accountId " +
         "or transactionCandidate.transactionIngestion.account.id = :accountId"
     )
     List<TransactionCandidate> findAllForAccountDeletionPreview(@Param("accountId") Long accountId);

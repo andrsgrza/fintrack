@@ -43,6 +43,7 @@ import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
+import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
 import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationService;
@@ -68,6 +69,9 @@ class TransactionCandidateServiceTest {
 
     @Mock
     private TransactionCandidateMapper transactionCandidateMapper;
+
+    @Mock
+    private FinancialTransactionMapper financialTransactionMapper;
 
     @Mock
     private CurrentUserService currentUserService;
@@ -103,6 +107,7 @@ class TransactionCandidateServiceTest {
             transactionCandidateRepository,
             transactionCandidateMapper,
             new TransactionCandidateFinancialTransactionMapper(),
+            financialTransactionMapper,
             currentUserService,
             financialAccountRepository,
             financialTransactionRepository,
@@ -117,6 +122,16 @@ class TransactionCandidateServiceTest {
         user.setId(1L);
         user.setLogin("user");
         lenient().when(currentUserService.getCurrentUserLogin()).thenReturn("user");
+        lenient()
+            .when(financialTransactionMapper.toDto(any(FinancialTransaction.class)))
+            .thenAnswer(invocation -> {
+                FinancialTransaction transaction = invocation.getArgument(0);
+                FinancialTransactionDTO dto = new FinancialTransactionDTO();
+                dto.setId(transaction.getId());
+                dto.setDescription(transaction.getDescription());
+                dto.setOrigin(transaction.getOrigin());
+                return dto;
+            });
     }
 
     @Test
@@ -317,22 +332,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void updateManualDraftRejectsFinancialTransactionLink() throws Exception {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setId(1L);
-        dto.setFinancialTransaction(refFinancialTransaction(1L));
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() ->
-            transactionCandidateService.updateManualDraft(1L, dto, new ObjectMapper().readTree("{\"financialTransaction\":{\"id\":1}}"))
-        )
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Financial transaction link is server-controlled");
-    }
-
-    @Test
     void updateManualDraftRejectsSignChangeThatMakesCategoryIncompatibleWithDerivedFlow() throws Exception {
         Category expenseCategory = category(CategoryType.EXPENSE, user);
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST)
@@ -421,7 +420,7 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void validManualDraftPostsFinancialTransactionAndLinksCandidate() {
+    void validManualDraftPostsFinancialTransactionAndDeletesPrePostCandidate() {
         Category category = category(CategoryType.EXPENSE, user);
         Tag tag = tag(user);
         FinancialAccount account = account(user);
@@ -446,12 +445,7 @@ class TransactionCandidateServiceTest {
             financialTransaction.setId(99L);
             return financialTransaction;
         });
-        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
-            toDto((TransactionCandidate) invocation.getArgument(0))
-        );
-
-        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
+        FinancialTransactionDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
 
         ArgumentCaptor<FinancialTransaction> captor = ArgumentCaptor.forClass(FinancialTransaction.class);
         verify(financialTransactionRepository).save(captor.capture());
@@ -467,29 +461,12 @@ class TransactionCandidateServiceTest {
         assertThat(posted.getNotes()).isEqualTo("note");
         assertThat(posted.getCategory()).isSameAs(category);
         assertThat(posted.getTags()).containsExactly(tag);
-        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
-        assertThat(result.getPostedAt()).isNotNull();
-        assertThat(result.getFinancialTransaction().getId()).isEqualTo(99L);
+        assertThat(result.getId()).isEqualTo(99L);
+        assertThat(existing.getTagAssociations()).isEmpty();
+        verify(transactionCandidateRepository).saveAndFlush(existing);
+        verify(transactionCandidateRepository).delete(existing);
+        verify(transactionCandidateRepository).flush();
         verifyNoInteractions(transactionRuleEvaluationService);
-    }
-
-    @Test
-    void postingManualDraftTwiceReturnsExistingLinkWithoutCreatingDuplicateTransaction() {
-        FinancialTransaction financialTransaction = new FinancialTransaction().id(99L).account(account(user));
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.POSTED).financialTransaction(financialTransaction);
-
-        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
-        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
-            toDto((TransactionCandidate) invocation.getArgument(0))
-        );
-
-        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
-
-        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
-        assertThat(result.getFinancialTransaction().getId()).isEqualTo(99L);
-        verify(transactionCandidateRepository).save(existing);
-        verifyNoInteractions(financialTransactionRepository);
     }
 
     @Test
@@ -585,15 +562,10 @@ class TransactionCandidateServiceTest {
             financialTransaction.setId(99L);
             return financialTransaction;
         });
-        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
-            toDto((TransactionCandidate) invocation.getArgument(0))
-        );
+        FinancialTransactionDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
 
-        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
-
-        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
-        assertThat(result.getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.VALID);
+        assertThat(result.getId()).isEqualTo(99L);
+        verify(transactionCandidateRepository).delete(existing);
         verifyNoInteractions(transactionRuleEvaluationService);
     }
 
@@ -868,48 +840,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void directFinancialTransactionLinkRejectedOnCreate() {
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
-        dto.setFinancialTransaction(refFinancialTransaction(1L));
-
-        assertThatThrownBy(() -> transactionCandidateService.save(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Financial transaction link is server-controlled");
-    }
-
-    @Test
-    void directFinancialTransactionLinkRejectedOnUpdate() {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
-        dto.setId(1L);
-        dto.setCreatedAt(existing.getCreatedAt());
-        dto.setUpdatedAt(existing.getUpdatedAt());
-        dto.setFinancialTransaction(refFinancialTransaction(1L));
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> transactionCandidateService.update(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Financial transaction link is server-controlled");
-    }
-
-    @Test
-    void directFinancialTransactionLinkRejectedOnPatch() throws Exception {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setId(1L);
-        dto.setFinancialTransaction(refFinancialTransaction(1L));
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() ->
-            transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"financialTransaction\":{\"id\":1}}"))
-        )
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Financial transaction link is server-controlled");
-    }
-
-    @Test
     void createRejectsServerOwnedFields() {
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
         dto.setCreatedAt(Instant.parse("2026-01-01T00:00:00Z"));
@@ -1130,11 +1060,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void updateRejectsPostedAtChange() {
-        assertTimestampUpdateRejected("Posted at cannot be changed", dto -> dto.setPostedAt(Instant.parse("2026-01-02T00:00:00Z")));
-    }
-
-    @Test
     void updateRejectsCancelledAtChange() {
         assertTimestampUpdateRejected("Cancelled at cannot be changed", dto -> dto.setCancelledAt(Instant.parse("2026-01-02T00:00:00Z")));
     }
@@ -1176,21 +1101,20 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void failedToPostedBlocked() {
+    void failedToReadyToPostBlocked() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.FAILED);
         existing.setFailureReason("failed");
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
         dto.setId(1L);
         dto.setCreatedAt(existing.getCreatedAt());
         dto.setUpdatedAt(existing.getUpdatedAt());
-        TransactionCandidate replacement = existingCandidate(TransactionCandidateStatus.POSTED);
+        dto.setStatus(TransactionCandidateStatus.READY_TO_POST);
 
         when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-        when(transactionCandidateMapper.toEntity(dto)).thenReturn(replacement);
 
         assertThatThrownBy(() -> transactionCandidateService.update(dto))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Failed candidates must be reviewed before posting");
+            .hasMessageContaining("Status is controlled by command endpoints");
     }
 
     @Test
@@ -1201,19 +1125,6 @@ class TransactionCandidateServiceTest {
         assertThatThrownBy(() -> transactionCandidateService.save(dto))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Status is controlled by command endpoints");
-    }
-
-    @Test
-    void postedCandidateCannotBeMutatedAsDraft() {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.POSTED);
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
-        dto.setId(1L);
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> transactionCandidateService.update(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Final transaction candidates cannot be changed");
     }
 
     @Test
@@ -1241,17 +1152,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void deleteRejectsPostedCandidate() {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.POSTED);
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Posted or cancelled transaction candidates cannot be deleted");
-    }
-
-    @Test
     void deleteRejectsCancelledCandidate() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.CANCELLED);
 
@@ -1259,7 +1159,7 @@ class TransactionCandidateServiceTest {
 
         assertThatThrownBy(() -> transactionCandidateService.delete(1L))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Posted or cancelled transaction candidates cannot be deleted");
+            .hasMessageContaining("Cancelled transaction candidates cannot be deleted");
     }
 
     @Test
@@ -1290,19 +1190,6 @@ class TransactionCandidateServiceTest {
     void deleteRejectsWorkflowLinkedCandidate() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
         existing.setIngestionRecord(ingestionRecord(user));
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Workflow-linked candidates cannot be deleted through generic candidate CRUD");
-    }
-
-    @Test
-    void deleteRejectsFinancialTransactionLinkedCandidate() {
-        FinancialTransaction financialTransaction = new FinancialTransaction().id(99L).account(account(user));
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        existing.setFinancialTransaction(financialTransaction);
 
         when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
 
@@ -1345,16 +1232,10 @@ class TransactionCandidateServiceTest {
             financialTransaction.setId(99L);
             return financialTransaction;
         });
-        when(transactionCandidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(transactionCandidateMapper.toDto(any(TransactionCandidate.class))).thenAnswer(invocation ->
-            toDto((TransactionCandidate) invocation.getArgument(0))
-        );
+        FinancialTransactionDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
 
-        TransactionCandidateDTO result = transactionCandidateService.postManualDraft(1L).orElseThrow();
-
-        assertThat(result.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
-        assertThat(result.getClassificationReviewStatus()).isEqualTo(classificationReviewStatus);
-        assertThat(result.getFinancialTransaction().getId()).isEqualTo(99L);
+        assertThat(result.getId()).isEqualTo(99L);
+        verify(transactionCandidateRepository).delete(existing);
         verifyNoInteractions(transactionRuleEvaluationService);
     }
 
@@ -1371,12 +1252,8 @@ class TransactionCandidateServiceTest {
         dto.setFlow(entity.getFlow());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
-        dto.setPostedAt(entity.getPostedAt());
         dto.setCancelledAt(entity.getCancelledAt());
         dto.setFailedAt(entity.getFailedAt());
-        if (entity.getFinancialTransaction() != null) {
-            dto.setFinancialTransaction(refFinancialTransaction(entity.getFinancialTransaction().getId()));
-        }
         return dto;
     }
 

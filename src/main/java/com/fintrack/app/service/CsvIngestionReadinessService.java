@@ -21,7 +21,7 @@ public class CsvIngestionReadinessService {
         int rejected = 0;
         int valid = 0;
         for (IngestionRecord record : records) {
-            if (record.getStatus() == IngestionRecordStatus.IMPORTED) {
+            if (record.getStatus() == IngestionRecordStatus.IMPORTED || record.getStatus() == IngestionRecordStatus.DELETED_AFTER_IMPORT) {
                 imported++;
             } else if (
                 record.getStatus() == IngestionRecordStatus.DISABLED || record.getStatus() == IngestionRecordStatus.SKIPPED_DUPLICATE

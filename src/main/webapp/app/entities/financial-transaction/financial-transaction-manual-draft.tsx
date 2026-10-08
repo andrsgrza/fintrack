@@ -48,7 +48,7 @@ import { TransactionClassification } from './transaction-presentation';
 
 const AUTOSAVE_DELAY_MS = 700;
 
-type SaveState = 'UNSAVED' | 'CREATING' | 'SAVING' | 'SAVED' | 'FAILED' | 'POSTING' | 'POSTED' | 'CANCELLED';
+type SaveState = 'UNSAVED' | 'CREATING' | 'SAVING' | 'SAVED' | 'FAILED' | 'POSTING' | 'CANCELLED';
 type RuleActionState = 'IDLE' | 'PREVIEWING' | 'APPLYING' | 'FAILED';
 type RulePreviewState = 'UNAVAILABLE' | 'STALE' | 'UPDATING' | 'UPDATED' | 'FAILED';
 
@@ -128,7 +128,6 @@ const buildRuleInputSignature = (draft: ManualDraftFormState) =>
 const isRulePreviewCandidateEligible = (candidate: ITransactionCandidate | null, draft: ManualDraftFormState) =>
   !!candidate?.id &&
   candidate.source === 'MANUAL' &&
-  candidate.status !== 'POSTED' &&
   candidate.status !== 'CANCELLED' &&
   candidate.status !== 'FAILED' &&
   !!draft.account &&
@@ -685,53 +684,54 @@ const ManualTransactionMovementSection = ({
     dataCy="manualDraftTransactionSection"
     className="mb-3"
   >
-    <Row>
-      <Col md="6">
-        <FormGroup>
-          <Label for="financial-transaction-transactionDate">
-            <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>
-          </Label>
-          <Input
-            id="financial-transaction-transactionDate"
-            name="transactionDate"
-            data-cy="transactionDate"
-            type="date"
-            value={draft.transactionDate}
-            onChange={onFieldChange('transactionDate')}
-            disabled={readOnly}
-          />
-        </FormGroup>
-      </Col>
-      <Col md="6">
-        <FormGroup>
-          <Label for="financial-transaction-postingDate">
-            <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting date</Translate>
-          </Label>
-          <FormGroup check className="mb-2">
-            <Input
-              id="financial-transaction-samePostingDate"
-              data-cy="samePostingDate"
-              type="checkbox"
-              checked={samePostingDate}
-              onChange={onSamePostingDateChange}
-              disabled={readOnly}
-            />
-            <Label check for="financial-transaction-samePostingDate">
-              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.samePostingDate">Use the same posting date</Translate>
-            </Label>
-          </FormGroup>
-          <Input
-            id="financial-transaction-postingDate"
-            name="postingDate"
-            data-cy="postingDate"
-            type="date"
-            value={draft.postingDate}
-            onChange={onFieldChange('postingDate')}
-            disabled={readOnly || samePostingDate}
-          />
-        </FormGroup>
-      </Col>
-    </Row>
+    <div className="manual-draft-date-grid mb-3" data-testid="manualDraftDateGrid">
+      <div className="manual-draft-date-header" data-testid="manualDraftTransactionDateHeader">
+        <Label className="mb-0" for="financial-transaction-transactionDate">
+          <Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>
+        </Label>
+      </div>
+      <div className="manual-draft-date-header manual-draft-posting-date-header" data-testid="manualDraftPostingDateHeader">
+        <Label className="mb-0" for="financial-transaction-postingDate">
+          <Translate contentKey="fintrackApp.financialTransaction.postingDate">Posting date</Translate>
+        </Label>
+      </div>
+      <div className="manual-draft-date-input">
+        <Input
+          id="financial-transaction-transactionDate"
+          name="transactionDate"
+          data-cy="transactionDate"
+          type="date"
+          value={draft.transactionDate}
+          onChange={onFieldChange('transactionDate')}
+          disabled={readOnly}
+        />
+      </div>
+      <div className="manual-draft-date-input">
+        <Input
+          id="financial-transaction-postingDate"
+          name="postingDate"
+          data-cy="postingDate"
+          type="date"
+          value={draft.postingDate}
+          onChange={onFieldChange('postingDate')}
+          disabled={readOnly || samePostingDate}
+        />
+      </div>
+      <FormGroup check className="manual-draft-same-posting-date d-flex align-items-center gap-1 mb-0">
+        <Input
+          className="mt-0"
+          id="financial-transaction-samePostingDate"
+          data-cy="samePostingDate"
+          type="checkbox"
+          checked={samePostingDate}
+          onChange={onSamePostingDateChange}
+          disabled={readOnly}
+        />
+        <Label check className="mb-0" for="financial-transaction-samePostingDate">
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.samePostingDate">Use the same posting date</Translate>
+        </Label>
+      </FormGroup>
+    </div>
     <FormGroup>
       <Label for="financial-transaction-description">
         <Translate contentKey="fintrackApp.financialTransaction.description">Description</Translate>
@@ -1028,8 +1028,7 @@ export const FinancialTransactionManualDraft = () => {
   const latestPreviewRequestIdRef = useRef(0);
   const samePostingDateRef = useRef(true);
 
-  const readOnly =
-    candidate?.status === 'POSTED' || candidate?.status === 'CANCELLED' || saveState === 'POSTED' || saveState === 'CANCELLED';
+  const readOnly = candidate?.status === 'CANCELLED' || saveState === 'CANCELLED';
   const effectiveClassificationReviewStatus = classificationReviewStatus ?? candidate?.classificationReviewStatus;
   const classificationBlockKey =
     candidate?.status === 'READY_TO_POST' ? postClassificationBlockKey(effectiveClassificationReviewStatus) : '';
@@ -1152,11 +1151,8 @@ export const FinancialTransactionManualDraft = () => {
         samePostingDateRef.current = shouldUseSamePostingDate;
         setSamePostingDate(shouldUseSamePostingDate);
         setOptionalDetailsOpen(!!loadedDraft.externalReference || !!loadedDraft.notes);
-        setSaveState(response.data.status === 'CANCELLED' ? 'CANCELLED' : response.data.status === 'POSTED' ? 'POSTED' : 'SAVED');
+        setSaveState(response.data.status === 'CANCELLED' ? 'CANCELLED' : 'SAVED');
         void runAutoPreviewForSavedDraft(response.data, loadedDraft);
-        if (response.data.status === 'POSTED' && response.data.financialTransaction?.id) {
-          navigate(`/financial-transaction/${response.data.financialTransaction.id}`, { replace: true });
-        }
       })
       .catch(() => {
         candidateIdRef.current = null;
@@ -1414,10 +1410,9 @@ export const FinancialTransactionManualDraft = () => {
     }
     try {
       const response = await postManualDraft(candidateIdRef.current);
-      setCandidate(response.data);
-      setSaveState('POSTED');
-      if (response.data.financialTransaction?.id) {
-        navigate(`/financial-transaction/${response.data.financialTransaction.id}`, { replace: true });
+      setSaveState('SAVED');
+      if (response.data.id) {
+        navigate(`/financial-transaction/${response.data.id}`, { replace: true });
       } else {
         navigate('/financial-transaction', { replace: true });
       }

@@ -2054,7 +2054,6 @@ class CategoryResourceIT {
             .currencySnapshot(CurrencyCode.MXN)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT)
-            .postedAt(status == TransactionCandidateStatus.POSTED ? DEFAULT_UPDATED_AT : null)
             .user(savedCategory.getUser())
             .account(account)
             .category(managedCategoryReference(savedCategory));
@@ -2230,12 +2229,6 @@ class CategoryResourceIT {
     @Transactional
     void deleteCategoryReferencedByFileImportCandidateRejectsAndLeavesCandidateUnchanged() throws Exception {
         assertDeleteCategoryReferencedByCandidateRejected(TransactionCandidateSource.FILE_IMPORT, TransactionCandidateStatus.READY_TO_POST);
-    }
-
-    @Test
-    @Transactional
-    void deleteCategoryReferencedByPostedCandidateRejectsAndLeavesCandidateUnchanged() throws Exception {
-        assertDeleteCategoryReferencedByCandidateRejected(TransactionCandidateSource.MANUAL, TransactionCandidateStatus.POSTED);
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.fintrack.app.web.rest;
 import static com.fintrack.app.web.rest.TestUtil.sameNumber;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -50,12 +51,19 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,6 +81,8 @@ class TransactionCandidateResourceIT {
     private static final String ENTITY_MANUAL_API_URL = ENTITY_API_URL + "/manual";
     private static final String ENTITY_MANUAL_DRAFTS_API_URL = ENTITY_API_URL + "/manual-drafts";
     private static final String CURRENT_MOCK_USER_LOGIN = "user";
+    private static final String MANUAL_POST_FAILURE_FUNCTION = "fail_manual_candidate_tag_cleanup";
+    private static final String MANUAL_POST_FAILURE_TRIGGER = "fail_manual_candidate_tag_cleanup_trigger";
 
     @Autowired
     private ObjectMapper om;
@@ -317,7 +327,7 @@ class TransactionCandidateResourceIT {
         restTransactionCandidateMockMvc
             .perform(post(ENTITY_API_URL_ID + "/post", candidate.getId()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("POSTED"));
+            .andExpect(jsonPath("$.origin").value("MANUAL"));
     }
 
     @Test
@@ -480,25 +490,35 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
-    void validManualDraftPostsFinancialTransactionAndLinksCandidate() throws Exception {
+    void validManualDraftPostsFinancialTransactionAndDeletesCandidateAndTagLinks() throws Exception {
         TransactionCandidate candidate = createReadyCandidate(currentUser());
+        Long candidateId = candidate.getId();
+        Long categoryId = candidate.getCategory().getId();
+        Set<Long> tagIds = candidate.getTags().stream().map(Tag::getId).collect(java.util.stream.Collectors.toSet());
 
         int transactionCountBefore = financialTransactionRepository.findAll().size();
 
-        restTransactionCandidateMockMvc
+        MvcResult result = restTransactionCandidateMockMvc
             .perform(post(ENTITY_API_URL_ID + "/post", candidate.getId()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("POSTED"))
-            .andExpect(jsonPath("$.postedAt").exists())
-            .andExpect(jsonPath("$.financialTransaction.id").exists());
+            .andExpect(jsonPath("$.id").exists())
+            .andExpect(jsonPath("$.origin").value("MANUAL"))
+            .andReturn();
+        Long postedTransactionId = om.readTree(result.getResponse().getContentAsByteArray()).path("id").asLong();
 
         em.flush();
         em.clear();
 
         assertThat(financialTransactionRepository.findAll()).hasSize(transactionCountBefore + 1);
-        TransactionCandidate postedCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
-        FinancialTransaction postedTransaction = postedCandidate.getFinancialTransaction();
-        assertThat(postedTransaction).isNotNull();
+        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        Number tagLinks = (Number) em
+            .createNativeQuery("select count(*) from rel_transaction_candidate__tags where transaction_candidate_id = :candidateId")
+            .setParameter("candidateId", candidateId)
+            .getSingleResult();
+        assertThat(tagLinks.longValue()).isZero();
+        assertThat(categoryRepository.findById(categoryId)).isPresent();
+        assertThat(tagRepository.findAllById(tagIds)).hasSize(tagIds.size());
+        FinancialTransaction postedTransaction = financialTransactionRepository.findById(postedTransactionId).orElseThrow();
         assertThat(postedTransaction.getOrigin()).isEqualTo(TransactionOrigin.MANUAL);
         assertThat(postedTransaction.getAccount().getId()).isEqualTo(candidate.getAccount().getId());
         assertThat(postedTransaction.getTransactionDate()).isEqualTo(candidate.getTransactionDate());
@@ -507,9 +527,7 @@ class TransactionCandidateResourceIT {
         assertThat(postedTransaction.getAmount()).isEqualByComparingTo(candidate.getAmount());
         assertThat(postedTransaction.getFlow()).isEqualTo(candidate.getFlow());
         assertThat(postedTransaction.getCategory().getId()).isEqualTo(candidate.getCategory().getId());
-        assertThat(postedTransaction.getTags())
-            .extracting(Tag::getId)
-            .containsExactlyInAnyOrderElementsOf(candidate.getTags().stream().map(Tag::getId).toList());
+        assertThat(postedTransaction.getTags()).extracting(Tag::getId).containsExactlyInAnyOrderElementsOf(tagIds);
     }
 
     @Test
@@ -548,15 +566,135 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
-    void postingManualDraftTwiceIsIdempotent() throws Exception {
+    void retryingManualPostAfterCommitReturnsNotFoundWithoutCreatingAnotherTransaction() throws Exception {
         TransactionCandidate candidate = createReadyCandidate(currentUser());
 
         restTransactionCandidateMockMvc.perform(post(ENTITY_API_URL_ID + "/post", candidate.getId())).andExpect(status().isOk());
         int transactionCountAfterFirstPost = financialTransactionRepository.findAll().size();
 
-        restTransactionCandidateMockMvc.perform(post(ENTITY_API_URL_ID + "/post", candidate.getId())).andExpect(status().isOk());
+        restTransactionCandidateMockMvc.perform(post(ENTITY_API_URL_ID + "/post", candidate.getId())).andExpect(status().isNotFound());
 
         assertThat(financialTransactionRepository.findAll()).hasSize(transactionCountAfterFirstPost);
+    }
+
+    @Test
+    @Transactional
+    void newlyPostedManualFinancialTransactionCanBeDeletedNormally() throws Exception {
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        MvcResult postResult = restTransactionCandidateMockMvc
+            .perform(post(ENTITY_API_URL_ID + "/post", candidate.getId()))
+            .andExpect(status().isOk())
+            .andReturn();
+        Long financialTransactionId = om.readTree(postResult.getResponse().getContentAsByteArray()).path("id").asLong();
+
+        restTransactionCandidateMockMvc
+            .perform(delete("/api/financial-transactions/{id}", financialTransactionId))
+            .andExpect(status().isNoContent());
+
+        em.flush();
+        em.clear();
+        assertThat(financialTransactionRepository.findById(financialTransactionId)).isEmpty();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void concurrentManualPostsCreateOneFinancialTransactionAndDeleteTheCandidateOnce() throws Exception {
+        long transactionCountBefore = financialTransactionRepository.count();
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        Long candidateId = candidate.getId();
+        Long accountId = candidate.getAccount().getId();
+        Long categoryId = candidate.getCategory().getId();
+        Long tagId = candidate.getTags().iterator().next().getId();
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        Long postedTransactionId = null;
+        try {
+            Future<MvcResult> firstPost = executor.submit(() -> concurrentManualPost(candidateId, ready, start));
+            Future<MvcResult> secondPost = executor.submit(() -> concurrentManualPost(candidateId, ready, start));
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            MvcResult firstResult = firstPost.get(30, TimeUnit.SECONDS);
+            MvcResult secondResult = secondPost.get(30, TimeUnit.SECONDS);
+            assertThat(List.of(firstResult.getResponse().getStatus(), secondResult.getResponse().getStatus())).containsExactlyInAnyOrder(
+                200,
+                404
+            );
+            MvcResult successfulResult = firstResult.getResponse().getStatus() == 200 ? firstResult : secondResult;
+            postedTransactionId = om.readTree(successfulResult.getResponse().getContentAsByteArray()).path("id").asLong();
+
+            TestTransaction.start();
+            assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore + 1);
+            assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(10, TimeUnit.SECONDS);
+            if (!TestTransaction.isActive()) {
+                TestTransaction.start();
+            }
+            try {
+                if (postedTransactionId != null) {
+                    financialTransactionRepository.deleteById(postedTransactionId);
+                    financialTransactionRepository.flush();
+                }
+                tagRepository.deleteById(tagId);
+                categoryRepository.deleteById(categoryId);
+                financialAccountRepository.deleteById(accountId);
+                TestTransaction.flagForCommit();
+            } finally {
+                TestTransaction.end();
+            }
+        }
+    }
+
+    @Test
+    @Transactional
+    void manualPostRollsBackFinancialTransactionAndCandidateCleanupWhenTagCleanupFails() throws Exception {
+        long transactionCountBefore = financialTransactionRepository.count();
+        TransactionCandidate candidate = createReadyCandidate(currentUser());
+        Long candidateId = candidate.getId();
+        Long accountId = candidate.getAccount().getId();
+        Long categoryId = candidate.getCategory().getId();
+        Long tagId = candidate.getTags().iterator().next().getId();
+        createManualPostFailureTrigger();
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        try {
+            restTransactionCandidateMockMvc
+                .perform(post(ENTITY_API_URL_ID + "/post", candidateId))
+                .andExpect(status().isInternalServerError());
+
+            TestTransaction.start();
+            assertThat(financialTransactionRepository.count()).isEqualTo(transactionCountBefore);
+            assertThat(transactionCandidateRepository.findOneWithRelationships(candidateId)).isPresent();
+            Number tagLinks = (Number) em
+                .createNativeQuery("select count(*) from rel_transaction_candidate__tags where transaction_candidate_id = :candidateId")
+                .setParameter("candidateId", candidateId)
+                .getSingleResult();
+            assertThat(tagLinks.longValue()).isEqualTo(1L);
+        } finally {
+            if (!TestTransaction.isActive()) {
+                TestTransaction.start();
+            }
+            try {
+                removeManualPostFailureTrigger();
+                transactionCandidateRepository.deleteById(candidateId);
+                transactionCandidateRepository.flush();
+                tagRepository.deleteById(tagId);
+                categoryRepository.deleteById(categoryId);
+                financialAccountRepository.deleteById(accountId);
+                TestTransaction.flagForCommit();
+            } finally {
+                TestTransaction.end();
+            }
+        }
     }
 
     @Test
@@ -576,9 +714,13 @@ class TransactionCandidateResourceIT {
         em.flush();
         em.clear();
 
-        TransactionCandidate postedCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
-        FinancialTransaction postedTransaction = postedCandidate.getFinancialTransaction();
-        assertThat(postedTransaction).isNotNull();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
+        FinancialTransaction postedTransaction = financialTransactionRepository
+            .findAll()
+            .stream()
+            .filter(transaction -> "Coffee shop".equals(transaction.getDescription()))
+            .findFirst()
+            .orElseThrow();
         assertThat(postedTransaction.getCategory()).isNull();
         assertThat(postedTransaction.getTags()).isEmpty();
     }
@@ -604,7 +746,6 @@ class TransactionCandidateResourceIT {
         );
         createSummaryCandidate(owner, TransactionCandidateSource.FILE_IMPORT, TransactionCandidateStatus.DRAFT, baseTime.plusSeconds(120));
         createSummaryCandidate(owner, TransactionCandidateSource.API_IMPORT, TransactionCandidateStatus.DRAFT, baseTime.plusSeconds(180));
-        createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.POSTED, baseTime.plusSeconds(240));
         createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.CANCELLED, baseTime.plusSeconds(300));
         createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.FAILED, baseTime.plusSeconds(360));
         createSummaryCandidate(owner, TransactionCandidateSource.MANUAL, TransactionCandidateStatus.FAILED, baseTime.plusSeconds(420));
@@ -1022,19 +1163,6 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
-    void directFinancialTransactionLinkRejected() throws Exception {
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setSource(TransactionCandidateSource.MANUAL);
-        dto.setFinancialTransaction(refFinancialTransaction(1L));
-
-        restTransactionCandidateMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.message").value("error.invalid"));
-    }
-
-    @Test
-    @Transactional
     void deleteCandidateCleansTagJoinRows() throws Exception {
         User owner = currentUser();
         Tag tag = createTag(owner);
@@ -1070,11 +1198,11 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
-    void deletePostedCandidateRejected() throws Exception {
+    void postedManualCandidateIsAlreadyGoneAfterPost() throws Exception {
         TransactionCandidate candidate = createReadyCandidate(currentUser());
         restTransactionCandidateMockMvc.perform(post(ENTITY_API_URL_ID + "/post", candidate.getId())).andExpect(status().isOk());
 
-        restTransactionCandidateMockMvc.perform(delete(ENTITY_API_URL_ID, candidate.getId())).andExpect(status().isBadRequest());
+        restTransactionCandidateMockMvc.perform(delete(ENTITY_API_URL_ID, candidate.getId())).andExpect(status().isNotFound());
     }
 
     @Test
@@ -1126,6 +1254,46 @@ class TransactionCandidateResourceIT {
             .user(owner)
             .tags(new HashSet<>());
         return transactionCandidateRepository.saveAndFlush(candidate);
+    }
+
+    private MvcResult concurrentManualPost(Long candidateId, CountDownLatch ready, CountDownLatch start) throws Exception {
+        ready.countDown();
+        if (!start.await(10, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Timed out waiting to start concurrent manual post requests");
+        }
+        return restTransactionCandidateMockMvc.perform(post(ENTITY_API_URL_ID + "/post", candidateId).with(user("user"))).andReturn();
+    }
+
+    private void createManualPostFailureTrigger() {
+        em
+            .createNativeQuery(
+                """
+                create or replace function %s()
+                returns trigger
+                language plpgsql
+                as $$
+                begin
+                  raise exception 'forced manual candidate tag cleanup failure';
+                end;
+                $$
+                """.formatted(MANUAL_POST_FAILURE_FUNCTION)
+            )
+            .executeUpdate();
+        em
+            .createNativeQuery(
+                "create trigger %s before delete on rel_transaction_candidate__tags for each row execute function %s()".formatted(
+                        MANUAL_POST_FAILURE_TRIGGER,
+                        MANUAL_POST_FAILURE_FUNCTION
+                    )
+            )
+            .executeUpdate();
+    }
+
+    private void removeManualPostFailureTrigger() {
+        em
+            .createNativeQuery("drop trigger if exists %s on rel_transaction_candidate__tags".formatted(MANUAL_POST_FAILURE_TRIGGER))
+            .executeUpdate();
+        em.createNativeQuery("drop function if exists %s()".formatted(MANUAL_POST_FAILURE_FUNCTION)).executeUpdate();
     }
 
     private TransactionCandidate createReadyCandidate(User owner) {

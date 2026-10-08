@@ -33,6 +33,7 @@ describe('Entities reducer tests', () => {
     updateSuccess: false,
     ingestionRecordParentCandidates: [],
     loadingIngestionRecordParentCandidates: false,
+    currentListRequestId: null,
   };
 
   function testInitialState(state) {
@@ -119,10 +120,15 @@ describe('Entities reducer tests', () => {
   describe('Successes', () => {
     it('should fetch all entities', () => {
       const payload = { data: [{ 1: 'fake1' }, { 2: 'fake2' }], headers: { 'x-total-count': 123 } };
+      const pending = reducer(undefined, {
+        type: getEntities.pending.type,
+        meta: { requestId: 'latest-request' },
+      });
       expect(
-        reducer(undefined, {
+        reducer(pending, {
           type: getEntities.fulfilled.type,
           payload,
+          meta: { requestId: 'latest-request' },
         }),
       ).toEqual({
         ...initialState,
@@ -130,6 +136,49 @@ describe('Entities reducer tests', () => {
         totalItems: payload.headers['x-total-count'],
         entities: payload.data,
       });
+    });
+
+    it('keeps newer list results when an older request resolves later', () => {
+      const olderPending = reducer(undefined, {
+        type: getEntities.pending.type,
+        meta: { requestId: 'older-request' },
+      });
+      const newerPending = reducer(olderPending, {
+        type: getEntities.pending.type,
+        meta: { requestId: 'newer-request' },
+      });
+      const newerFulfilled = reducer(newerPending, {
+        type: getEntities.fulfilled.type,
+        meta: { requestId: 'newer-request' },
+        payload: { data: [{ description: 'newer result' }], headers: { 'x-total-count': 1 } },
+      });
+      const olderFulfilled = reducer(newerFulfilled, {
+        type: getEntities.fulfilled.type,
+        meta: { requestId: 'older-request' },
+        payload: { data: [{ description: 'older result' }], headers: { 'x-total-count': 1 } },
+      });
+
+      expect(olderFulfilled.entities).toEqual([{ description: 'newer result' }]);
+      expect(olderFulfilled.totalItems).toBe(1);
+      expect(olderFulfilled.currentListRequestId).toBeNull();
+    });
+
+    it('keeps the current request loading when an older list request fails', () => {
+      const olderPending = reducer(undefined, {
+        type: getEntities.pending.type,
+        meta: { requestId: 'older-request' },
+      });
+      const newerPending = reducer(olderPending, {
+        type: getEntities.pending.type,
+        meta: { requestId: 'newer-request' },
+      });
+      const afterOlderRejection = reducer(newerPending, {
+        type: getEntities.rejected.type,
+        meta: { requestId: 'older-request' },
+      });
+
+      expect(afterOlderRejection.loading).toBe(true);
+      expect(afterOlderRejection.currentListRequestId).toBe('newer-request');
     });
 
     it('should fetch a single entity', () => {

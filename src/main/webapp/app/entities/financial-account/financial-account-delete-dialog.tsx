@@ -26,7 +26,7 @@ const isBlockedHardDelete = (data: unknown): data is IFinancialAccountHardDelete
 };
 
 const DeletionSummary = ({ preview }: { preview: IFinancialAccountDeletionPreview }) => {
-  const manualDrafts = Math.max(0, preview.counts.manualCandidates - preview.counts.manualPostedCandidates);
+  const manualDrafts = preview.counts.manualCandidates;
   const items = [
     { count: preview.counts.financialTransactions, key: 'transactions' },
     { count: manualDrafts, key: 'manualDrafts' },
