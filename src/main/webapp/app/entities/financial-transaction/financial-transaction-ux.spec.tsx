@@ -498,6 +498,15 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.getByRole('menuitem', { name: /delete/i }).getAttribute('href')).toContain('/financial-transaction/2501/delete');
   });
 
+  it('preserves live filter and pagination query state when opening the list delete route', () => {
+    renderList('/financial-transaction?page=3&sort=transactionDate,asc&flow.equals=OUT&description.contains=Bus');
+
+    fireEvent.click(screen.getByRole('button', { name: /more transaction actions/i }));
+    expect(screen.getByRole('menuitem', { name: /delete/i }).getAttribute('href')).toBe(
+      '/financial-transaction/2501/delete?page=3&sort=transactionDate,asc&flow.equals=OUT&description.contains=Bus',
+    );
+  });
+
   it('uses a product empty state with a new transaction call to action', () => {
     mockState = {
       ...baseState,
@@ -617,7 +626,7 @@ describe('FinancialTransaction posted transaction UX', () => {
     expect(screen.queryByText('2501')).toBeNull();
   });
 
-  it('uses a product delete confirmation without exposing a transaction ID', () => {
+  it('uses a product delete confirmation without exposing a transaction ID', async () => {
     mockState = baseState;
 
     render(
@@ -629,7 +638,7 @@ describe('FinancialTransaction posted transaction UX', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Delete transaction' })).toBeTruthy();
-    expect(screen.getByText('Are you sure you want to delete this transaction?')).toBeTruthy();
+    expect(await screen.findByText('Are you sure you want to delete this transaction?')).toBeTruthy();
     expect(screen.queryByText('2501')).toBeNull();
   });
 

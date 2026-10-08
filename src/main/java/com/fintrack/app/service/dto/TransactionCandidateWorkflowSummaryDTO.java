@@ -63,8 +63,6 @@ public class TransactionCandidateWorkflowSummaryDTO implements Serializable {
 
     private List<TransactionCandidateTagSelectionDTO> selectedTags = new ArrayList<>();
 
-    private Long financialTransactionId;
-
     private Instant createdAt;
 
     private Instant updatedAt;
@@ -251,14 +249,6 @@ public class TransactionCandidateWorkflowSummaryDTO implements Serializable {
 
     public void setSelectedTags(List<TransactionCandidateTagSelectionDTO> selectedTags) {
         this.selectedTags = selectedTags;
-    }
-
-    public Long getFinancialTransactionId() {
-        return financialTransactionId;
-    }
-
-    public void setFinancialTransactionId(Long financialTransactionId) {
-        this.financialTransactionId = financialTransactionId;
     }
 
     public Instant getCreatedAt() {

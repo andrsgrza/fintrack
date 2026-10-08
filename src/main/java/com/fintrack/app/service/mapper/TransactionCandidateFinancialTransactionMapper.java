@@ -8,7 +8,7 @@ import java.time.Instant;
 import org.springframework.stereotype.Service;
 
 /**
- * Internal mapper for converting a reviewed TransactionCandidate into a new posted FinancialTransaction shell.
+ * Internal mapper for converting a reviewed TransactionCandidate into a new final FinancialTransaction shell.
  *
  * This mapper only copies common transaction fields. Callers still own lifecycle validation, idempotency,
  * source-specific links, status transitions, persistence, and transactional boundaries.

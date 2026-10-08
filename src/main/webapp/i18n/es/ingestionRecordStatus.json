@@ -5,6 +5,7 @@
       "VALID": "Válida",
       "DISABLED": "Deshabilitada",
       "IMPORTED": "Importada",
+      "DELETED_AFTER_IMPORT": "Transacción eliminada después de importar",
       "SKIPPED_DUPLICATE": "Duplicada omitida",
       "REJECTED": "Rechazada",
       "FAILED": "Fallida"

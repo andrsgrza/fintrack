@@ -24,7 +24,6 @@ export interface IFileImportCandidateWorkflowSummary {
   tagIds?: number[];
   tagNames?: string[];
   selectedTags?: IFileImportCandidateTagSelection[];
-  financialTransactionId?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }

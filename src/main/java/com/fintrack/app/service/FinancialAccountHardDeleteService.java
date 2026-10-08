@@ -160,20 +160,6 @@ public class FinancialAccountHardDeleteService {
         counts.setManualCandidates(
             candidates.stream().filter(candidate -> candidate.getSource() == TransactionCandidateSource.MANUAL).count()
         );
-        counts.setManualDraftCandidates(
-            candidates
-                .stream()
-                .filter(candidate -> candidate.getSource() == TransactionCandidateSource.MANUAL)
-                .filter(candidate -> candidate.getStatus() == TransactionCandidateStatus.DRAFT)
-                .count()
-        );
-        counts.setManualPostedCandidates(
-            candidates
-                .stream()
-                .filter(candidate -> candidate.getSource() == TransactionCandidateSource.MANUAL)
-                .filter(candidate -> candidate.getStatus() == TransactionCandidateStatus.POSTED)
-                .count()
-        );
         counts.setTransactionIngestions((long) ingestions.size());
         counts.setIngestionRecords((long) records.size());
         counts.setFileImportCandidates(
@@ -236,7 +222,7 @@ public class FinancialAccountHardDeleteService {
         Map<FinancialAccountDeletionBlockerCode, Set<Long>> blockers
     ) {
         boolean hasWorkflowLink = candidate.getTransactionIngestion() != null || candidate.getIngestionRecord() != null;
-        boolean validUnposted =
+        boolean validPrePost =
             candidate.getStatus() == TransactionCandidateStatus.DRAFT ||
             candidate.getStatus() == TransactionCandidateStatus.READY_TO_POST ||
             candidate.getStatus() == TransactionCandidateStatus.CANCELLED ||
@@ -246,16 +232,10 @@ public class FinancialAccountHardDeleteService {
             addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE, candidate.getId());
             return;
         }
-        if (validUnposted && candidate.getFinancialTransaction() == null) {
+        if (validPrePost) {
             return;
         }
-        if (
-            candidate.getStatus() != TransactionCandidateStatus.POSTED ||
-            candidate.getFinancialTransaction() == null ||
-            !belongsToAccount(candidate.getFinancialTransaction().getAccount(), account)
-        ) {
-            addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE, candidate.getId());
-        }
+        addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE, candidate.getId());
     }
 
     private void validateFileImportCandidate(
@@ -280,28 +260,13 @@ public class FinancialAccountHardDeleteService {
         }
 
         if (candidate.getStatus() == TransactionCandidateStatus.READY_TO_POST) {
-            if (
-                candidate.getFinancialTransaction() != null ||
-                record.getFinancialTransaction() != null ||
-                record.getStatus() != IngestionRecordStatus.VALID
-            ) {
+            if (record.getFinancialTransaction() != null || record.getStatus() != IngestionRecordStatus.VALID) {
                 addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_INGESTION_GRAPH, candidate.getId());
             }
             return;
         }
 
-        if (
-            candidate.getStatus() != TransactionCandidateStatus.POSTED ||
-            candidate.getFinancialTransaction() == null ||
-            record.getStatus() != IngestionRecordStatus.IMPORTED ||
-            record.getFinancialTransaction() == null ||
-            !Objects.equals(record.getFinancialTransaction().getId(), candidate.getFinancialTransaction().getId()) ||
-            !belongsToAccount(candidate.getFinancialTransaction().getAccount(), account) ||
-            candidate.getFinancialTransaction().getTransactionIngestion() == null ||
-            !Objects.equals(candidate.getFinancialTransaction().getTransactionIngestion().getId(), ingestion.getId())
-        ) {
-            addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_INGESTION_GRAPH, candidate.getId());
-        }
+        addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_INGESTION_GRAPH, candidate.getId());
     }
 
     private void validateRecords(
@@ -403,7 +368,7 @@ public class FinancialAccountHardDeleteService {
         // Preflight admits only transfers whose two legs belong to this same aggregate.
         internalTransferRepository.deleteLocalByAccountId(accountId);
 
-        // Candidates own FKs to both records and posted financial transactions.
+        // Candidates own FKs to their pre-post workflow records and tag associations.
         transactionCandidateRepository.deleteTagLinksByAccountId(accountId);
         transactionCandidateRepository.deleteByAccountId(accountId);
         ingestionRecordRepository.deleteByTransactionIngestionAccountId(accountId);

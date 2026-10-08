@@ -15,8 +15,6 @@ export interface IFinancialAccountDeletionBlocker {
 export interface IFinancialAccountDeletionPreviewCounts {
   financialTransactions: number;
   manualCandidates: number;
-  manualDraftCandidates: number;
-  manualPostedCandidates: number;
   transactionIngestions: number;
   ingestionRecords: number;
   fileImportCandidates: number;

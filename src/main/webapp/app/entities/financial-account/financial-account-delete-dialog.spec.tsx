@@ -31,8 +31,6 @@ const safePreview = (overrides: Partial<IFinancialAccountDeletionPreview> = {}):
   counts: {
     financialTransactions: 2,
     manualCandidates: 3,
-    manualDraftCandidates: 2,
-    manualPostedCandidates: 1,
     transactionIngestions: 1,
     ingestionRecords: 4,
     fileImportCandidates: 1,
@@ -100,7 +98,7 @@ describe('FinancialAccountDeleteDialog', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-labelledby')).toBe('financial-account-delete-title');
     expect(screen.getByTestId('financialAccountDeleteDialogHeading').getAttribute('id')).toBe('financial-account-delete-title');
     expect(screen.getByText('2 transactions')).toBeTruthy();
-    expect(screen.getByText('2 manual drafts')).toBeTruthy();
+    expect(screen.getByText('3 manual drafts')).toBeTruthy();
     expect(screen.getByText('1 import')).toBeTruthy();
     expect(screen.getByText('4 import records')).toBeTruthy();
     expect(screen.getByText("This account's card details")).toBeTruthy();

@@ -21,7 +21,7 @@ import java.util.Set;
 /**
  * A DTO for the {@link com.fintrack.app.domain.TransactionCandidate} entity.
  */
-@Schema(description = "A transaction in progress/review before it becomes posted ledger data. Candidates never affect balances.")
+@Schema(description = "A transaction in progress/review before it becomes final ledger data. Candidates never affect balances.")
 @SuppressWarnings("common-java:DuplicatedBlocks")
 public class TransactionCandidateDTO implements Serializable {
 
@@ -68,8 +68,6 @@ public class TransactionCandidateDTO implements Serializable {
 
     private Instant updatedAt;
 
-    private Instant postedAt;
-
     private Instant cancelledAt;
 
     private Instant failedAt;
@@ -83,8 +81,6 @@ public class TransactionCandidateDTO implements Serializable {
     private TransactionIngestionDTO transactionIngestion;
 
     private IngestionRecordDTO ingestionRecord;
-
-    private FinancialTransactionDTO financialTransaction;
 
     private Set<TagDTO> tags = new HashSet<>();
 
@@ -240,14 +236,6 @@ public class TransactionCandidateDTO implements Serializable {
         this.updatedAt = updatedAt;
     }
 
-    public Instant getPostedAt() {
-        return postedAt;
-    }
-
-    public void setPostedAt(Instant postedAt) {
-        this.postedAt = postedAt;
-    }
-
     public Instant getCancelledAt() {
         return cancelledAt;
     }
@@ -302,14 +290,6 @@ public class TransactionCandidateDTO implements Serializable {
 
     public void setIngestionRecord(IngestionRecordDTO ingestionRecord) {
         this.ingestionRecord = ingestionRecord;
-    }
-
-    public FinancialTransactionDTO getFinancialTransaction() {
-        return financialTransaction;
-    }
-
-    public void setFinancialTransaction(FinancialTransactionDTO financialTransaction) {
-        this.financialTransaction = financialTransaction;
     }
 
     public Set<TagDTO> getTags() {

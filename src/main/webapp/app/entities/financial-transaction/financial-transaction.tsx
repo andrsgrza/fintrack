@@ -604,7 +604,7 @@ export const FinancialTransaction = () => {
                     >
                       <DropdownItem
                         tag={Link}
-                        to={`/financial-transaction/${financialTransaction.id}/delete?page=${paginationState.activePage}&sort=${paginationState.sort},${paginationState.order}`}
+                        to={`/financial-transaction/${financialTransaction.id}/delete${pageLocation.search}`}
                         className="text-danger"
                         data-cy="entityDeleteButton"
                       >

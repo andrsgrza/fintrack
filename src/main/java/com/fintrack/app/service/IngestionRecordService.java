@@ -405,6 +405,13 @@ public class IngestionRecordService {
             if (ingestionRecord.getErrorCode() != null || ingestionRecord.getErrorMessage() != null) {
                 throw new IllegalArgumentException("Imported records cannot have error details");
             }
+        } else if (ingestionRecord.getStatus() == IngestionRecordStatus.DELETED_AFTER_IMPORT) {
+            if (ingestionRecord.getFinancialTransaction() != null) {
+                throw new IllegalArgumentException("Deleted-after-import records cannot have a financial transaction");
+            }
+            if (ingestionRecord.getErrorCode() != null || ingestionRecord.getErrorMessage() != null) {
+                throw new IllegalArgumentException("Deleted-after-import records cannot have error details");
+            }
         } else if (ingestionRecord.getStatus() == IngestionRecordStatus.DISABLED) {
             if (ingestionRecord.getFinancialTransaction() != null) {
                 throw new IllegalArgumentException("Disabled records cannot have a financial transaction");

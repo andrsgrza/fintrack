@@ -8,7 +8,9 @@
         "viewDraftsLabel": "Ver borradores"
       },
       "delete": {
-        "question": "¿Seguro que quieres eliminar esta transacción?"
+        "question": "¿Seguro que quieres eliminar esta transacción?",
+        "deleting": "Eliminando...",
+        "failed": "No se pudo eliminar esta transacción. Inténtalo de nuevo."
       },
       "detail": {
         "title": "Transacción"
@@ -74,7 +76,6 @@
         "posting": "Publicando transacción…",
         "post": "Publicar transacción",
         "postFailed": "No se pudo publicar la transacción.",
-        "posted": "Publicada.",
         "cancel": "Cancelar borrador",
         "cancelConfirm": "¿Cancelar este borrador? Se eliminarán los cambios guardados del borrador.",
         "cancelFailed": "No se pudo cancelar el borrador.",

@@ -1,6 +1,7 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.TransactionIngestion;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -53,6 +54,15 @@ public interface TransactionIngestionRepository
         "select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where transactionIngestion.id = :id and account.user.login = :login"
     )
     Optional<TransactionIngestion> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    /**
+     * Locks only the target ingestion parent for a Confirm Import command. Child rows are loaded after this lock is held.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select transactionIngestion from TransactionIngestion transactionIngestion where transactionIngestion.id = :id and transactionIngestion.account.user.login = :login"
+    )
+    Optional<TransactionIngestion> findOneByIdAndAccountUserLoginForConfirm(@Param("id") Long id, @Param("login") String login);
 
     @Query(
         "select transactionIngestion from TransactionIngestion transactionIngestion left join fetch transactionIngestion.account account left join fetch account.user where account.user.login = :login"

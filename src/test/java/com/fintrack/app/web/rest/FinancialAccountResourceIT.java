@@ -436,7 +436,6 @@ class FinancialAccountResourceIT {
             .currencySnapshot(account.getCurrency())
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT)
-            .postedAt(status == TransactionCandidateStatus.POSTED ? DEFAULT_UPDATED_AT : null)
             .user(account.getUser())
             .account(account);
         em.persist(candidate);
@@ -448,19 +447,17 @@ class FinancialAccountResourceIT {
         FinancialAccount account,
         TransactionIngestion ingestion,
         IngestionRecord record,
-        FinancialTransaction financialTransaction,
         Tag tag
     ) {
         TransactionCandidate candidate = createCandidate(
             account,
             TransactionCandidateSource.FILE_IMPORT,
-            TransactionCandidateStatus.POSTED
+            TransactionCandidateStatus.READY_TO_POST
         );
         candidate
             .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED)
             .transactionIngestion(ingestion)
             .ingestionRecord(record)
-            .financialTransaction(financialTransaction)
             .addTags(tag);
         candidate = em.merge(candidate);
         em.flush();
@@ -2799,14 +2796,6 @@ class FinancialAccountResourceIT {
         FinancialTransaction postedManualTransaction = createTransaction(financialAccount, LocalDate.parse("2026-01-11"));
         postedManualTransaction.addTags(tag);
         postedManualTransaction = em.merge(postedManualTransaction);
-        TransactionCandidate postedManual = createCandidate(
-            financialAccount,
-            TransactionCandidateSource.MANUAL,
-            TransactionCandidateStatus.POSTED
-        );
-        postedManual.setFinancialTransaction(postedManualTransaction);
-        postedManual.addTags(tag);
-        postedManual = em.merge(postedManual);
 
         TransactionIngestion preparedIngestion = createTransactionIngestion(financialAccount, IngestionType.FILE);
         FileIngestion preparedMetadata = createFileIngestion(preparedIngestion);
@@ -2826,13 +2815,6 @@ class FinancialAccountResourceIT {
         importedTransaction.addTags(tag);
         importedTransaction = em.merge(importedTransaction);
         IngestionRecord importedRecord = createIngestionRecord(completedIngestion, importedTransaction);
-        TransactionCandidate importedCandidate = createFileImportCandidate(
-            financialAccount,
-            completedIngestion,
-            importedRecord,
-            importedTransaction,
-            tag
-        );
 
         CreditAccountDetails creditDetails = createCreditAccountDetails(financialAccount, new BigDecimal("5000.00"));
         Budget budget = BudgetResourceIT.createEntity(em);
@@ -2851,15 +2833,7 @@ class FinancialAccountResourceIT {
         Long budgetId = budget.getId();
         Long subscriptionId = subscription.getId();
         Long creditDetailsId = creditDetails.getId();
-        List<Long> candidateIds = List.of(
-            draft.getId(),
-            ready.getId(),
-            cancelled.getId(),
-            failed.getId(),
-            postedManual.getId(),
-            preparedCandidate.getId(),
-            importedCandidate.getId()
-        );
+        List<Long> candidateIds = List.of(draft.getId(), ready.getId(), cancelled.getId(), failed.getId(), preparedCandidate.getId());
         List<Long> transactionIds = List.of(directTransaction.getId(), postedManualTransaction.getId(), importedTransaction.getId());
         List<Long> ingestionIds = List.of(preparedIngestion.getId(), completedIngestion.getId());
         List<Long> metadataIds = List.of(preparedMetadata.getId(), completedMetadata.getId());
@@ -2967,8 +2941,9 @@ class FinancialAccountResourceIT {
         TransactionCandidate candidate = createCandidate(
             financialAccount,
             TransactionCandidateSource.MANUAL,
-            TransactionCandidateStatus.POSTED
+            TransactionCandidateStatus.READY_TO_POST
         );
+        candidate.setTransactionIngestion(createTransactionIngestion(financialAccount, IngestionType.FILE));
 
         assertHardDeleteBlocked(financialAccount.getId(), "CORRUPT_CANDIDATE");
 
@@ -3215,7 +3190,7 @@ class FinancialAccountResourceIT {
         fileTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
         fileTransaction.setTransactionIngestion(fileParent);
         fileTransaction = em.merge(fileTransaction);
-        IngestionRecord record = createIngestionRecord(fileParent, fileTransaction);
+        IngestionRecord record = createPreparedIngestionRecord(fileParent);
 
         TransactionIngestion apiParent = createTransactionIngestion(financialAccount, IngestionType.API);
         ApiIngestion apiIngestion = createApiIngestion(apiParent);
@@ -3255,7 +3230,7 @@ class FinancialAccountResourceIT {
         IngestionRecord record = createIngestionRecord(fileParent, fileTransaction);
         Tag tag = TagResourceIT.createEntity(em);
         em.persist(tag);
-        TransactionCandidate candidate = createFileImportCandidate(financialAccount, fileParent, record, fileTransaction, tag);
+        TransactionCandidate candidate = createFileImportCandidate(financialAccount, fileParent, record, tag);
 
         Long accountId = financialAccount.getId();
         Long fileParentId = fileParent.getId();

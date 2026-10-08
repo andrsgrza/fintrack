@@ -466,6 +466,29 @@ describe('TransactionIngestion file workflow', () => {
     expect((await screen.findAllByText('Import partially completed')).length).toBeGreaterThan(0);
   });
 
+  it('renders deleted-after-import rows as completed historical records without review actions', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'COMPLETED',
+        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[3],
+            status: 'DELETED_AFTER_IMPORT',
+            financialTransactionId: null,
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    expect(await screen.findByText('Transaction deleted after import')).toBeTruthy();
+    expect(screen.getByText('Import completed')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
+  });
+
   it('disable action updates row status and counts from response', async () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     mockAxiosPost.mockResolvedValue({
@@ -2503,7 +2526,16 @@ describe('TransactionIngestion file workflow', () => {
           failed: 0,
           counts: { recordsReceived: 2, recordsCreated: 1, recordsSkipped: 1, recordsRejected: 0, validRows: 0, invalidRows: 0 },
           rows: [
-            { ...readyRows[0], status: 'IMPORTED', financialTransactionId: 9001 },
+            {
+              ...readyRows[0],
+              status: 'IMPORTED',
+              financialTransactionId: 9001,
+              financialTransaction: {
+                id: 9001,
+                category: { id: 9, name: 'Salary', color: '#0B6E4F' },
+                tags: [{ id: 5, name: 'Business', color: '#3B82F6' }],
+              },
+            },
             { ...readyRows[1], status: 'DISABLED' },
           ],
         },
@@ -2525,6 +2557,8 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /enable/i })).toBeNull();
+    expect(screen.getByTestId('classificationCategoryFinal-9001').textContent).toBe('Salary');
+    expect(screen.getByTestId('classificationTagsFinal-9001').textContent).toBe('Business');
   });
 
   it('completed review loads as read-only', async () => {
@@ -2538,6 +2572,12 @@ describe('TransactionIngestion file workflow', () => {
             ...persistedReviewResponse.data.rows[0],
             status: 'IMPORTED',
             financialTransactionId: 9001,
+            financialTransaction: {
+              id: 9001,
+              category: { id: 9, name: 'Salary', color: '#0B6E4F' },
+              tags: [{ id: 5, name: 'Business', color: '#3B82F6' }],
+            },
+            candidate: null,
             description: 'Uber',
             descriptionReview: {
               source: 'DESCRIPTION_RULE',
@@ -2567,6 +2607,10 @@ describe('TransactionIngestion file workflow', () => {
     expect(rowForRecord(302).querySelector('input, select, textarea')).toBeNull();
     expect(within(rowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
     expect(screen.getByTestId('descriptionReview-ruleName-300').textContent).toContain('Normalize Uber');
+    expect(screen.getByTestId('classificationCategoryFinal-9001').textContent).toBe('Salary');
+    expect(screen.getByTestId('classificationTagsFinal-9001').textContent).toBe('Business');
+    expect(screen.queryByTestId('classificationCategoryReadOnly-400')).toBeNull();
+    expect(screen.queryByTestId('classificationTagsReadOnly-400')).toBeNull();
   });
 
   it('confirm API error displays review error', async () => {

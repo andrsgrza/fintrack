@@ -77,7 +77,6 @@ enum TransactionCandidateSource {
 enum TransactionCandidateStatus {
   DRAFT,
   READY_TO_POST,
-  POSTED,
   CANCELLED,
   FAILED
 }
@@ -293,7 +292,7 @@ entity FinancialTransaction {
 }
 
 /**
- * A transaction in progress/review before it becomes posted ledger data.
+ * A transaction in progress/review before it becomes final ledger data.
  *
  * TransactionCandidate is intentionally separate from FinancialTransaction:
  * candidates never affect balances, dashboards, budgets, or reports.
@@ -317,7 +316,6 @@ entity TransactionCandidate {
   failureReason String maxlength(1000)
   createdAt Instant required
   updatedAt Instant required
-  postedAt Instant
   cancelledAt Instant
   failedAt Instant
 }
@@ -643,7 +641,6 @@ relationship OneToOne {
   ApiIngestion{transactionIngestion(id) required} to TransactionIngestion{apiIngestion}
   IngestionRecord{financialTransaction(id)} to FinancialTransaction
   TransactionCandidate{ingestionRecord(id)} to IngestionRecord
-  TransactionCandidate{financialTransaction(id)} to FinancialTransaction
 }
 
 relationship ManyToOne {

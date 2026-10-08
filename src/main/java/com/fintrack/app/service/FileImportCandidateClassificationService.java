@@ -349,11 +349,7 @@ public class FileImportCandidateClassificationService {
         if (candidate.getSource() != TransactionCandidateSource.FILE_IMPORT) {
             throw new IllegalArgumentException("Only FILE_IMPORT candidates can be classified from file ingestion");
         }
-        if (
-            candidate.getStatus() == TransactionCandidateStatus.POSTED ||
-            candidate.getStatus() == TransactionCandidateStatus.CANCELLED ||
-            candidate.getStatus() == TransactionCandidateStatus.FAILED
-        ) {
+        if (candidate.getStatus() == TransactionCandidateStatus.CANCELLED || candidate.getStatus() == TransactionCandidateStatus.FAILED) {
             throw new IllegalArgumentException("Final transaction candidates cannot be classified");
         }
         if (candidate.getIngestionRecord() == null || candidate.getIngestionRecord().getStatus() != IngestionRecordStatus.VALID) {

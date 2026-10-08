@@ -3,6 +3,7 @@ package com.fintrack.app.web.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionCandidateService;
+import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
@@ -238,12 +239,12 @@ public class TransactionCandidateResource {
      * {@code POST  /transaction-candidates/:id/post} : Post a manual draft into a FinancialTransaction.
      *
      * @param id the id of the manual draft to post.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the posted draft.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the final transaction.
      */
     @PostMapping("/{id}/post")
-    public ResponseEntity<TransactionCandidateDTO> postManualTransactionCandidate(@PathVariable("id") Long id) {
+    public ResponseEntity<FinancialTransactionDTO> postManualTransactionCandidate(@PathVariable("id") Long id) {
         LOG.debug("REST request to post manual TransactionCandidate draft : {}", id);
-        Optional<TransactionCandidateDTO> result;
+        Optional<FinancialTransactionDTO> result;
         try {
             result = transactionCandidateService.postManualDraft(id);
         } catch (IllegalArgumentException e) {

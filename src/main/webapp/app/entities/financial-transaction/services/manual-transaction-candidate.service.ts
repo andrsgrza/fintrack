@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
+import { IFinancialTransaction } from 'app/shared/model/financial-transaction.model';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 
@@ -17,7 +18,7 @@ export const updateManualDraft = (id: string | number, payload: ITransactionCand
 
 export const cancelManualDraft = (id: string | number) => axios.post<ITransactionCandidate>(`${apiUrl}/${id}/cancel`);
 
-export const postManualDraft = (id: string | number) => axios.post<ITransactionCandidate>(`${apiUrl}/${id}/post`);
+export const postManualDraft = (id: string | number) => axios.post<IFinancialTransaction>(`${apiUrl}/${id}/post`);
 
 export interface IManualTransactionDraftSummary {
   id?: number;

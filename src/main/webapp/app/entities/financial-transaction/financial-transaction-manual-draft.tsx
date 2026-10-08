@@ -48,7 +48,7 @@ import { TransactionClassification } from './transaction-presentation';
 
 const AUTOSAVE_DELAY_MS = 700;
 
-type SaveState = 'UNSAVED' | 'CREATING' | 'SAVING' | 'SAVED' | 'FAILED' | 'POSTING' | 'POSTED' | 'CANCELLED';
+type SaveState = 'UNSAVED' | 'CREATING' | 'SAVING' | 'SAVED' | 'FAILED' | 'POSTING' | 'CANCELLED';
 type RuleActionState = 'IDLE' | 'PREVIEWING' | 'APPLYING' | 'FAILED';
 type RulePreviewState = 'UNAVAILABLE' | 'STALE' | 'UPDATING' | 'UPDATED' | 'FAILED';
 
@@ -128,7 +128,6 @@ const buildRuleInputSignature = (draft: ManualDraftFormState) =>
 const isRulePreviewCandidateEligible = (candidate: ITransactionCandidate | null, draft: ManualDraftFormState) =>
   !!candidate?.id &&
   candidate.source === 'MANUAL' &&
-  candidate.status !== 'POSTED' &&
   candidate.status !== 'CANCELLED' &&
   candidate.status !== 'FAILED' &&
   !!draft.account &&
@@ -1029,8 +1028,7 @@ export const FinancialTransactionManualDraft = () => {
   const latestPreviewRequestIdRef = useRef(0);
   const samePostingDateRef = useRef(true);
 
-  const readOnly =
-    candidate?.status === 'POSTED' || candidate?.status === 'CANCELLED' || saveState === 'POSTED' || saveState === 'CANCELLED';
+  const readOnly = candidate?.status === 'CANCELLED' || saveState === 'CANCELLED';
   const effectiveClassificationReviewStatus = classificationReviewStatus ?? candidate?.classificationReviewStatus;
   const classificationBlockKey =
     candidate?.status === 'READY_TO_POST' ? postClassificationBlockKey(effectiveClassificationReviewStatus) : '';
@@ -1153,11 +1151,8 @@ export const FinancialTransactionManualDraft = () => {
         samePostingDateRef.current = shouldUseSamePostingDate;
         setSamePostingDate(shouldUseSamePostingDate);
         setOptionalDetailsOpen(!!loadedDraft.externalReference || !!loadedDraft.notes);
-        setSaveState(response.data.status === 'CANCELLED' ? 'CANCELLED' : response.data.status === 'POSTED' ? 'POSTED' : 'SAVED');
+        setSaveState(response.data.status === 'CANCELLED' ? 'CANCELLED' : 'SAVED');
         void runAutoPreviewForSavedDraft(response.data, loadedDraft);
-        if (response.data.status === 'POSTED' && response.data.financialTransaction?.id) {
-          navigate(`/financial-transaction/${response.data.financialTransaction.id}`, { replace: true });
-        }
       })
       .catch(() => {
         candidateIdRef.current = null;
@@ -1415,10 +1410,9 @@ export const FinancialTransactionManualDraft = () => {
     }
     try {
       const response = await postManualDraft(candidateIdRef.current);
-      setCandidate(response.data);
-      setSaveState('POSTED');
-      if (response.data.financialTransaction?.id) {
-        navigate(`/financial-transaction/${response.data.financialTransaction.id}`, { replace: true });
+      setSaveState('SAVED');
+      if (response.data.id) {
+        navigate(`/financial-transaction/${response.data.id}`, { replace: true });
       } else {
         navigate('/financial-transaction', { replace: true });
       }

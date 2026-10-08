@@ -287,12 +287,8 @@ public class FinancialTransactionResource {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFinancialTransaction(@PathVariable("id") Long id) {
         LOG.debug("REST request to delete FinancialTransaction : {}", id);
-        try {
-            if (!financialTransactionService.delete(id)) {
-                return ResponseEntity.notFound().build();
-            }
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        if (!financialTransactionService.delete(id)) {
+            return ResponseEntity.notFound().build();
         }
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))

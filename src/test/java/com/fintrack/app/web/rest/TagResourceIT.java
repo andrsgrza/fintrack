@@ -1681,7 +1681,6 @@ class TagResourceIT {
             .currencySnapshot(CurrencyCode.MXN)
             .createdAt(DEFAULT_CREATED_AT)
             .updatedAt(DEFAULT_UPDATED_AT)
-            .postedAt(status == TransactionCandidateStatus.POSTED ? DEFAULT_UPDATED_AT : null)
             .user(savedTag.getUser())
             .account(account)
             .addTags(managedTagReference(savedTag));
@@ -1771,12 +1770,6 @@ class TagResourceIT {
     @Transactional
     void deleteTagReferencedByFileImportCandidateRejectsAndLeavesCandidateJoinUnchanged() throws Exception {
         assertDeleteTagReferencedByCandidateRejected(TransactionCandidateSource.FILE_IMPORT, TransactionCandidateStatus.READY_TO_POST);
-    }
-
-    @Test
-    @Transactional
-    void deleteTagReferencedByPostedCandidateRejectsAndLeavesCandidateJoinUnchanged() throws Exception {
-        assertDeleteTagReferencedByCandidateRejected(TransactionCandidateSource.MANUAL, TransactionCandidateStatus.POSTED);
     }
 
     @Test

@@ -19,7 +19,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * A transaction in progress/review before it becomes posted ledger data.
+ * A transaction in progress/review before it becomes final ledger data.
  *
  * TransactionCandidate is intentionally separate from FinancialTransaction:
  * candidates never affect balances, dashboards, budgets, or reports.
@@ -111,9 +111,6 @@ public class TransactionCandidate implements Serializable {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "posted_at")
-    private Instant postedAt;
-
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
@@ -145,22 +142,6 @@ public class TransactionCandidate implements Serializable {
     @OneToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties(value = { "financialTransaction", "transactionIngestion" }, allowSetters = true)
     private IngestionRecord ingestionRecord;
-
-    @OneToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties(
-        value = {
-            "account",
-            "category",
-            "financialSubscription",
-            "transactionIngestion",
-            "tags",
-            "outgoingInternalTransfer",
-            "incomingInternalTransfer",
-            "ingestionRecord",
-        },
-        allowSetters = true
-    )
-    private FinancialTransaction financialTransaction;
 
     @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<TransactionCandidateTag> tagAssociations = new HashSet<>();
@@ -407,19 +388,6 @@ public class TransactionCandidate implements Serializable {
         this.updatedAt = updatedAt;
     }
 
-    public Instant getPostedAt() {
-        return this.postedAt;
-    }
-
-    public TransactionCandidate postedAt(Instant postedAt) {
-        this.setPostedAt(postedAt);
-        return this;
-    }
-
-    public void setPostedAt(Instant postedAt) {
-        this.postedAt = postedAt;
-    }
-
     public Instant getCancelledAt() {
         return this.cancelledAt;
     }
@@ -512,19 +480,6 @@ public class TransactionCandidate implements Serializable {
 
     public void setIngestionRecord(IngestionRecord ingestionRecord) {
         this.ingestionRecord = ingestionRecord;
-    }
-
-    public FinancialTransaction getFinancialTransaction() {
-        return this.financialTransaction;
-    }
-
-    public TransactionCandidate financialTransaction(FinancialTransaction financialTransaction) {
-        this.setFinancialTransaction(financialTransaction);
-        return this;
-    }
-
-    public void setFinancialTransaction(FinancialTransaction financialTransaction) {
-        this.financialTransaction = financialTransaction;
     }
 
     /**

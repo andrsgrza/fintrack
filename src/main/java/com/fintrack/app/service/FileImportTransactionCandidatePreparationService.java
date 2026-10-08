@@ -105,9 +105,6 @@ public class FileImportTransactionCandidatePreparationService {
         if (candidate.getSource() != TransactionCandidateSource.FILE_IMPORT) {
             throw new IllegalArgumentException("Existing candidate source is not FILE_IMPORT");
         }
-        if (candidate.getStatus() == TransactionCandidateStatus.POSTED || candidate.getFinancialTransaction() != null) {
-            throw new IllegalArgumentException("Posted transaction candidate cannot be removed by row review");
-        }
         // Entity deletion cascades to the explicit candidate-tag associations. Do not remove the rows
         // natively first: the managed association collection would then try to delete them again.
         transactionCandidateRepository.delete(candidate);
@@ -196,21 +193,9 @@ public class FileImportTransactionCandidatePreparationService {
                 "Existing candidate source is not FILE_IMPORT"
             );
         }
-        if (candidate.getStatus() == TransactionCandidateStatus.POSTED) {
-            return rowResult(record, candidate.getId(), PrepareTransactionCandidateRowAction.SKIPPED, "Posted candidate not modified");
-        }
         if (candidate.getStatus() == TransactionCandidateStatus.CANCELLED || candidate.getStatus() == TransactionCandidateStatus.FAILED) {
             return rowResult(record, candidate.getId(), PrepareTransactionCandidateRowAction.ERROR, "Final candidate cannot be synced");
         }
-        if (candidate.getFinancialTransaction() != null) {
-            return rowResult(
-                record,
-                candidate.getId(),
-                PrepareTransactionCandidateRowAction.ERROR,
-                "Candidate with financial transaction link cannot be synced"
-            );
-        }
-
         boolean ruleInputChanged = ruleInputChanged(candidate, fields);
         boolean changed = applyFields(candidate, fields);
         if (candidate.getStatus() != TransactionCandidateStatus.READY_TO_POST) {

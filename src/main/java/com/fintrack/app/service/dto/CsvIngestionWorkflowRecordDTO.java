@@ -19,6 +19,12 @@ public class CsvIngestionWorkflowRecordDTO implements Serializable {
 
     private Long financialTransactionId;
 
+    /**
+     * The final ledger transaction for a completed FILE import row. This becomes the authoritative classification
+     * source after the pre-post TransactionCandidate is deleted.
+     */
+    private FinancialTransactionDTO financialTransaction;
+
     private LocalDate transactionDate;
 
     private LocalDate postingDate;
@@ -77,6 +83,14 @@ public class CsvIngestionWorkflowRecordDTO implements Serializable {
 
     public void setFinancialTransactionId(Long financialTransactionId) {
         this.financialTransactionId = financialTransactionId;
+    }
+
+    public FinancialTransactionDTO getFinancialTransaction() {
+        return financialTransaction;
+    }
+
+    public void setFinancialTransaction(FinancialTransactionDTO financialTransaction) {
+        this.financialTransaction = financialTransaction;
     }
 
     public LocalDate getTransactionDate() {

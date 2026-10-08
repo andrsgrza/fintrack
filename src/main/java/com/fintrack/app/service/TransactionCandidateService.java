@@ -27,6 +27,7 @@ import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftTagSummaryDTO;
@@ -39,6 +40,7 @@ import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRulePreviewResponseDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
+import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
 import com.fintrack.app.service.rules.CategorySuggestion;
@@ -91,6 +93,8 @@ public class TransactionCandidateService {
 
     private final TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper;
 
+    private final FinancialTransactionMapper financialTransactionMapper;
+
     private final CurrentUserService currentUserService;
 
     private final FinancialAccountRepository financialAccountRepository;
@@ -113,6 +117,7 @@ public class TransactionCandidateService {
         TransactionCandidateRepository transactionCandidateRepository,
         TransactionCandidateMapper transactionCandidateMapper,
         TransactionCandidateFinancialTransactionMapper transactionCandidateFinancialTransactionMapper,
+        FinancialTransactionMapper financialTransactionMapper,
         CurrentUserService currentUserService,
         FinancialAccountRepository financialAccountRepository,
         FinancialTransactionRepository financialTransactionRepository,
@@ -126,6 +131,7 @@ public class TransactionCandidateService {
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.transactionCandidateMapper = transactionCandidateMapper;
         this.transactionCandidateFinancialTransactionMapper = transactionCandidateFinancialTransactionMapper;
+        this.financialTransactionMapper = financialTransactionMapper;
         this.currentUserService = currentUserService;
         this.financialAccountRepository = financialAccountRepository;
         this.financialTransactionRepository = financialTransactionRepository;
@@ -212,41 +218,36 @@ public class TransactionCandidateService {
      * Post a complete manual transaction draft into the ledger.
      *
      * @param id the candidate id.
-     * @return the posted manual candidate.
+     * @return the posted financial transaction. The pre-post candidate is deleted atomically after posting.
      */
-    public Optional<TransactionCandidateDTO> postManualDraft(Long id) {
+    public Optional<FinancialTransactionDTO> postManualDraft(Long id) {
         LOG.debug("Request to post manual TransactionCandidate draft : {}", id);
-        return findAccessibleEntityForPosting(id)
-            .map(existing -> {
-                if (existing.getStatus() == TransactionCandidateStatus.POSTED && existing.getFinancialTransaction() != null) {
-                    return existing;
-                }
-                rejectManualPostMutation(existing);
-                normalizeFields(existing);
-                deriveAmountAndFlow(existing);
-                recalculateManualDraftStatus(existing);
-                rejectStaleReviewStateForPosting(existing);
-                if (existing.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
-                    throw new IllegalArgumentException("Manual transaction candidate is not ready to post");
-                }
-                validateCandidate(existing, existing);
+        return findAccessibleEntityForPosting(id).map(existing -> {
+            rejectManualPostMutation(existing);
+            normalizeFields(existing);
+            deriveAmountAndFlow(existing);
+            recalculateManualDraftStatus(existing);
+            rejectStaleReviewStateForPosting(existing);
+            if (existing.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
+                throw new IllegalArgumentException("Manual transaction candidate is not ready to post");
+            }
+            validateCandidate(existing, existing);
 
-                Instant now = Instant.now();
-                FinancialTransaction financialTransaction = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
-                    existing,
-                    TransactionOrigin.MANUAL,
-                    now
-                );
-                financialTransaction = financialTransactionRepository.save(financialTransaction);
-                existing.setFinancialTransaction(financialTransaction);
-                existing.setStatus(TransactionCandidateStatus.POSTED);
-                existing.setValidationStatus(TransactionCandidateValidationStatus.VALID);
-                existing.setPostedAt(now);
-                existing.setUpdatedAt(now);
-                return existing;
-            })
-            .map(transactionCandidateRepository::save)
-            .map(transactionCandidateMapper::toDto);
+            Instant now = Instant.now();
+            FinancialTransaction financialTransaction = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
+                existing,
+                TransactionOrigin.MANUAL,
+                now
+            );
+            financialTransaction = financialTransactionRepository.save(financialTransaction);
+            // Explicitly flush orphan removal before deleting the candidate. If either delete fails, the
+            // enclosing transaction rolls back the newly-created FinancialTransaction as well.
+            existing.setTagAssociations(Set.of());
+            transactionCandidateRepository.saveAndFlush(existing);
+            transactionCandidateRepository.delete(existing);
+            transactionCandidateRepository.flush();
+            return financialTransactionMapper.toDto(financialTransaction);
+        });
     }
 
     /**
@@ -368,7 +369,6 @@ public class TransactionCandidateService {
         candidate.setUser(existing.getUser());
         candidate.setCreatedAt(existing.getCreatedAt());
         candidate.setUpdatedAt(Instant.now());
-        candidate.setPostedAt(existing.getPostedAt());
         candidate.setCancelledAt(existing.getCancelledAt());
         candidate.setFailedAt(existing.getFailedAt());
         applyDefaults(candidate);
@@ -935,9 +935,6 @@ public class TransactionCandidateService {
         if (candidate.getStatus() == TransactionCandidateStatus.READY_TO_POST) {
             validateReadyToPost(candidate);
         }
-        if (candidate.getStatus() == TransactionCandidateStatus.POSTED) {
-            validatePosted(candidate);
-        }
     }
 
     private void validateSameOwner(TransactionCandidate candidate) {
@@ -967,12 +964,6 @@ public class TransactionCandidateService {
             !Objects.equals(ownerId, candidate.getIngestionRecord().getTransactionIngestion().getAccount().getUser().getId())
         ) {
             throw new IllegalArgumentException("Ingestion record must belong to candidate owner");
-        }
-        if (
-            candidate.getFinancialTransaction() != null &&
-            !Objects.equals(ownerId, candidate.getFinancialTransaction().getAccount().getUser().getId())
-        ) {
-            throw new IllegalArgumentException("Financial transaction must belong to candidate owner");
         }
     }
 
@@ -1044,12 +1035,6 @@ public class TransactionCandidateService {
         candidate.setValidationStatus(TransactionCandidateValidationStatus.VALID);
     }
 
-    private void validatePosted(TransactionCandidate candidate) {
-        if (candidate.getFinancialTransaction() == null || candidate.getFinancialTransaction().getId() == null) {
-            throw new IllegalArgumentException("Posted candidates require a financial transaction link");
-        }
-    }
-
     private void validateFinalState(TransactionCandidate candidate) {
         if (candidate.getStatus() == TransactionCandidateStatus.FAILED && candidate.getFailureReason() == null) {
             throw new IllegalArgumentException("Failure reason is required for failed candidates");
@@ -1060,16 +1045,13 @@ public class TransactionCandidateService {
         if (previousStatus == null || nextStatus == null || previousStatus == nextStatus) {
             return;
         }
-        if (previousStatus == TransactionCandidateStatus.POSTED || previousStatus == TransactionCandidateStatus.CANCELLED) {
+        if (previousStatus == TransactionCandidateStatus.CANCELLED) {
             throw new IllegalArgumentException("Final transaction candidates cannot be changed");
-        }
-        if (previousStatus == TransactionCandidateStatus.FAILED && nextStatus == TransactionCandidateStatus.POSTED) {
-            throw new IllegalArgumentException("Failed candidates must be reviewed before posting");
         }
     }
 
     private void rejectFinalMutation(TransactionCandidate existing) {
-        if (existing.getStatus() == TransactionCandidateStatus.POSTED || existing.getStatus() == TransactionCandidateStatus.CANCELLED) {
+        if (existing.getStatus() == TransactionCandidateStatus.CANCELLED) {
             throw new IllegalArgumentException("Final transaction candidates cannot be changed");
         }
     }
@@ -1085,11 +1067,7 @@ public class TransactionCandidateService {
         if (existing.getSource() != TransactionCandidateSource.MANUAL) {
             throw new IllegalArgumentException("Rule preview only supports manual transaction candidates");
         }
-        if (
-            existing.getStatus() == TransactionCandidateStatus.POSTED ||
-            existing.getStatus() == TransactionCandidateStatus.CANCELLED ||
-            existing.getStatus() == TransactionCandidateStatus.FAILED
-        ) {
+        if (existing.getStatus() == TransactionCandidateStatus.CANCELLED || existing.getStatus() == TransactionCandidateStatus.FAILED) {
             throw new IllegalArgumentException("Final transaction candidates cannot use rule preview");
         }
     }
@@ -1140,9 +1118,6 @@ public class TransactionCandidateService {
         if (fieldPresent(node, "updatedAt") && !Objects.equals(existing.getUpdatedAt(), dto.getUpdatedAt())) {
             throw new IllegalArgumentException("Updated at cannot be changed");
         }
-        if (fieldPresent(node, "postedAt") && !Objects.equals(existing.getPostedAt(), dto.getPostedAt())) {
-            throw new IllegalArgumentException("Posted at cannot be changed");
-        }
         if (fieldPresent(node, "cancelledAt") && !Objects.equals(existing.getCancelledAt(), dto.getCancelledAt())) {
             throw new IllegalArgumentException("Cancelled at cannot be changed");
         }
@@ -1160,10 +1135,8 @@ public class TransactionCandidateService {
         rejectCreateField(dto.getFlow(), "Flow is derived from signed amount");
         rejectCreateField(dto.getCreatedAt(), "Created at is server-controlled");
         rejectCreateField(dto.getUpdatedAt(), "Updated at is server-controlled");
-        rejectCreateField(dto.getPostedAt(), "Posted at is server-controlled");
         rejectCreateField(dto.getCancelledAt(), "Cancelled at is server-controlled");
         rejectCreateField(dto.getFailedAt(), "Failed at is server-controlled");
-        rejectCreateField(dto.getFinancialTransaction(), "Financial transaction link is server-controlled");
     }
 
     private void rejectGenericCreateControlledFields(TransactionCandidateDTO dto) {
@@ -1218,9 +1191,6 @@ public class TransactionCandidateService {
         rejectUpdateField(dto.getCategorySource(), node, "categorySource", "Category source is server-controlled");
         rejectUpdateField(dto.getAmount(), node, "amount", "Amount is derived from signed amount");
         rejectUpdateField(dto.getFlow(), node, "flow", "Flow is derived from signed amount");
-        if ((node == null && dto.getFinancialTransaction() != null) || (node != null && node.has("financialTransaction"))) {
-            throw new IllegalArgumentException("Financial transaction link is server-controlled");
-        }
     }
 
     private void rejectGenericStatusChange(TransactionCandidate existing, TransactionCandidateDTO dto, JsonNode node) {
@@ -1260,8 +1230,8 @@ public class TransactionCandidateService {
     }
 
     private void rejectGenericDelete(TransactionCandidate candidate) {
-        if (candidate.getStatus() == TransactionCandidateStatus.POSTED || candidate.getStatus() == TransactionCandidateStatus.CANCELLED) {
-            throw new IllegalArgumentException("Posted or cancelled transaction candidates cannot be deleted");
+        if (candidate.getStatus() == TransactionCandidateStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cancelled transaction candidates cannot be deleted");
         }
         if (candidate.getSource() == TransactionCandidateSource.FILE_IMPORT) {
             throw new IllegalArgumentException("File import candidates cannot be deleted through generic candidate CRUD");
@@ -1269,11 +1239,7 @@ public class TransactionCandidateService {
         if (candidate.getSource() == TransactionCandidateSource.API_IMPORT) {
             throw new IllegalArgumentException("API import candidates cannot be deleted through generic candidate CRUD");
         }
-        if (
-            candidate.getTransactionIngestion() != null ||
-            candidate.getIngestionRecord() != null ||
-            candidate.getFinancialTransaction() != null
-        ) {
+        if (candidate.getTransactionIngestion() != null || candidate.getIngestionRecord() != null) {
             throw new IllegalArgumentException("Workflow-linked candidates cannot be deleted through generic candidate CRUD");
         }
         if (candidate.getStatus() != TransactionCandidateStatus.DRAFT || candidate.getSource() != TransactionCandidateSource.MANUAL) {
@@ -1299,9 +1265,6 @@ public class TransactionCandidateService {
         }
         if (fieldPresent(node, "updatedAt")) {
             throw new IllegalArgumentException("Updated at is server-controlled");
-        }
-        if (fieldPresent(node, "postedAt")) {
-            throw new IllegalArgumentException("Posted at is server-controlled");
         }
         if (fieldPresent(node, "cancelledAt")) {
             throw new IllegalArgumentException("Cancelled at is server-controlled");
@@ -1399,9 +1362,6 @@ public class TransactionCandidateService {
     }
 
     private void applyLifecycleTimestamps(TransactionCandidate candidate, Instant now) {
-        if (candidate.getStatus() == TransactionCandidateStatus.POSTED && candidate.getPostedAt() == null) {
-            candidate.setPostedAt(now);
-        }
         if (candidate.getStatus() == TransactionCandidateStatus.CANCELLED && candidate.getCancelledAt() == null) {
             candidate.setCancelledAt(now);
         }

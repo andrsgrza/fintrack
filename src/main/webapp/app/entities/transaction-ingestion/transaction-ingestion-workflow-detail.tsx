@@ -78,11 +78,18 @@ interface ICsvIngestionDescriptionReview {
   editedBy?: string | null;
 }
 
+interface ICompletedWorkflowFinancialTransaction {
+  id?: number;
+  category?: { id?: number; name?: string; color?: string | null } | null;
+  tags?: Array<{ id?: number; name?: string; color?: string | null }>;
+}
+
 interface ICsvIngestionWorkflowRow {
   ingestionRecordId?: number;
   recordIndex?: number;
   status?: string;
   financialTransactionId?: number | null;
+  financialTransaction?: ICompletedWorkflowFinancialTransaction | null;
   transactionDate?: string;
   postingDate?: string | null;
   description?: string;
@@ -491,7 +498,7 @@ const candidateBlocksClassification = (row: ICsvIngestionWorkflowRow) => {
   if (candidate.source !== 'FILE_IMPORT') {
     return 'source';
   }
-  if (['POSTED', 'CANCELLED', 'FAILED'].includes(candidate.status ?? '')) {
+  if (['CANCELLED', 'FAILED'].includes(candidate.status ?? '')) {
     return 'final';
   }
   if (candidate.status !== 'READY_TO_POST') {
@@ -861,7 +868,7 @@ export const TransactionIngestionWorkflowDetail = () => {
   const classificationConfirmBlocked = Boolean(
     classificationRows.find(row => candidateBlocksClassification(row) || !candidateHasReviewedClassification(row.candidate)),
   );
-  const showClassificationColumns = reviewActionsEnabled || rows.some(row => row.candidate?.id);
+  const showClassificationColumns = reviewActionsEnabled || rows.some(row => row.candidate?.id || row.financialTransaction?.id);
   const classificationReevaluationAvailable =
     workflow?.status === 'READY' && classificationRows.length > 0 && !validateCandidateBackedWorkflow(workflow);
   const classificationReevaluationRunning =
@@ -1881,6 +1888,7 @@ export const TransactionIngestionWorkflowDetail = () => {
     rowBlocked: string | null,
   ) => {
     const candidateId = candidate?.id;
+    const completedFinancialTransaction = row.financialTransaction;
     const compatibleCategories = categories.filter(category => categoryCompatibleWithFlow(category, candidate?.flow ?? row.flow));
     const previewCategoryName = suggestedCategoryName(preview);
     const categorySuggestionApplicable = hasApplicableSuggestedCategory(candidate, preview);
@@ -1906,6 +1914,10 @@ export const TransactionIngestionWorkflowDetail = () => {
               </option>
             ))}
           </Input>
+        ) : completedFinancialTransaction?.id ? (
+          <span data-testid={`classificationCategoryFinal-${completedFinancialTransaction.id}`}>
+            {completedFinancialTransaction.category?.name ?? ''}
+          </span>
         ) : candidateId ? (
           <span data-testid={`classificationCategoryReadOnly-${candidateId}`}>{candidate?.categoryName ?? ''}</span>
         ) : row.status === 'VALID' ? (
@@ -1945,6 +1957,7 @@ export const TransactionIngestionWorkflowDetail = () => {
     rowBlocked: string | null,
   ) => {
     const candidateId = candidate?.id;
+    const completedFinancialTransaction = row.financialTransaction;
     const selectedTags = candidateSelectedTags(candidate, tags);
     const tagSuggestionApplicable = hasApplicableSuggestedTags(candidate, preview);
     const editable = reviewActionsEnabled && row.status === 'VALID' && Boolean(candidateId) && !rowBlocked;
@@ -1968,6 +1981,13 @@ export const TransactionIngestionWorkflowDetail = () => {
               )
             }
           />
+        ) : completedFinancialTransaction?.id ? (
+          <span data-testid={`classificationTagsFinal-${completedFinancialTransaction.id}`}>
+            {(completedFinancialTransaction.tags ?? [])
+              .map(tag => tag.name)
+              .filter(Boolean)
+              .join(', ')}
+          </span>
         ) : candidateId ? (
           <span data-testid={`classificationTagsReadOnly-${candidateId}`}>{(candidate?.tagNames ?? []).join(', ')}</span>
         ) : row.status === 'VALID' ? (

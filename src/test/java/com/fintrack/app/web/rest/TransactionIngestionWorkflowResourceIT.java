@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -55,6 +56,7 @@ import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
 import com.fintrack.app.repository.TransactionRuleRepository;
+import com.fintrack.app.service.TransactionIngestionService;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -67,14 +69,23 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,6 +96,11 @@ class TransactionIngestionWorkflowResourceIT {
 
     private static final String FILE_WORKFLOW_URL = "/api/transaction-ingestions/file";
     private static final String PARENT_FILE_INGESTION_URL = "/api/transaction-ingestions/{id}/file-ingestion";
+    private static final String CONFIRM_IMPORT_FAILURE_FUNCTION = "raise_confirm_import_failure";
+    private static final String CONFIRM_IMPORT_FAILURE_TRIGGER = "transaction_ingestion_confirm_import_failure";
+    private static final String CONFIRM_IMPORT_FAILURE_DESCRIPTION = "FORCE_CONFIRM_IMPORT_ROLLBACK";
+    private static final String CONFIRM_CANDIDATE_CLEANUP_FAILURE_FUNCTION = "raise_confirm_candidate_cleanup_failure";
+    private static final String CONFIRM_CANDIDATE_CLEANUP_FAILURE_TRIGGER = "transaction_ingestion_confirm_candidate_cleanup_failure";
 
     private static final String VALID_CSV =
         """
@@ -132,6 +148,9 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Autowired
     private TransactionCandidateRepository transactionCandidateRepository;
+
+    @Autowired
+    private TransactionIngestionService transactionIngestionService;
 
     @Autowired
     private DescriptionNormalizationRuleRepository descriptionNormalizationRuleRepository;
@@ -1357,8 +1376,8 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.row.status").value("DISABLED"));
 
-        assertThat(candidateTagJoinRows(candidateId).longValue()).isZero();
-        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        assertThat(candidateTagJoinRows(candidate.getId()).longValue()).isZero();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
         mockMvc.perform(get(workflowUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.rows[0].candidate").doesNotExist());
     }
 
@@ -1641,8 +1660,8 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.row.status").value("REJECTED"));
 
-        assertThat(candidateTagJoinRows(candidateId).longValue()).isZero();
-        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        assertThat(candidateTagJoinRows(candidate.getId()).longValue()).isZero();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
         mockMvc.perform(get(workflowUrl(ingestion))).andExpect(status().isOk()).andExpect(jsonPath("$.rows[0].candidate").doesNotExist());
     }
 
@@ -1841,7 +1860,6 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(uberCandidate.getAccount().getId()).isEqualTo(ingestion.getAccount().getId());
         assertThat(uberCandidate.getTransactionIngestion().getId()).isEqualTo(ingestion.getId());
         assertThat(uberCandidate.getIngestionRecord().getId()).isEqualTo(records.get(2).getId());
-        assertThat(uberCandidate.getFinancialTransaction()).isNull();
         assertThat(uberCandidate.getTransactionDate()).isEqualTo(LocalDate.parse("2026-01-17"));
         assertThat(uberCandidate.getPostingDate()).isEqualTo(LocalDate.parse("2026-01-18"));
         assertThat(uberCandidate.getDescription()).isEqualTo("Uber");
@@ -1971,39 +1989,6 @@ class TransactionIngestionWorkflowResourceIT {
         TransactionCandidate synced = candidateForRecord(record);
         assertThat(synced.getNotes()).isEqualTo("only notes changed");
         assertThat(synced.getClassificationReviewStatus()).isEqualTo(TransactionCandidateClassificationReviewStatus.SUGGESTED);
-    }
-
-    @Test
-    @Transactional
-    void prepareCandidatesDoesNotModifyPostedCandidateAndCreatesNoFinancialTransactions() throws Exception {
-        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
-        IngestionRecord record = recordsFor(ingestion).get(0);
-        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isOk());
-        TransactionCandidate candidate = candidateForRecord(record);
-        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
-        financialTransaction.setAccount(ingestion.getAccount());
-        financialTransaction.setTransactionIngestion(ingestion);
-        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
-        candidate.setStatus(TransactionCandidateStatus.POSTED);
-        candidate.setFinancialTransaction(financialTransaction);
-        candidate.setPostedAt(Instant.now());
-        candidate.setDescription("Already posted");
-        transactionCandidateRepository.saveAndFlush(candidate);
-        long financialTransactionCountBefore = financialTransactionRepository.count();
-        setNormalizedFields(record, "2026-02-01", null, "Should not sync", "-42.50", "MXN", null, null);
-
-        mockMvc
-            .perform(post(prepareCandidatesUrl(ingestion)))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.createdCount").value(0))
-            .andExpect(jsonPath("$.updatedCount").value(0))
-            .andExpect(jsonPath("$.skippedCount").value(1))
-            .andExpect(jsonPath("$.rows[0].reason").value("Posted candidate not modified"));
-
-        TransactionCandidate unchanged = candidateForRecord(record);
-        assertThat(unchanged.getDescription()).isEqualTo("Already posted");
-        assertThat(unchanged.getFinancialTransaction().getId()).isEqualTo(financialTransaction.getId());
-        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
     }
 
     @Test
@@ -2203,7 +2188,7 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
-    void confirmImportPostsPreparedCandidateAndIgnoresRequestBodyCategoryAndTags() throws Exception {
+    void confirmImportDeletesPreparedCandidateAndIgnoresRequestBodyCategoryAndTags() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);
         Category candidateCategory = persistCategory("Transport", CategoryType.EXPENSE, currentMockUser());
@@ -2224,12 +2209,12 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("COMPLETED"))
             .andExpect(jsonPath("$.createdNow").value(1))
-            .andExpect(jsonPath("$.rows[0].candidate.status").value("POSTED"));
+            .andExpect(jsonPath("$.rows[0].candidate").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].financialTransaction.category.id").value(candidateCategory.getId()))
+            .andExpect(jsonPath("$.rows[0].financialTransaction.tags[0].id").value(candidateTag.getId()));
 
-        TransactionCandidate postedCandidate = candidateForRecord(record);
         FinancialTransaction transaction = financialTransactionRepository.findAll().get(0);
-        assertThat(postedCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
-        assertThat(postedCandidate.getFinancialTransaction().getId()).isEqualTo(transaction.getId());
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
         assertThat(transaction.getCategory().getId()).isEqualTo(candidateCategory.getId());
         assertThat(transaction.getTags()).extracting(Tag::getId).containsExactly(candidateTag.getId());
         assertThat(transaction.getOrigin().name()).isEqualTo("FILE_IMPORT");
@@ -2590,11 +2575,7 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(status().isBadRequest());
 
         candidate.setSource(TransactionCandidateSource.FILE_IMPORT);
-        for (TransactionCandidateStatus status : List.of(
-            TransactionCandidateStatus.POSTED,
-            TransactionCandidateStatus.CANCELLED,
-            TransactionCandidateStatus.FAILED
-        )) {
+        for (TransactionCandidateStatus status : List.of(TransactionCandidateStatus.CANCELLED, TransactionCandidateStatus.FAILED)) {
             candidate.setStatus(status);
             transactionCandidateRepository.saveAndFlush(candidate);
             mockMvc
@@ -3102,8 +3083,8 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(jsonPath("$.status").value("COMPLETED"))
             .andExpect(jsonPath("$.createdNow").value(1))
             .andExpect(jsonPath("$.rows[0].status").value("IMPORTED"))
-            .andExpect(jsonPath("$.rows[0].candidate.status").value("POSTED"))
-            .andExpect(jsonPath("$.rows[0].candidate.financialTransactionId").exists());
+            .andExpect(jsonPath("$.rows[0].candidate").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].financialTransaction.id").exists());
 
         FinancialTransaction transaction = financialTransactionRepository.findAll().get(0);
         assertThat(transaction.getDescription()).isEqualTo("Candidate reviewed description");
@@ -3116,10 +3097,8 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(transaction.getOrigin()).isEqualTo(TransactionOrigin.FILE_IMPORT);
         assertThat(transaction.getTransactionIngestion().getId()).isEqualTo(ingestion.getId());
 
-        TransactionCandidate postedCandidate = candidateForRecord(record);
-        assertThat(postedCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.POSTED);
-        assertThat(postedCandidate.getPostedAt()).isNotNull();
-        assertThat(postedCandidate.getFinancialTransaction().getId()).isEqualTo(transaction.getId());
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
+        assertThat(candidateTagJoinRows(candidate.getId()).longValue()).isZero();
 
         IngestionRecord importedRecord = recordsFor(ingestion).get(0);
         assertThat(importedRecord.getStatus()).isEqualTo(IngestionRecordStatus.IMPORTED);
@@ -3131,6 +3110,16 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(rawData.path("normalized").has("tagIds")).isFalse();
         assertThat(rawData.path("review").has("categoryId")).isFalse();
         assertThat(rawData.path("review").has("tagIds")).isFalse();
+
+        mockMvc
+            .perform(get(workflowUrl(ingestion)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.rows[0].candidate").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].description").value("Candidate reviewed description"))
+            .andExpect(jsonPath("$.rows[0].financialTransaction.id").value(transaction.getId()))
+            .andExpect(jsonPath("$.rows[0].financialTransaction.category.id").value(category.getId()))
+            .andExpect(jsonPath("$.rows[0].financialTransaction.tags[0].id").value(tag.getId()));
     }
 
     @Test
@@ -3303,8 +3292,8 @@ class TransactionIngestionWorkflowResourceIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.createdNow").value(1))
-                .andExpect(jsonPath("$.rows[0].candidate.status").value("POSTED"))
-                .andExpect(jsonPath("$.rows[0].candidate.financialTransactionId").exists());
+                .andExpect(jsonPath("$.rows[0].candidate").doesNotExist())
+                .andExpect(jsonPath("$.rows[0].financialTransaction.id").exists());
         }
     }
 
@@ -3326,30 +3315,6 @@ class TransactionIngestionWorkflowResourceIT {
             transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user")
         ).allSatisfy(candidate -> assertThat(candidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST));
         assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
-    }
-
-    @Test
-    @Transactional
-    void confirmRejectsMixedPartialPostedCandidateWhenParentIsNotCompleted() throws Exception {
-        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
-        IngestionRecord record = recordsFor(ingestion).get(0);
-        TransactionCandidate candidate = preparedCandidateForConfirm(
-            ingestion,
-            TransactionCandidateClassificationReviewStatus.USER_SELECTED
-        );
-        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
-        financialTransaction.setAccount(ingestion.getAccount());
-        financialTransaction.setTransactionIngestion(ingestion);
-        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
-        candidate.setStatus(TransactionCandidateStatus.POSTED);
-        candidate.setFinancialTransaction(financialTransaction);
-        candidate.setPostedAt(Instant.now());
-        transactionCandidateRepository.saveAndFlush(candidate);
-
-        confirmImport(ingestion).andExpect(status().isBadRequest());
-
-        assertThat(ingestionRecordRepository.findById(record.getId()).orElseThrow().getStatus()).isEqualTo(IngestionRecordStatus.VALID);
-        assertThat(financialTransactionRepository.count()).isEqualTo(1);
     }
 
     @Test
@@ -3442,6 +3407,268 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
+    void concurrentConfirmRequestsCreateOnlyOneSetOfTransactions() throws Exception {
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        prepareCandidatesForConfirm(ingestion, TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
+        Long ingestionId = ingestion.getId();
+        Long recordId = record.getId();
+        Long accountId = ingestion.getAccount().getId();
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<MvcResult> firstConfirm = executor.submit(() -> concurrentConfirm(ingestionId, ready, start));
+            Future<MvcResult> secondConfirm = executor.submit(() -> concurrentConfirm(ingestionId, ready, start));
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            MvcResult firstResult = firstConfirm.get(30, TimeUnit.SECONDS);
+            MvcResult secondResult = secondConfirm.get(30, TimeUnit.SECONDS);
+            assertThat(firstResult.getResponse().getStatus()).isEqualTo(200);
+            assertThat(secondResult.getResponse().getStatus()).isEqualTo(200);
+            assertThat(
+                List.of(
+                    objectMapper.readTree(firstResult.getResponse().getContentAsString()).path("createdNow").asInt(),
+                    objectMapper.readTree(secondResult.getResponse().getContentAsString()).path("createdNow").asInt()
+                )
+            ).containsExactlyInAnyOrder(0, 1);
+
+            TestTransaction.start();
+            TransactionIngestion completed = transactionIngestionRepository.findById(ingestionId).orElseThrow();
+            IngestionRecord importedRecord = ingestionRecordRepository.findOneWithToOneRelationships(recordId).orElseThrow();
+            List<TransactionCandidate> candidates =
+                transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestionId, "user");
+            assertThat(completed.getStatus()).isEqualTo(IngestionStatus.COMPLETED);
+            assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore + 1);
+            assertThat(importedRecord.getStatus()).isEqualTo(IngestionRecordStatus.IMPORTED);
+            assertThat(importedRecord.getFinancialTransaction()).isNotNull();
+            assertThat(candidates).isEmpty();
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(10, TimeUnit.SECONDS);
+            if (!TestTransaction.isActive()) {
+                TestTransaction.start();
+            }
+            try {
+                authenticateAsUser();
+                assertThat(transactionIngestionService.delete(ingestionId)).isTrue();
+                financialAccountRepository.deleteById(accountId);
+                TestTransaction.flagForCommit();
+            } finally {
+                TestTransaction.end();
+            }
+        }
+    }
+
+    @Test
+    @Transactional
+    void confirmCompletedIngestionRejectsUnimportedRecordWithoutRecreatingTransactions() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        ingestion.setStatus(IngestionStatus.COMPLETED);
+        ingestion.setCompletedAt(Instant.now());
+        transactionIngestionRepository.saveAndFlush(ingestion);
+
+        confirmImport(ingestion)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Completed ingestion contains a valid record"));
+
+        assertThat(financialTransactionRepository.count()).isZero();
+        assertThat(recordsFor(ingestion).get(0).getStatus()).isEqualTo(IngestionRecordStatus.VALID);
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.COMPLETED
+        );
+    }
+
+    @Test
+    @Transactional
+    void confirmRollsBackAllWritesWhenFinancialTransactionPersistenceFails() throws Exception {
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+        TransactionIngestion ingestion = createWorkflowWithValidRows();
+        prepareCandidatesForConfirm(ingestion, TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
+        List<IngestionRecord> records = recordsFor(ingestion);
+        TransactionCandidate failingCandidate = candidateForRecord(records.get(1));
+        failingCandidate.setDescription(CONFIRM_IMPORT_FAILURE_DESCRIPTION);
+        failingCandidate.setUpdatedAt(Instant.now());
+        transactionCandidateRepository.saveAndFlush(failingCandidate);
+
+        Long ingestionId = ingestion.getId();
+        Long accountId = ingestion.getAccount().getId();
+        createConfirmImportFailureTrigger();
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        try {
+            mockMvc
+                .perform(post("/api/transaction-ingestions/" + ingestionId + "/confirm").with(user("user")))
+                .andExpect(status().isInternalServerError());
+
+            TestTransaction.start();
+            TransactionIngestion persistedIngestion = transactionIngestionRepository.findById(ingestionId).orElseThrow();
+            List<IngestionRecord> persistedRecords = ingestionRecordRepository.findAllByTransactionIngestionIdOrderByRecordIndexAsc(
+                ingestionId
+            );
+            List<TransactionCandidate> persistedCandidates =
+                transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestionId, "user");
+            assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+            assertThat(persistedIngestion.getStatus()).isEqualTo(IngestionStatus.READY);
+            assertThat(persistedIngestion.getRecordsCreated()).isZero();
+            assertThat(persistedRecords).extracting(IngestionRecord::getStatus).containsOnly(IngestionRecordStatus.VALID);
+            assertThat(persistedRecords).allSatisfy(record -> assertThat(record.getFinancialTransaction()).isNull());
+            assertThat(persistedCandidates).allSatisfy(candidate -> {
+                assertThat(candidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+            });
+        } finally {
+            if (!TestTransaction.isActive()) {
+                TestTransaction.start();
+            }
+            try {
+                removeConfirmImportFailureTrigger();
+                authenticateAsUser();
+                assertThat(transactionIngestionService.delete(ingestionId)).isTrue();
+                financialAccountRepository.deleteById(accountId);
+                TestTransaction.flagForCommit();
+            } finally {
+                TestTransaction.end();
+            }
+        }
+    }
+
+    @Test
+    @Transactional
+    void confirmRollsBackAllWritesWhenCandidateCleanupFails() throws Exception {
+        long financialTransactionCountBefore = financialTransactionRepository.count();
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        Tag tag = persistTag("Cleanup rollback tag", currentMockUser());
+        prepareCandidatesForConfirm(ingestion, TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        TransactionCandidate candidate = candidateForRecord(record);
+        candidate.setTags(new HashSet<>(Set.of(tag)));
+        transactionCandidateRepository.saveAndFlush(candidate);
+
+        Long ingestionId = ingestion.getId();
+        Long recordId = record.getId();
+        Long candidateId = candidate.getId();
+        Long accountId = ingestion.getAccount().getId();
+        createConfirmCandidateCleanupFailureTrigger();
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        try {
+            mockMvc
+                .perform(post("/api/transaction-ingestions/" + ingestionId + "/confirm").with(user("user")))
+                .andExpect(status().isInternalServerError());
+
+            TestTransaction.start();
+            TransactionIngestion persistedIngestion = transactionIngestionRepository.findById(ingestionId).orElseThrow();
+            IngestionRecord persistedRecord = ingestionRecordRepository.findById(recordId).orElseThrow();
+            TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidateId).orElseThrow();
+            assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
+            assertThat(persistedIngestion.getStatus()).isEqualTo(IngestionStatus.READY);
+            assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.VALID);
+            assertThat(persistedRecord.getFinancialTransaction()).isNull();
+            assertThat(persistedCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
+            assertThat(candidateTagJoinRows(candidateId).longValue()).isEqualTo(1L);
+        } finally {
+            if (!TestTransaction.isActive()) {
+                TestTransaction.start();
+            }
+            try {
+                removeConfirmCandidateCleanupFailureTrigger();
+                authenticateAsUser();
+                assertThat(transactionIngestionService.delete(ingestionId)).isTrue();
+                financialAccountRepository.deleteById(accountId);
+                TestTransaction.flagForCommit();
+            } finally {
+                TestTransaction.end();
+            }
+        }
+    }
+
+    @Test
+    @Transactional
+    void confirmCompletedIngestionDoesNotRecreateDeletedAfterImportTransaction() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        String rawDataBeforeConfirmRetry = record.getRawData();
+        ingestion.setStatus(IngestionStatus.COMPLETED);
+        ingestion.setCompletedAt(Instant.now());
+        ingestion.setRecordsReceived(1);
+        ingestion.setRecordsCreated(1);
+        ingestion.setRecordsSkipped(0);
+        ingestion.setRecordsRejected(0);
+        record.setStatus(IngestionRecordStatus.DELETED_AFTER_IMPORT);
+        record.setFinancialTransaction(null);
+        record.setErrorCode(null);
+        record.setErrorMessage(null);
+        transactionIngestionRepository.saveAndFlush(ingestion);
+        ingestionRecordRepository.saveAndFlush(record);
+
+        confirmImport(ingestion)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(0))
+            .andExpect(jsonPath("$.alreadyImported").value(1))
+            .andExpect(jsonPath("$.counts.recordsCreated").value(1))
+            .andExpect(jsonPath("$.counts.recordsRejected").value(0))
+            .andExpect(jsonPath("$.rows[0].status").value("DELETED_AFTER_IMPORT"))
+            .andExpect(jsonPath("$.rows[0].financialTransactionId").doesNotExist());
+
+        IngestionRecord persistedRecord = recordsFor(ingestion).get(0);
+        assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.DELETED_AFTER_IMPORT);
+        assertThat(persistedRecord.getFinancialTransaction()).isNull();
+        assertThat(persistedRecord.getRawData()).isEqualTo(rawDataBeforeConfirmRetry);
+        assertThat(financialTransactionRepository.count()).isZero();
+        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(
+            IngestionStatus.COMPLETED
+        );
+    }
+
+    @Test
+    @Transactional
+    void newlyConfirmedFileImportCanBeDeletedAndConfirmRetryDoesNotRecreateIt() throws Exception {
+        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
+        IngestionRecord record = recordsFor(ingestion).get(0);
+        prepareCandidatesForConfirm(ingestion, TransactionCandidateClassificationReviewStatus.NOT_APPLICABLE);
+        Long candidateId = candidateForRecord(record).getId();
+
+        confirmImport(ingestion).andExpect(status().isOk()).andExpect(jsonPath("$.createdNow").value(1));
+
+        FinancialTransaction financialTransaction = financialTransactionRepository.findAll().get(0);
+        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+
+        mockMvc
+            .perform(delete("/api/financial-transactions/{id}", financialTransaction.getId()).accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNoContent());
+
+        IngestionRecord deletedRecord = ingestionRecordRepository.findById(record.getId()).orElseThrow();
+        assertThat(deletedRecord.getStatus()).isEqualTo(IngestionRecordStatus.DELETED_AFTER_IMPORT);
+        assertThat(deletedRecord.getFinancialTransaction()).isNull();
+        assertThat(
+            transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user")
+        ).isEmpty();
+
+        confirmImport(ingestion)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.createdNow").value(0))
+            .andExpect(jsonPath("$.alreadyImported").value(1))
+            .andExpect(jsonPath("$.rows[0].status").value("DELETED_AFTER_IMPORT"));
+
+        mockMvc.perform(post(prepareCandidatesUrl(ingestion))).andExpect(status().isBadRequest());
+        assertThat(financialTransactionRepository.findById(financialTransaction.getId())).isEmpty();
+        assertThat(
+            transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user")
+        ).isEmpty();
+    }
+
+    @Test
+    @Transactional
     void deleteCompletedImportedWorkflowCleansChildrenAndTransactionsButKeepsCategoryAndTags() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);
@@ -3461,14 +3688,13 @@ class TransactionIngestionWorkflowResourceIT {
             .andExpect(jsonPath("$.createdNow").value(1));
 
         Long financialTransactionId = financialTransactionRepository.findAll().get(0).getId();
-        Long candidateId = candidate.getId();
         Number tagJoinRowsBeforeDelete = (Number) em
             .createNativeQuery("select count(*) from rel_financial_transaction__tags where financial_transaction_id = :transactionId")
             .setParameter("transactionId", financialTransactionId)
             .getSingleResult();
         assertThat(tagJoinRowsBeforeDelete.longValue()).isEqualTo(1L);
-        Number candidateTagJoinRowsBeforeDelete = candidateTagJoinRows(candidateId);
-        assertThat(candidateTagJoinRowsBeforeDelete.longValue()).isEqualTo(1L);
+        assertThat(candidateTagJoinRows(candidate.getId()).longValue()).isZero();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
 
         mockMvc
             .perform(delete("/api/transaction-ingestions/{id}", ingestion.getId()).accept(MediaType.APPLICATION_JSON))
@@ -3479,9 +3705,9 @@ class TransactionIngestionWorkflowResourceIT {
             .setParameter("transactionId", financialTransactionId)
             .getSingleResult();
         assertThat(tagJoinRowsAfterDelete.longValue()).isZero();
-        assertThat(candidateTagJoinRows(candidateId).longValue()).isZero();
+        assertThat(candidateTagJoinRows(candidate.getId()).longValue()).isZero();
         assertThat(fileIngestionRepository.findById(fileIngestionId)).isEmpty();
-        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
         assertThat(ingestionRecordRepository.findById(record.getId())).isEmpty();
         assertThat(financialTransactionRepository.findById(financialTransactionId)).isEmpty();
         assertThat(transactionIngestionRepository.findById(ingestion.getId())).isEmpty();
@@ -3507,8 +3733,8 @@ class TransactionIngestionWorkflowResourceIT {
             .perform(delete("/api/transaction-ingestions/{id}", ingestion.getId()).accept(MediaType.APPLICATION_JSON))
             .andExpect(status().isNoContent());
 
-        assertThat(candidateTagJoinRows(candidateId).longValue()).isZero();
-        assertThat(transactionCandidateRepository.findById(candidateId)).isEmpty();
+        assertThat(candidateTagJoinRows(candidate.getId()).longValue()).isZero();
+        assertThat(transactionCandidateRepository.findById(candidate.getId())).isEmpty();
         assertThat(ingestionRecordRepository.findById(record.getId())).isEmpty();
         assertThat(transactionIngestionRepository.findById(ingestion.getId())).isEmpty();
         assertThat(tagRepository.findById(tag.getId())).isPresent();
@@ -3606,42 +3832,18 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
-    void confirmRejectsPostedCandidateBeforeParentCompletedWhenRowIsNotImported() throws Exception {
-        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
-        IngestionRecord record = recordsFor(ingestion).get(0);
-        JsonNode rawDataBefore = objectMapper.readTree(record.getRawData());
-        TransactionCandidate candidate = preparedCandidateForConfirm(
-            ingestion,
-            TransactionCandidateClassificationReviewStatus.USER_SELECTED
-        );
-        FinancialTransaction financialTransaction = createExistingFileTransaction(ingestion);
-        candidate.setStatus(TransactionCandidateStatus.POSTED);
-        candidate.setFinancialTransaction(financialTransaction);
-        candidate.setPostedAt(Instant.now());
-        transactionCandidateRepository.saveAndFlush(candidate);
-        long financialTransactionCountBefore = financialTransactionRepository.count();
-
-        confirmImport(ingestion)
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("Posted transaction candidate requires an imported ingestion record"));
-
-        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
-        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
-        IngestionRecord persistedRecord = ingestionRecordRepository.findById(record.getId()).orElseThrow();
-        assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.VALID);
-        assertThat(objectMapper.readTree(persistedRecord.getRawData())).isEqualTo(rawDataBefore);
-    }
-
-    @Test
-    @Transactional
-    void confirmRejectsImportedRowWhenCandidateIsNotPosted() throws Exception {
+    void confirmRejectsImportedRowThatRetainsAPrePostCandidate() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         IngestionRecord record = recordsFor(ingestion).get(0);
         TransactionCandidate candidate = preparedCandidateForConfirm(
             ingestion,
             TransactionCandidateClassificationReviewStatus.USER_SELECTED
         );
-        FinancialTransaction financialTransaction = createExistingFileTransaction(ingestion);
+        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
+        financialTransaction.setAccount(ingestion.getAccount());
+        financialTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
+        financialTransaction.setTransactionIngestion(ingestion);
+        financialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
         record.setStatus(IngestionRecordStatus.IMPORTED);
         record.setFinancialTransaction(financialTransaction);
         ingestionRecordRepository.saveAndFlush(record);
@@ -3649,13 +3851,12 @@ class TransactionIngestionWorkflowResourceIT {
 
         confirmImport(ingestion)
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("Imported ingestion record requires a posted transaction candidate"));
+            .andExpect(jsonPath("$.detail").value("Imported ingestion record cannot retain a transaction candidate"));
 
         assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
         assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
         TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
         assertThat(persistedCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
-        assertThat(persistedCandidate.getFinancialTransaction()).isNull();
     }
 
     @Test
@@ -3736,55 +3937,6 @@ class TransactionIngestionWorkflowResourceIT {
 
     @Test
     @Transactional
-    void confirmRejectsPostedCandidateFinancialTransactionMismatch() throws Exception {
-        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
-        IngestionRecord record = recordsFor(ingestion).get(0);
-        TransactionCandidate candidate = preparedCandidateForConfirm(
-            ingestion,
-            TransactionCandidateClassificationReviewStatus.USER_SELECTED
-        );
-        FinancialTransaction recordTransaction = createExistingFileTransaction(ingestion);
-        FinancialTransaction candidateTransaction = createExistingFileTransaction(ingestion);
-        record.setStatus(IngestionRecordStatus.IMPORTED);
-        record.setFinancialTransaction(recordTransaction);
-        ingestionRecordRepository.saveAndFlush(record);
-        candidate.setStatus(TransactionCandidateStatus.POSTED);
-        candidate.setFinancialTransaction(candidateTransaction);
-        candidate.setPostedAt(Instant.now());
-        transactionCandidateRepository.saveAndFlush(candidate);
-        long financialTransactionCountBefore = financialTransactionRepository.count();
-
-        confirmImport(ingestion)
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("Posted transaction candidate financial transaction must match ingestion record"));
-
-        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
-        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
-    }
-
-    @Test
-    @Transactional
-    void confirmRejectsUnpostedCandidateWithFinancialTransactionLink() throws Exception {
-        TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
-        TransactionCandidate candidate = preparedCandidateForConfirm(
-            ingestion,
-            TransactionCandidateClassificationReviewStatus.USER_SELECTED
-        );
-        candidate.setFinancialTransaction(createExistingFileTransaction(ingestion));
-        transactionCandidateRepository.saveAndFlush(candidate);
-        long financialTransactionCountBefore = financialTransactionRepository.count();
-
-        confirmImport(ingestion)
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("Unposted transaction candidate cannot be linked to a financial transaction"));
-
-        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
-        assertThat(recordsFor(ingestion).get(0).getStatus()).isEqualTo(IngestionRecordStatus.VALID);
-        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
-    }
-
-    @Test
-    @Transactional
     void confirmRejectsFileImportCandidateWithoutIngestionRecord() throws Exception {
         TransactionIngestion ingestion = createWorkflowWithSingleValidRow();
         TransactionCandidate candidate = preparedCandidateForConfirm(
@@ -3801,7 +3953,6 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(financialTransactionRepository.count()).isZero();
         TransactionCandidate orphanCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
         assertThat(orphanCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
-        assertThat(orphanCandidate.getFinancialTransaction()).isNull();
     }
 
     @Test
@@ -3822,31 +3973,6 @@ class TransactionIngestionWorkflowResourceIT {
         assertThat(financialTransactionRepository.count()).isZero();
         TransactionCandidate orphanCandidate = transactionCandidateRepository.findOneWithRelationships(candidate.getId()).orElseThrow();
         assertThat(orphanCandidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST);
-        assertThat(orphanCandidate.getFinancialTransaction()).isNull();
-    }
-
-    @Test
-    @Transactional
-    void confirmRollsBackAllRowsWhenAnyCandidateHasCorruptFinancialTransactionLink() throws Exception {
-        TransactionIngestion ingestion = createWorkflowWithValidRows();
-        prepareCandidatesForConfirm(ingestion, TransactionCandidateClassificationReviewStatus.USER_SELECTED);
-        List<IngestionRecord> records = recordsFor(ingestion);
-        TransactionCandidate corruptCandidate = candidateForRecord(records.get(1));
-        FinancialTransaction existingTransaction = createExistingFileTransaction(ingestion);
-        corruptCandidate.setFinancialTransaction(existingTransaction);
-        transactionCandidateRepository.saveAndFlush(corruptCandidate);
-        long financialTransactionCountBefore = financialTransactionRepository.count();
-
-        confirmImport(ingestion)
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("Unposted transaction candidate cannot be linked to a financial transaction"));
-
-        assertThat(financialTransactionRepository.count()).isEqualTo(financialTransactionCountBefore);
-        assertThat(recordsFor(ingestion)).allSatisfy(record -> assertThat(record.getStatus()).isEqualTo(IngestionRecordStatus.VALID));
-        assertThat(
-            transactionCandidateRepository.findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(ingestion.getId(), "user")
-        ).allSatisfy(candidate -> assertThat(candidate.getStatus()).isEqualTo(TransactionCandidateStatus.READY_TO_POST));
-        assertThat(transactionIngestionRepository.findById(ingestion.getId()).orElseThrow().getStatus()).isEqualTo(IngestionStatus.READY);
     }
 
     @Test
@@ -3983,6 +4109,87 @@ class TransactionIngestionWorkflowResourceIT {
 
     private ResultActions confirmImport(TransactionIngestion ingestion) throws Exception {
         return mockMvc.perform(post(confirmUrl(ingestion)));
+    }
+
+    private MvcResult concurrentConfirm(Long ingestionId, CountDownLatch ready, CountDownLatch start) throws Exception {
+        ready.countDown();
+        if (!start.await(10, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Timed out waiting to start concurrent Confirm Import request");
+        }
+        return mockMvc.perform(post("/api/transaction-ingestions/" + ingestionId + "/confirm").with(user("user"))).andReturn();
+    }
+
+    private void createConfirmImportFailureTrigger() {
+        em
+            .createNativeQuery(
+                """
+                create or replace function %s()
+                returns trigger
+                language plpgsql
+                as $$
+                begin
+                  if new.description = '%s' then
+                    raise exception 'forced confirm import persistence failure';
+                  end if;
+                  return new;
+                end;
+                $$
+                """.formatted(CONFIRM_IMPORT_FAILURE_FUNCTION, CONFIRM_IMPORT_FAILURE_DESCRIPTION)
+            )
+            .executeUpdate();
+        em
+            .createNativeQuery(
+                "create trigger %s before insert on financial_transaction for each row execute function %s()".formatted(
+                        CONFIRM_IMPORT_FAILURE_TRIGGER,
+                        CONFIRM_IMPORT_FAILURE_FUNCTION
+                    )
+            )
+            .executeUpdate();
+    }
+
+    private void removeConfirmImportFailureTrigger() {
+        em
+            .createNativeQuery("drop trigger if exists %s on financial_transaction".formatted(CONFIRM_IMPORT_FAILURE_TRIGGER))
+            .executeUpdate();
+        em.createNativeQuery("drop function if exists %s()".formatted(CONFIRM_IMPORT_FAILURE_FUNCTION)).executeUpdate();
+    }
+
+    private void createConfirmCandidateCleanupFailureTrigger() {
+        em
+            .createNativeQuery(
+                """
+                create or replace function %s()
+                returns trigger
+                language plpgsql
+                as $$
+                begin
+                  raise exception 'forced confirm candidate cleanup failure';
+                end;
+                $$
+                """.formatted(CONFIRM_CANDIDATE_CLEANUP_FAILURE_FUNCTION)
+            )
+            .executeUpdate();
+        em
+            .createNativeQuery(
+                "create trigger %s before delete on rel_transaction_candidate__tags for each row execute function %s()".formatted(
+                        CONFIRM_CANDIDATE_CLEANUP_FAILURE_TRIGGER,
+                        CONFIRM_CANDIDATE_CLEANUP_FAILURE_FUNCTION
+                    )
+            )
+            .executeUpdate();
+    }
+
+    private void removeConfirmCandidateCleanupFailureTrigger() {
+        em
+            .createNativeQuery(
+                "drop trigger if exists %s on rel_transaction_candidate__tags".formatted(CONFIRM_CANDIDATE_CLEANUP_FAILURE_TRIGGER)
+            )
+            .executeUpdate();
+        em.createNativeQuery("drop function if exists %s()".formatted(CONFIRM_CANDIDATE_CLEANUP_FAILURE_FUNCTION)).executeUpdate();
+    }
+
+    private void authenticateAsUser() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("user", "test"));
     }
 
     private ResultActions confirmImportWithIgnoredBody(TransactionIngestion ingestion, List<Map<String, Object>> recordSelections)
@@ -4255,14 +4462,6 @@ class TransactionIngestionWorkflowResourceIT {
             .filter(record -> record.getTransactionIngestion().getId().equals(ingestion.getId()))
             .sorted(Comparator.comparing(IngestionRecord::getRecordIndex))
             .toList();
-    }
-
-    private FinancialTransaction createExistingFileTransaction(TransactionIngestion ingestion) {
-        FinancialTransaction financialTransaction = FinancialTransactionResourceIT.createEntity(em);
-        financialTransaction.setAccount(ingestion.getAccount());
-        financialTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
-        financialTransaction.setTransactionIngestion(ingestion);
-        return financialTransactionRepository.saveAndFlush(financialTransaction);
     }
 
     private TransactionCandidate candidateForRecord(IngestionRecord record) {
