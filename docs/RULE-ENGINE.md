@@ -727,6 +727,18 @@ Description normalization is not part of the category/tag Transaction Rule Engin
 - It does not run during Confirm Import.
 - It does not invoke category/tag TransactionRule evaluation.
 
+### Configured DescriptionNormalizationRule editing
+
+The Description Normalization Rule product editor persists the parent and all matching conditions as one aggregate. It uses:
+
+- `POST /api/description-normalization-rules/configured`;
+- `GET /api/description-normalization-rules/{id}/configured`;
+- `PUT /api/description-normalization-rules/{id}/configured`.
+
+Configured `PUT` validates the complete requested configuration before condition replacement, then updates the parent and replaces ordered conditions in one transaction. Owner, rule identity, and priority remain server-managed; normal rule reorder remains the only priority-changing operation. This write does not execute normalization, reevaluate imported rows, mutate `rawData`, or alter FinancialTransactions. Existing generated/detail condition endpoints remain temporarily available for technical maintenance; the later DNR product-detail polish will make that distinction clearer.
+
+The aggregate has no version column or lock-based conflict response. A failed command cannot leave a partial parent/condition collection, but concurrent editors still have last-successful-save-wins behavior.
+
 ### Matcher helper boundary
 
 `DescriptionNormalizationRuleEvaluationService` uses the shared `TextConditionMatcher` and `ConditionGroupEvaluator` helpers.

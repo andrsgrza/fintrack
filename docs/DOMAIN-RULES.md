@@ -1587,6 +1587,10 @@ Description normalization rules are separate from `TransactionRule`.
 - Rule names are unique per owner, case-insensitive and trim-insensitive.
 - `createdAt` and `updatedAt` are server-owned.
 
+Configured product writes use the parent aggregate endpoints `POST /api/description-normalization-rules/configured`, `GET /api/description-normalization-rules/{id}/configured`, and `PUT /api/description-normalization-rules/{id}/configured`. A configured `PUT` updates the editable parent fields and replaces the submitted complete condition set in one transaction. It validates a proposed configuration before deleting existing conditions, preserves the existing owner, id, creation time, and priority, and never reevaluates historic ingestion rows or changes FinancialTransactions. Owner scoping and the existing administrator access policy apply to the parent; clients cannot supply an owner.
+
+There is no `@Version` or pessimistic-lock protocol for this aggregate. Each configured save is atomic, but two concurrent successful edits have normal last-commit-wins semantics; a later save can replace an earlier session's condition set.
+
 `DescriptionNormalizationRuleCondition`:
 
 - has no field selector; every condition evaluates `rawData.raw.description`;

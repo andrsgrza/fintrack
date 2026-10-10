@@ -36,7 +36,35 @@
       "manageConditions": "Manage conditions",
       "addCondition": "Add condition",
       "activeRequiresCondition": "Active rules require at least one condition.",
-      "activeDisabledNoConditions": "Add at least one condition before activating this rule."
+      "activeDisabledNoConditions": "Add at least one condition before activating this rule.",
+      "configuredLoadFailed": "The rule could not be loaded. Return to the rule manager and try again.",
+      "configuredSaveFailed": "The rule could not be saved. Your changes are still available to retry.",
+      "configuredValidationFailed": "Complete the highlighted fields before saving.",
+      "operators": {
+        "EXACT": "equals",
+        "NOT_EQUALS": "does not equal",
+        "CONTAINS": "contains",
+        "NOT_CONTAINS": "does not contain",
+        "STARTS_WITH": "starts with",
+        "ENDS_WITH": "ends with",
+        "REGEX": "matches expression"
+      },
+      "editor": {
+        "identity": "Identity",
+        "matching": "Matching",
+        "result": "Result",
+        "status": "Status",
+        "allHelp": "Every condition must match the original description.",
+        "anyHelp": "At least one condition must match the original description.",
+        "noConditions": "No conditions have been added.",
+        "regexHelp": "Advanced: use a valid Java regular expression.",
+        "resultHelp": "A matching original description is replaced with this value.",
+        "statusHelp": "Active rules participate in future import normalization; saving does not reprocess history.",
+        "preview": "Configuration preview",
+        "previewIf": "IF original description",
+        "previewThen": "THEN replace it with",
+        "previewIncomplete": "Complete the name, result, and every condition to see this configuration summary."
+      }
     },
     "descriptionNormalizationRuleCondition": {
       "operator": "Operator",

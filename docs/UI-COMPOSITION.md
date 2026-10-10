@@ -727,8 +727,10 @@ Description normalization rules follow the same parent-centered composition patt
 
 - list page owns reorder controls;
 - product create uses the configured parent + local conditions command and does not create an empty draft;
-- configured create keeps local conditions until one atomic save; legacy detail condition management remains technical/direct-maintenance compatibility;
-- edit page retains scalar parent editing and detail condition maintenance for existing rules;
+- standalone create and edit share one configured form: Identity → Matching → Result → Status, with local condition add/edit/remove and a live human-readable configuration summary;
+- configured create and edit use `POST`, `GET`, and `PUT /api/description-normalization-rules[/id]/configured`; edit loads every ordered condition and saves the complete replacement atomically while priority stays server-managed;
+- save failures preserve the local draft and show the backend validation message; client validation prevents blank identity/result/condition values and an active rule with no conditions;
+- legacy detail condition management remains technical/direct-maintenance compatibility until DNR-POLISH-1 converts the detail to read-only product presentation;
 - condition forms have no field selector because every condition evaluates original imported description.
 
 The product route is:

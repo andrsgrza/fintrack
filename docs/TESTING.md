@@ -3075,6 +3075,15 @@ Current automated coverage includes:
   - first matching rule wins;
   - empty-condition rules do not match defensively;
   - ALL/ANY matching behavior.
+- `DescriptionNormalizationRuleResourceIT`
+  - configured create and configured `GET`/`PUT` aggregate contracts;
+  - full condition replacement, add/remove/value/operator changes, repeated saves, priority and owner preservation;
+  - invalid configured commands preserve the existing parent/conditions; inactive empty configurations remain valid while active empty configurations are rejected;
+  - owner-scoped rejection, missing-rule handling, and current administrator access behavior.
+- `description-normalization-rule-ux.spec.tsx`
+  - shared create/edit configured editor loading, ALL/ANY change, condition add/edit/remove, preview, client validation, create/update payloads, and retained draft on save failure.
+- `description-normalization-rule.cy.ts`
+  - isolated browser create → configured edit → reload flow, activation guard, condition replacement, priority preservation, and technical detail-route availability.
 
 Recommended focused commands:
 

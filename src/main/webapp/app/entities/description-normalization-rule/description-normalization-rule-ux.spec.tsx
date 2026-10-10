@@ -19,7 +19,6 @@ const mockDispatch = jest.fn();
 const mockGetEntities = jest.fn(params => ({ type: 'descriptionNormalizationRule/getEntities', payload: params }));
 const mockGetEntity = jest.fn(id => ({ type: 'descriptionNormalizationRule/getEntity', payload: id }));
 const mockReset = jest.fn(() => ({ type: 'descriptionNormalizationRule/reset' }));
-const mockPartialUpdateEntity = jest.fn(entity => ({ type: 'descriptionNormalizationRule/partialUpdateEntity', payload: entity }));
 let mockState;
 
 jest.mock('app/config/store', () => ({
@@ -31,7 +30,6 @@ jest.mock('./description-normalization-rule.reducer', () => ({
   getEntities: params => mockGetEntities(params),
   getEntity: id => mockGetEntity(id),
   reset: () => mockReset(),
-  partialUpdateEntity: entity => mockPartialUpdateEntity(entity),
 }));
 
 const baseRule = {
@@ -131,7 +129,16 @@ describe('DescriptionNormalizationRule UX', () => {
     );
   });
 
-  it('edit hydrates name, description, resultingDescription, conditionOperator and active', async () => {
+  it('edit loads the complete configured aggregate, supports condition changes, and sends the configured update', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...baseRule,
+        conditions: [
+          { operator: 'CONTAINS', value: 'UBER', caseSensitive: false, position: 0 },
+          { operator: 'REGEX', value: 'RIDE.*', caseSensitive: true, position: 1 },
+        ],
+      },
+    });
     render(
       <MemoryRouter initialEntries={['/description-normalization-rule/1/edit']}>
         <Routes>
@@ -140,12 +147,76 @@ describe('DescriptionNormalizationRule UX', () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(mockGetEntity).toHaveBeenCalledWith('1'));
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/description-normalization-rules/1/configured'));
     expect(screen.getByDisplayValue('Normalize Uber')).toBeTruthy();
     expect(screen.getByDisplayValue('Imported Uber rows')).toBeTruthy();
     expect(screen.getByDisplayValue('Uber')).toBeTruthy();
-    expect(screen.getByDisplayValue('ALL')).toBeTruthy();
+    expect(screen.getByLabelText(/condition logic/i)).toHaveProperty('value', 'ALL');
     expect(screen.getByLabelText(/active/i)).toHaveProperty('checked', true);
+
+    expect(screen.getByDisplayValue('UBER')).toBeTruthy();
+    expect(screen.getByDisplayValue('RIDE.*')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/condition logic/i), { target: { value: 'ANY' } });
+    fireEvent.change(screen.getByDisplayValue('UBER'), { target: { value: 'UBER EATS' } });
+    fireEvent.click(screen.getByTestId('deleteDescriptionNormalizationRuleCondition-1'));
+    fireEvent.change(screen.getByLabelText(/resulting description/i), { target: { value: 'Uber food' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPut).toHaveBeenCalledWith(
+        'api/description-normalization-rules/1/configured',
+        expect.objectContaining({
+          name: 'Normalize Uber',
+          active: true,
+          conditionOperator: 'ANY',
+          resultingDescription: 'Uber food',
+          conditions: [expect.objectContaining({ operator: 'CONTAINS', value: 'UBER EATS', position: 0 })],
+        }),
+      ),
+    );
+    expect(mockAxiosPut.mock.calls[0][1]).not.toHaveProperty('priority');
+  });
+
+  it('adds conditions, changes ALL/ANY preview, and prevents an active rule without conditions client-side', async () => {
+    render(
+      <MemoryRouter initialEntries={['/description-normalization-rule/new']}>
+        <Routes>
+          <Route path="/description-normalization-rule/new" element={<DescriptionNormalizationRuleUpdate />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Normalize Uber' } });
+    fireEvent.change(screen.getByLabelText(/resulting description/i), { target: { value: 'Uber' } });
+    fireEvent.click(screen.getByLabelText(/active/i));
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    expect(await screen.findByText('Active rules require at least one condition.')).toBeTruthy();
+    expect(mockAxiosPost).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /add condition/i }));
+    fireEvent.change(screen.getByLabelText(/^value$/i), { target: { value: 'UBER' } });
+    expect(screen.getByText(/IF original description/i)).toBeTruthy();
+    expect(screen.getByText(/contains “UBER”/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/condition logic/i), { target: { value: 'ANY' } });
+    expect(screen.getByText(/Any condition/i)).toBeTruthy();
+  });
+
+  it('preserves an edit draft and displays backend save failures', async () => {
+    mockAxiosGet.mockResolvedValue({ data: { ...baseRule, conditions: [{ operator: 'CONTAINS', value: 'UBER', caseSensitive: false }] } });
+    mockAxiosPut.mockRejectedValue({ response: { data: { detail: 'Description normalization rule name already exists' } } });
+    render(
+      <MemoryRouter initialEntries={['/description-normalization-rule/1/edit']}>
+        <Routes>
+          <Route path="/description-normalization-rule/:id/edit" element={<DescriptionNormalizationRuleUpdate />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByDisplayValue('Normalize Uber')).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue('Normalize Uber'), { target: { value: 'A retained draft' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    expect(await screen.findByText('Description normalization rule name already exists')).toBeTruthy();
+    expect(screen.getByDisplayValue('A retained draft')).toBeTruthy();
   });
 
   it('detail renders embedded conditions editor without field selector', async () => {

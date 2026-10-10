@@ -13,12 +13,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Creates a DescriptionNormalizationRule and its condition set as one transaction.
+ * Creates or replaces the configured state of a DescriptionNormalizationRule as one transaction.
  *
  * The generated parent and condition write routes remain available for technical maintenance. Product
  * composition uses this command so an active rule can never be persisted without its required conditions.
@@ -58,12 +59,69 @@ public class DescriptionNormalizationRuleConfigurationService {
         applyRequest(rule, request);
 
         List<DescriptionNormalizationRuleCondition> conditions = toConditions(request, rule, now);
-        validate(rule, conditions);
+        validate(rule, conditions, null);
 
         DescriptionNormalizationRule savedRule = ruleRepository.save(rule);
         conditions.forEach(condition -> condition.setDescriptionNormalizationRule(savedRule));
         conditionRepository.saveAll(conditions);
         return toResponse(savedRule, conditions);
+    }
+
+    /**
+     * Returns the complete configured aggregate, including its ordered matching conditions.
+     */
+    @Transactional(readOnly = true)
+    public Optional<DescriptionNormalizationRuleConfiguredResponseDTO> findOne(Long id) {
+        return findAccessibleEntity(id).map(rule ->
+            toResponse(rule, conditionRepository.findByDescriptionNormalizationRuleIdOrderByPositionAscIdAsc(rule.getId()))
+        );
+    }
+
+    /**
+     * Replaces the editable configured state of an existing rule atomically. Priority and owner deliberately remain
+     * server-managed properties of the existing aggregate.
+     */
+    public DescriptionNormalizationRuleConfiguredResponseDTO update(Long id, DescriptionNormalizationRuleConfiguredRequestDTO request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Description normalization rule payload is required");
+        }
+        DescriptionNormalizationRule rule = findAccessibleEntity(id).orElseThrow(() -> new IllegalArgumentException("Entity not found"));
+        Instant now = Instant.now();
+        DescriptionNormalizationRule proposedRule = copyForValidation(rule);
+        applyRequest(proposedRule, request);
+        proposedRule.setUpdatedAt(now);
+
+        List<DescriptionNormalizationRuleCondition> conditions = toConditions(request, proposedRule, now);
+
+        // Validate a detached proposal before mutating the managed aggregate or deleting its current conditions. Any
+        // later persistence failure is still rolled back by this service transaction.
+        validate(proposedRule, conditions, rule.getId());
+
+        applyRequest(rule, request);
+        rule.setUpdatedAt(now);
+        conditions.forEach(condition -> condition.setDescriptionNormalizationRule(rule));
+        ruleRepository.save(rule);
+        conditionRepository.deleteByDescriptionNormalizationRuleId(rule.getId());
+        conditionRepository.flush();
+        conditionRepository.saveAll(conditions);
+        return toResponse(rule, conditions);
+    }
+
+    private DescriptionNormalizationRule copyForValidation(DescriptionNormalizationRule existing) {
+        DescriptionNormalizationRule proposed = new DescriptionNormalizationRule();
+        proposed.setId(existing.getId());
+        proposed.setUser(existing.getUser());
+        proposed.setPriority(existing.getPriority());
+        proposed.setCreatedAt(existing.getCreatedAt());
+        proposed.setUpdatedAt(existing.getUpdatedAt());
+        return proposed;
+    }
+
+    private Optional<DescriptionNormalizationRule> findAccessibleEntity(Long id) {
+        if (currentUserService.isAdmin()) {
+            return ruleRepository.findOneWithToOneRelationships(id);
+        }
+        return ruleRepository.findOneWithToOneRelationshipsByIdAndUserLogin(id, currentUserService.getCurrentUserLogin());
     }
 
     private void applyRequest(DescriptionNormalizationRule rule, DescriptionNormalizationRuleConfiguredRequestDTO request) {
@@ -101,7 +159,7 @@ public class DescriptionNormalizationRuleConfigurationService {
         return conditions;
     }
 
-    private void validate(DescriptionNormalizationRule rule, List<DescriptionNormalizationRuleCondition> conditions) {
+    private void validate(DescriptionNormalizationRule rule, List<DescriptionNormalizationRuleCondition> conditions, Long excludeId) {
         if (rule.getName() == null) {
             throw new IllegalArgumentException("Name is required");
         }
@@ -123,7 +181,7 @@ public class DescriptionNormalizationRuleConfigurationService {
         if (rule.getActive() == null) {
             throw new IllegalArgumentException("Active is required");
         }
-        if (ruleRepository.existsByUserLoginAndNormalizedName(rule.getUser().getLogin(), rule.getName().toLowerCase(), null)) {
+        if (ruleRepository.existsByUserLoginAndNormalizedName(rule.getUser().getLogin(), rule.getName().toLowerCase(), excludeId)) {
             throw new IllegalArgumentException("Description normalization rule name already exists");
         }
         if (Boolean.TRUE.equals(rule.getActive()) && conditions.isEmpty()) {

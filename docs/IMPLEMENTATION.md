@@ -1439,6 +1439,12 @@ Description normalization is implemented as a separate ingestion-focused rule sy
 
 The evaluator loads active rules for the current owner by priority and returns the first matching `resultingDescription`. It does not save anything.
 
+### Configured DescriptionNormalizationRule command
+
+`DescriptionNormalizationRuleConfigurationService` owns product create and edit as one aggregate command. `POST /api/description-normalization-rules/configured` creates a rule at the next owner priority; `GET /api/description-normalization-rules/{id}/configured` returns the parent with conditions ordered by `position,id`; and `PUT /api/description-normalization-rules/{id}/configured` validates a detached proposed aggregate before it mutates the managed parent or deletes current children. After validation, the configured PUT preserves id, owner, priority, and `createdAt`, sets `updatedAt`, deletes the old child collection, and saves the submitted ordered collection inside the same transaction.
+
+This command deliberately has no historic side effect: it does not rerun ingestion normalization, modify `rawData`, create FinancialTransactions, or otherwise alter completed imports. It preserves current owner/admin accessibility checks. There is no aggregate version or pessimistic lock; configured writes are atomic but concurrent successful saves remain last-write-wins.
+
 Architecture boundary:
 
 - `DescriptionNormalizationRuleEvaluationService` uses `TextConditionMatcher` and `ConditionGroupEvaluator`.
