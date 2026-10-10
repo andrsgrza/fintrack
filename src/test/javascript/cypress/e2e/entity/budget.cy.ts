@@ -36,8 +36,10 @@ describe('Budget e2e test', () => {
   };
 
   const fillCreateForm = (name: string) => {
-    cy.get('[data-cy="name"]').clear().type(name);
-    cy.get('[data-cy="amount"]').clear().type('1000');
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(name);
+    cy.get('[data-cy="amount"]').clear();
+    cy.get('[data-cy="amount"]').type('1000');
     cy.get('[data-cy="currency"]').select('MXN');
     cy.get('[data-cy="period"]').select('MONTHLY');
     cy.get('[data-cy="startDate"]').type('2026-07-01');

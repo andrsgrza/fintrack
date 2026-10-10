@@ -111,7 +111,8 @@ describe('TransactionRule configured workflow e2e test', () => {
   };
 
   const setConditionLogic = (logic: 'ALL' | 'ANY') => {
-    cy.get('[data-cy="conditionLogic"]').select(logic).should('have.value', logic);
+    cy.get('[data-cy="conditionLogic"]').select(logic);
+    cy.get('[data-cy="conditionLogic"]').should('have.value', logic);
   };
 
   const assertAnyDisabled = () => {
@@ -127,7 +128,8 @@ describe('TransactionRule configured workflow e2e test', () => {
     cy.get('[data-cy="embeddedConditionForm"]').within(() => {
       cy.get('[data-cy="field"]').select('DESCRIPTION');
       cy.get('[data-cy="operator"]').select('CONTAINS');
-      cy.get('[data-cy="value"]').clear().type(value);
+      cy.get('[data-cy="value"]').clear();
+      cy.get('[data-cy="value"]').type(value);
       cy.get('[data-cy="conditionSaveButton"]').click();
     });
     cy.get('[data-cy="conditionRow"][data-condition-field="DESCRIPTION"][data-condition-operator="CONTAINS"]')
@@ -208,7 +210,8 @@ describe('TransactionRule configured workflow e2e test', () => {
     const ruleName = uniqueName('tr-expense-rule');
 
     visitCreate();
-    cy.get('[data-cy="name"]').clear().type(ruleName);
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(ruleName);
     selectCategory(expenseCategory);
     assertRequiredFlow('Expense');
     assertAnyDisabled();
@@ -225,7 +228,8 @@ describe('TransactionRule configured workflow e2e test', () => {
     const ruleName = uniqueName('tr-income-rule');
 
     visitCreate();
-    cy.get('[data-cy="name"]').clear().type(ruleName);
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(ruleName);
     selectCategory(incomeCategory);
     assertRequiredFlow('Income');
     assertAnyDisabled();
@@ -250,7 +254,8 @@ describe('TransactionRule configured workflow e2e test', () => {
     const ruleName = uniqueName('tr-both-rule');
 
     visitCreate();
-    cy.get('[data-cy="name"]').clear().type(ruleName);
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(ruleName);
     selectCategory(bothCategory);
     assertNoRequiredFlow();
     assertAnyEnabled();
@@ -265,7 +270,8 @@ describe('TransactionRule configured workflow e2e test', () => {
     const ruleName = uniqueName('tr-tag-rule');
 
     visitCreate();
-    cy.get('[data-cy="name"]').clear().type(ruleName);
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(ruleName);
     selectTag(tag);
     assertNoRequiredFlow();
     assertAnyEnabled();
@@ -310,7 +316,7 @@ describe('TransactionRule configured workflow e2e test', () => {
   it('marks TransactionRule technical/debug condition surfaces clearly', () => {
     const ruleName = uniqueName('tr-debug-rule');
 
-    createConfiguredRule(ruleName, expenseCategory, 'OUT').then(rule => {
+    createConfiguredRule(ruleName, expenseCategory, 'OUT').then(() => {
       visitList();
       cy.contains('a', ruleName).parents('tr').find(entityDetailsButtonSelector).click();
       cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('be.visible');

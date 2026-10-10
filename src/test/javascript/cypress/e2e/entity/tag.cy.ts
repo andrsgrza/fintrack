@@ -70,8 +70,10 @@ describe('Tag product UX e2e test', () => {
       cy.get('[data-cy="color"]').should('exist');
     });
     cy.get('[data-cy="tagColorPreview"]').should('not.exist');
-    cy.get('[data-cy="name"]').clear().type(tagName);
-    cy.get('[data-cy="description"]').clear().type('Trips and travel');
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(tagName);
+    cy.get('[data-cy="description"]').clear();
+    cy.get('[data-cy="description"]').type('Trips and travel');
     cy.get('[data-cy="tagColorPicker"]').then($input => {
       const input = $input[0] as HTMLInputElement;
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -86,7 +88,7 @@ describe('Tag product UX e2e test', () => {
     cy.wait('@createTagRequest').then(({ response }) => {
       expect(response?.statusCode).to.equal(201);
       expect(response?.body.name).to.equal(tagName);
-      tags.push(response!.body);
+      tags.push(response.body);
     });
 
     cy.get(entityTableSelector).should('contain', tagName).and('contain', 'Trips and travel');
@@ -116,7 +118,7 @@ describe('Tag product UX e2e test', () => {
     cy.get('[data-cy="entityDetailsBackButton"]').click();
     cy.location('pathname').should('eq', tagPageUrl);
 
-    cy.then(() => cy.visit(`/tag/${tags[0].id}/edit`));
+    cy.visit(`/tag/${tags[0].id}/edit`);
     cy.wait('@tagRequest').its('response.statusCode').should('eq', 200);
     cy.get('[data-cy="tagColorPicker"]').should('exist');
     cy.get('[data-cy="tagColorControlRow"]').within(() => {
@@ -124,22 +126,24 @@ describe('Tag product UX e2e test', () => {
       cy.get('[data-cy="color"]').should('exist');
     });
     cy.get('[data-cy="tagColorPreview"]').should('not.exist');
-    cy.get('[data-cy="description"]').clear().type('Updated travel');
-    cy.get('[data-cy="color"]').clear().type('#abcdef');
+    cy.get('[data-cy="description"]').clear();
+    cy.get('[data-cy="description"]').type('Updated travel');
+    cy.get('[data-cy="color"]').clear();
+    cy.get('[data-cy="color"]').type('#abcdef');
     cy.get('[data-cy="active"]').uncheck();
     cy.get(entityCreateSaveButtonSelector).click();
     cy.wait('@updateTagRequest').its('response.statusCode').should('eq', 200);
 
-    cy.then(() => cy.visit(`/tag/${tags[0].id}`));
+    cy.visit(`/tag/${tags[0].id}`);
     cy.contains('Updated travel').should('exist');
     cy.get('[data-cy="tagDetailStatusHelpButton"]').should('exist').focus();
 
-    cy.then(() => cy.visit(`/tag/${tags[0].id}/edit`));
+    cy.visit(`/tag/${tags[0].id}/edit`);
     cy.get('[data-cy="active"]').check();
     cy.get(entityCreateSaveButtonSelector).click();
     cy.wait('@updateTagRequest').its('response.statusCode').should('eq', 200);
 
-    cy.then(() => cy.visit(`/tag/${tags[0].id}/delete`));
+    cy.visit(`/tag/${tags[0].id}/delete`);
     cy.get('[data-cy="tagDeleteLeafMessage"]').should('exist');
     cy.get(entityConfirmDeleteButtonSelector).click();
     cy.wait('@deleteTagRequest').its('response.statusCode').should('eq', 204);

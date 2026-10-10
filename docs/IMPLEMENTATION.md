@@ -1414,6 +1414,14 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 2026-07-11 | **Decision 11C — snapshot audit plan:** remove required `ApiIngestion`→`ApiAccessToken` FK; add snapshot fields; token DELETE allowed with historical ingestions; cascade permissions only. Superseded by implementation entry below.                                                                                                                                                                                                                                                                                                                                                            |
 | 2026-07-11 | **Decision 11C implemented ✅:** snapshot fields + Liquibase `20260711160000`; token server-side generation + `rawToken` reveal modal; delete cascades permissions only; `SpaWebFilter` fix for `/api-*` frontend routes; ITs + service tests. Docs synced. Runtime API auth enforcement deferred fase 6.                                                                                                                                                                                                                                                                                        |
 
+## Rules product navigation
+
+`/rules` is the authenticated product entry point for rule management. Its two destinations deliberately keep the independent engines separate: **Description Rules** opens `/description-normalization-rule`, while **Classification Rules** opens `/transaction-rule`. Existing manager URLs, deep links, and Transaction Ingestion contextual rule creation remain in place; this navigation change neither redirects nor changes either engine's contracts.
+
+The landing uses the existing `ProductPage`, `ProductPageHeader`, and `ProductSection` primitives directly. No new shared rule presentation component was introduced because the two cards have distinct explanatory content and there is no repeated presentation behavior to extract yet.
+
+Both managers will receive consistent ordering UX in later manager-specific polish slices: arrow controls and drag-and-drop, with keyboard-accessible controls, owner-scoped complete-order persistence, and recovery on reorder errors. That work is not implemented by the `/rules` landing.
+
 ## Description normalization rules
 
 Description normalization is implemented as a separate ingestion-focused rule system:

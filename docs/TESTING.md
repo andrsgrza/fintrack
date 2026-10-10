@@ -2916,8 +2916,10 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - Unified category/tag decisions survive refresh because workflow row candidate summaries reload persisted selections.
 - Transaction Ingestion tag-selector coverage uses the shared `ProductTagSelector`: no native tag multi-select remains; persisted tags render as color-accented removable pills; active-only Add tag search prevents duplicates; inactive historical selections remain visible/removable but are unavailable for new assignment. The existing ingestion-scoped classification PATCH remains the only persistence path. Jest and Cypress keep transient rule suggestions distinct from persisted pills, cover remove/add/reload, per-row and batch apply, reevaluate, auto-apply, and protected manual selections.
 - Cypress coverage for the real workflow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
-  Run it with a dedicated clean user so existing manual TransactionRules cannot influence suggestions:
-  `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
+  The default local Liquibase seed account is `user` / `user`; use it for a clean local database or override `INGESTION_E2E_USERNAME` and `INGESTION_E2E_PASSWORD` with a dedicated account when one has been provisioned:
+  `INGESTION_E2E_USERNAME=user INGESTION_E2E_PASSWORD=user npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
+  `e2e:headless` first waits for application health on the configured default backend port (normally `http://127.0.0.1:8080/management/health`). When intentionally validating an isolated app on another local port, run Cypress directly with its matching base URL after the app health endpoint is UP, for example:
+  `npm run e2e:cypress -- --config baseUrl=http://localhost:18080 --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
 - The workflow E2E also asserts all four global reevaluation controls and the eligible-row action are visible, sends their description/candidate-preview requests with the correct global or row scope, and proves no rule-apply or confirm-no-suggestions request occurs until the test explicitly applies the relevant domain suggestion. It verifies per-row category/tag apply uses `CATEGORY`/`TAGS`, the global category action leaves tag suggestions pending until the global tag action runs, and description application does not invoke category/tag rule application or Confirm Import.
 - Cypress workflow hardening coverage also includes:
   - invalid CSV header stays on `/transaction-ingestion/new`, shows a backend error, and does not navigate to review;
@@ -2926,8 +2928,8 @@ CSV review row action tests continue to cover the canonical mutation flow:
   - disabling one valid row excludes it from candidate-backed classification preview and import while importing the remaining enabled valid row.
 - `src/test/javascript/cypress/e2e/entity/transaction-ingestion.cy.ts` is now a lightweight workflow smoke spec, not a generated CRUD spec. It checks list/menu load, `/transaction-ingestion/new`, workflow detail navigation, and absence of the old generated Edit product action.
 - `src/test/javascript/cypress/e2e/entity/file-ingestion.cy.ts` and `src/test/javascript/cypress/e2e/entity/ingestion-record.cy.ts` are technical/debug smoke specs. They verify the generated/debug pages remain reachable and marked technical without restoring old product CRUD expectations.
-- Run the current ingestion E2E pattern with:
-  `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
+- Run the current ingestion E2E pattern against a clean local seed database with:
+  `INGESTION_E2E_USERNAME=user INGESTION_E2E_PASSWORD=user npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
 - confirm import requires every current `VALID` row to have exactly one reviewed, valid, `READY_TO_POST` `FILE_IMPORT` candidate. Confirm no longer parses the old `records/categoryId/tagIds` request body; persisted candidates win.
 - confirm import rejects corrupt pre-completed `FILE_IMPORT` candidate state all-or-nothing: imported row with a remaining candidate, candidate linked to a disabled/non-valid row, candidate/record ingestion mismatch, any candidate with a final-transaction link, and a valid row whose candidate is orphaned from the ingestion.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
@@ -3054,6 +3056,12 @@ Copy this block when hardening the next entity:
 | 2026-07-11 | **Decision 11C implemented ✅**                                   | ApiAccessToken: 41 IT (+name-only create, delete preserves ingestions, cascade permissions), 8 service unit. ApiIngestion: 51 IT (+snapshot copy/retain/immutable/rename, normalization, direct delete blocked), 10 service unit. SpaWebFilterIT: forwards `/api-access-token/*` to SPA. Gaps: runtime API auth fase 6, E2E reveal modal.                                                                                                                                 |
 
 ## Description normalization rule tests
+
+## Rules landing navigation tests
+
+`rules.spec.tsx` verifies the authenticated `/rules` route's two distinct product destinations, localized English/Spanish copy, and links to the preserved Description Normalization Rule and Transaction Rule manager URLs. `menu.spec.tsx` verifies that the shared authenticated entity menu has one Rules entry in both languages, removes the two redundant product-facing manager entries, and retains the technical TransactionRuleCondition entry.
+
+`rules.cy.ts` is the browser navigation smoke: it opens Rules from the authenticated entity menu, enters each existing manager from the landing, returns through Rules, and confirms both direct manager URLs still load. It does not create or modify rules.
 
 Current automated coverage includes:
 

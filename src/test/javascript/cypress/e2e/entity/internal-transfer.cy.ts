@@ -247,7 +247,8 @@ describe('InternalTransfer e2e test', () => {
       it('edit button click should load edit InternalTransfer page and save', () => {
         cy.get(entityEditButtonSelector).first().click();
         cy.getEntityCreateUpdateHeading('InternalTransfer');
-        cy.get('[data-cy="notes"]').clear().type('updated transfer notes');
+        cy.get('[data-cy="notes"]').clear();
+        cy.get('[data-cy="notes"]').type('updated transfer notes');
         cy.get(entityCreateSaveButtonSelector).click();
         cy.wait('@entitiesRequest').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);

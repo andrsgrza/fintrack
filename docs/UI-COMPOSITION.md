@@ -713,6 +713,14 @@ The following generated backend write endpoints remain temporarily behavior-comp
 
 Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and endpoint tests may remain while backend compatibility remains. A later backend hardening slice may reject or remove these generated write paths after no active product/debug consumer exists.
 
+## Rules landing and navigation
+
+`/rules` is the user-facing Rules landing within the authenticated product navigation. It uses the standard wide `ProductPage` composition with one `ProductPageHeader` and two responsive `ProductSection` cards: Description Rules and Classification Rules. Each card is a normal keyboard-accessible link-style action to its preserved manager route (`/description-normalization-rule` and `/transaction-rule` respectively); it does not combine the rule engines or expose generated entity terminology.
+
+The main entity menu exposes one **Rules / Reglas** entry. The separate product-facing Description Normalization Rule and Transaction Rule menu entries are removed, while the intentionally technical TransactionRuleCondition entry remains available with its Technical badge. The same authenticated entity menu is used for ordinary users and administrators, so this change introduces no new authorization path.
+
+Future manager-specific polish must provide both arrow controls and drag-and-drop ordering in both managers, including keyboard-accessible ordering and existing complete owner-specific reorder persistence. It is not part of this landing slice.
+
 ## DescriptionNormalizationRule UI composition
 
 Description normalization rules follow the same parent-centered composition pattern as TransactionRule:

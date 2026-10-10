@@ -25,9 +25,9 @@ const renderDraftList = () =>
 
 const findDraftRow = async () => {
   await screen.findByText('Coffee');
-  const row = document.querySelector('[data-cy="manualDraftRow"]') as HTMLElement | null;
+  const row = document.querySelector('[data-cy="manualDraftRow"]');
   expect(row).not.toBeNull();
-  return row!;
+  return row;
 };
 
 const draftSummary = {
@@ -94,7 +94,7 @@ describe('FinancialTransaction manual draft recovery list', () => {
     expect(within(row).getByText('Expenses › Transport')).toBeTruthy();
     expect(within(row).getByText('Business')).toBeTruthy();
     expect(within(row).getByText('Personal')).toBeTruthy();
-    const category = row.querySelector('[data-cy="transactionCategory"]') as HTMLElement;
+    const category = row.querySelector('[data-cy="transactionCategory"]');
     expect(category.className).toContain('rounded-1');
     expect(category.getAttribute('data-color-treatment')).toBe('category');
     expect(category.getAttribute('style')).toContain('background-color');
@@ -129,7 +129,7 @@ describe('FinancialTransaction manual draft recovery list', () => {
     renderDraftList();
 
     await screen.findByText('No description');
-    const row = document.querySelector('[data-cy="manualDraftRow"]') as HTMLElement;
+    const row = document.querySelector('[data-cy="manualDraftRow"]');
     expect(within(row).getByText('No description')).toBeTruthy();
     expect(within(row).getByText('No account')).toBeTruthy();
     expect(within(row).getByText('No date')).toBeTruthy();

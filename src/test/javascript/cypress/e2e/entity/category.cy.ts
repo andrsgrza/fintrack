@@ -37,14 +37,17 @@ describe('Category product UX e2e test', () => {
     cy.authenticatedRequest({ method: 'GET', url: '/api/categories?sort=id,desc' }).then(({ body, status }) => {
       expect(status).to.equal(200);
       const category = body.find(item => item.name === name);
-      expect(category, `category ${name} was created`).to.exist;
+      assert.exists(category, `category ${name} was created`);
       categories.push(category);
     });
 
   const fillCategoryForm = ({ name, description, color }: { name: string; description: string; color: string }) => {
-    cy.get('[data-cy="name"]').clear().type(name);
-    cy.get('[data-cy="description"]').clear().type(description);
-    cy.get('[data-cy="color"]').clear().type(color);
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(name);
+    cy.get('[data-cy="description"]').clear();
+    cy.get('[data-cy="description"]').type(description);
+    cy.get('[data-cy="color"]').clear();
+    cy.get('[data-cy="color"]').type(color);
   };
 
   beforeEach(() => {
@@ -101,10 +104,8 @@ describe('Category product UX e2e test', () => {
     cy.get(entityCreateButtonSelector).click();
     fillCategoryForm({ name: childName, description: 'Rides to work', color: '#abcdef' });
     cy.get('[data-cy="categoryType"]').select('EXPENSE');
-    cy.then(() => {
-      expect(categories[0], 'root category is tracked').to.exist;
-      cy.get('[data-cy="parentCategory"]').select(String(categories[0].id));
-    });
+    assert.exists(categories[0], 'root category is tracked');
+    cy.get('[data-cy="parentCategory"]').select(String(categories[0].id));
     cy.get(entityCreateSaveButtonSelector).click();
     cy.wait('@createCategoryRequest').then(({ response }) => {
       expect(response?.statusCode).to.equal(201);
@@ -145,7 +146,8 @@ describe('Category product UX e2e test', () => {
     cy.contains('[data-cy="entityTable"]', childName).should('exist');
     cy.get('[data-cy="categoryHierarchyConnector"]').should('not.exist');
 
-    cy.get('[data-cy="categoryViewFlat"]').click().should('have.attr', 'aria-pressed', 'true');
+    cy.get('[data-cy="categoryViewFlat"]').click();
+    cy.get('[data-cy="categoryViewFlat"]').should('have.attr', 'aria-pressed', 'true');
     cy.contains('[data-cy="entityTable"]', childName)
       .should('have.attr', 'data-category-depth', '0')
       .find('[data-cy="categoryFlatPath"]')
@@ -156,9 +158,7 @@ describe('Category product UX e2e test', () => {
       .find('[data-cy="categoryFlatPath"]')
       .contains('[data-cy="categoryBreadcrumbAncestor"]', rootName)
       .click();
-    cy.then(() => {
-      cy.location('pathname').should('eq', `/category/${categories[0].id}`);
-    });
+    cy.location('pathname').should('eq', `/category/${categories[0].id}`);
     cy.get('[data-cy="categoryDetailsHeading"]').should('exist');
     cy.get('[data-cy="categoryDetailColorAccent"]').should($header => {
       expect($header.css('border-left-color')).to.match(/rgb\(18,\s*52,\s*86\)/);
@@ -171,23 +171,19 @@ describe('Category product UX e2e test', () => {
     cy.viewport(1024, 768);
     cy.get('[data-cy="categoryDetailStatusHelpButton"]').focus();
     cy.get('[data-cy="categoryDetailStatusHelpTooltip"]').should('be.visible');
-    cy.then(() => {
-      cy.contains('[data-cy="categoryChildLink"]', childName).should('have.attr', 'href', `/category/${categories[1].id}`).click();
-    });
-    cy.then(() => {
-      cy.location('pathname').should('eq', `/category/${categories[1].id}`);
-    });
+    cy.contains('[data-cy="categoryChildLink"]', childName).should('have.attr', 'href', `/category/${categories[1].id}`);
+    cy.contains('[data-cy="categoryChildLink"]', childName).click();
+    cy.location('pathname').should('eq', `/category/${categories[1].id}`);
     cy.get('[data-cy="categoryDetailsHeading"]').should('contain', childName);
     cy.get('[data-cy="categoryPath"]').should('contain', rootName).and('contain', childName);
     cy.go('back');
-    cy.then(() => {
-      cy.location('pathname').should('eq', `/category/${categories[0].id}`);
-    });
+    cy.location('pathname').should('eq', `/category/${categories[0].id}`);
     cy.contains('[data-cy="categoryChildren"]', childName).should('exist');
     cy.go('back');
     cy.location('pathname').should('eq', categoryPageUrl);
     cy.contains('[data-cy="entityTable"]', childName).should('exist');
-    cy.get('[data-cy="categoryViewNested"]').click().should('have.attr', 'aria-pressed', 'true');
+    cy.get('[data-cy="categoryViewNested"]').click();
+    cy.get('[data-cy="categoryViewNested"]').should('have.attr', 'aria-pressed', 'true');
     cy.contains('[data-cy="entityTable"]', childName)
       .should('have.attr', 'data-category-depth', '1')
       .within(() => {
@@ -198,7 +194,7 @@ describe('Category product UX e2e test', () => {
     cy.get('[data-cy="categoryPath"]').should('contain', rootName).and('contain', childName);
     cy.get('[data-cy="categoryChildrenSummary"]').should('exist');
 
-    cy.then(() => cy.visit(`/category/${categories[1].id}/edit`));
+    cy.visit(`/category/${categories[1].id}/edit`);
     cy.get('[data-cy="parentCategory"]').should('be.disabled').and('have.value', rootName);
     cy.get('[data-cy="categoryParentImmutableHelp"]').should('exist');
     cy.get('[data-cy="categoryType"]').should('be.disabled');
@@ -208,44 +204,44 @@ describe('Category product UX e2e test', () => {
       cy.get('[data-cy="color"]').should('exist');
     });
     cy.get('[data-cy="categoryColorPreview"]').should('not.exist');
-    cy.get('[data-cy="description"]').clear().type('Updated rides to work');
-    cy.get('[data-cy="color"]').clear().type('#112233');
+    cy.get('[data-cy="description"]').clear();
+    cy.get('[data-cy="description"]').type('Updated rides to work');
+    cy.get('[data-cy="color"]').clear();
+    cy.get('[data-cy="color"]').type('#112233');
     cy.get('[data-cy="active"]').uncheck();
     cy.get(entityCreateSaveButtonSelector).click();
     cy.wait('@updateCategoryRequest').its('response.statusCode').should('eq', 200);
 
-    cy.then(() => cy.visit(`/category/${categories[1].id}`));
+    cy.visit(`/category/${categories[1].id}`);
     cy.contains('Updated rides to work').should('exist');
     cy.get('[data-cy="categoryStatusBadge"]').should('exist');
     cy.get('[data-cy="categoryDetailStatusHelpButton"]').should('exist').focus();
 
-    cy.then(() => cy.visit(`/category/${categories[1].id}/edit`));
+    cy.visit(`/category/${categories[1].id}/edit`);
     cy.get('[data-cy="active"]').check();
     cy.get(entityCreateSaveButtonSelector).click();
     cy.wait('@updateCategoryRequest').its('response.statusCode').should('eq', 200);
 
-    cy.then(() => cy.visit(`/category/${categories[0].id}/delete`));
+    cy.visit(`/category/${categories[0].id}/delete`);
     cy.wait('@categoryChildrenCountRequest').its('response.body').should('eq', 1);
     cy.get('[data-cy="categoryDeleteBlockedMessage"]').should('exist');
     cy.get(entityConfirmDeleteButtonSelector).should('not.exist');
 
-    cy.then(() => cy.visit(`/category/${categories[2].id}/edit`));
+    cy.visit(`/category/${categories[2].id}/edit`);
     cy.wait('@categoryRequest').its('response.statusCode').should('eq', 200);
-    cy.get('[data-cy="categoryType"]')
-      .should('not.be.disabled')
-      .and('have.value', 'EXPENSE')
-      .select('INCOME')
-      .should('have.value', 'INCOME');
+    cy.get('[data-cy="categoryType"]').should('not.be.disabled').and('have.value', 'EXPENSE');
+    cy.get('[data-cy="categoryType"]').select('INCOME');
+    cy.get('[data-cy="categoryType"]').should('have.value', 'INCOME');
     cy.get(entityCreateSaveButtonSelector).click();
     cy.wait('@updateCategoryRequest').then(({ request, response }) => {
       expect(request.body.categoryType).to.equal('INCOME');
       expect(response?.statusCode).to.equal(200);
       expect(response?.body.categoryType).to.equal('INCOME');
     });
-    cy.then(() => cy.visit(`/category/${categories[2].id}`));
+    cy.visit(`/category/${categories[2].id}`);
     cy.get('[data-cy="categoryTypeValue"]').should('contain', 'Ingreso');
 
-    cy.then(() => cy.visit(`/category/${categories[1].id}/delete`));
+    cy.visit(`/category/${categories[1].id}/delete`);
     cy.wait('@categoryChildrenCountRequest').its('response.body').should('eq', 0);
     cy.get(entityConfirmDeleteButtonSelector).click();
     cy.wait('@deleteCategoryRequest').its('response.statusCode').should('eq', 204);

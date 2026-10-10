@@ -20,17 +20,14 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/tag">
         <Translate contentKey="global.menu.entities.tag" />
       </MenuItem>
-      <MenuItem icon="asterisk" to="/transaction-rule">
-        <Translate contentKey="global.menu.entities.transactionRule" />
+      <MenuItem icon="asterisk" to="/rules">
+        <Translate contentKey="global.menu.entities.rules" />
       </MenuItem>
       <MenuItem icon="asterisk" to="/transaction-rule-condition">
         <Translate contentKey="global.menu.entities.transactionRuleCondition" />{' '}
         <Badge color="secondary" pill>
           <Translate contentKey="global.menu.entities.technical">Technical</Translate>
         </Badge>
-      </MenuItem>
-      <MenuItem icon="asterisk" to="/description-normalization-rule">
-        <Translate contentKey="global.menu.entities.descriptionNormalizationRule" />
       </MenuItem>
       <MenuItem icon="asterisk" to="/financial-subscription">
         <Translate contentKey="global.menu.entities.financialSubscription" />

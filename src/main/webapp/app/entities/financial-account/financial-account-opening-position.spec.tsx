@@ -283,8 +283,8 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.queryByText('Initial account value')).toBeNull();
     expect(screen.getByLabelText('Tracking start date')).toBeTruthy();
     expect(screen.queryByLabelText('Active')).toBeNull();
-    expect((screen.getByLabelText('Account Type') as HTMLSelectElement).disabled).toBe(false);
-    expect((screen.getByLabelText('Currency') as HTMLSelectElement).disabled).toBe(false);
+    expect(screen.getByLabelText('Account Type').disabled).toBe(false);
+    expect(screen.getByLabelText('Currency').disabled).toBe(false);
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Budgets')).toBeNull();
@@ -295,7 +295,7 @@ describe('FinancialAccount opening-position labels', () => {
   it('renders a translated label for every supported account type', () => {
     renderCreateForm();
 
-    const optionLabels = Array.from((screen.getByLabelText('Account Type') as HTMLSelectElement).options).map(option => option.textContent);
+    const optionLabels = Array.from(screen.getByLabelText('Account Type').options).map(option => option.textContent);
 
     expect(optionLabels).toEqual(['Debit account', 'Cash', 'Credit card', 'Investment account']);
     expect(optionLabels).not.toContain('DEBIT');
@@ -318,8 +318,8 @@ describe('FinancialAccount opening-position labels', () => {
     renderCreateForm();
 
     const accountTypeSelect = screen.getByLabelText('Account Type');
-    const initialBalanceInput = screen.getByLabelText('Initial balance') as HTMLInputElement;
-    const initialBalanceDateInput = screen.getByLabelText('Tracking start date') as HTMLInputElement;
+    const initialBalanceInput = screen.getByLabelText('Initial balance');
+    const initialBalanceDateInput = screen.getByLabelText('Tracking start date');
 
     fireEvent.change(initialBalanceInput, { target: { value: '100' } });
     fireEvent.change(initialBalanceDateInput, { target: { value: '2026-01-10' } });
@@ -337,8 +337,8 @@ describe('FinancialAccount opening-position labels', () => {
         'Amount available when you started tracking this account. Negative values represent overdraft or a negative balance.',
       ),
     ).toBeNull();
-    expect((screen.getByLabelText('Opening card balance') as HTMLInputElement).value).toBe('');
-    expect((screen.getByLabelText('Tracking start date') as HTMLInputElement).value).toBe('');
+    expect(screen.getByLabelText('Opening card balance').value).toBe('');
+    expect(screen.getByLabelText('Tracking start date').value).toBe('');
     expect(screen.getByText('Credit details')).toBeTruthy();
     expect(screen.getByLabelText('Credit limit')).toBeTruthy();
     expect(screen.getByLabelText('Statement closing day')).toBeTruthy();
@@ -359,11 +359,11 @@ describe('FinancialAccount opening-position labels', () => {
 
     fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
 
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Everyday account');
-    expect((screen.getByLabelText('Institution Name') as HTMLInputElement).value).toBe('My bank');
-    expect((screen.getByLabelText('Currency') as HTMLInputElement).value).toBe('USD');
-    expect((screen.getByLabelText('Last Four Digits') as HTMLInputElement).value).toBe('1234');
-    expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Personal checking account');
+    expect(screen.getByLabelText('Name').value).toBe('Everyday account');
+    expect(screen.getByLabelText('Institution Name').value).toBe('My bank');
+    expect(screen.getByLabelText('Currency').value).toBe('USD');
+    expect(screen.getByLabelText('Last Four Digits').value).toBe('1234');
+    expect(screen.getByLabelText('Description').value).toBe('Personal checking account');
   });
 
   it('does not expose server-owned timestamps in edit mode and locks immutable selects', () => {
@@ -375,8 +375,8 @@ describe('FinancialAccount opening-position labels', () => {
     expect(screen.getByTestId('financialAccountStatusControl')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
-    expect((screen.getByLabelText('Account Type') as HTMLSelectElement).disabled).toBe(true);
-    expect((screen.getByLabelText('Currency') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByLabelText('Account Type').disabled).toBe(true);
+    expect(screen.getByLabelText('Currency').disabled).toBe(true);
     expect(screen.queryByLabelText('Budgets')).toBeNull();
     expect(screen.queryByLabelText('Transaction Ingestions')).toBeNull();
   });
@@ -428,7 +428,7 @@ describe('FinancialAccount opening-position labels', () => {
     renderCreateForm();
 
     fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
-    const cardBalanceInput = screen.getByLabelText('Opening card balance') as HTMLInputElement;
+    const cardBalanceInput = screen.getByLabelText('Opening card balance');
     fireEvent.change(cardBalanceInput, { target: { value: '5000' } });
 
     fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'DEBIT' } });
@@ -444,7 +444,7 @@ describe('FinancialAccount opening-position labels', () => {
         'Use a positive number if you owed money, or a negative number if you had credit in your favor. This is not your credit limit.',
       ),
     ).toBeNull();
-    expect((screen.getByLabelText('Initial balance') as HTMLInputElement).value).toBe('');
+    expect(screen.getByLabelText('Initial balance').value).toBe('');
     expect(screen.queryByText('Credit details')).toBeNull();
     expectNoMissingTranslations();
   });
@@ -468,7 +468,7 @@ describe('FinancialAccount opening-position labels', () => {
     });
 
     expect(screen.getByText('Credit details')).toBeTruthy();
-    expect((screen.getByLabelText('Credit limit') as HTMLInputElement).value).toBe('50000');
+    expect(screen.getByLabelText('Credit limit').value).toBe('50000');
     expect(screen.queryByLabelText('Account')).toBeNull();
     expectNoMissingTranslations();
 
@@ -497,7 +497,7 @@ describe('FinancialAccount opening-position labels', () => {
     fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'CREDIT_CARD' } });
     fireEvent.change(screen.getByLabelText('Opening card balance'), { target: { value: '5000' } });
     fireEvent.change(screen.getByLabelText('Tracking start date'), { target: { value: '2026-01-10' } });
-    expect((screen.getByLabelText('Account Type') as HTMLSelectElement).value).toBe('CREDIT_CARD');
+    expect(screen.getByLabelText('Account Type').value).toBe('CREDIT_CARD');
     expect(screen.getByText('Credit details')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
