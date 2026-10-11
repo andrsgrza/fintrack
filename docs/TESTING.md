@@ -1515,16 +1515,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                           | Tests   | Custom vs generated                                                                                                                                                      |
-| --------------- | ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Integration IT  | `TransactionRuleResourceIT`    | **143** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + configured rule API + categoryType/FLOW guard + JHipster CRUD/filters        |
-| Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                             |
-| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                                |
-| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                |
-| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                |
-| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **39**  | Classification manager cards, localized condition/result summaries, active/inactive output state, arrows + drag shared complete-order persistence/recovery, mixed-owner admin safety, plus configured editor/detail coverage |
-| E2E             | `transaction-rule.cy.ts`       | **8**   | Configured create/edit workflow + categoryType/FLOW guard + technical/debug surface smoke + Rules landing, classification-result presentation, arrow reorder and genuine browser drag persistence |
+| Type            | File                           | Tests   | Custom vs generated                                                                                                                                                                                                                                                                                               |
+| --------------- | ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TransactionRuleResourceIT`    | **143** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + configured rule API + categoryType/FLOW guard + JHipster CRUD/filters                                                                                                                                                 |
+| Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                                                                                                                                                                      |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                                                                                                                                                                         |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                                                                                                                                                         |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                                                                                                                                                         |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                                                                                                                                                         |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **41**  | Classification manager cards, localized condition/result summaries, active/inactive output state, arrows + drag shared complete-order persistence/recovery, mixed-owner admin safety, configured editor coverage, and configured read-only detail/delete coverage                                                 |
+| E2E             | `transaction-rule.cy.ts`       | **9**   | Configured create/edit workflow with multiple typed conditions and multiple ProductTagSelector tags, read-only detail, product delete confirmation, categoryType/FLOW guard, technical/debug surface smoke, Rules landing, classification-result presentation, arrow reorder and genuine browser drag persistence |
 
 **Run:**
 
@@ -1580,14 +1580,14 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 
 #### Frontend UX — `transaction-rule-ux.spec.tsx` — ✅
 
-| Area                 | What it checks                                                                                                                                                                                              |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Product list         | Product manager loads `priority ASC, id ASC`, bounded per-rule condition batches, and category/tag/account identities; cards show name, status, 1-based order, readable IF/THEN configuration, and compact actions |
-| Compact detail       | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                                                                            |
-| Configured create    | Create hides timestamps/priority, renders active/output/conditionLogic plus inline local conditions, blocks zero conditions/outputs, and posts to `POST /api/transaction-rules/configured`                  |
-| Configured edit      | Edit loads `GET /api/transaction-rules/{id}/configured`, hydrates parent/output/active/conditions, and saves through `PUT /api/transaction-rules/{id}/configured` without priority                          |
-| Category/FLOW guard  | EXPENSE auto-adds/locks `FLOW EQUALS OUT`, BOTH/null removes frontend auto-FLOW, `ANY` is blocked for EXPENSE/INCOME, and incompatible user-authored FLOW blocks Save                                       |
-| Server-managed order | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                                                               |
+| Area                 | What it checks                                                                                                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Product list         | Product manager loads `priority ASC, id ASC`, bounded per-rule condition batches, and category/tag/account identities; cards show name, status, 1-based order, readable IF/THEN configuration, and compact actions                                                             |
+| Read-only detail     | Detail loads the configured aggregate; it renders all typed conditions, product category/tag outputs, historical inactive output state, priority/multi-rule/workflow explanations, and no inline condition write controls                                                      |
+| Configured create    | Create hides timestamps/priority, renders active/output/conditionLogic plus inline local conditions, blocks zero conditions/outputs, and posts to `POST /api/transaction-rules/configured`                                                                                     |
+| Configured edit      | Edit loads `GET /api/transaction-rules/{id}/configured`, hydrates parent/output/active/conditions, and saves through `PUT /api/transaction-rules/{id}/configured` without priority                                                                                             |
+| Category/FLOW guard  | EXPENSE auto-adds/locks `FLOW EQUALS OUT`, BOTH/null removes frontend auto-FLOW, `ANY` is blocked for EXPENSE/INCOME, and incompatible user-authored FLOW blocks Save                                                                                                          |
+| Server-managed order | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                                                                                                                                  |
 | Manual reorder       | Arrows are disabled at boundaries and actual pointer/touch/keyboard drag is available; both send the full priority-ordered owner id sequence, reload on success, restore confirmed order on failure, include inactive rules, and are unavailable to mixed-owner administrators |
 
 Manual verification checklist:
@@ -1698,7 +1698,7 @@ Configured workflow coverage:
 - BOTH category allows `ANY` and does not auto-create required Flow;
 - tag-only output allows `ANY` and does not auto-create required Flow;
 - edit existing configured rule, hydrate parent fields/conditions, change EXPENSE category to INCOME, and persist `FLOW IN`;
-- technical/debug smoke: TransactionRule detail labels the persisted condition editor, and standalone TransactionRuleCondition page shows the Technical/debug banner.
+- technical/debug smoke: the product TransactionRule detail is read-only, while the standalone TransactionRuleCondition page remains available with the Technical/debug banner.
 
 Test data is created through API per test: one EXPENSE category, one INCOME category, one BOTH category, and one tag. Rules are created through configured API only for seed/edit setup; product create cases use the UI.
 
@@ -1972,13 +1972,13 @@ Service tests cover parent immutability, merged-state validation, duplicate norm
 - field/operator changes clearing incompatible values;
 - `ACCOUNT EQUALS` submitting the selected account id as a string and hidden `caseSensitive=false`.
 
-`transaction-rule-ux.spec.tsx` also verifies the embedded TransactionRule detail table uses the normalized `Condition` summary, does not render raw `Value` / `Second Value` / `Case Sensitive` headers, keeps Edit/Delete, and does not render View.
+`transaction-rule-ux.spec.tsx` also verifies the product TransactionRule detail uses `GET /configured`, renders every typed condition without raw `Value` / `Second Value` / `Case Sensitive` fields, explains ALL/ANY and multi-rule behavior, renders category/tag identity including historical inactive outputs, and exposes no inline condition controls.
 
 The same spec covers the configured TransactionRule product create/edit flow:
 
 - create/edit render the configured inline Conditions editor;
 - list Create routes to `/transaction-rule/new`, the configured product create route;
-- detail labels the embedded persisted condition editor as technical/debug because it writes through child condition endpoints;
+- detail loads the configured aggregate, routes Edit to the configured editor, and routes Delete through the product confirmation;
 - create does not call the old draft reducer path and posts to `POST /api/transaction-rules/configured`;
 - edit loads `GET /api/transaction-rules/{id}/configured`;
 - edit saves through `PUT /api/transaction-rules/{id}/configured`;
@@ -1988,6 +1988,11 @@ The same spec covers the configured TransactionRule product create/edit flow:
 - `ANY` is blocked for EXPENSE/INCOME outputs;
 - user-authored incompatible FLOW blocks Save instead of being silently mutated;
 - configured payloads omit priority and removed/deferred outputs.
+- product category identity/picker and `ProductTagSelector` support category-only, tag-only, and combined outputs while retaining loaded inactive historical outputs and excluding them from new choices;
+- the live IF/THEN configuration summary reflects draft ALL/ANY, typed conditions, and product result identities without evaluating a transaction;
+- failed configured saves retain the complete draft and duplicate clicks do not issue a second command.
+
+`transaction-rule-condition-ux.spec.tsx` additionally verifies that a field/operator transition clears only incompatible values, displays the reset explanation, and clears a `FLOW` value when switching to the distinct `ORIGIN` enum domain.
 
 ### Transaction Ingestion contextual rule creation
 

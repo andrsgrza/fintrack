@@ -58,7 +58,11 @@ export const buildTransactionRuleResultActions = (rule: ITransactionRule, transl
  * Formats persisted condition values for the product manager without attempting to evaluate a rule in the browser.
  * The condition summary itself remains shared with the configured editor and technical condition surfaces.
  */
-export const buildTransactionRuleManagerConditionSummary = (
+/**
+ * Adds presentation-only catalog context to the typed condition formatter. Both the manager and product detail
+ * use this so ACCOUNT conditions never fall back to raw ids and date-only values retain their calendar day.
+ */
+export const buildTransactionRuleConditionSummaryWithContext = (
   condition: ITransactionRuleCondition,
   translate: TranslateFn,
   accountsById: ReadonlyMap<number, IFinancialAccount>,
@@ -91,3 +95,6 @@ export const buildTransactionRuleManagerConditionSummary = (
       return undefined;
     },
   });
+
+/** @deprecated Kept as a narrow alias while the manager uses the shared product formatter. */
+export const buildTransactionRuleManagerConditionSummary = buildTransactionRuleConditionSummaryWithContext;

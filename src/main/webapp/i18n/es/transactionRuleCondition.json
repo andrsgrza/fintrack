@@ -62,6 +62,9 @@
         "ACCOUNT": "Usa IDs de cuenta separados por coma.",
         "DESCRIPTION": "Usa textos separados por coma.",
         "EXTERNAL_REFERENCE": "Usa textos separados por coma."
+      },
+      "form": {
+        "valueReset": "El valor anterior no es compatible con este campo u operador y se eliminó."
       }
     }
   }

@@ -14,10 +14,27 @@
       "updated": "Un Transaction Rule ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Transaction Rule ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "Esto eliminará la Regla de clasificación {{ id }} y sus condiciones. Las categorías, suscripciones, etiquetas y transacciones no se eliminarán. Sólo afecta sugerencias futuras: no cambia ni reevalúa automáticamente transacciones publicadas o clasificaciones ya revisadas. Esta acción no se puede deshacer."
+        "question": "Esto eliminará la Regla de clasificación {{ id }} y sus condiciones. Las categorías, suscripciones, etiquetas y transacciones no se eliminarán. Sólo afecta sugerencias futuras: no cambia ni reevalúa automáticamente transacciones publicadas o clasificaciones ya revisadas. Esta acción no se puede deshacer.",
+        "failed": "No se pudo eliminar la regla. Inténtalo de nuevo."
       },
       "detail": {
-        "title": "Regla"
+        "title": "Regla de clasificación",
+        "matching": "Coincidencia",
+        "results": "Resultados sugeridos",
+        "behavior": "Comportamiento de evaluación",
+        "allExplanation": "Todas las condiciones de abajo deben coincidir para que esta regla sugiera sus resultados.",
+        "anyExplanation": "Al menos una condición de abajo debe coincidir para que esta regla sugiera sus resultados.",
+        "inactiveExplanation": "Esta regla conserva su configuración, pero no participa en futuras evaluaciones de clasificación. El historial existente no cambia.",
+        "inactiveOutputExplanation": "Las salidas de categoría o etiquetas inactivas permanecen visibles como configuración histórica, pero no son elegibles para nuevas sugerencias hasta reactivarse.",
+        "outputUnavailable": "Algunos detalles de resultados configurados no están disponibles temporalmente. No se eliminaron de esta regla.",
+        "accountsUnavailable": "Los nombres de las cuentas no están disponibles temporalmente. Las condiciones de cuenta se muestran sin identificadores de cuenta sin procesar.",
+        "priorityExplanation": "Esta regla está en la posición {{position}} del orden de evaluación. Las reglas de clasificación activas se evalúan en ese orden.",
+        "multiRuleExplanation": "Pueden coincidir varias reglas. La primera categoría elegible de las reglas coincidentes gana; las etiquetas elegibles de las reglas coincidentes se acumulan sin duplicados. Las reglas inactivas no contribuyen.",
+        "configurationExplanation": "Esta página explica la configuración guardada. No muestra si una transacción concreta coincidió ni qué sugerencias se aplicaron.",
+        "workflowExplanation": "Las reglas generan sugerencias de categoría y etiquetas en los flujos compatibles de revisión de ingesta y borradores manuales. Las sugerencias se aplican desde esos flujos; editar una regla no cambia el historial publicado.",
+        "notFound": "No se encontró esta regla de clasificación o ya no está disponible.",
+        "forbidden": "No tienes acceso a esta regla de clasificación.",
+        "loadFailed": "No se pudo cargar esta regla de clasificación. Vuelve al administrador de reglas e inténtalo de nuevo."
       },
       "createTitle": "Crear regla",
       "editTitle": "Editar regla",
@@ -25,6 +42,22 @@
       "configuredConditionsHelp": "Define condiciones antes de guardar esta regla.",
       "configuredLoadFailed": "No se pudo cargar la configuración de la regla.",
       "configuredSaveFailed": "No se pudo guardar la configuración de la regla.",
+      "editor": {
+        "noCategory": "Sin categoría seleccionada",
+        "loadingCategories": "Cargando categorías…",
+        "selectCategory": "Elegir categoría",
+        "inactiveCategoryHistorical": "Esta categoría inactiva se conserva como resultado histórico. No se sugerirá de nuevo hasta que sea reactivada.",
+        "inactiveTagsHistorical": "Las etiquetas inactivas se conservan como resultados históricos y no se ofrecen para nuevas selecciones.",
+        "categoriesLoadFailed": "No se pudieron cargar las categorías. El resultado existente no cambió.",
+        "searchCategories": "Buscar categorías",
+        "noCategoryMatches": "No se encontraron categorías activas",
+        "outputHelp": "Elige una categoría, etiquetas o ambas. Sólo se pueden seleccionar nuevos resultados activos.",
+        "configurationPreview": "Resumen de configuración",
+        "configurationPreviewHelp": "Describe la configuración de la regla; no evalúa una transacción específica.",
+        "statusHelp": "Las reglas activas participan en evaluaciones futuras de clasificación. Cambiar este estado no reclasifica transacciones históricas.",
+        "expenseFlowNotice": "Una categoría de gasto requiere Flujo = Gasto y coincidencia ALL. La condición de flujo requerida se muestra abajo.",
+        "incomeFlowNotice": "Una categoría de ingreso requiere Flujo = Ingreso y coincidencia ALL. La condición de flujo requerida se muestra abajo."
+      },
       "id": "ID",
       "name": "Nombre",
       "description": "Descripción",

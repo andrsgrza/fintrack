@@ -2771,11 +2771,8 @@ describe('TransactionIngestion file workflow', () => {
     const workflowRow = await screen.findByTestId('workflowRow-300');
     fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
-    await screen.findByRole('option', { name: 'Transport' });
-    await screen.findByRole('option', { name: 'Ride share' });
-
-    expect(screen.getByTestId('contextualTransactionRuleCategory').value).toBe('7');
-    expect(screen.getByTestId('contextualTransactionRuleTags').value).toBe('3');
+    await waitFor(() => expect(screen.getByTestId('transactionRuleCategoryIdentity').textContent).toContain('Transport'));
+    await waitFor(() => expect(screen.getByTestId('transactionRuleResultTagsChip').textContent).toContain('Ride share'));
     fireEvent.click(
       within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', {
         name: /save and reevaluate this row/i,

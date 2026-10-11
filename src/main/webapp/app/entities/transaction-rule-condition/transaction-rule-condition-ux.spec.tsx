@@ -312,6 +312,22 @@ describe('TransactionRuleCondition UX', () => {
 
     expect(screen.getByLabelText('Operator').value).toBe('EQUALS');
     expect(screen.getByLabelText('Value').value).toBe('');
+    expect(document.querySelector('[data-cy="conditionValueResetNotice"]')?.textContent).toContain(
+      'The previous value is not compatible with this field or operator and was cleared.',
+    );
+  });
+
+  it('clears an enum value when changing between Flow and Origin', () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'FLOW' } });
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'OUT' } });
+    fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'ORIGIN' } });
+
+    expect(screen.getByLabelText('Value').value).toBe('');
+    expect(document.querySelector('[data-cy="conditionValueResetNotice"]')?.textContent).toContain(
+      'The previous value is not compatible with this field or operator and was cleared.',
+    );
   });
 
   it('changing away from BETWEEN hides and clears second value', () => {

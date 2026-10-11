@@ -106,7 +106,7 @@ FINTRACK already implements the rule authoring model:
 - TransactionRule product create/edit use the configured parent + conditions command API.
 - TransactionRule create/edit manage metadata, outputs, active state, condition logic, and local inline conditions together.
 - TransactionRule create does not create empty inactive drafts.
-- TransactionRule detail may still expose embedded condition management for direct maintenance/debug compatibility, but TR-3 labels that editor technical/debug because it writes directly to child condition endpoints.
+- TransactionRule detail is a read-only product explanation backed by the configured aggregate API: it presents all stored conditions and outputs, but never writes child conditions.
 - Standalone TransactionRuleCondition generated screens remain available only for technical/debug/direct maintenance and are marked as such in the UI/menu.
 - Generated TransactionRule write endpoints and TransactionRuleCondition CRUD endpoints remain available temporarily, but configured endpoints are the product create/edit source of truth.
 - active/configured TransactionRule requires at least one condition and at least one output.
@@ -137,6 +137,10 @@ The product create/edit UI mirrors this guard:
 - BOTH/null outputs remove only frontend auto-created FLOW conditions;
 - user-authored incompatible FLOW conditions are not silently changed and block save;
 - `ANY` is disabled/blocked for EXPENSE/INCOME resulting categories.
+
+Configured rule create/edit is an authoring surface, not an evaluation debugger. It renders a live localized IF/THEN summary of the draft using the same typed-condition summary logic as the manager; it does not evaluate a transaction or mutate any candidate/FinancialTransaction. Result category selection uses a product category identity/picker and result tags use `ProductTagSelector`. New choices are active and owner-scoped; a loaded historical inactive category/tag output remains visible and can be retained on an unrelated save, but it cannot be newly selected and evaluator behavior remains `OUTPUT_INACTIVE` (not a suggestion).
+
+The configured endpoint is one atomic aggregate write that preserves owner and priority. It has no version field or conflict protocol, so concurrent successful saves follow existing last-write-wins semantics. This editor behavior does not alter Transaction Ingestion contextual creation: plain save creates the rule only, while the existing explicit reevaluation actions remain the only reevaluation path.
 
 The pure evaluator is implemented. FinancialTransaction create applies category/tag suggestions in `FILL_EMPTY_ONLY` mode. Existing transaction reevaluation and bulk execution remain deferred.
 

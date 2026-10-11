@@ -14,10 +14,27 @@
       "updated": "A Transaction Rule is updated with identifier {{ param }}",
       "deleted": "A Transaction Rule is deleted with identifier {{ param }}",
       "delete": {
-        "question": "This will delete Classification Rule {{ id }} and its conditions. Categories, subscriptions, tags, and transactions will not be deleted. It affects future suggestions only: posted transactions and classifications already reviewed are not changed or automatically reevaluated. This action cannot be undone."
+        "question": "This will delete Classification Rule {{ id }} and its conditions. Categories, subscriptions, tags, and transactions will not be deleted. It affects future suggestions only: posted transactions and classifications already reviewed are not changed or automatically reevaluated. This action cannot be undone.",
+        "failed": "The rule could not be deleted. Try again."
       },
       "detail": {
-        "title": "Transaction Rule"
+        "title": "Classification rule",
+        "matching": "Matching",
+        "results": "Suggested results",
+        "behavior": "Evaluation behavior",
+        "allExplanation": "Every condition below must match for this rule to suggest its outputs.",
+        "anyExplanation": "At least one condition below must match for this rule to suggest its outputs.",
+        "inactiveExplanation": "This rule remains configured but does not participate in future classification evaluations. Existing history is unchanged.",
+        "inactiveOutputExplanation": "Inactive category or tag outputs remain visible as historical configuration, but are not eligible for new suggestions until reactivated.",
+        "outputUnavailable": "Some configured output details are temporarily unavailable. They have not been removed from this rule.",
+        "accountsUnavailable": "Account names are temporarily unavailable. Account conditions are shown without raw account identifiers.",
+        "priorityExplanation": "This rule is at position {{position}} in the evaluation order. Active classification rules are evaluated in that order.",
+        "multiRuleExplanation": "Multiple rules can match. The first eligible category from matching rules wins; eligible tags from matching rules accumulate without duplicates. Inactive rules do not contribute.",
+        "configurationExplanation": "This page explains the stored configuration. It does not show whether a particular transaction matched or which suggestions were applied.",
+        "workflowExplanation": "Rules generate category and tag suggestions in supported transaction-ingestion and manual-draft review workflows. Suggestions are applied through those workflows; editing a rule does not change posted history.",
+        "notFound": "This classification rule was not found or is no longer available.",
+        "forbidden": "You do not have access to this classification rule.",
+        "loadFailed": "This classification rule could not be loaded. Return to the rule manager and try again."
       },
       "createTitle": "Create Transaction Rule",
       "editTitle": "Edit Transaction Rule",
@@ -25,6 +42,22 @@
       "configuredConditionsHelp": "Define conditions before saving this rule.",
       "configuredLoadFailed": "Transaction rule configuration could not be loaded.",
       "configuredSaveFailed": "Transaction rule configuration could not be saved.",
+      "editor": {
+        "noCategory": "No category selected",
+        "loadingCategories": "Loading categories…",
+        "selectCategory": "Choose category",
+        "inactiveCategoryHistorical": "This inactive category is retained as a historical output. It will not be newly suggested until it is reactivated.",
+        "inactiveTagsHistorical": "Inactive tags are retained as historical outputs and are not newly offered for selection.",
+        "categoriesLoadFailed": "Categories could not be loaded. The existing result is unchanged.",
+        "searchCategories": "Search categories",
+        "noCategoryMatches": "No active categories found",
+        "outputHelp": "Choose a category, tags, or both. Only active outputs can be newly selected.",
+        "configurationPreview": "Configuration summary",
+        "configurationPreviewHelp": "This describes the rule configuration; it does not evaluate a specific transaction.",
+        "statusHelp": "Active rules participate in future classification evaluations. Changing this never reclassifies historical transactions.",
+        "expenseFlowNotice": "An expense category requires Flow = Expense and ALL matching. The required Flow condition is shown below.",
+        "incomeFlowNotice": "An income category requires Flow = Income and ALL matching. The required Flow condition is shown below."
+      },
       "id": "ID",
       "name": "Name",
       "description": "Description",

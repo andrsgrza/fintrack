@@ -62,6 +62,9 @@
         "ACCOUNT": "Use comma-separated account IDs.",
         "DESCRIPTION": "Use comma-separated text values.",
         "EXTERNAL_REFERENCE": "Use comma-separated text values."
+      },
+      "form": {
+        "valueReset": "The previous value is not compatible with this field or operator and was cleared."
       }
     }
   }

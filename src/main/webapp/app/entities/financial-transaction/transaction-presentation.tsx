@@ -188,7 +188,7 @@ export const TransactionCategory = ({
   );
 };
 
-const TransactionTagChip = ({ tag }: { tag: CompactTag }) => (
+const TransactionTagChip = ({ tag, showInactiveLabel = false }: { tag: CompactTag; showInactiveLabel?: boolean }) => (
   <span
     className={`d-inline-flex align-items-center rounded-pill border px-2 py-1 small fw-semibold${tag.active === false ? ' opacity-75' : ''}`}
     data-cy="transactionTagChip"
@@ -197,6 +197,9 @@ const TransactionTagChip = ({ tag }: { tag: CompactTag }) => (
     style={colorIdentityStyle(tag.color)}
   >
     {tag.name}
+    {tag.active === false && showInactiveLabel ? (
+      <span className="ms-1 text-muted">({translate('fintrackApp.tag.status.inactive')})</span>
+    ) : null}
   </span>
 );
 
@@ -205,11 +208,13 @@ export const TransactionTagChips = ({
   tagNames = [],
   maxVisible = 3,
   showEmpty = false,
+  showInactiveLabel = false,
 }: {
   tags?: CompactTag[] | null;
   tagNames?: string[] | null;
   maxVisible?: number;
   showEmpty?: boolean;
+  showInactiveLabel?: boolean;
 }) => {
   const resolvedTags = tags ?? [];
   const resolvedTagNames = tagNames ?? [];
@@ -229,7 +234,7 @@ export const TransactionTagChips = ({
   return (
     <span className="d-inline-flex flex-wrap gap-1 align-items-center" data-cy="transactionTagChips">
       {visibleTags.map((tag, index) => (
-        <TransactionTagChip key={tag.id ?? `${tag.name}-${index}`} tag={tag} />
+        <TransactionTagChip key={tag.id ?? `${tag.name}-${index}`} tag={tag} showInactiveLabel={showInactiveLabel} />
       ))}
       {total > maxVisible ? (
         <Badge color="light" className="border text-dark fw-normal" pill data-cy="transactionAdditionalTags">

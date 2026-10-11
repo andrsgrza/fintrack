@@ -80,9 +80,8 @@ export const requiresSecondValue = (operator?: RuleOperator) => operator === Rul
 export const supportsCaseSensitive = (field?: TransactionRuleField) => isTextField(field);
 
 export const getValueInputKind = (field?: TransactionRuleField, operator?: RuleOperator): ValueInputKind => {
-  if (isListOperator(operator)) {
-    return 'text';
-  }
+  if (isAccountField(field) && !isListOperator(operator)) return 'account-select';
+  if (isListOperator(operator)) return 'text';
   if (isAmountField(field)) {
     return 'number';
   }
@@ -95,9 +94,7 @@ export const getValueInputKind = (field?: TransactionRuleField, operator?: RuleO
   if (field === TransactionRuleField.ORIGIN) {
     return 'origin-select';
   }
-  if (isAccountField(field)) {
-    return 'account-select';
-  }
+  if (isAccountField(field)) return 'account-select';
   return 'text';
 };
 

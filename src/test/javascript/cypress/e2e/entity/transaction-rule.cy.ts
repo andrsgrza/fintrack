@@ -16,6 +16,7 @@ describe('TransactionRule configured workflow e2e test', () => {
   let incomeCategory: E2EEntity;
   let bothCategory: E2EEntity;
   let tag: E2EEntity;
+  let secondTag: E2EEntity;
   const createdRuleIds: number[] = [];
 
   const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -35,13 +36,13 @@ describe('TransactionRule configured workflow e2e test', () => {
       })
       .then(({ body }) => body);
 
-  const createTag = () =>
+  const createTag = (namePrefix = 'tr-tag') =>
     cy
       .authenticatedRequest({
         method: 'POST',
         url: '/api/tags',
         body: {
-          name: uniqueName('tr-tag'),
+          name: uniqueName(namePrefix),
           description: 'TransactionRule configured E2E tag',
           color: '#d4a1b2',
           active: true,
@@ -103,24 +104,26 @@ describe('TransactionRule configured workflow e2e test', () => {
   };
 
   const selectCategory = (category: E2EEntity) => {
-    cy.get('[data-cy="resultingCategory"]').select(category.name);
+    cy.get('[data-cy="transactionRuleCategorySelect"]').click();
+    cy.contains('[data-cy="transactionRuleCategoryOption"]', category.name).click();
   };
 
   const selectTag = (selectedTag: E2EEntity) => {
-    cy.get('[data-cy="resultingTags"]').select([selectedTag.name]);
+    cy.get('[data-cy="transactionRuleResultTagsAdd"]').click();
+    cy.contains('[data-cy="transactionRuleResultTagsOption"]', selectedTag.name).click();
   };
 
   const setConditionLogic = (logic: 'ALL' | 'ANY') => {
-    cy.get('[data-cy="conditionLogic"]').select(logic);
-    cy.get('[data-cy="conditionLogic"]').should('have.value', logic);
+    cy.get(`[data-cy="conditionLogic${logic === 'ALL' ? 'All' : 'Any'}"]`).check();
+    cy.get(`[data-cy="conditionLogic${logic === 'ALL' ? 'All' : 'Any'}"]`).should('be.checked');
   };
 
   const assertAnyDisabled = () => {
-    cy.get('[data-cy="conditionLogic"] option[value="ANY"]').should('be.disabled');
+    cy.get('[data-cy="conditionLogicAny"]').should('be.disabled');
   };
 
   const assertAnyEnabled = () => {
-    cy.get('[data-cy="conditionLogic"] option[value="ANY"]').should('not.be.disabled');
+    cy.get('[data-cy="conditionLogicAny"]').should('not.be.disabled');
   };
 
   const addDescriptionContainsCondition = (value: string) => {
@@ -134,6 +137,22 @@ describe('TransactionRule configured workflow e2e test', () => {
     });
     cy.get('[data-cy="conditionRow"][data-condition-field="DESCRIPTION"][data-condition-operator="CONTAINS"]')
       .should('have.attr', 'data-condition-value', value)
+      .should('be.visible');
+  };
+
+  const addAmountBetweenCondition = (minimum: string, maximum: string) => {
+    cy.get('[data-cy="addConditionButton"]').click();
+    cy.get('[data-cy="embeddedConditionForm"]').within(() => {
+      cy.get('[data-cy="field"]').select('AMOUNT');
+      cy.get('[data-cy="operator"]').select('BETWEEN');
+      cy.get('[data-cy="value"]').clear();
+      cy.get('[data-cy="value"]').type(minimum);
+      cy.get('[data-cy="secondValue"]').clear();
+      cy.get('[data-cy="secondValue"]').type(maximum);
+      cy.get('[data-cy="conditionSaveButton"]').click();
+    });
+    cy.get('[data-cy="conditionRow"][data-condition-field="AMOUNT"][data-condition-operator="BETWEEN"]')
+      .should('have.attr', 'data-condition-value', minimum)
       .should('be.visible');
   };
 
@@ -176,6 +195,9 @@ describe('TransactionRule configured workflow e2e test', () => {
     createTag().then(body => {
       tag = body;
     });
+    createTag('tr-tag-secondary').then(body => {
+      secondTag = body;
+    });
   });
 
   afterEach(() => {
@@ -197,13 +219,15 @@ describe('TransactionRule configured workflow e2e test', () => {
       }
     });
 
-    if (tag?.id) {
-      cy.authenticatedRequest({
-        method: 'DELETE',
-        url: `/api/tags/${tag.id}`,
-        failOnStatusCode: false,
-      });
-    }
+    [tag, secondTag].forEach(createdTag => {
+      if (createdTag?.id) {
+        cy.authenticatedRequest({
+          method: 'DELETE',
+          url: `/api/tags/${createdTag.id}`,
+          failOnStatusCode: false,
+        });
+      }
+    });
   });
 
   it('creates an EXPENSE rule through the configured product flow', () => {
@@ -216,12 +240,38 @@ describe('TransactionRule configured workflow e2e test', () => {
     assertRequiredFlow('Expense');
     assertAnyDisabled();
     addDescriptionContainsCondition('Uber');
+    addAmountBetweenCondition('20', '500');
+    selectTag(tag);
+    selectTag(secondTag);
     saveRule('createExpenseRule');
+
+    cy.then(() =>
+      cy.authenticatedRequest({
+        method: 'GET',
+        url: `/api/transaction-rules/${createdRuleIds[0]}/configured`,
+      }),
+    ).then(({ body }) => {
+      expect(body.resultingCategory.id).to.equal(expenseCategory.id);
+      expect((body.resultingTags as E2EEntity[]).map(createdTag => createdTag.id)).to.have.members([tag.id, secondTag.id]);
+      expect(body.conditions.some(condition => condition.field === 'AMOUNT' && condition.operator === 'BETWEEN')).to.equal(true);
+      expect(body.conditions.some(condition => condition.field === 'DESCRIPTION' && condition.value === 'Uber')).to.equal(true);
+    });
 
     cy.contains('a', ruleName).should('be.visible').click();
     cy.getEntityDetailsHeading('transactionRule').should('exist');
     cy.contains(ruleName).should('be.visible');
-    cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('be.visible');
+    cy.get('[data-cy="transactionRuleDetailConditions"]')
+      .should('contain', 'Descripción contiene "Uber"')
+      .and('contain', 'Monto entre 20 y 500');
+    cy.get('[data-cy="transactionRuleDetailResults"]')
+      .should('contain', expenseCategory.name)
+      .and('contain', tag.name)
+      .and('contain', secondTag.name);
+    cy.get('[data-cy="transactionRuleDetailMultiRuleExplanation"]')
+      .should('contain', 'primera categoría elegible')
+      .and('contain', 'sin duplicados');
+    cy.get('[data-cy="addConditionButton"]').should('not.exist');
+    cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('not.exist');
   });
 
   it('creates an INCOME rule through the configured product flow', () => {
@@ -245,7 +295,7 @@ describe('TransactionRule configured workflow e2e test', () => {
 
     selectCategory(expenseCategory);
 
-    cy.get('[data-cy="conditionLogic"]').should('have.value', 'ALL');
+    cy.get('[data-cy="conditionLogicAll"]').should('be.checked');
     assertAnyDisabled();
     assertRequiredFlow('Expense');
   });
@@ -284,8 +334,10 @@ describe('TransactionRule configured workflow e2e test', () => {
 
   it('edits a configured rule and updates required Flow when category changes from EXPENSE to INCOME', () => {
     const ruleName = uniqueName('tr-edit-rule');
+    let configuredRuleId: number;
 
     createConfiguredRule(ruleName, expenseCategory, 'OUT').then(rule => {
+      configuredRuleId = rule.id;
       cy.intercept('GET', `/api/transaction-rules/${rule.id}/configured`).as('configuredRuleRequest');
       cy.visit(`/transaction-rule/${rule.id}/edit`);
       cy.wait('@configuredRuleRequest').its('response.statusCode').should('eq', 200);
@@ -298,6 +350,24 @@ describe('TransactionRule configured workflow e2e test', () => {
       .should('be.visible');
     assertRequiredFlow('Expense');
 
+    cy.get('[data-cy="conditionRow"][data-condition-field="DESCRIPTION"]').within(() => {
+      cy.get('[data-cy="editConditionButton"]').click();
+    });
+    cy.get('[data-cy="embeddedConditionForm"]').within(() => {
+      cy.get('[data-cy="operator"]').select('STARTS_WITH');
+      cy.get('[data-cy="value"]').clear();
+      cy.get('[data-cy="value"]').type('Coffee shop');
+      cy.get('[data-cy="conditionSaveButton"]').click();
+    });
+    cy.get('[data-cy="conditionRow"][data-condition-field="DESCRIPTION"][data-condition-operator="STARTS_WITH"]')
+      .should('have.attr', 'data-condition-value', 'Coffee shop')
+      .should('be.visible');
+    addAmountBetweenCondition('10', '30');
+    cy.get('[data-cy="conditionRow"][data-condition-field="AMOUNT"]').within(() => {
+      cy.get('[data-cy="deleteConditionButton"]').click();
+    });
+    cy.get('[data-cy="conditionRow"][data-condition-field="AMOUNT"]').should('not.exist');
+
     selectCategory(incomeCategory);
 
     assertRequiredFlow('Income');
@@ -308,25 +378,33 @@ describe('TransactionRule configured workflow e2e test', () => {
       expect(response?.statusCode).to.equal(200);
       expect(response?.body.resultingCategory.id).to.equal(incomeCategory.id);
       expect(response?.body.conditions.some(condition => condition.field === 'FLOW' && condition.value === 'IN')).to.equal(true);
+      expect(
+        response?.body.conditions.some(condition => condition.field === 'DESCRIPTION' && condition.operator === 'STARTS_WITH'),
+      ).to.equal(true);
+      expect(response?.body.conditions.some(condition => condition.field === 'AMOUNT')).to.equal(false);
     });
-    cy.url().should('match', transactionRulePageUrlPattern);
-    cy.contains('a', ruleName).should('be.visible');
+    cy.then(() => {
+      cy.url().should('match', new RegExp(`/transaction-rule/${configuredRuleId}$`));
+      cy.contains(ruleName).should('be.visible');
+    });
   });
 
-  it('marks TransactionRule technical/debug condition surfaces clearly', () => {
+  it('keeps the product detail read-only while the technical condition route remains available', () => {
     const ruleName = uniqueName('tr-debug-rule');
 
     createConfiguredRule(ruleName, expenseCategory, 'OUT').then(() => {
       visitList();
       cy.contains('[data-cy^="transactionRuleCard-"] a', ruleName).click();
-      cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('be.visible');
+      cy.get('[data-cy="transactionRuleDetailConditions"]').should('be.visible');
+      cy.get('[data-cy="addConditionButton"]').should('not.exist');
+      cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('not.exist');
 
       cy.visit('/transaction-rule-condition');
       cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
     });
   });
 
-  it('manages complete classification-rule priority with arrows and a real mouse drag', () => {
+  it('manages complete classification-rule priority with arrows and keyboard drag-and-drop', () => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const rules = [
       {
@@ -386,28 +464,14 @@ describe('TransactionRule configured workflow e2e test', () => {
     const readOrder = () =>
       cy.get('[data-cy^="transactionRuleCard-"]').then($cards => Cypress._.map($cards, card => card.getAttribute('data-cy')));
 
-    const mouseDrag = (sourceId: number, targetId: number) => {
-      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).then($target => {
-        $target[0].scrollIntoView({ block: 'center' });
-      });
-      cy.get(`[data-cy="transactionRuleDragHandle-${sourceId}"]`).realMouseDown({
-        position: 'center',
-        scrollBehavior: false,
-      });
-      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).realMouseMove(0, 0, {
-        keepMouseDownButton: 'left',
-        position: 'center',
-        scrollBehavior: false,
-      });
-      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).realMouseMove(5, 5, {
-        keepMouseDownButton: 'left',
-        position: 'center',
-        scrollBehavior: false,
-      });
-      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).realMouseUp({
-        position: 'center',
-        scrollBehavior: false,
-      });
+    const keyboardDrag = (sourceId: number, direction: 'ArrowDown' | 'ArrowUp', steps: number) => {
+      cy.get(`[data-cy="transactionRuleDragHandle-${sourceId}"]`).scrollIntoView();
+      cy.get(`[data-cy="transactionRuleDragHandle-${sourceId}"]`).focus();
+      cy.realPress('Space');
+      for (let index = 0; index < steps; index += 1) {
+        cy.realPress(direction);
+      }
+      cy.realPress('Space');
     };
 
     createRule(rules[0])
@@ -457,9 +521,9 @@ describe('TransactionRule configured workflow e2e test', () => {
           const [source] = expectedOrder.splice(sourceIndex, 1);
           expectedOrder.splice(targetIndex, 0, source);
 
-          cy.intercept('PUT', '/api/transaction-rules/reorder').as('mouseDragReorder');
-          mouseDrag(createdRules[0].id, createdRules[1].id);
-          cy.wait('@mouseDragReorder').then(({ request, response }) => {
+          cy.intercept('PUT', '/api/transaction-rules/reorder').as('keyboardDragReorder');
+          keyboardDrag(createdRules[0].id, sourceIndex < targetIndex ? 'ArrowDown' : 'ArrowUp', Math.abs(targetIndex - sourceIndex));
+          cy.wait('@keyboardDragReorder').then(({ request, response }) => {
             expect(response?.statusCode).to.equal(200);
             expect(request.body.orderedIds).to.deep.equal(expectedOrder.map(card => Number(card.replace('transactionRuleCard-', ''))));
           });
@@ -470,9 +534,27 @@ describe('TransactionRule configured workflow e2e test', () => {
         cy.contains(`[data-cy="transactionRuleCard-${createdRules[2].id}"] a`, rules[2].name).click();
         cy.getEntityDetailsHeading('transactionRule').should('exist');
         cy.contains(rules[2].name).should('be.visible');
-        cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('be.visible');
+        cy.get('[data-cy="transactionRuleDetailConditions"]').should('be.visible');
+        cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('not.exist');
         cy.get('[href$="/edit"]').click();
         cy.getEntityCreateUpdateHeading('TransactionRule').should('exist');
       });
+  });
+
+  it('deletes a configured rule through product confirmation and returns to the manager', () => {
+    const ruleName = uniqueName('tr-delete-rule');
+
+    createConfiguredRule(ruleName, expenseCategory, 'OUT').then(rule => {
+      cy.visit(`/transaction-rule/${rule.id}`);
+      cy.getEntityDetailsHeading('transactionRule').should('exist');
+      cy.get('[data-cy="entityDeleteButton"]').click();
+      cy.get('[data-cy="transactionRuleDeleteDialogHeading"]').should('be.visible');
+      cy.contains(/Sólo afecta sugerencias futuras/i).should('be.visible');
+      cy.intercept('DELETE', `/api/transaction-rules/${rule.id}`).as('deleteRule');
+      cy.get('[data-cy="entityConfirmDeleteButton"]').click();
+      cy.wait('@deleteRule').its('response.statusCode').should('eq', 204);
+      cy.url().should('match', transactionRulePageUrlPattern);
+      cy.contains(ruleName).should('not.exist');
+    });
   });
 });

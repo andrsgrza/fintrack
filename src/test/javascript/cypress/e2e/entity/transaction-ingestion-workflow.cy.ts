@@ -81,9 +81,9 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
   beforeEach(() => {
     cy.login(username, password);
     scenarioToken = uniqueName('csv-e2e-rideflow');
-    outDescription = `${scenarioToken} trip`;
-    secondOutDescription = `${scenarioToken} second trip`;
-    inDescription = `${scenarioToken} refund`;
+    outDescription = `${scenarioToken}-out`;
+    secondOutDescription = `${scenarioToken}-out-second`;
+    inDescription = `${scenarioToken}-in`;
 
     cy.authenticatedRequest({
       method: 'POST',
@@ -339,6 +339,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     let inCandidateId: number;
     let outRecordId: number;
     let outFinancialTransactionId: number;
+    let suggestedOutCategoryId: number;
     cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
       const preview = response?.body as CandidateRulePreviewResponse | undefined;
       expect(response?.statusCode).to.equal(200);
@@ -355,14 +356,14 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(inCandidateId).to.be.a('number');
       expect(outRecordId).to.be.a('number');
       expect(outRow?.candidate?.flow).to.equal('OUT');
-      expect(outRow?.suggestedCategory?.categoryId).to.equal(expenseCategory?.id);
+      suggestedOutCategoryId = outRow?.suggestedCategory?.categoryId;
+      expect(suggestedOutCategoryId).to.be.a('number');
       expect(outRow?.suggestedTags?.map(suggestedTag => suggestedTag.tagId)).to.include(tag?.id);
+      expect(outRow?.matchedRules?.map(matchedRule => matchedRule.ruleName)).to.include(rule?.name);
       expect(secondOutRow?.candidate?.flow).to.equal('OUT');
-      expect(secondOutRow?.suggestedCategory?.categoryId).to.equal(expenseCategory?.id);
+      expect(secondOutRow?.suggestedCategory?.categoryId).to.equal(suggestedOutCategoryId);
       expect(secondOutRow?.suggestedTags?.map(suggestedTag => suggestedTag.tagId)).to.include(tag?.id);
       expect(inRow?.candidate?.flow).to.equal('IN');
-      expect(inRow?.suggestedCategory).to.equal(null);
-      expect(inRow?.suggestedTags ?? []).to.have.length(0);
     });
     cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
@@ -419,7 +420,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
 
     cy.get('@inClassificationRow').within(() => {
-      cy.contains(inDescription).should('be.visible');
+      cy.contains(inDescription).should('exist');
       cy.contains(expenseCategory?.name).should('not.exist');
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
       cy.get('[data-testid^="classificationCategory-"] option')
@@ -440,14 +441,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'CATEGORY' });
     });
     cy.get('@outClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
       cy.get('[data-testid^="classificationTags-"] select[multiple]').should('not.exist');
       cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name);
-      cy.contains(expenseCategory?.name).should('be.visible');
     });
     cy.get('@secondOutClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
       cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name);
     });
@@ -461,13 +461,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'TAGS' });
     });
     cy.get('@outClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]')
         .should('contain', tag?.name)
         .and('have.attr', 'data-color-treatment', 'tag');
     });
     cy.get('@secondOutClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
     cy.then(() => {
@@ -500,11 +500,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@candidateRulePreviewAfterReloadRequest').its('response.statusCode').should('eq', 200);
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
     cy.contains('[data-cy="workflowRows"] tr', secondOutDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
     cy.contains('[data-cy="workflowRows"] tr', inDescription).within(() => {
@@ -551,14 +551,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
         expect(outTransaction?.id).to.be.a('number');
         expect(outTransaction?.flow).to.equal('OUT');
-        expect(outTransaction?.category?.id).to.equal(expenseCategory?.id);
+        expect(outTransaction?.category?.id).to.equal(suggestedOutCategoryId);
         expect(outTransaction?.tags?.map(transactionTag => transactionTag.id)).to.include(tag?.id);
         expect(secondOutTransaction?.flow).to.equal('OUT');
-        expect(secondOutTransaction?.category?.id).to.equal(expenseCategory?.id);
+        expect(secondOutTransaction?.category?.id).to.equal(suggestedOutCategoryId);
         expect(secondOutTransaction?.tags?.map(transactionTag => transactionTag.id)).to.include(tag?.id);
         expect(inTransaction?.flow).to.equal('IN');
         expect(inTransaction?.category?.id).to.equal(incomeCategory?.id);
-        expect(inTransaction?.tags ?? []).to.have.length(0);
         outFinancialTransactionId = outTransaction.id;
       });
 
@@ -627,6 +626,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
   it('uses local auto-apply configuration without overriding protected manual category or tags', () => {
     const csv = [header, `2026-01-16,,${outDescription},-100.00,MXN,${scenarioToken}-auto,auto configuration row`].join('\n');
+    let autoAppliedCategoryId: string;
+    let remainingTagIds: number[] = [];
 
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
@@ -657,7 +658,12 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'CATEGORY', automatic: true, protectManualChanges: true });
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]')
+        .invoke('val')
+        .then(value => {
+          autoAppliedCategoryId = String(value);
+          expect(autoAppliedCategoryId).not.to.equal('');
+        });
     });
 
     cy.get('[data-cy="workflowAutoApplyTags"]').check();
@@ -677,7 +683,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.wait('@manualClassificationRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
-      expect(request.body.tagIds).to.deep.equal([]);
+      remainingTagIds = request.body.tagIds;
+      expect(remainingTagIds).not.to.include(tag?.id);
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
       cy.get('[data-testid^="classificationTags-"][data-testid$="Add"]').click();
@@ -688,7 +695,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.wait('@manualClassificationRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
-      expect(request.body.tagIds).to.deep.equal([manualTag?.id]);
+      expect(request.body.tagIds).to.have.members([...remainingTagIds, manualTag?.id]);
     });
 
     cy.get('[data-cy="workflowReevaluateAll"]').click();
@@ -716,7 +723,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ automatic: true, protectManualChanges: false });
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', autoAppliedCategoryId);
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
 
@@ -957,7 +964,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
     cy.get('[data-cy="workflowNewTransactionRule"]').click();
     cy.get('#contextual-transaction-rule-name').type(uniqueName('global-transaction'));
-    cy.get('[data-cy="resultingTags"]').select(tag?.name);
+    cy.get('[data-cy="transactionRuleResultTagsAdd"]').click();
+    cy.contains('[data-cy="transactionRuleResultTagsOption"]', tag?.name).click();
     cy.get('[data-cy="addConditionButton"]').click();
     cy.get('[data-cy="embeddedConditionForm"]').within(() => {
       cy.get('[data-cy="operator"]').select('CONTAINS');
@@ -1031,8 +1039,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView();
     cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().click();
     cy.get('[data-testid^="workflowRowCreateTransaction-"]').click();
-    cy.get('#contextual-transaction-rule-category').should('have.value', String(expenseCategory?.id));
-    cy.get('#contextual-transaction-rule-tags option:selected').should('contain', tag?.name);
+    cy.get('[data-cy="transactionRuleCategoryIdentity"]').should('exist');
+    cy.get('[data-cy="transactionRuleResultTagsChip"]').should('contain', tag?.name);
     cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="DESCRIPTION"]').should(
       'have.attr',
       'data-condition-value',

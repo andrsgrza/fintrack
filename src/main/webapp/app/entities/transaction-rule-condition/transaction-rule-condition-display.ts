@@ -29,6 +29,9 @@ const fieldValueTranslationKey = (condition: ITransactionRuleCondition, value: s
   if (condition.field === TransactionRuleField.FLOW) {
     return `fintrackApp.TransactionFlow.${value}`;
   }
+  if (condition.field === TransactionRuleField.ORIGIN) {
+    return `fintrackApp.TransactionOrigin.${value}`;
+  }
   return undefined;
 };
 
