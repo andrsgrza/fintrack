@@ -1,4 +1,4 @@
-import { entityCreateButtonSelector, entityCreateSaveButtonSelector, entityDetailsButtonSelector } from '../../support/entity';
+import { entityCreateButtonSelector, entityCreateSaveButtonSelector } from '../../support/entity';
 
 describe('TransactionRule configured workflow e2e test', () => {
   const transactionRulePageUrl = '/transaction-rule';
@@ -318,11 +318,161 @@ describe('TransactionRule configured workflow e2e test', () => {
 
     createConfiguredRule(ruleName, expenseCategory, 'OUT').then(() => {
       visitList();
-      cy.contains('a', ruleName).parents('tr').find(entityDetailsButtonSelector).click();
+      cy.contains('[data-cy^="transactionRuleCard-"] a', ruleName).click();
       cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('be.visible');
 
       cy.visit('/transaction-rule-condition');
       cy.get('[data-cy="technicalViewBanner"]').should('be.visible');
     });
+  });
+
+  it('manages complete classification-rule priority with arrows and a real mouse drag', () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const rules = [
+      {
+        name: `tr-order-category-and-tag-${suffix}`,
+        active: true,
+        conditionLogic: 'ALL',
+        resultingCategory: expenseCategory,
+        resultingTags: [tag],
+        conditions: [
+          { field: 'FLOW', operator: 'EQUALS', value: 'OUT', secondValue: null, caseSensitive: false },
+          { field: 'DESCRIPTION', operator: 'CONTAINS', value: 'Coffee', secondValue: null, caseSensitive: false },
+        ],
+      },
+      {
+        name: `tr-order-inactive-tags-${suffix}`,
+        active: false,
+        conditionLogic: 'ANY',
+        resultingCategory: null,
+        resultingTags: [tag],
+        conditions: [
+          { field: 'DESCRIPTION', operator: 'CONTAINS', value: 'Rent', secondValue: null, caseSensitive: true },
+          { field: 'AMOUNT', operator: 'BETWEEN', value: '20', secondValue: '500', caseSensitive: false },
+        ],
+      },
+      {
+        name: `tr-order-category-${suffix}`,
+        active: true,
+        conditionLogic: 'ANY',
+        resultingCategory: bothCategory,
+        resultingTags: [],
+        conditions: [{ field: 'EXTERNAL_REFERENCE', operator: 'CONTAINS', value: 'ref', secondValue: null, caseSensitive: false }],
+      },
+    ];
+    const createdRules: Array<{ id: number; name: string; active: boolean }> = [];
+
+    const createRule = rule =>
+      cy
+        .authenticatedRequest({
+          method: 'POST',
+          url: '/api/transaction-rules/configured',
+          body: {
+            name: rule.name,
+            description: 'Classification manager E2E rule',
+            conditionLogic: rule.conditionLogic,
+            active: rule.active,
+            resultingCategory: rule.resultingCategory ? { id: rule.resultingCategory.id } : null,
+            resultingTags: rule.resultingTags.map(resultingTag => ({ id: resultingTag.id })),
+            conditions: rule.conditions,
+          },
+        })
+        .then(response => {
+          expect(response.status).to.equal(201);
+          createdRuleIds.push(response.body.id);
+          createdRules.push({ id: response.body.id, name: rule.name, active: rule.active });
+        });
+
+    const readOrder = () =>
+      cy.get('[data-cy^="transactionRuleCard-"]').then($cards => Cypress._.map($cards, card => card.getAttribute('data-cy')));
+
+    const mouseDrag = (sourceId: number, targetId: number) => {
+      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).then($target => {
+        $target[0].scrollIntoView({ block: 'center' });
+      });
+      cy.get(`[data-cy="transactionRuleDragHandle-${sourceId}"]`).realMouseDown({
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).realMouseMove(0, 0, {
+        keepMouseDownButton: 'left',
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).realMouseMove(5, 5, {
+        keepMouseDownButton: 'left',
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(`[data-cy="transactionRuleCard-${targetId}"]`).realMouseUp({
+        position: 'center',
+        scrollBehavior: false,
+      });
+    };
+
+    createRule(rules[0])
+      .then(() => createRule(rules[1]))
+      .then(() => createRule(rules[2]))
+      .then(() => {
+        cy.visit('/rules');
+        cy.get('[data-cy="rulesClassificationManagerLink"]').click();
+        cy.url().should('include', transactionRulePageUrl);
+
+        cy.get(`[data-cy="transactionRuleCard-${createdRules[0].id}"]`)
+          .should('contain', 'Todas las condiciones')
+          .and('contain', 'Coffee')
+          .and('contain', expenseCategory.name)
+          .and('contain', tag.name);
+        cy.get(`[data-cy="transactionRuleCard-${createdRules[1].id}"]`)
+          .should('contain', 'Inactiva')
+          .and('contain', 'Cualquier condición')
+          .and('contain', 'Rent');
+
+        readOrder().then(orderBeforeArrow => {
+          const inactiveCard = `transactionRuleCard-${createdRules[1].id}`;
+          const inactiveIndex = orderBeforeArrow.indexOf(inactiveCard);
+          expect(inactiveIndex).to.be.greaterThan(0);
+          const expectedOrder = [...orderBeforeArrow];
+          [expectedOrder[inactiveIndex - 1], expectedOrder[inactiveIndex]] = [
+            expectedOrder[inactiveIndex],
+            expectedOrder[inactiveIndex - 1],
+          ];
+
+          cy.intercept('PUT', '/api/transaction-rules/reorder').as('arrowReorder');
+          cy.get(`[data-cy="transactionRuleMoveUp-${createdRules[1].id}"]`).click();
+          cy.wait('@arrowReorder').then(({ request, response }) => {
+            expect(response?.statusCode).to.equal(200);
+            expect(request.body.orderedIds).to.deep.equal(expectedOrder.map(card => Number(card.replace('transactionRuleCard-', ''))));
+          });
+          cy.reload();
+          readOrder().should('deep.equal', expectedOrder);
+        });
+
+        readOrder().then(orderBeforeDrag => {
+          const sourceCard = `transactionRuleCard-${createdRules[0].id}`;
+          const targetCard = `transactionRuleCard-${createdRules[1].id}`;
+          const sourceIndex = orderBeforeDrag.indexOf(sourceCard);
+          const targetIndex = orderBeforeDrag.indexOf(targetCard);
+          const expectedOrder = [...orderBeforeDrag];
+          const [source] = expectedOrder.splice(sourceIndex, 1);
+          expectedOrder.splice(targetIndex, 0, source);
+
+          cy.intercept('PUT', '/api/transaction-rules/reorder').as('mouseDragReorder');
+          mouseDrag(createdRules[0].id, createdRules[1].id);
+          cy.wait('@mouseDragReorder').then(({ request, response }) => {
+            expect(response?.statusCode).to.equal(200);
+            expect(request.body.orderedIds).to.deep.equal(expectedOrder.map(card => Number(card.replace('transactionRuleCard-', ''))));
+          });
+          cy.reload();
+          readOrder().should('deep.equal', expectedOrder);
+        });
+
+        cy.contains(`[data-cy="transactionRuleCard-${createdRules[2].id}"] a`, rules[2].name).click();
+        cy.getEntityDetailsHeading('transactionRule').should('exist');
+        cy.contains(rules[2].name).should('be.visible');
+        cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('be.visible');
+        cy.get('[href$="/edit"]').click();
+        cy.getEntityCreateUpdateHeading('TransactionRule').should('exist');
+      });
   });
 });

@@ -18,6 +18,39 @@ import { TransactionRuleDetail } from './transaction-rule-detail';
 import { TransactionRuleUpdate } from './transaction-rule-update';
 
 jest.mock('axios');
+jest.mock('@dnd-kit/core', () => ({
+  DndContext: ({ children, onDragEnd }) => (
+    <div>
+      <button
+        type="button"
+        data-testid="transaction-rule-dnd-drop-first-on-second"
+        onClick={() => onDragEnd({ active: { id: 1 }, over: { id: 2 } })}
+      >
+        Trigger drag reorder
+      </button>
+      {children}
+    </div>
+  ),
+  KeyboardSensor: class KeyboardSensor {},
+  MouseSensor: class MouseSensor {},
+  TouchSensor: class TouchSensor {},
+  closestCenter: jest.fn(),
+  useSensor: jest.fn(() => ({})),
+  useSensors: jest.fn(() => []),
+}));
+jest.mock('@dnd-kit/sortable', () => ({
+  SortableContext: ({ children }) => <>{children}</>,
+  arrayMove(items, from, to) {
+    const copy = [...items];
+    const [item] = copy.splice(from, 1);
+    copy.splice(to, 0, item);
+    return copy;
+  },
+  sortableKeyboardCoordinates: jest.fn(),
+  useSortable: () => ({ attributes: {}, listeners: {}, setNodeRef: jest.fn(), transform: null, transition: undefined, isDragging: false }),
+  verticalListSortingStrategy: jest.fn(),
+}));
+jest.mock('@dnd-kit/utilities', () => ({ CSS: { Transform: { toString: jest.fn(() => undefined) } } }));
 
 const mockAxiosGet = axios.get as jest.Mock;
 const mockAxiosPost = axios.post as jest.Mock;
@@ -108,14 +141,74 @@ const createListRule = (id: number, name: string, priority: number) => ({
   resultingTags: priority === 0 ? baseRule.resultingTags : [],
 });
 
-const renderList = (entities: any[] = [createListRule(1, 'Coffee rule', 0), createListRule(2, 'Rent rule', 1)]) => {
+const managerConditions = (ruleId: number) => {
+  if (ruleId === 2) {
+    return [
+      { id: 22, position: 0, field: 'AMOUNT', operator: 'BETWEEN', value: '20', secondValue: '500', caseSensitive: false },
+      { id: 23, position: 1, field: 'ACCOUNT', operator: 'EQUALS', value: '2', secondValue: null, caseSensitive: false },
+    ];
+  }
+  return [
+    { id: 11, position: 0, field: 'DESCRIPTION', operator: 'CONTAINS', value: 'Coffee', secondValue: null, caseSensitive: true },
+    { id: 12, position: 1, field: 'FLOW', operator: 'EQUALS', value: 'OUT', secondValue: null, caseSensitive: false },
+    {
+      id: 13,
+      position: 2,
+      field: 'TRANSACTION_DATE',
+      operator: 'BETWEEN',
+      value: '2026-01-01',
+      secondValue: '2026-01-31',
+      caseSensitive: false,
+    },
+  ];
+};
+
+const mockManagerList = (entities: any[], options: { failedConditionsFor?: number[]; catalogFailure?: boolean } = {}) => {
+  mockAxiosGet.mockImplementation((url: string) => {
+    if (url.startsWith('api/transaction-rules?')) {
+      return Promise.resolve({ data: entities });
+    }
+    if (url === 'api/categories?sort=name,ASC') {
+      return options.catalogFailure
+        ? Promise.reject(new Error('categories unavailable'))
+        : Promise.resolve({ data: [{ id: 3, name: 'Food', color: '#d97706', active: false, categoryType: 'EXPENSE' }] });
+    }
+    if (url === 'api/tags?sort=name,ASC') {
+      return options.catalogFailure
+        ? Promise.reject(new Error('tags unavailable'))
+        : Promise.resolve({ data: [{ id: 5, name: 'Morning', color: '#2563eb', active: false }] });
+    }
+    if (url === 'api/financial-accounts?sort=name,ASC') {
+      return options.catalogFailure
+        ? Promise.reject(new Error('accounts unavailable'))
+        : Promise.resolve({ data: [{ id: 2, name: 'Checking account', accountType: 'DEBIT', currency: 'MXN', active: true }] });
+    }
+    const conditionMatch = url.match(/^api\/transaction-rules\/(\d+)\/conditions$/);
+    if (conditionMatch) {
+      const ruleId = Number(conditionMatch[1]);
+      if (options.failedConditionsFor?.includes(ruleId)) {
+        return Promise.reject(new Error('conditions unavailable'));
+      }
+      return Promise.resolve({ data: managerConditions(ruleId) });
+    }
+    return Promise.resolve({ data: [] });
+  });
+};
+
+const renderList = (
+  entities: any[] = [createListRule(1, 'Coffee rule', 0), createListRule(2, 'Rent rule', 1)],
+  options: { admin?: boolean; failedConditionsFor?: number[]; catalogFailure?: boolean } = {},
+) => {
   mockState = {
     ...baseState,
+    authentication: { account: { authorities: [options.admin ? 'ROLE_ADMIN' : 'ROLE_USER'] } },
+    locale: { currentLocale: 'en' },
     transactionRule: {
       ...baseState.transactionRule,
       entities,
     },
   };
+  mockManagerList(entities, options);
 
   return render(
     <MemoryRouter initialEntries={['/transaction-rule']}>
@@ -228,113 +321,117 @@ describe('TransactionRule UX', () => {
     registerTranslations();
   });
 
-  it('renders product-oriented list columns and keeps row actions', () => {
+  it('renders a product rule manager with readable matching and inactive result identities', async () => {
     renderList([createListRule(1, 'Coffee rule', 0), { ...createListRule(2, 'Rent rule', 1), conditionLogic: 'ANY', active: true }]);
 
-    expect(mockGetEntities).toHaveBeenCalledWith({ sort: 'priority,asc&sort=id,asc' });
-    expect(screen.queryByRole('columnheader', { name: /id/i })).toBeNull();
-    expect(screen.queryByRole('columnheader', { name: /created at/i })).toBeNull();
-    expect(screen.getByRole('columnheader', { name: /name/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: /status/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: /order/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: /conditions/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: /result/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: /updated/i })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /create a new transaction rule/i }).getAttribute('href')).toBe('/transaction-rule/new');
+    expect(await screen.findByText('Coffee rule')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.getByRole('link', { name: /create rule/i }).getAttribute('href')).toBe('/transaction-rule/new');
     expect(screen.getByRole('link', { name: 'Coffee rule' }).getAttribute('href')).toBe('/transaction-rule/1');
     expect(screen.getByText('Inactive')).toBeTruthy();
     expect(screen.getByText('Active')).toBeTruthy();
-    expect(screen.getByText('All conditions')).toBeTruthy();
-    expect(screen.getByText('Any condition')).toBeTruthy();
-    expect(screen.getByText('#1')).toBeTruthy();
-    expect(screen.getByText('#2')).toBeTruthy();
-    expect(screen.getByText('Category: Food')).toBeTruthy();
-    expect(screen.getByText('Tags: Morning')).toBeTruthy();
-    expect(screen.getByText('No result configured')).toBeTruthy();
+    expect(screen.getByText(/All conditions/)).toBeTruthy();
+    expect(screen.getByText(/Any condition/)).toBeTruthy();
+    expect(screen.getByText('Position 1')).toBeTruthy();
+    expect(screen.getByText('Position 2')).toBeTruthy();
+    expect(screen.getByTestId('transactionRuleSummary-1').textContent).toContain('Coffee');
+    expect(screen.getByTestId('transactionRuleSummary-1').textContent).toContain('case-sensitive');
+    expect(screen.getByTestId('transactionRuleSummary-1').textContent).toContain('Expense');
+    expect(screen.getByText('and 1 more')).toBeTruthy();
+    expect(screen.getByText('Food')).toBeTruthy();
+    expect(screen.getByText('Morning')).toBeTruthy();
+    expect(screen.getAllByText('Inactive historical output')).toHaveLength(1);
+    const secondRuleSummary = screen.getByTestId('transactionRuleSummary-2').textContent ?? '';
+    expect(secondRuleSummary).toContain('Amount');
+    expect(secondRuleSummary).toContain('20');
+    expect(secondRuleSummary).toContain('500');
+    expect(secondRuleSummary).toContain('Checking account');
     expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(2);
-    expect(screen.queryByLabelText('Priority')).toBeNull();
+    expect(screen.getByText(/first eligible category wins/i)).toBeTruthy();
   });
 
-  it('renders rules in priority ascending order even when raw entities are unsorted', () => {
+  it('renders rules in priority ascending order even when the response is unsorted', async () => {
     renderList([createListRule(3, 'Rule C', 2), createListRule(2, 'Rule B', 1), createListRule(1, 'Rule A', 0)]);
 
-    const rows = screen.getAllByRole('row').slice(1);
+    await screen.findByText('Rule A');
+    const cards = screen.getAllByTestId(/transactionRuleCard-/);
 
-    expect(within(rows[0]).getByRole('link', { name: 'Rule A' })).toBeTruthy();
-    expect(within(rows[0]).getByText('#1')).toBeTruthy();
-    expect(within(rows[1]).getByRole('link', { name: 'Rule B' })).toBeTruthy();
-    expect(within(rows[1]).getByText('#2')).toBeTruthy();
-    expect(within(rows[2]).getByRole('link', { name: 'Rule C' })).toBeTruthy();
-    expect(within(rows[2]).getByText('#3')).toBeTruthy();
+    expect(within(cards[0]).getByRole('link', { name: 'Rule A' })).toBeTruthy();
+    expect(within(cards[0]).getByText('Position 1')).toBeTruthy();
+    expect(within(cards[1]).getByRole('link', { name: 'Rule B' })).toBeTruthy();
+    expect(within(cards[1]).getByText('Position 2')).toBeTruthy();
+    expect(within(cards[2]).getByRole('link', { name: 'Rule C' })).toBeTruthy();
+    expect(within(cards[2]).getByText('Position 3')).toBeTruthy();
   });
 
-  it('renders only possible move controls and keeps row actions', () => {
+  it('keeps boundary arrow controls accessible and disabled', async () => {
     renderList([createListRule(1, 'Rule A', 0), createListRule(2, 'Rule B', 1), createListRule(3, 'Rule C', 2)]);
 
+    await screen.findByText('Rule A');
     const moveUpButtons = screen.getAllByRole('button', { name: /move up/i });
     const moveDownButtons = screen.getAllByRole('button', { name: /move down/i });
-    const rows = screen.getAllByRole('row').slice(1);
+    const cards = screen.getAllByTestId(/transactionRuleCard-/);
 
-    expect(moveUpButtons).toHaveLength(2);
-    expect(moveDownButtons).toHaveLength(2);
-    expect(within(rows[0]).queryByRole('button', { name: /move up/i })).toBeNull();
-    expect(within(rows[0]).getByRole('button', { name: /move down/i })).toBeTruthy();
-    expect(within(rows[1]).getByRole('button', { name: /move up/i })).toBeTruthy();
-    expect(within(rows[1]).getByRole('button', { name: /move down/i })).toBeTruthy();
-    expect(within(rows[2]).getByRole('button', { name: /move up/i })).toBeTruthy();
-    expect(within(rows[2]).queryByRole('button', { name: /move down/i })).toBeNull();
+    expect(moveUpButtons).toHaveLength(3);
+    expect(moveDownButtons).toHaveLength(3);
+    expect(within(cards[0]).getByRole('button', { name: /move up/i }).disabled).toBe(true);
+    expect(within(cards[0]).getByRole('button', { name: /move down/i }).disabled).toBe(false);
+    expect(within(cards[1]).getByRole('button', { name: /move up/i }).disabled).toBe(false);
+    expect(within(cards[1]).getByRole('button', { name: /move down/i }).disabled).toBe(false);
+    expect(within(cards[2]).getByRole('button', { name: /move up/i }).disabled).toBe(false);
+    expect(within(cards[2]).getByRole('button', { name: /move down/i }).disabled).toBe(true);
     expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(3);
     expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(3);
-    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(3);
+    expect(screen.getAllByTestId(/transactionRuleDragHandle-/)).toHaveLength(3);
   });
 
-  it('renders no reorder buttons for a single-row list', () => {
+  it('disables both movement controls for a single-rule list', async () => {
     renderList([createListRule(1, 'Only rule', 0)]);
 
-    expect(screen.queryByRole('button', { name: /move up/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /move down/i })).toBeNull();
+    await screen.findByText('Only rule');
+    expect(screen.getByRole('button', { name: /move up/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /move down/i }).disabled).toBe(true);
     expect(screen.getAllByRole('link', { name: /view/i })).toHaveLength(1);
     expect(screen.getAllByRole('link', { name: /edit/i })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(1);
   });
 
   it('clicking move up on the last row sends the full swapped priority order and reloads', async () => {
     mockAxiosPut.mockResolvedValue({ data: [] });
     renderList([createListRule(1, 'Rule A', 0), createListRule(2, 'Rule B', 1), createListRule(3, 'Rule C', 2)]);
-    mockGetEntities.mockClear();
+    await screen.findByText('Rule A');
 
-    fireEvent.click(within(screen.getAllByRole('row')[3]).getByRole('button', { name: /move up/i }));
+    fireEvent.click(within(screen.getByTestId('transactionRuleCard-3')).getByRole('button', { name: /move up/i }));
 
     await waitFor(() =>
       expect(mockAxiosPut).toHaveBeenCalledWith('api/transaction-rules/reorder', {
         orderedIds: [1, 3, 2],
       }),
     );
-    await waitFor(() => expect(mockGetEntities).toHaveBeenCalledWith({ sort: 'priority,asc&sort=id,asc' }));
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules?sort=priority,ASC&sort=id,ASC'));
   });
 
   it('clicking move down on the first row sends the full swapped priority order and reloads', async () => {
     mockAxiosPut.mockResolvedValue({ data: [] });
     renderList([createListRule(1, 'Rule A', 0), createListRule(2, 'Rule B', 1), createListRule(3, 'Rule C', 2)]);
-    mockGetEntities.mockClear();
+    await screen.findByText('Rule A');
 
-    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: /move down/i }));
+    fireEvent.click(within(screen.getByTestId('transactionRuleCard-1')).getByRole('button', { name: /move down/i }));
 
     await waitFor(() =>
       expect(mockAxiosPut).toHaveBeenCalledWith('api/transaction-rules/reorder', {
         orderedIds: [2, 1, 3],
       }),
     );
-    await waitFor(() => expect(mockGetEntities).toHaveBeenCalledWith({ sort: 'priority,asc&sort=id,asc' }));
+    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledWith('api/transaction-rules?sort=priority,ASC&sort=id,ASC'));
   });
 
   it('uses the priority ascending array for reorder even when raw entities are reversed', async () => {
     mockAxiosPut.mockResolvedValue({ data: [] });
     renderList([createListRule(3, 'Rule C', 2), createListRule(2, 'Rule B', 1), createListRule(1, 'Rule A', 0)]);
+    await screen.findByText('Rule A');
 
-    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: /move down/i }));
+    fireEvent.click(within(screen.getByTestId('transactionRuleCard-1')).getByRole('button', { name: /move down/i }));
 
     await waitFor(() =>
       expect(mockAxiosPut).toHaveBeenCalledWith('api/transaction-rules/reorder', {
@@ -346,10 +443,52 @@ describe('TransactionRule UX', () => {
   it('shows a reorder error when move request fails', async () => {
     mockAxiosPut.mockRejectedValue(new Error('reorder failed'));
     renderList();
+    await screen.findByText('Coffee rule');
 
-    fireEvent.click(screen.getAllByRole('button', { name: /move down/i })[0]);
+    fireEvent.click(within(screen.getByTestId('transactionRuleCard-1')).getByRole('button', { name: /move down/i }));
 
-    expect(await screen.findByText('Could not reorder rules.')).toBeTruthy();
+    expect(await screen.findByText('The order could not be saved. The last confirmed order has been restored.')).toBeTruthy();
+  });
+
+  it('routes drag completion through the same complete-order persistence contract', async () => {
+    mockAxiosPut.mockResolvedValue({ data: [] });
+    renderList();
+    await screen.findByText('Coffee rule');
+
+    fireEvent.click(screen.getByTestId('transaction-rule-dnd-drop-first-on-second'));
+
+    await waitFor(() => expect(mockAxiosPut).toHaveBeenCalledWith('api/transaction-rules/reorder', { orderedIds: [2, 1] }));
+  });
+
+  it('shows per-rule condition failure and preserves the rule identity', async () => {
+    renderList([createListRule(1, 'Unavailable conditions', 0)], { failedConditionsFor: [1] });
+
+    expect(await screen.findByText('Unavailable conditions')).toBeTruthy();
+    expect(screen.getByText('Conditions could not be loaded.')).toBeTruthy();
+  });
+
+  it('shows a truthful dependent-data warning instead of silently claiming no outputs', async () => {
+    renderList([createListRule(1, 'Historical rule', 0)], { catalogFailure: true });
+
+    expect(await screen.findByText('Historical rule')).toBeTruthy();
+    expect(screen.getAllByText('Some output identity details are temporarily unavailable.').length).toBeGreaterThan(0);
+    expect(screen.getByText('Food')).toBeTruthy();
+  });
+
+  it('keeps reordering unavailable for a mixed-owner admin list', async () => {
+    renderList([createListRule(1, 'Admin visible rule', 0)], { admin: true });
+
+    await screen.findByText('Admin visible rule');
+    expect(screen.getByTestId('transactionRuleAdminReorderUnavailable')).toBeTruthy();
+    expect(screen.queryByTestId('transactionRuleDragHandle-1')).toBeNull();
+    expect(screen.queryByRole('button', { name: /move up/i })).toBeNull();
+  });
+
+  it('renders an explanatory empty state', async () => {
+    renderList([]);
+
+    expect(await screen.findByText('No classification rules yet')).toBeTruthy();
+    expect(screen.getByTestId('transactionRuleEmptyCreate')).toBeTruthy();
   });
 
   it('renders configured create form with inline conditions editor', () => {

@@ -2,17 +2,19 @@
   "fintrackApp": {
     "transactionRule": {
       "home": {
-        "title": "Transaction Rules",
+        "title": "Reglas de clasificación",
+        "subtitle": "Configura sugerencias de categoría y etiquetas para la revisión de transacciones.",
         "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nuevo Transaction Rule",
+        "createLabel": "Crear regla",
         "createOrEditLabel": "Crear o editar Transaction Rule",
-        "notFound": "Ningún Transaction Rules encontrado"
+        "notFound": "Ningún Transaction Rules encontrado",
+        "loadFailed": "No se pudieron cargar las reglas de clasificación. Intenta refrescar la lista."
       },
       "created": "Un nuevo Transaction Rule ha sido creado con el identificador {{ param }}",
       "updated": "Un Transaction Rule ha sido actualizado con el identificador {{ param }}",
       "deleted": "Un Transaction Rule ha sido eliminado con el identificador {{ param }}",
       "delete": {
-        "question": "Esto eliminará Transaction Rule {{ id }} y sus condiciones. Las categorías, suscripciones, etiquetas y transacciones no se eliminarán. Las transacciones futuras ya no serán clasificadas por esta regla. Esta acción no se puede deshacer."
+        "question": "Esto eliminará la Regla de clasificación {{ id }} y sus condiciones. Las categorías, suscripciones, etiquetas y transacciones no se eliminarán. Sólo afecta sugerencias futuras: no cambia ni reevalúa automáticamente transacciones publicadas o clasificaciones ya revisadas. Esta acción no se puede deshacer."
       },
       "detail": {
         "title": "Regla"
@@ -31,6 +33,15 @@
       "moveUp": "Subir",
       "moveDown": "Bajar",
       "reorderFailed": "No se pudo reordenar las reglas.",
+      "reorder": {
+        "title": "Orden de evaluación",
+        "explanation": "Las reglas activas se evalúan en orden. Pueden coincidir varias reglas: la primera categoría elegible gana y las etiquetas elegibles de las reglas coincidentes se acumulan sin duplicados. Las reglas inactivas no participan.",
+        "position": "Posición {{position}}",
+        "actions": "Reordenar regla",
+        "dragHandle": "Arrastra {{name}} para cambiar su orden de evaluación",
+        "failed": "No se pudo guardar el orden. Se restauró el último orden confirmado.",
+        "adminUnavailable": "No se puede reordenar aquí porque esta lista de administrador puede incluir reglas de distintos usuarios."
+      },
       "evaluationOrder": "Orden de evaluación",
       "priorityServerManagedHelp": "El orden de las reglas se administra desde la lista de reglas. Las reglas nuevas se agregan al final.",
       "requiredFlowHelp": "La categoría seleccionada requiere una condición de flujo compatible.",
@@ -53,6 +64,21 @@
         "label": "Condiciones",
         "all": "Todas las condiciones",
         "any": "Cualquier condición"
+      },
+      "summary": {
+        "matching": "Coincidencia",
+        "result": "Sugerencias",
+        "if": "Si",
+        "noConditions": "No hay condiciones configuradas.",
+        "moreConditions": "y {{count}} más",
+        "conditionsUnavailable": "No se pudieron cargar las condiciones.",
+        "accountUnavailable": "Detalles de cuenta no disponibles",
+        "inactiveHistoricalOutput": "Salida histórica inactiva",
+        "outputDetailsUnavailable": "Algunos detalles de identidad de salida no están disponibles temporalmente."
+      },
+      "empty": {
+        "title": "Aún no hay reglas de clasificación",
+        "body": "Crea una regla para sugerir una categoría, etiquetas o ambas durante la revisión de transacciones."
       },
       "result": {
         "label": "Resultado",

@@ -97,8 +97,9 @@ FINTRACK already implements the rule authoring model:
 - priorities are unique and consecutive per user.
 - new rules are appended at the end.
 - deleting a rule reindexes priorities for that user.
-- users reorder rules through Move up / Move down on the TransactionRule list.
-- drag-and-drop priority UI is deferred.
+- the Classification Rules manager keeps the complete current-owner list in `priority ASC, id ASC` order and supports both Move up / Move down controls and keyboard-accessible pointer/touch drag-and-drop.
+- arrows and drag-and-drop both submit the same complete current-owner id sequence to `PUT /api/transaction-rules/reorder`; a failed request restores the last server-confirmed order.
+- an administrator list can span owners while that command is current-user scoped, so the manager deliberately does not expose reorder controls there.
 - `TransactionRuleCondition.position` is server-managed.
 - condition position orders conditions inside one rule.
 - condition position does not reindex on delete.
@@ -735,9 +736,11 @@ The Description Normalization Rule product editor persists the parent and all ma
 - `GET /api/description-normalization-rules/{id}/configured`;
 - `PUT /api/description-normalization-rules/{id}/configured`.
 
-Configured `PUT` validates the complete requested configuration before condition replacement, then updates the parent and replaces ordered conditions in one transaction. Owner, rule identity, and priority remain server-managed; normal rule reorder remains the only priority-changing operation. This write does not execute normalization, reevaluate imported rows, mutate `rawData`, or alter FinancialTransactions. Existing generated/detail condition endpoints remain temporarily available for technical maintenance; the later DNR product-detail polish will make that distinction clearer.
+Configured `PUT` validates the complete requested configuration before condition replacement, then updates the parent and replaces ordered conditions in one transaction. Owner, rule identity, and priority remain server-managed; normal rule reorder remains the only priority-changing operation. This write does not execute normalization, reevaluate imported rows, mutate `rawData`, or alter FinancialTransactions. Existing generated/detail condition endpoints remain temporarily available for technical maintenance; the product detail is now read-only and directs edits through this configured editor.
 
 The aggregate has no version column or lock-based conflict response. A failed command cannot leave a partial parent/condition collection, but concurrent editors still have last-successful-save-wins behavior.
+
+The Description Rules manager shows the whole current-owner collection ordered by `priority ASC, id ASC`, including inactive rules. It describes condition configuration rather than re-evaluating it: ALL means every displayed condition must match; ANY means at least one may match; each condition retains its operator, value, and case-sensitivity display. Reordering always sends the complete owner id list to `PUT /api/description-normalization-rules/reorder`; drag-and-drop and arrows share it. The manager safely suppresses reorder for a mixed-owner administrator list because that endpoint remains current-user scoped.
 
 ### Matcher helper boundary
 

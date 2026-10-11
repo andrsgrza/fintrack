@@ -2,17 +2,19 @@
   "fintrackApp": {
     "transactionRule": {
       "home": {
-        "title": "Transaction Rules",
+        "title": "Classification Rules",
+        "subtitle": "Configure category and tag suggestions for transaction review.",
         "refreshListLabel": "Refresh list",
-        "createLabel": "Create a new Transaction Rule",
+        "createLabel": "Create rule",
         "createOrEditLabel": "Create or edit a Transaction Rule",
-        "notFound": "No Transaction Rules found"
+        "notFound": "No Transaction Rules found",
+        "loadFailed": "Classification rules could not be loaded. Try refreshing the list."
       },
       "created": "A new Transaction Rule is created with identifier {{ param }}",
       "updated": "A Transaction Rule is updated with identifier {{ param }}",
       "deleted": "A Transaction Rule is deleted with identifier {{ param }}",
       "delete": {
-        "question": "This will delete Transaction Rule {{ id }} and its conditions. Categories, subscriptions, tags, and transactions will not be deleted. Future transactions will no longer be classified by this rule. This action cannot be undone."
+        "question": "This will delete Classification Rule {{ id }} and its conditions. Categories, subscriptions, tags, and transactions will not be deleted. It affects future suggestions only: posted transactions and classifications already reviewed are not changed or automatically reevaluated. This action cannot be undone."
       },
       "detail": {
         "title": "Transaction Rule"
@@ -31,6 +33,15 @@
       "moveUp": "Move up",
       "moveDown": "Move down",
       "reorderFailed": "Could not reorder rules.",
+      "reorder": {
+        "title": "Evaluation order",
+        "explanation": "Active rules are evaluated in order. Multiple rules can match: the first eligible category wins, and eligible tags from matching rules accumulate without duplicates. Inactive rules do not participate.",
+        "position": "Position {{position}}",
+        "actions": "Reorder rule",
+        "dragHandle": "Drag {{name}} to change its evaluation order",
+        "failed": "The order could not be saved. The last confirmed order has been restored.",
+        "adminUnavailable": "Reordering is unavailable here because this administrator list can include rules owned by different users."
+      },
       "evaluationOrder": "Evaluation order",
       "priorityServerManagedHelp": "Rule order is managed from the rules list. New rules are added last.",
       "requiredFlowHelp": "The selected category requires a compatible Flow condition.",
@@ -53,6 +64,21 @@
         "label": "Conditions",
         "all": "All conditions",
         "any": "Any condition"
+      },
+      "summary": {
+        "matching": "Matching",
+        "result": "Suggestions",
+        "if": "If",
+        "noConditions": "No conditions configured.",
+        "moreConditions": "and {{count}} more",
+        "conditionsUnavailable": "Conditions could not be loaded.",
+        "accountUnavailable": "Account details unavailable",
+        "inactiveHistoricalOutput": "Inactive historical output",
+        "outputDetailsUnavailable": "Some output identity details are temporarily unavailable."
+      },
+      "empty": {
+        "title": "No classification rules yet",
+        "body": "Create a rule to suggest a category, tags, or both during transaction review."
       },
       "result": {
         "label": "Result",

@@ -540,7 +540,7 @@ Position does not affect `ALL` / `ANY` logical semantics.
 
 TransactionRule priority/order is server-managed, unique/consecutive per user, reindexed on rule delete, stored 0-based, and displayed 1-based in the UI.
 
-TransactionRule list is the only manual reorder surface. It always renders rules in evaluation order (`priority ASC, id ASC`) and provides only possible Move up / Move down controls per row: the first row does not render Move up, the last row does not render Move down, and a single-row list renders neither. Each move swaps adjacent rules in that priority-ordered array, sends the full current-user ordered id list to `PUT /api/transaction-rules/reorder`, then reloads from the backend. The backend validates exact current-user membership and normalizes priorities to `0..n`.
+TransactionRule list is the only manual reorder surface. It is a complete Classification Rules manager, rendering rules in evaluation order (`priority ASC, id ASC`) as cards with readable condition summaries, a category identity and tag pills, status, and one-based evaluation position. Move up / Move down controls remain visible but disabled at the respective boundaries; a keyboard-accessible `@dnd-kit` handle also supports pointer, touch, and keyboard reorder. Both interactions swap/reposition the same complete current-user array, submit every ordered id to `PUT /api/transaction-rules/reorder`, then reload from the backend. A failed persistence restores the last confirmed order. The backend validates exact current-user membership and normalizes priorities to `0..n`; an administrator list may span owners, so it shows no reorder controls.
 
 `TransactionRuleCondition.position` orders conditions inside one rule.
 
@@ -590,7 +590,6 @@ The TransactionRule detail page refreshes parent state after condition mutations
 Deferred for this workflow:
 
 - row-positioned inline edit;
-- TransactionRule drag-and-drop UI;
 - condition reorder UI/API;
 - rule execution engine;
 - override confirmation UI;
@@ -719,19 +718,21 @@ Canonical ingestion product writes should use the TransactionIngestion workflow 
 
 The main entity menu exposes one **Rules / Reglas** entry. The separate product-facing Description Normalization Rule and Transaction Rule menu entries are removed, while the intentionally technical TransactionRuleCondition entry remains available with its Technical badge. The same authenticated entity menu is used for ordinary users and administrators, so this change introduces no new authorization path.
 
-Future manager-specific polish must provide both arrow controls and drag-and-drop ordering in both managers, including keyboard-accessible ordering and existing complete owner-specific reorder persistence. It is not part of this landing slice.
+The Description Rules manager now provides both arrow controls and keyboard-accessible `@dnd-kit` drag-and-drop ordering. It operates against the complete authenticated-owner collection and restores the confirmed order after a failed persistence attempt. Transaction Rule manager ordering polish remains separate.
 
 ## DescriptionNormalizationRule UI composition
 
 Description normalization rules follow the same parent-centered composition pattern as TransactionRule:
 
-- list page owns reorder controls;
+- list page is a wide product manager with ordered rule cards, active/inactive status, readable ALL/ANY condition summaries, result summaries, a back-to-Rules action, and owner-safe reorder controls;
 - product create uses the configured parent + local conditions command and does not create an empty draft;
 - standalone create and edit share one configured form: Identity → Matching → Result → Status, with local condition add/edit/remove and a live human-readable configuration summary;
 - configured create and edit use `POST`, `GET`, and `PUT /api/description-normalization-rules[/id]/configured`; edit loads every ordered condition and saves the complete replacement atomically while priority stays server-managed;
 - save failures preserve the local draft and show the backend validation message; client validation prevents blank identity/result/condition values and an active rule with no conditions;
-- legacy detail condition management remains technical/direct-maintenance compatibility until DNR-POLISH-1 converts the detail to read-only product presentation;
+- detail is a read-only product view: Matching exposes every condition and grouping semantics, Result shows the replacement, and Behavior explains FILE-import scope, first-match-wins order, and non-retroactivity; it links only to configured edit/delete actions;
 - condition forms have no field selector because every condition evaluates original imported description.
+
+The detail no longer embeds child-condition CRUD. Those generated endpoints continue as technical compatibility surfaces, but product editing always uses the configured aggregate editor. Delete confirmation names the future-only and precedence effects rather than exposing a raw entity warning.
 
 The product route is:
 

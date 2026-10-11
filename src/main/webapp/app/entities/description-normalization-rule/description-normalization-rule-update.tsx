@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Alert, Col, Row } from 'reactstrap';
+import { Alert, Button } from 'reactstrap';
 import { Translate } from 'react-jhipster';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import DescriptionNormalizationRuleConfiguredForm from './components/description-normalization-rule-configured-form';
 import { getConfiguredDescriptionNormalizationRule } from './description-normalization-rule-configured.service';
 import { IDescriptionNormalizationRuleConfigured } from 'app/shared/model/description-normalization-rule-configured.model';
 import { IContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
+import { ProductPage, ProductPageHeader } from 'app/shared/ui/product-page';
 
 const standaloneSaveActions: IContextualRuleSaveAction[] = [
   { action: 'SAVE', labelKey: 'entity.action.save', label: 'Save', dataCy: 'entityCreateSaveButton' },
 ];
 
-/** Standalone configured create/edit route. The technical detail remains available until DNR-POLISH-1. */
+/** Standalone configured create/edit route used by the description-rules product manager. */
 export const DescriptionNormalizationRuleUpdate = () => {
   const navigate = useNavigate();
   const { id } = useParams<'id'>();
@@ -45,41 +47,42 @@ export const DescriptionNormalizationRuleUpdate = () => {
 
   const headingKey = isNew ? 'fintrackApp.descriptionNormalizationRule.createTitle' : 'fintrackApp.descriptionNormalizationRule.editTitle';
 
+  const returnPath = !isNew && id ? `/description-normalization-rule/${id}` : '/description-normalization-rule';
+
   return (
-    <div>
-      <Row className="justify-content-center">
-        <Col md="8">
-          <h2 data-cy="DescriptionNormalizationRuleCreateUpdateHeading">
-            <Translate contentKey={headingKey}>Create or edit Description Normalization Rule</Translate>
-          </h2>
-        </Col>
-      </Row>
-      <Row className="justify-content-center">
-        <Col md="8">
-          {loading ? (
-            <p>
-              <Translate contentKey="global.messages.info.loading">Loading...</Translate>
-            </p>
-          ) : null}
-          {loadError ? (
-            <Alert color="danger" role="alert">
-              <Translate contentKey="fintrackApp.descriptionNormalizationRule.configuredLoadFailed">
-                The rule could not be loaded. Return to the rule manager and try again.
-              </Translate>
-            </Alert>
-          ) : null}
-          {!loading && !loadError ? (
-            <DescriptionNormalizationRuleConfiguredForm
-              key={configuredRule?.id ?? 'new'}
-              initialValue={configuredRule ?? undefined}
-              saveActions={standaloneSaveActions}
-              onSaved={() => navigate('/description-normalization-rule')}
-              onCancel={() => navigate('/description-normalization-rule')}
-            />
-          ) : null}
-        </Col>
-      </Row>
-    </div>
+    <ProductPage>
+      <ProductPageHeader
+        headingId="description-normalization-rule-create-update-heading"
+        dataCy="DescriptionNormalizationRuleCreateUpdateHeading"
+        title={<Translate contentKey={headingKey}>Create or edit Description Normalization Rule</Translate>}
+        actions={
+          <Button color="secondary" outline size="sm" onClick={() => navigate(returnPath)}>
+            <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.cancel">Cancel</Translate>
+          </Button>
+        }
+      />
+      {loading ? (
+        <p>
+          <Translate contentKey="global.messages.info.loading">Loading...</Translate>
+        </p>
+      ) : null}
+      {loadError ? (
+        <Alert color="danger" role="alert">
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.configuredLoadFailed">
+            The rule could not be loaded. Return to the rule manager and try again.
+          </Translate>
+        </Alert>
+      ) : null}
+      {!loading && !loadError ? (
+        <DescriptionNormalizationRuleConfiguredForm
+          key={configuredRule?.id ?? 'new'}
+          initialValue={configuredRule ?? undefined}
+          saveActions={standaloneSaveActions}
+          onSaved={savedRule => navigate(isNew ? '/description-normalization-rule' : `/description-normalization-rule/${savedRule.id}`)}
+          onCancel={() => navigate(returnPath)}
+        />
+      ) : null}
+    </ProductPage>
   );
 };
 

@@ -13,6 +13,7 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.TagRepository;
@@ -75,6 +76,10 @@ class TransactionRuleServiceTest {
 
         category = new Category();
         category.setId(3L);
+        category.setName("Current user category");
+        category.setCategoryType(CategoryType.BOTH);
+        category.setActive(true);
+        category.setUser(currentUser);
 
         categoryDTO = new CategoryDTO();
         categoryDTO.setId(3L);
@@ -101,7 +106,6 @@ class TransactionRuleServiceTest {
         transactionRuleDTO.setUpdatedAt(Instant.parse("2026-07-11T00:00:00Z"));
 
         lenient().when(categoryRepository.findOneByIdAndUserLogin(3L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(category));
-        lenient().when(categoryRepository.findOneByIdAndUserLogin(3L, OTHER_USER_LOGIN)).thenReturn(Optional.of(category));
     }
 
     @Test
@@ -150,12 +154,23 @@ class TransactionRuleServiceTest {
         User otherUser = new User();
         otherUser.setId(99L);
         otherUser.setLogin(OTHER_USER_LOGIN);
+        Category otherUserCategory = new Category();
+        otherUserCategory.setId(4L);
+        otherUserCategory.setName("Other user category");
+        otherUserCategory.setCategoryType(CategoryType.BOTH);
+        otherUserCategory.setActive(true);
+        otherUserCategory.setUser(otherUser);
+        CategoryDTO otherUserCategoryDTO = new CategoryDTO();
+        otherUserCategoryDTO.setId(otherUserCategory.getId());
+        transactionRuleDTO.setResultingCategory(otherUserCategoryDTO);
         TransactionRule mappedEntity = validMappedRule(null);
+        mappedEntity.setResultingCategory(otherUserCategory);
         TransactionRule savedEntity = validMappedRule(10L);
         savedEntity.setUser(otherUser);
 
         when(currentUserService.getCurrentUser()).thenReturn(otherUser);
         when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
+        when(categoryRepository.findOneByIdAndUserLogin(otherUserCategory.getId(), OTHER_USER_LOGIN)).thenReturn(Optional.of(otherUserCategory));
         when(transactionRuleRepository.findMaxPriorityByUserId(otherUser.getId())).thenReturn(null);
         when(transactionRuleRepository.existsByUserLoginAndNormalizedName(OTHER_USER_LOGIN, "amazon rule", null)).thenReturn(false);
         when(transactionRuleRepository.save(mappedEntity)).thenReturn(savedEntity);
@@ -473,20 +488,24 @@ class TransactionRuleServiceTest {
         transactionRuleDTO.setResultingCategory(categoryDTO);
 
         TransactionRule mappedEntity = validMappedRule(10L);
-        Category category = new Category();
-        category.setId(88L);
+        Category otherOwnerCategory = new Category();
+        otherOwnerCategory.setId(88L);
+        otherOwnerCategory.setName("Other owner category");
+        otherOwnerCategory.setCategoryType(CategoryType.BOTH);
+        otherOwnerCategory.setActive(true);
+        otherOwnerCategory.setUser(otherOwner);
 
         when(currentUserService.isAdmin()).thenReturn(true);
         when(transactionRuleRepository.findOneWithEagerRelationships(10L)).thenReturn(Optional.of(transactionRule));
         when(transactionRuleMapper.toEntity(transactionRuleDTO)).thenReturn(mappedEntity);
-        when(categoryRepository.findOneByIdAndUserLogin(88L, OTHER_USER_LOGIN)).thenReturn(Optional.of(category));
+        when(categoryRepository.findOneByIdAndUserLogin(88L, OTHER_USER_LOGIN)).thenReturn(Optional.of(otherOwnerCategory));
         when(transactionRuleRepository.existsByUserLoginAndNormalizedName(OTHER_USER_LOGIN, "amazon rule", 10L)).thenReturn(false);
         when(transactionRuleRepository.save(mappedEntity)).thenReturn(transactionRule);
         when(transactionRuleMapper.toDto(transactionRule)).thenReturn(transactionRuleDTO);
 
         transactionRuleService.update(transactionRuleDTO);
 
-        assertThat(mappedEntity.getResultingCategory()).isEqualTo(category);
+        assertThat(mappedEntity.getResultingCategory()).isEqualTo(otherOwnerCategory);
         verify(categoryRepository).findOneByIdAndUserLogin(88L, OTHER_USER_LOGIN);
     }
 

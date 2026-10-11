@@ -2,9 +2,9 @@
   "fintrackApp": {
     "TransactionOrigin": {
       "null": "",
-      "MANUAL": "MANUAL",
-      "FILE_IMPORT": "FILE_IMPORT",
-      "API": "API"
+      "MANUAL": "Captura manual",
+      "FILE_IMPORT": "Importación de archivo",
+      "API": "Importación por API"
     }
   }
 }

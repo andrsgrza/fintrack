@@ -288,9 +288,9 @@ describe('TransactionRuleCondition UX', () => {
 
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'ORIGIN' } });
 
-    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'MANUAL' })).toBeTruthy();
-    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'FILE_IMPORT' })).toBeTruthy();
-    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'API' })).toBeTruthy();
+    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'Manual entry' })).toBeTruthy();
+    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'File import' })).toBeTruthy();
+    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'API import' })).toBeTruthy();
   });
 
   it('renders IN and NOT_IN as text input with helper text', () => {

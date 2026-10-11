@@ -1523,8 +1523,8 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 | Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                |
 | Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                |
 | Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **33**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, configured create/edit flow, edit hydration, grouped edit form, detail embedded condition editor |
-| E2E             | `transaction-rule.cy.ts`       | **7**   | Configured create/edit workflow + categoryType/FLOW guard + technical/debug surface smoke                                                                                |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **39**  | Classification manager cards, localized condition/result summaries, active/inactive output state, arrows + drag shared complete-order persistence/recovery, mixed-owner admin safety, plus configured editor/detail coverage |
+| E2E             | `transaction-rule.cy.ts`       | **8**   | Configured create/edit workflow + categoryType/FLOW guard + technical/debug surface smoke + Rules landing, classification-result presentation, arrow reorder and genuine browser drag persistence |
 
 **Run:**
 
@@ -1582,13 +1582,13 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 
 | Area                 | What it checks                                                                                                                                                                                              |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Product list         | List hides generated ID/created columns, requests `priority ASC, id ASC`, and shows Name/Status/Order/Conditions/Result/Updated/Actions                                                                     |
+| Product list         | Product manager loads `priority ASC, id ASC`, bounded per-rule condition batches, and category/tag/account identities; cards show name, status, 1-based order, readable IF/THEN configuration, and compact actions |
 | Compact detail       | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                                                                            |
 | Configured create    | Create hides timestamps/priority, renders active/output/conditionLogic plus inline local conditions, blocks zero conditions/outputs, and posts to `POST /api/transaction-rules/configured`                  |
 | Configured edit      | Edit loads `GET /api/transaction-rules/{id}/configured`, hydrates parent/output/active/conditions, and saves through `PUT /api/transaction-rules/{id}/configured` without priority                          |
 | Category/FLOW guard  | EXPENSE auto-adds/locks `FLOW EQUALS OUT`, BOTH/null removes frontend auto-FLOW, `ANY` is blocked for EXPENSE/INCOME, and incompatible user-authored FLOW blocks Save                                       |
 | Server-managed order | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                                                               |
-| Manual reorder       | List defensively renders `priority ASC, id ASC`, omits impossible first-up/last-down controls, sends full swapped ordered ids from the priority-ordered array, reloads on success, and shows inline failure |
+| Manual reorder       | Arrows are disabled at boundaries and actual pointer/touch/keyboard drag is available; both send the full priority-ordered owner id sequence, reload on success, restore confirmed order on failure, include inactive rules, and are unavailable to mixed-owner administrators |
 
 Manual verification checklist:
 
@@ -3081,9 +3081,12 @@ Current automated coverage includes:
   - invalid configured commands preserve the existing parent/conditions; inactive empty configurations remain valid while active empty configurations are rejected;
   - owner-scoped rejection, missing-rule handling, and current administrator access behavior.
 - `description-normalization-rule-ux.spec.tsx`
-  - shared create/edit configured editor loading, ALL/ANY change, condition add/edit/remove, preview, client validation, create/update payloads, and retained draft on save failure.
+  - ordered product-card rendering, active/inactive state, ALL/ANY/operator/value/case-sensitivity summaries, empty and Spanish states, and read-only detail composition;
+  - up/down and dnd-kit completion both submit the same complete owner id list, include inactive rules, disable boundary moves, restore confirmed order after failure, and suppress unsafe mixed-owner administrator reorder;
+  - shared configured create/edit loading, atomic update navigation back to detail, and product deletion failure handling.
 - `description-normalization-rule.cy.ts`
-  - isolated browser create → configured edit → reload flow, activation guard, condition replacement, priority preservation, and technical detail-route availability.
+  - isolated browser create → configured edit → reload flow, activation guard, condition replacement, and priority preservation;
+  - Rules landing navigation, arrow reorder persistence, real pointer drag-and-drop reorder persistence, inactive-rule representation, read-only detail, configured edit return, and deletion list refresh.
 
 Recommended focused commands:
 

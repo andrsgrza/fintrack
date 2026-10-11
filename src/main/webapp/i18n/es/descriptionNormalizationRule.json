@@ -5,16 +5,32 @@
         "title": "Reglas de normalización de descripción",
         "refreshListLabel": "Refrescar lista",
         "createLabel": "Crear regla de normalización",
-        "notFound": "No se encontraron reglas de normalización"
+        "notFound": "No se encontraron reglas de normalización",
+        "subtitle": "Estandariza las descripciones originales de importaciones de archivos antes de revisar los movimientos.",
+        "loadFailed": "No se pudieron cargar las reglas de descripción. Intenta refrescar la lista."
       },
       "created": "Se creó una regla de normalización con identificador {{ param }}",
       "updated": "Se actualizó una regla de normalización con identificador {{ param }}",
       "deleted": "Se eliminó una regla de normalización con identificador {{ param }}",
       "delete": {
-        "question": "Esto eliminará la regla de normalización {{ id }} y sus condiciones. Las descripciones crudas importadas y las transacciones no se eliminarán."
+        "question": "Esto eliminará la regla de normalización {{ id }} y sus condiciones. Las descripciones crudas importadas y las transacciones no se eliminarán.",
+        "title": "Eliminar regla de descripción",
+        "warning": "Eliminar esta regla la quita de futuras evaluaciones de normalización. No modifica movimientos publicados ni reprocesa automáticamente importaciones ya revisadas.",
+        "precedence": "Eliminar una regla puede cambiar cuál de las reglas restantes gana para futuras descripciones importadas.",
+        "loadFailed": "No se pudo cargar la regla, por lo que no se puede eliminar de forma segura. Cierra este diálogo e inténtalo de nuevo.",
+        "failed": "No se pudo eliminar la regla. El orden visible no cambió; inténtalo de nuevo."
       },
       "detail": {
-        "title": "Regla de normalización de descripción"
+        "title": "Regla de normalización de descripción",
+        "loadFailed": "No se pudo cargar esta regla de descripción. Vuelve al administrador de reglas e inténtalo de nuevo.",
+        "matching": "Coincidencia",
+        "result": "Resultado",
+        "behavior": "Comportamiento",
+        "allExplanation": "Todas las condiciones de abajo deben coincidir con la descripción original.",
+        "anyExplanation": "Al menos una condición de abajo debe coincidir con la descripción original.",
+        "fileImportScope": "Sólo aplica a descripciones originales de importaciones de archivos, no a borradores manuales.",
+        "firstMatch": "Las reglas activas se evalúan de arriba hacia abajo. La primera que coincida determina la descripción normalizada.",
+        "history": "Los cambios afectan evaluaciones futuras o filas de importación reevaluadas explícitamente; los movimientos publicados no cambian."
       },
       "createTitle": "Crear regla de normalización",
       "editTitle": "Editar regla de normalización",
@@ -27,6 +43,7 @@
       "order": "Orden",
       "moveUp": "Subir",
       "moveDown": "Bajar",
+      "actions": "Acciones de regla",
       "conditionOperator": "Lógica de condiciones",
       "resultingDescription": "Descripción resultante",
       "createdAt": "Creada el",
@@ -48,6 +65,38 @@
         "STARTS_WITH": "empieza con",
         "ENDS_WITH": "termina con",
         "REGEX": "coincide con la expresión"
+      },
+      "status": {
+        "active": "Activa",
+        "inactive": "Inactiva"
+      },
+      "summary": {
+        "matching": "Coincidencia",
+        "result": "Resultado",
+        "then": "Entonces reemplazar la descripción por",
+        "all": "Todas las condiciones deben coincidir",
+        "any": "Puede coincidir cualquier condición",
+        "and": "y",
+        "or": "o",
+        "noConditions": "No hay condiciones configuradas",
+        "moreConditions": "y {{ count }} más",
+        "caseSensitive": "sensible a mayúsculas",
+        "caseInsensitive": "no sensible a mayúsculas",
+        "unknownOperator": "usa un operador desconocido",
+        "missingValue": "un valor faltante"
+      },
+      "empty": {
+        "title": "Aún no hay reglas de descripción",
+        "body": "Crea una regla para estandarizar descripciones originales de futuras importaciones de archivos antes de clasificarlas."
+      },
+      "reorder": {
+        "title": "Orden de evaluación",
+        "explanation": "Las reglas activas se evalúan de arriba hacia abajo. La primera que coincida determina la descripción; las inactivas no participan.",
+        "position": "Posición {{ position }}",
+        "dragHandle": "Arrastra {{ name }} para cambiar su posición de evaluación",
+        "actions": "Acciones de orden",
+        "failed": "No se pudo guardar el orden. Se restauró el último orden confirmado.",
+        "adminUnavailable": "Aquí no se puede reordenar porque esta lista de administrador puede incluir reglas de diferentes usuarios."
       },
       "editor": {
         "identity": "Identidad",

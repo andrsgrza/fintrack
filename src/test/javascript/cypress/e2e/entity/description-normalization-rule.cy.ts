@@ -90,4 +90,120 @@ describe('DescriptionNormalizationRule configured editor e2e test', () => {
       cy.getEntityDetailsHeading('descriptionNormalizationRule').should('exist');
     });
   });
+
+  it('manages the complete description-rule order with arrows and a real mouse drag, then reads, edits, and deletes a rule', () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const rules = [
+      { name: `dnr-order-alpha-${suffix}`, result: 'Alpha', active: true, value: 'ALPHA' },
+      { name: `dnr-order-bravo-${suffix}`, result: 'Bravo', active: false, value: 'BRAVO' },
+      { name: `dnr-order-charlie-${suffix}`, result: 'Charlie', active: true, value: 'CHARLIE' },
+    ];
+    const createdRules: Array<{ id: number; name: string; active: boolean }> = [];
+
+    const createRule = rule =>
+      cy
+        .authenticatedRequest({
+          method: 'POST',
+          url: '/api/description-normalization-rules/configured',
+          body: {
+            name: rule.name,
+            active: rule.active,
+            conditionOperator: 'ALL',
+            resultingDescription: rule.result,
+            conditions: [{ operator: 'CONTAINS', value: rule.value, caseSensitive: false }],
+          },
+        })
+        .then(response => {
+          expect(response.status).to.equal(201);
+          createdRuleIds.push(response.body.id);
+          createdRules.push({ id: response.body.id, name: rule.name, active: rule.active });
+        });
+
+    const readOrder = () =>
+      cy.get('[data-cy^="descriptionNormalizationRuleCard-"]').then($cards => Cypress._.map($cards, card => card.getAttribute('data-cy')));
+
+    const mouseDrag = (sourceId: number, targetId: number) => {
+      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).then($target => {
+        $target[0].scrollIntoView({ block: 'center' });
+      });
+      cy.get(`[data-cy="descriptionNormalizationRuleDragHandle-${sourceId}"]`).realMouseDown({
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).realMouseMove(0, 0, {
+        keepMouseDownButton: 'left',
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(`[data-cy="descriptionNormalizationRuleDragHandle-${sourceId}"]`).should('have.attr', 'aria-pressed', 'true');
+      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).realMouseMove(5, 5, {
+        keepMouseDownButton: 'left',
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).realMouseUp({
+        position: 'center',
+        scrollBehavior: false,
+      });
+    };
+
+    createRule(rules[0])
+      .then(() => createRule(rules[1]))
+      .then(() => createRule(rules[2]))
+      .then(() => {
+        cy.visit('/rules');
+        cy.get('[data-cy="rulesDescriptionManagerLink"]').click();
+        cy.url().should('include', pageUrl);
+        cy.get(`[data-cy="descriptionNormalizationRuleCard-${createdRules[0].id}"]`).should('contain', rules[0].name);
+        cy.get(`[data-cy="descriptionNormalizationRuleCard-${createdRules[1].id}"]`).should('contain', rules[1].name);
+
+        readOrder().then(orderBeforeArrow => {
+          const bravoCard = `descriptionNormalizationRuleCard-${createdRules[1].id}`;
+          const bravoIndex = orderBeforeArrow.indexOf(bravoCard);
+          const expectedOrder = [...orderBeforeArrow];
+          [expectedOrder[bravoIndex - 1], expectedOrder[bravoIndex]] = [expectedOrder[bravoIndex], expectedOrder[bravoIndex - 1]];
+
+          cy.intercept('PUT', '/api/description-normalization-rules/reorder').as('arrowReorder');
+          cy.get(`[data-cy="descriptionNormalizationRuleMoveUp-${createdRules[1].id}"]`).click();
+          cy.wait('@arrowReorder').its('response.statusCode').should('eq', 200);
+          cy.reload();
+          readOrder().should('deep.equal', expectedOrder);
+        });
+
+        readOrder().then(orderBeforeDrag => {
+          const sourceCard = `descriptionNormalizationRuleCard-${createdRules[0].id}`;
+          const targetCard = `descriptionNormalizationRuleCard-${createdRules[1].id}`;
+          const sourceIndex = orderBeforeDrag.indexOf(sourceCard);
+          const targetIndex = orderBeforeDrag.indexOf(targetCard);
+          const expectedOrder = [...orderBeforeDrag];
+          const [source] = expectedOrder.splice(sourceIndex, 1);
+          expectedOrder.splice(targetIndex, 0, source);
+
+          cy.intercept('PUT', '/api/description-normalization-rules/reorder').as('mouseDragReorder');
+          mouseDrag(createdRules[0].id, createdRules[1].id);
+          cy.wait('@mouseDragReorder').its('response.statusCode').should('eq', 200);
+          cy.reload();
+          readOrder().should('deep.equal', expectedOrder);
+        });
+
+        cy.contains(`[data-cy="descriptionNormalizationRuleCard-${createdRules[2].id}"] a`, rules[2].name).as('charlieRuleLink');
+        cy.get('@charlieRuleLink').click();
+        cy.get('[data-cy="descriptionNormalizationRuleDetailsHeading"]').should('contain', rules[2].name);
+        cy.get('[data-cy="descriptionNormalizationRuleDetailConditions"]').should('contain', rules[2].value);
+        cy.get('[data-cy="descriptionNormalizationRuleDetailEdit"]').click();
+        cy.get('[data-cy="descriptionNormalizationRuleResult"]').clear();
+        cy.get('[data-cy="descriptionNormalizationRuleResult"]').type('Charlie normalized');
+        cy.get(entityCreateSaveButtonSelector).click();
+        cy.get('[data-cy="descriptionNormalizationRuleDetailsHeading"]').should('contain', rules[2].name);
+        cy.contains('Charlie normalized').should('exist');
+
+        cy.get('[href$="/delete"]').click();
+        cy.get('[data-cy="descriptionNormalizationRuleDeletePrecedence"]').should('be.visible');
+        cy.intercept('DELETE', `/api/description-normalization-rules/${createdRules[2].id}`).as('deleteRule');
+        cy.get('[data-cy="entityConfirmDeleteButton"]').click();
+        cy.wait('@deleteRule').its('response.statusCode').should('eq', 204);
+        cy.url().should('match', new RegExp(`${pageUrl}(\\?.*)?$`));
+        cy.get(`[data-cy="descriptionNormalizationRuleCard-${createdRules[2].id}"]`).should('not.exist');
+      });
+  });
 });

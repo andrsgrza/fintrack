@@ -3,6 +3,7 @@
     "rules": {
       "title": "Reglas",
       "subtitle": "Automatiza cómo se normalizan y clasifican tus movimientos.",
+      "back": "Volver a reglas",
       "description": {
         "title": "Reglas de descripción",
         "summary": "Estandariza las descripciones originales de los archivos importados antes de clasificarlos.",

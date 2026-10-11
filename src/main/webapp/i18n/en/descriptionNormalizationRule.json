@@ -5,16 +5,32 @@
         "title": "Description Normalization Rules",
         "refreshListLabel": "Refresh list",
         "createLabel": "Create a new Description Normalization Rule",
-        "notFound": "No Description Normalization Rules found"
+        "notFound": "No Description Normalization Rules found",
+        "subtitle": "Standardize original descriptions from file imports before transactions are reviewed.",
+        "loadFailed": "Description rules could not be loaded. Try refreshing the list."
       },
       "created": "A new Description Normalization Rule is created with identifier {{ param }}",
       "updated": "A Description Normalization Rule is updated with identifier {{ param }}",
       "deleted": "A Description Normalization Rule is deleted with identifier {{ param }}",
       "delete": {
-        "question": "This will delete Description Normalization Rule {{ id }} and its conditions. Imported raw descriptions and transactions will not be deleted."
+        "question": "This will delete Description Normalization Rule {{ id }} and its conditions. Imported raw descriptions and transactions will not be deleted.",
+        "title": "Delete description rule",
+        "warning": "Deleting this rule removes it from future normalization evaluations. It does not change posted transactions or automatically reprocess reviewed imports.",
+        "precedence": "Removing a rule can change which remaining rule wins for future imported descriptions.",
+        "loadFailed": "This rule could not be loaded, so it cannot be deleted safely. Close this dialog and try again.",
+        "failed": "The rule could not be deleted. No visible rule order was changed; try again."
       },
       "detail": {
-        "title": "Description Normalization Rule"
+        "title": "Description Normalization Rule",
+        "loadFailed": "This description rule could not be loaded. Return to the rule manager and try again.",
+        "matching": "Matching",
+        "result": "Result",
+        "behavior": "Behavior",
+        "allExplanation": "Every condition below must match the original description.",
+        "anyExplanation": "At least one condition below must match the original description.",
+        "fileImportScope": "Applies only to original descriptions in file imports, not manual transaction drafts.",
+        "firstMatch": "Active rules are evaluated from top to bottom. The first matching rule determines the normalized description.",
+        "history": "Changes affect future evaluations or explicitly reevaluated import rows; previously posted transactions are not changed."
       },
       "createTitle": "Create Description Normalization Rule",
       "editTitle": "Edit Description Normalization Rule",
@@ -27,6 +43,7 @@
       "order": "Order",
       "moveUp": "Move up",
       "moveDown": "Move down",
+      "actions": "Rule actions",
       "conditionOperator": "Condition Logic",
       "resultingDescription": "Resulting Description",
       "createdAt": "Created At",
@@ -48,6 +65,38 @@
         "STARTS_WITH": "starts with",
         "ENDS_WITH": "ends with",
         "REGEX": "matches expression"
+      },
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "summary": {
+        "matching": "Matching",
+        "result": "Result",
+        "then": "Then replace the description with",
+        "all": "All conditions must match",
+        "any": "Any condition may match",
+        "and": "and",
+        "or": "or",
+        "noConditions": "No conditions configured",
+        "moreConditions": "and {{ count }} more",
+        "caseSensitive": "case-sensitive",
+        "caseInsensitive": "case-insensitive",
+        "unknownOperator": "uses an unknown operator",
+        "missingValue": "a missing value"
+      },
+      "empty": {
+        "title": "No description rules yet",
+        "body": "Create a rule to standardize original descriptions from future file imports before you classify them."
+      },
+      "reorder": {
+        "title": "Evaluation order",
+        "explanation": "Active rules are evaluated from top to bottom. The first matching rule determines the description; inactive rules do not participate.",
+        "position": "Position {{ position }}",
+        "dragHandle": "Drag {{ name }} to change its evaluation position",
+        "actions": "Reorder actions",
+        "failed": "The order could not be saved. The last confirmed order has been restored.",
+        "adminUnavailable": "Reordering is unavailable here because this administrator list can include rules owned by different users."
       },
       "editor": {
         "identity": "Identity",

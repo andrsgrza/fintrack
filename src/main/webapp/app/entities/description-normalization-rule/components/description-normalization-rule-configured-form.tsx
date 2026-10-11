@@ -37,7 +37,7 @@ const serverErrorMessage = error => error?.response?.data?.detail ?? error?.resp
 
 /**
  * Product configured editor shared by standalone create/edit and Transaction Ingestion contextual creation.
- * It deliberately keeps the aggregate command separate from the technical condition CRUD retained on detail.
+ * It deliberately keeps this product-facing aggregate command separate from the generic condition CRUD endpoints.
  */
 export const DescriptionNormalizationRuleConfiguredForm = ({
   initialValue,

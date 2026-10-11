@@ -3,6 +3,7 @@
     "rules": {
       "title": "Rules",
       "subtitle": "Automate how your transactions are normalized and classified.",
+      "back": "Back to rules",
       "description": {
         "title": "Description Rules",
         "summary": "Standardize original descriptions from imported files before classifying them.",
