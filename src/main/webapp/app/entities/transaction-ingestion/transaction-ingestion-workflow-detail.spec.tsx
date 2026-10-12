@@ -11,6 +11,13 @@ import enIngestionRecordStatus from 'app/../i18n/en/ingestionRecordStatus.json';
 import enCategory from 'app/../i18n/en/category.json';
 import enTag from 'app/../i18n/en/tag.json';
 import enTransactionRule from 'app/../i18n/en/transactionRule.json';
+import esTransactionIngestion from 'app/../i18n/es/transactionIngestion.json';
+import esTransactionFlow from 'app/../i18n/es/transactionFlow.json';
+import esIngestionStatus from 'app/../i18n/es/ingestionStatus.json';
+import esIngestionRecordStatus from 'app/../i18n/es/ingestionRecordStatus.json';
+import esCategory from 'app/../i18n/es/category.json';
+import esTag from 'app/../i18n/es/tag.json';
+import esTransactionRule from 'app/../i18n/es/transactionRule.json';
 import { TransactionIngestion } from './transaction-ingestion';
 import { TransactionIngestionWorkflowDetail } from './transaction-ingestion-workflow-detail';
 
@@ -99,6 +106,17 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enTag);
   TranslatorContext.registerTranslations('en', enTransactionRule);
   TranslatorContext.setLocale('en');
+};
+
+const registerSpanishTranslations = () => {
+  TranslatorContext.registerTranslations('es', esTransactionIngestion);
+  TranslatorContext.registerTranslations('es', esTransactionFlow);
+  TranslatorContext.registerTranslations('es', esIngestionStatus);
+  TranslatorContext.registerTranslations('es', esIngestionRecordStatus);
+  TranslatorContext.registerTranslations('es', esCategory);
+  TranslatorContext.registerTranslations('es', esTag);
+  TranslatorContext.registerTranslations('es', esTransactionRule);
+  TranslatorContext.setLocale('es');
 };
 
 const renderPersistedReview = (path = '/transaction-ingestion/100', entity = baseState.transactionIngestion.entity) => {
@@ -356,13 +374,23 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy();
   });
 
-  it('canonical detail page loads parent summary, file metadata, counts, statuses, and actions', async () => {
+  it('renders the product review header, compact real summary, and collapsed file details without changing row actions', async () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderPersistedReview();
 
-    expect(await screen.findByText('workflow.csv')).toBeTruthy();
-    expect(screen.getByText('Parent summary')).toBeTruthy();
-    expect(screen.getByText('Checking account')).toBeTruthy();
+    expect((await screen.findAllByText('workflow.csv')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Review Import' })).toBeTruthy();
+    expect(screen.getByTestId('workflowHeaderStatus').textContent).toBe('Needs review');
+    expect(screen.getByRole('link', { name: 'Checking account' }).getAttribute('href')).toBe('/financial-account/10');
+    expect(screen.getByRole('link', { name: /back to imports/i }).getAttribute('href')).toBe('/transaction-ingestion');
+    expect(screen.queryByText('Parent summary')).toBeNull();
+    expect(screen.getByText('Review summary')).toBeTruthy();
+    expect(screen.getByText('File details')).toBeTruthy();
+    const fileDetails = screen.getByTestId('workflowFileDetailsDisclosure');
+    expect(fileDetails.open).toBe(false);
+    expect(screen.getByText('Show file details')).toBeTruthy();
+    fireEvent.click(screen.getByText('Show file details'));
+    expect(fileDetails.open).toBe(true);
     expect(screen.getByText('FILE')).toBeTruthy();
     expect(screen.getByText('Parser name')).toBeTruthy();
     expect(screen.getByText('fintrack-canonical-csv')).toBeTruthy();
@@ -379,9 +407,8 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(counts).getByText('Valid rows')).toBeTruthy();
     expect(within(counts).getByText('Invalid rows')).toBeTruthy();
     expect(within(counts).getByText('Disabled rows')).toBeTruthy();
-    expect(within(counts).getByText('Records rejected')).toBeTruthy();
     expect(within(counts).getByText('3')).toBeTruthy();
-    expect(within(counts).getAllByText('1')).toHaveLength(4);
+    expect(within(counts).getAllByText('1')).toHaveLength(3);
 
     expect(screen.getByText('Valid')).toBeTruthy();
     expect(screen.getByText('Rejected')).toBeTruthy();
@@ -413,7 +440,7 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderPersistedReview();
 
-    expect(await screen.findByText('workflow.csv')).toBeTruthy();
+    expect((await screen.findAllByText('workflow.csv')).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /back/i }).getAttribute('href')).toBe('/transaction-ingestion');
     expect(screen.queryByRole('link', { name: /edit/i })).toBeNull();
   });
@@ -443,11 +470,44 @@ describe('TransactionIngestion file workflow', () => {
     });
 
     expect(await screen.findByText('No file workflow metadata or review rows are available yet.')).toBeTruthy();
-    expect(screen.getByText('Parent summary')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Review Import' })).toBeTruthy();
+    expect(screen.getByTestId('workflowHeaderStatus').textContent).toBe('Pending');
     expect(screen.queryByTestId('workflowCounts')).toBeNull();
   });
 
+  it('uses Spanish product copy for the review header, status, and file details', async () => {
+    registerSpanishTranslations();
+    mockAxiosGet.mockResolvedValue(persistedReviewResponse);
+    renderPersistedReview();
+
+    expect(await screen.findByRole('heading', { name: 'Revisar importación' })).toBeTruthy();
+    expect(screen.getByTestId('workflowHeaderStatus').textContent).toBe('Requiere revisión');
+    expect(screen.getByRole('link', { name: 'Volver a importaciones' }).getAttribute('href')).toBe('/transaction-ingestion');
+    expect(screen.getByText('Resumen de revisión')).toBeTruthy();
+    expect(screen.getByText('Detalles del archivo')).toBeTruthy();
+  });
+
+  it('keeps a long filename in the product header and leaves file details collapsed initially', async () => {
+    const longFilename = `statement-${'x'.repeat(180)}.csv`;
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        fileMetadata: { ...persistedReviewResponse.data.fileMetadata, originalFilename: longFilename },
+      },
+    });
+    renderPersistedReview();
+
+    const filenames = await screen.findAllByText(longFilename);
+    expect(filenames.some(element => element.classList.contains('text-break'))).toBe(true);
+    expect(screen.getByTestId('workflowFileDetailsDisclosure').open).toBe(false);
+  });
+
   it('renders ingestion readiness and import-result status labels', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'PENDING' } });
+    const pending = renderPersistedReview();
+    expect((await screen.findAllByText('Pending')).length).toBeGreaterThan(0);
+    pending.unmount();
+
     mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'READY' } });
     const { unmount } = renderPersistedReview();
     expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
@@ -461,11 +521,27 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'COMPLETED' } });
     const completed = renderPersistedReview();
     expect((await screen.findAllByText('Import completed')).length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('workflowCounts')).getByText('Records Created')).toBeTruthy();
+    expect(within(screen.getByTestId('workflowCounts')).getByText('Records Skipped')).toBeTruthy();
+    expect(within(screen.getByTestId('workflowCounts')).getByText('Records rejected')).toBeTruthy();
     completed.unmount();
 
     mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'PARTIALLY_COMPLETED' } });
-    renderPersistedReview();
+    const partiallyCompleted = renderPersistedReview();
     expect((await screen.findAllByText('Import partially completed')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('workflowPartiallyCompleted')).toBeTruthy();
+    partiallyCompleted.unmount();
+
+    mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'PROCESSING' } });
+    const processing = renderPersistedReview();
+    expect((await screen.findAllByText('Processing')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('workflowProcessing')).toBeTruthy();
+    processing.unmount();
+
+    mockAxiosGet.mockResolvedValueOnce({ data: { ...persistedReviewResponse.data, status: 'FAILED' } });
+    renderPersistedReview();
+    expect((await screen.findAllByText('Failed')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('workflowFailed')).toBeTruthy();
   });
 
   it('renders deleted-after-import rows as completed historical records without review actions', async () => {
@@ -2552,7 +2628,7 @@ describe('TransactionIngestion file workflow', () => {
     await waitFor(() => expect(screen.getAllByText('Import completed').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Imported');
     expectRowStatus(302, 'Disabled');
-    expect(within(screen.getByTestId('workflowCounts')).getAllByText('0')).toHaveLength(3);
+    expect(within(screen.getByTestId('workflowCounts')).getAllByText('0')).toHaveLength(1);
     expect(screen.queryByText('No transactions were created yet.')).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Error' })).toBeNull();

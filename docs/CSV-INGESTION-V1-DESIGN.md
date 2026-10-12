@@ -29,7 +29,7 @@ Recommendation:
 
 I2A removes the old `IngestionRecordStatus.CREATED` ambiguity. Valid review rows now use `VALID`; rows that generate a `FinancialTransaction` during confirm import use `IMPORTED`.
 
-I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and review rows in one submit, then redirects to canonical workflow detail `/transaction-ingestion/{id}`, where the user can return later to inspect parent summary, read-only FileIngestion metadata, and review rows. TC-4D makes generated FileIngestion write routes unavailable in the UI; users do not manually create/edit/delete FileIngestion metadata from generated screens. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
+I2B adds a persistent TransactionIngestion review page. `/transaction-ingestion/new` is the canonical FILE ingestion creation workflow: it creates the parent `TransactionIngestion`, `FileIngestion` metadata, and review rows in one submit, then redirects to canonical workflow detail `/transaction-ingestion/{id}`, where the user can return later to inspect the product review header, compact workflow summary, collapsed technical file details, and review rows. TC-4D makes generated FileIngestion write routes unavailable in the UI; users do not manually create/edit/delete FileIngestion metadata from generated screens. I2B.1 supports enable/disable. I2B.2 supports editing normalized review-row values. I2C adds confirm import for `READY` reviews.
 
 ## 2. Responsibility split using current entities
 

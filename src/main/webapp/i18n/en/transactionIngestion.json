@@ -51,7 +51,10 @@
         "csvHint": "Expected header: transactionDate,postingDate,description,signedAmount,currency,externalReference,notes",
         "upload": "Upload",
         "workflowCreated": "Workflow created",
-        "reviewTitle": "Review import",
+        "reviewTitle": "Review Import",
+        "backToImports": "Back to imports",
+        "reviewSummary": "Review summary",
+        "reviewTools": "Review tools",
         "workflowTitle": "Transaction ingestion workflow",
         "parentSummary": "Parent summary",
         "apiTbd": "API ingestion detail is not implemented yet.",
@@ -60,6 +63,9 @@
         "transactionIngestionId": "Transaction Ingestion ID",
         "fileIngestionId": "File Ingestion ID",
         "fileMetadata": "File metadata",
+        "fileDetails": "File details",
+        "showFileDetails": "Show file details",
+        "fileCreatedAt": "File created at",
         "originalFilename": "Original filename",
         "fileType": "File type",
         "contentType": "Content type",
@@ -104,6 +110,7 @@
         "fixRejectedRows": "Fix or disable rejected rows before importing.",
         "noValidRows": "There are no valid rows to import.",
         "importCompleted": "Import completed.",
+        "importPartiallyCompleted": "Import partially completed.",
         "importProcessing": "Import is processing.",
         "importFailed": "Import failed.",
         "descriptionReview": {
@@ -121,6 +128,7 @@
           "applyAllSuggestions": "Apply all suggested descriptions"
         },
         "reevaluation": {
+          "title": "Reevaluate",
           "descriptions": "Reevaluate descriptions",
           "categories": "Reevaluate categories",
           "tags": "Reevaluate tags",
@@ -128,6 +136,7 @@
           "row": "Reevaluate this row"
         },
         "ruleCreation": {
+          "title": "Rules",
           "newNormalization": "New Description Rule",
           "newTransaction": "New Classification Rule",
           "createFromRow": "Create rule",

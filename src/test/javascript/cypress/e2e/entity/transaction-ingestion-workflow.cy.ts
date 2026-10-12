@@ -298,6 +298,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       `2026-01-16,,${secondOutDescription},-50.00,MXN,${scenarioToken}-second-trip,e2e second out row`,
       `2026-01-17,,${inDescription},100.00,MXN,${scenarioToken}-refund,e2e in row`,
     ].join('\n');
+    const uploadedFilename = `statement-${scenarioToken}-merchant-classification-export-for-responsive-review.csv`;
 
     let oldClassificationPreviewCalled = false;
     let financialTransactionRulePreviewCalled = false;
@@ -326,11 +327,58 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
     cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
 
-    uploadCsvFromCreatePage(csv, 'uber-flow-classification.csv');
+    uploadCsvFromCreatePage(csv, uploadedFilename);
 
     cy.url().should('match', /\/transaction-ingestion\/\d+$/);
-    cy.get('[data-cy="workflowReviewHeading"]').should('exist');
+    const accountName = account?.name;
+    if (!accountName) {
+      throw new Error('Expected an account name for the ingestion review header.');
+    }
+    cy.get('[data-cy="workflowReviewHeading"]')
+      .invoke('text')
+      .should('match', /Review Import|Revisar importaci\u00f3n/);
+    cy.get('[data-cy="workflowReviewHeading"]').parent().should('contain', accountName).and('contain', uploadedFilename);
+    cy.get('[data-cy="workflowHeaderStatus"]')
+      .invoke('text')
+      .should('match', /Ready to import|Lista para importar/);
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="workflowReviewSummary"]').within(() => {
+      cy.contains(/Records received|Registros recibidos/).should('exist');
+      cy.contains(/Valid rows|Filas v\u00e1lidas/).should('exist');
+    });
+
+    cy.viewport(1440, 900);
+    cy.get('[data-cy="workflowReviewHeading"]').closest('header').should('have.css', 'flex-direction', 'row');
+
+    cy.viewport(375, 667);
+    cy.get('[data-cy="workflowReviewHeading"]').closest('header').should('have.css', 'flex-direction', 'column');
+    cy.get('[data-cy="workflowHeaderStatus"]').should('be.visible');
+    cy.get('[data-cy="workflowReviewHeading"]')
+      .parent()
+      .find('.text-break')
+      .should('contain', uploadedFilename)
+      .then($filename => expect($filename[0].scrollWidth).to.be.at.most($filename[0].clientWidth));
+    cy.get('[data-cy="workflowCounts"] > .col').then($metrics => {
+      expect($metrics).to.have.length(4);
+      expect($metrics[2].getBoundingClientRect().top).to.be.greaterThan($metrics[0].getBoundingClientRect().top);
+    });
+    cy.get('[data-cy="workflowFileDetailsDisclosure"]').should('not.have.attr', 'open');
+    cy.get('[data-cy="workflowFileDetailsDisclosure"]')
+      .find('summary')
+      .then($summary => $summary[0].focus());
+    cy.focused().should('have.prop', 'tagName', 'SUMMARY');
+    cy.realPress('Enter');
+    cy.get('[data-cy="workflowFileDetailsDisclosure"]').should('have.attr', 'open');
+    cy.get('[data-cy="workflowMetadata"]').should('contain', uploadedFilename);
+    cy.get('[data-cy="workflowMetadata"]').then($metadata => {
+      expect($metadata[0].scrollWidth).to.be.at.most($metadata[0].clientWidth);
+    });
+    cy.realPress('Space');
+    cy.get('[data-cy="workflowFileDetailsDisclosure"]').should('not.have.attr', 'open');
+    cy.get('[data-cy="workflowFileDetailsDisclosure"]').find('summary').click();
+    cy.get('[data-cy="workflowFileDetailsDisclosure"]').should('have.attr', 'open');
+    cy.viewport(1280, 720);
+    cy.get('[data-cy="workflowReviewHeading"]').closest('header').should('have.css', 'flex-direction', 'row');
     cy.get('[data-cy="workflowRows"]').should('contain', outDescription).and('contain', inDescription);
     cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);

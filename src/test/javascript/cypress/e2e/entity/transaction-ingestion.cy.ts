@@ -138,7 +138,7 @@ describe('TransactionIngestion workflow smoke e2e test', () => {
     cy.wait('@entityRequest').its('response.statusCode').should('eq', 200);
     cy.url().should('match', new RegExp(`/transaction-ingestion/${transactionIngestion?.id}$`));
     cy.get('[data-cy="workflowReviewHeading"]').should('exist');
-    cy.get('[data-cy="transactionIngestionParentSummary"]').should('exist');
+    cy.get('[data-cy="workflowHeaderStatus"]').should('exist');
     cy.get('[data-cy="apiIngestionTbd"]').should('exist');
     cy.get(entityDetailsBackButtonSelector).click();
     cy.wait('@entitiesRequest').its('response.statusCode').should('eq', 200);

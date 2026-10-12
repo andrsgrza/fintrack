@@ -243,6 +243,7 @@ Still unchanged after TC-3D.1:
 - Confirm Import backend internals create `FinancialTransaction` rows from reviewed `FILE_IMPORT` candidate fields/category/tags, link the records, then clear candidate-tag associations and delete those pre-post candidates atomically. TC-4B removes backend parsing/validation of the old confirm selection payload; persisted candidates are the pre-post source of truth.
 - Candidate-to-`FinancialTransaction` base field mapping is shared internally; Confirm Import still adds the FILE-specific `transactionIngestion` link and owns record/candidate/parent status transitions.
 - No UserPreference, persisted reevaluation preference, draft dashboard/menu entry, or CSV/API TransactionCandidate generic product UI exists yet. The TransactionIngestion configuration is deliberately local to its review page.
+- INGESTION-POLISH-1 keeps the candidate-backed FILE workflow unchanged while replacing the review route's generated parent-summary presentation with a product header, compact lifecycle-accurate summary, collapsible file/process metadata, and grouped review tools. It introduces no workflow/domain/API behavior and deliberately leaves responsive candidate-table redesign to a later slice.
 
 TC-2C.1b/1d adds the frontend rule suggestions slice for manual candidates:
 
