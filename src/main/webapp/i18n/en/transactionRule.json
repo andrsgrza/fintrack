@@ -158,6 +158,8 @@
       "validation": {
         "conditionsRequired": "Transaction rule must have at least one condition.",
         "outputRequired": "Select at least one output: category or tags.",
+        "outputsUnavailable": "Active categories and tags must load before this rule can be saved.",
+        "inactiveOutputsCannotBeUsedForNewRule": "An inactive category or tag cannot be used to create a new rule. Remove it or choose an active output.",
         "expenseRequiresFlowOut": "Expense categories require Flow = OUT.",
         "incomeRequiresFlowIn": "Income categories require Flow = IN.",
         "expenseIncomeRequireAll": "Expense/income categories require condition logic ALL.",

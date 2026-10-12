@@ -1614,6 +1614,9 @@ The single FILE-ingestion review can create both rule types without leaving the 
 - A row `TransactionRule` prefill uses the persisted `FILE_IMPORT` candidate description, its current `FLOW`, and only its persisted selected category/tags as outputs. It does **not** turn account context or transient suggestions into conditions or outputs.
 - Rule creation is atomic and server-managed: priority, condition positions, timestamps, ownership, normalization-rule validation, and rollback on invalid input are handled by `POST /api/description-normalization-rules/configured`. Transaction rules reuse `POST /api/transaction-rules/configured`.
 - Saving a contextual rule by itself changes neither `rawData`, `IngestionRecord`, nor `TransactionCandidate`, and does not create a `FinancialTransaction` or confirm the import. Re-evaluation is an explicit second action.
+- A missing immutable original description or missing current candidate description prevents row-contextual creation rather than substituting a different field. The modal retains the review context and explains the unavailable source.
+- Row reevaluation is restricted to that row's `IngestionRecord` for normalization or that candidate for classification. All-applicable reevaluation is restricted to eligible rows of the current ingestion, never historical transactions or other ingestions. Classification reevaluation remains preview-only unless its existing local auto-apply configuration is enabled; application respects current manual-provenance protection.
+- New TransactionRule outputs cannot reference an inactive category or tag. Existing rules may retain a historical inactive output, but row-contextual new-rule creation requires the user to reconcile it with an active output. A saved rule followed by a failed reevaluation is reported as saved-with-follow-up-failure; it is not re-created.
 
 ### FinancialAccount inactive eligibility (ACC-UX-3A)
 

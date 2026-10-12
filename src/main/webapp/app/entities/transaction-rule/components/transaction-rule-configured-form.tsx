@@ -419,10 +419,17 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
 
   const validationMessages = useMemo(() => {
     const messages: string[] = [];
+    const creatingRule = initialValue?.id === undefined;
     if (!ruleName.trim()) messages.push(translate('entity.validation.required'));
     if (!conditions.length) messages.push(translate('fintrackApp.transactionRule.validation.conditionsRequired'));
     if (!hasAnyOutput(selectedCategoryId, selectedTagIds))
       messages.push(translate('fintrackApp.transactionRule.validation.outputRequired'));
+    if (catalogError) {
+      messages.push(translate('fintrackApp.transactionRule.validation.outputsUnavailable'));
+    }
+    if (creatingRule && (selectedCategory?.active === false || selectedTags.some(tag => tag.active === false))) {
+      messages.push(translate('fintrackApp.transactionRule.validation.inactiveOutputsCannotBeUsedForNewRule'));
+    }
     if (requiredFlow && conditionLogic !== RuleConditionLogic.ALL) {
       messages.push(translate('fintrackApp.transactionRule.validation.expenseIncomeRequireAll'));
     }
@@ -439,7 +446,18 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
       }
     }
     return Array.from(new Set(messages));
-  }, [conditions, conditionLogic, requiredFlow, ruleName, selectedCategory, selectedCategoryId, selectedTagIds]);
+  }, [
+    catalogError,
+    conditions,
+    conditionLogic,
+    initialValue?.id,
+    requiredFlow,
+    ruleName,
+    selectedCategory,
+    selectedCategoryId,
+    selectedTagIds,
+    selectedTags,
+  ]);
 
   const save = async (event: FormEvent, action: ContextualRuleSaveAction) => {
     event.preventDefault();
@@ -674,7 +692,7 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
             key={saveAction.action}
             data-cy={saveAction.dataCy}
             data-testid={saveAction.dataCy}
-            disabled={savingAction !== null || validationMessages.length > 0}
+            disabled={savingAction !== null || catalogLoading || validationMessages.length > 0}
             onClick={saveAction.action === 'SAVE' ? undefined : event => save(event, saveAction.action)}
           >
             {savingAction === saveAction.action ? <FontAwesomeIcon icon="sync" spin /> : <FontAwesomeIcon icon="save" />}{' '}

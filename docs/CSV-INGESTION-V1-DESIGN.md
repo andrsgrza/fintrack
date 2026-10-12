@@ -713,7 +713,10 @@ The review page contains global actions for a new description-normalization rule
 - Global actions begin with a blank rule form.
 - A row normalization rule begins with original `rawData.raw.description` in its first condition and the current normalized/manual description as its result.
 - A row TransactionRule begins with `DESCRIPTION CONTAINS` the persisted candidate description and `FLOW EQUALS` the persisted candidate flow. Its persisted category/tags are outputs. Account context and transient suggestions are deliberately not converted into conditions or outputs.
-- Plain Save only creates the rule. It never mutates `rawData`, candidates, row status, or transactions. Save + reevaluate this row/all performs a separate scoped reevaluation after successful save; its apply/protect behavior is governed by the page-local automation configuration.
+- A selected row is identified in the modal. If the immutable original description (normalization) or current candidate description (classification) is unavailable, the modal explains that source state and does not invent a fallback rule.
+- Plain Save only creates the rule. It never mutates `rawData`, candidates, row status, or transactions. **Save and reevaluate this row** scopes description reevaluation to that `IngestionRecord` or classification preview/application to that `TransactionCandidate`; **Save and reevaluate all applicable rows** remains restricted to the current ingestion's eligible rows.
+- Reevaluation stays distinct from application: with the corresponding page-local auto-apply setting off, it returns description or classification suggestions only. With it on, the existing protected-manual-change semantics control the applicable persisted scope. Neither operation confirms the import.
+- Rule creation and reevaluation are separate requests. If the rule saves and the follow-up request fails, the review reports the partial success and never retries the create command automatically.
 
 Rule-applied metadata shape:
 

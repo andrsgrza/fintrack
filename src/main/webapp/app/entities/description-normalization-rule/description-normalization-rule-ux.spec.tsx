@@ -249,6 +249,29 @@ describe('DescriptionNormalizationRule product UX', () => {
     expect(await screen.findByTestId('rule-detail-destination')).toBeTruthy();
   });
 
+  it('prevents duplicate configured creates while the first description-rule save is pending', async () => {
+    mockAxiosPost.mockImplementation(() => new Promise(() => undefined));
+    render(
+      <MemoryRouter initialEntries={['/description-normalization-rule/new']}>
+        <Routes>
+          <Route path="/description-normalization-rule/new" element={<DescriptionNormalizationRuleUpdate />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Normalize pending save' } });
+    fireEvent.change(screen.getByLabelText(/resulting description/i), { target: { value: 'Normalized pending save' } });
+    fireEvent.click(screen.getByRole('button', { name: /add condition/i }));
+    fireEvent.change(screen.getByTestId('contextualDescriptionRuleConditionValue-0'), { target: { value: 'PENDING' } });
+    fireEvent.click(screen.getByLabelText('Active'));
+
+    const saveButton = screen.getByRole('button', { name: /^save$/i });
+    fireEvent.click(saveButton);
+    fireEvent.click(saveButton);
+
+    expect(mockAxiosPost).toHaveBeenCalledTimes(1);
+  });
+
   it('uses product deletion confirmation and reports a deletion failure without navigating away', async () => {
     mockAxiosGet.mockResolvedValue({ data: { ...firstRule, conditions: [] } });
     mockAxiosDelete.mockRejectedValueOnce(new Error('failed'));

@@ -950,6 +950,9 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
     cy.get('[data-cy="workflowNewNormalizationRule"]').click();
     cy.get('[data-cy="transactionIngestionRuleCreationModal"]').should('be.visible');
+    cy.get('[data-testid="contextualNormalizationRuleExplanation"]')
+      .invoke('text')
+      .should('match', /original file description|descripci[oó]n original del archivo/i);
     cy.get('#contextual-description-rule-name').type(uniqueName('global-normalization'));
     cy.get('#contextual-description-rule-result').type('Normalized global description');
     cy.contains('button', /Add condition|Agregar condición/i).click();
@@ -963,6 +966,9 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.then(() => expect(descriptionReevaluationCalls).to.equal(0));
 
     cy.get('[data-cy="workflowNewTransactionRule"]').click();
+    cy.get('[data-testid="contextualTransactionRuleExplanation"]')
+      .invoke('text')
+      .should('match', /classification rules generate|reglas de clasificaci[oó]n generan/i);
     cy.get('#contextual-transaction-rule-name').type(uniqueName('global-transaction'));
     cy.get('[data-cy="transactionRuleResultTagsAdd"]').click();
     cy.contains('[data-cy="transactionRuleResultTagsOption"]', tag?.name).click();
@@ -987,14 +993,40 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-cy="workflowNewNormalizationRule"]').click();
     cy.get('#contextual-description-rule-name').type(uniqueName('global-normalization-reevaluate-all'));
     cy.get('#contextual-description-rule-result').type('Normalized after global reevaluation');
+    cy.contains('button', /Add condition|Agregar condición/i).click();
+    cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').type(scenarioToken);
+    cy.get('[data-cy="descriptionNormalizationRuleActive"]').check();
     cy.get('[data-cy="contextualRuleSaveAndReevaluateAll"]').click();
-    cy.wait('@createConfiguredNormalizationRule').then(({ response }) => {
+    cy.wait('@createConfiguredNormalizationRule').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(201);
+      expect(request.body).to.include({ active: true });
       contextualDescriptionRules.push(response?.body);
     });
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.deep.equal({ apply: false, protectManualChanges: true });
+    });
+
+    cy.get('[data-cy="workflowNewTransactionRule"]').click();
+    cy.get('#contextual-transaction-rule-name').type(uniqueName('global-transaction-reevaluate-all'));
+    cy.get('[data-cy="transactionRuleResultTagsAdd"]').click();
+    cy.contains('[data-cy="transactionRuleResultTagsOption"]', tag?.name).click();
+    cy.get('[data-cy="addConditionButton"]').click();
+    cy.get('[data-cy="embeddedConditionForm"]').within(() => {
+      cy.get('[data-cy="operator"]').select('CONTAINS');
+      cy.get('[data-cy="value"]').type(scenarioToken);
+      cy.get('[data-cy="conditionSaveButton"]').click();
+    });
+    cy.get('[data-cy="contextualRuleSaveAndReevaluateAll"]').click();
+    cy.wait('@createConfiguredTransactionRule').then(({ response }) => {
+      expect(response?.statusCode).to.equal(201);
+      contextualTransactionRules.push(response?.body);
+    });
+    cy.wait('@candidateRulePreviewRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      // The established ALL/current-ingestion preview contract sends no request body;
+      // only scoped or row-specific previews carry a batch payload.
+      expect(request.body).to.equal('');
     });
 
     cy.then(() => {
@@ -1004,6 +1036,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView();
     cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().click();
     cy.get('[data-testid^="workflowRowCreateNormalization-"]').click();
+    cy.get('[data-testid="contextualRuleSelectedRow"]').should('contain', '1');
     cy.get('#contextual-description-rule-result').should('have.value', outDescription);
     cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').should('have.value', outDescription);
     cy.get('#contextual-description-rule-name').clear();

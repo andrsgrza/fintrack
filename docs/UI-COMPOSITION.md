@@ -724,11 +724,12 @@ Standalone generated/debug condition screens are not the product flow for managi
 
 ### Transaction Ingestion contextual rule editor
 
-The unified FILE-ingestion review opens the existing full configured rule editors inside a modal rather than navigating to generated entity screens. The global **New normalization rule** and **New transaction rule** actions start blank product forms. An eligible row's **Create rule** menu offers the same forms with editable review-only prefills.
+The unified FILE-ingestion review opens the existing full configured rule editors inside a modal rather than navigating to generated entity screens. The global **New Description Rule** and **New Classification Rule** actions start blank product forms. An eligible row's **Create rule** menu offers the same forms with editable review-only prefills.
 
-- Normalization-rule row prefill: condition value = immutable original description; result = current normalized/manual description.
-- Transaction-rule row prefill: `DESCRIPTION CONTAINS` current persisted candidate description and `FLOW EQUALS` current candidate flow; persisted candidate category/tags are outputs. Account context is informational and never becomes an automatic condition; transient suggestions are never persisted as outputs.
-- Save only writes the formal rule. Save + reevaluate this row/all runs the existing scoped reevaluation command only after save succeeds. None of these actions confirms import or writes category/tags to `rawData`.
+- Normalization-rule row prefill: condition value = immutable original description; result = current normalized/manual description. If that original value is unavailable, the modal shows an honest unavailable-source state rather than substituting a current value.
+- Transaction-rule row prefill: `DESCRIPTION CONTAINS` current persisted candidate description and `FLOW EQUALS` current candidate flow; persisted candidate category/tags are outputs. Account context is informational and never becomes an automatic condition; transient suggestions are never persisted as outputs. Inactive row outputs remain visible for reconciliation but cannot be saved as new rule outputs.
+- The modal identifies the selected row, has an accessible labelled heading, uses the full engine-specific configured editor, and keeps catalog-dependent save actions disabled while their outputs load.
+- Save only writes the formal rule. Save + reevaluate this row/all runs the existing scoped reevaluation command only after save succeeds. A row action targets its record/candidate; an all action targets eligible rows of the same ingestion. The UI labels classification reevaluation as suggestions unless the existing local auto-apply option is on. None of these actions confirms import or writes category/tags to `rawData`; a saved-rule/failed-reevaluation outcome is shown as partial success.
 
 ## TransactionRule generated technical/debug surfaces
 

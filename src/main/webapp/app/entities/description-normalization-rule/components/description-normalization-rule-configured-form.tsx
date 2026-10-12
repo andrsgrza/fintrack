@@ -1,4 +1,4 @@
-import React, { FormEvent, useMemo, useState } from 'react';
+import React, { FormEvent, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Form, FormFeedback, FormGroup, FormText, Input, Label } from 'reactstrap';
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -52,6 +52,7 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
   const [resultingDescription, setResultingDescription] = useState(initialValue?.resultingDescription ?? '');
   const [conditions, setConditions] = useState<IDescriptionNormalizationRuleConfiguredCondition[]>(initialValue?.conditions ?? []);
   const [savingAction, setSavingAction] = useState<ContextualRuleSaveAction | null>(null);
+  const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
@@ -89,6 +90,9 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
 
   const save = async (event: FormEvent, action: ContextualRuleSaveAction) => {
     event.preventDefault();
+    if (savingRef.current) {
+      return;
+    }
     const draftErrors = validateDraft();
     setValidationErrors(draftErrors);
     if (Object.keys(draftErrors).length > 0) {
@@ -97,6 +101,7 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
     }
 
     setError(null);
+    savingRef.current = true;
     setSavingAction(action);
     try {
       const response = initialValue?.id
@@ -106,6 +111,7 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
     } catch (requestError) {
       setError(serverErrorMessage(requestError) ?? translate('fintrackApp.descriptionNormalizationRule.configuredSaveFailed'));
     } finally {
+      savingRef.current = false;
       setSavingAction(null);
     }
   };

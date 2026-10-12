@@ -404,7 +404,7 @@ describe('TransactionRule configured workflow e2e test', () => {
     });
   });
 
-  it('manages complete classification-rule priority with arrows and keyboard drag-and-drop', () => {
+  it('manages complete classification-rule priority with arrows, keyboard drag-and-drop, and real mouse drag-and-drop', () => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const rules = [
       {
@@ -474,6 +474,35 @@ describe('TransactionRule configured workflow e2e test', () => {
       cy.realPress('Space');
     };
 
+    const mouseDrag = (sourceId: number, targetId: number) => {
+      const sourceHandle = `[data-cy="transactionRuleDragHandle-${sourceId}"]`;
+      const targetCard = `[data-cy="transactionRuleCard-${targetId}"]`;
+
+      cy.get(sourceHandle).realMouseMove(0, 0, {
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(sourceHandle).realMouseDown({
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(sourceHandle).realMouseMove(12, 0, {
+        keepMouseDownButton: 'left',
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(targetCard).realMouseMove(0, 0, {
+        keepMouseDownButton: 'left',
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(targetCard).realMouseUp({
+        position: 'center',
+        scrollBehavior: false,
+      });
+    };
+
+    cy.viewport(1200, 2000);
     createRule(rules[0])
       .then(() => createRule(rules[1]))
       .then(() => createRule(rules[2]))
@@ -527,6 +556,26 @@ describe('TransactionRule configured workflow e2e test', () => {
             expect(response?.statusCode).to.equal(200);
             expect(request.body.orderedIds).to.deep.equal(expectedOrder.map(card => Number(card.replace('transactionRuleCard-', ''))));
           });
+          cy.reload();
+          readOrder().should('deep.equal', expectedOrder);
+        });
+
+        readOrder().then(orderBeforeMouseDrag => {
+          const sourceCard = `transactionRuleCard-${createdRules[0].id}`;
+          const targetCard = `transactionRuleCard-${createdRules[1].id}`;
+          const sourceIndex = orderBeforeMouseDrag.indexOf(sourceCard);
+          const targetIndex = orderBeforeMouseDrag.indexOf(targetCard);
+          const expectedOrder = [...orderBeforeMouseDrag];
+          const [source] = expectedOrder.splice(sourceIndex, 1);
+          expectedOrder.splice(targetIndex, 0, source);
+
+          cy.intercept('PUT', '/api/transaction-rules/reorder').as('mouseDragReorder');
+          mouseDrag(createdRules[0].id, createdRules[1].id);
+          cy.wait('@mouseDragReorder').then(({ request, response }) => {
+            expect(response?.statusCode).to.equal(200);
+            expect(request.body.orderedIds).to.deep.equal(expectedOrder.map(card => Number(card.replace('transactionRuleCard-', ''))));
+          });
+          readOrder().should('deep.equal', expectedOrder);
           cy.reload();
           readOrder().should('deep.equal', expectedOrder);
         });

@@ -158,6 +158,8 @@
       "validation": {
         "conditionsRequired": "La regla debe tener al menos una condición.",
         "outputRequired": "Selecciona al menos un resultado: categoría o etiquetas.",
+        "outputsUnavailable": "Las categorías y etiquetas activas deben cargarse antes de guardar la regla.",
+        "inactiveOutputsCannotBeUsedForNewRule": "No se puede usar una categoría o etiqueta inactiva al crear una regla nueva. Elimínala o elige una salida activa.",
         "expenseRequiresFlowOut": "Las categorías de gasto requieren flujo = Gasto.",
         "incomeRequiresFlowIn": "Las categorías de ingreso requieren flujo = Ingreso.",
         "expenseIncomeRequireAll": "Las categorías de gasto/ingreso requieren lógica de condición ALL.",

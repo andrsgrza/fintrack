@@ -122,31 +122,47 @@ describe('DescriptionNormalizationRule configured editor e2e test', () => {
     const readOrder = () =>
       cy.get('[data-cy^="descriptionNormalizationRuleCard-"]').then($cards => Cypress._.map($cards, card => card.getAttribute('data-cy')));
 
+    const keyboardDrag = (sourceId: number, direction: 'ArrowDown' | 'ArrowUp', steps: number) => {
+      cy.get(`[data-cy="descriptionNormalizationRuleDragHandle-${sourceId}"]`).scrollIntoView();
+      cy.get(`[data-cy="descriptionNormalizationRuleDragHandle-${sourceId}"]`).focus();
+      cy.realPress('Space');
+      for (let index = 0; index < steps; index += 1) {
+        cy.realPress(direction);
+      }
+      cy.realPress('Space');
+    };
+
     const mouseDrag = (sourceId: number, targetId: number) => {
-      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).then($target => {
-        $target[0].scrollIntoView({ block: 'center' });
-      });
-      cy.get(`[data-cy="descriptionNormalizationRuleDragHandle-${sourceId}"]`).realMouseDown({
+      const sourceHandle = `[data-cy="descriptionNormalizationRuleDragHandle-${sourceId}"]`;
+      const targetCard = `[data-cy="descriptionNormalizationRuleCard-${targetId}"]`;
+
+      // Start with the pointer over the activator. This is a native CDP mouse
+      // sequence via cypress-real-events, not an application-level event.
+      cy.get(sourceHandle).realMouseMove(0, 0, {
         position: 'center',
         scrollBehavior: false,
       });
-      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).realMouseMove(0, 0, {
+      cy.get(sourceHandle).realMouseDown({
+        position: 'center',
+        scrollBehavior: false,
+      });
+      cy.get(sourceHandle).realMouseMove(12, 0, {
         keepMouseDownButton: 'left',
         position: 'center',
         scrollBehavior: false,
       });
-      cy.get(`[data-cy="descriptionNormalizationRuleDragHandle-${sourceId}"]`).should('have.attr', 'aria-pressed', 'true');
-      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).realMouseMove(5, 5, {
+      cy.get(targetCard).realMouseMove(0, 0, {
         keepMouseDownButton: 'left',
         position: 'center',
         scrollBehavior: false,
       });
-      cy.get(`[data-cy="descriptionNormalizationRuleCard-${targetId}"]`).realMouseUp({
+      cy.get(targetCard).realMouseUp({
         position: 'center',
         scrollBehavior: false,
       });
     };
 
+    cy.viewport(1200, 1200);
     createRule(rules[0])
       .then(() => createRule(rules[1]))
       .then(() => createRule(rules[2]))
@@ -179,9 +195,36 @@ describe('DescriptionNormalizationRule configured editor e2e test', () => {
           const [source] = expectedOrder.splice(sourceIndex, 1);
           expectedOrder.splice(targetIndex, 0, source);
 
+          cy.intercept('PUT', '/api/description-normalization-rules/reorder').as('keyboardDragReorder');
+          keyboardDrag(createdRules[0].id, sourceIndex < targetIndex ? 'ArrowDown' : 'ArrowUp', Math.abs(targetIndex - sourceIndex));
+          cy.wait('@keyboardDragReorder').then(({ request, response }) => {
+            expect(response?.statusCode).to.equal(200);
+            expect(request.body.orderedIds).to.deep.equal(
+              expectedOrder.map(card => Number(card.replace('descriptionNormalizationRuleCard-', ''))),
+            );
+          });
+          cy.reload();
+          readOrder().should('deep.equal', expectedOrder);
+        });
+
+        readOrder().then(orderBeforeDrag => {
+          const sourceCard = `descriptionNormalizationRuleCard-${createdRules[0].id}`;
+          const targetCard = `descriptionNormalizationRuleCard-${createdRules[1].id}`;
+          const sourceIndex = orderBeforeDrag.indexOf(sourceCard);
+          const targetIndex = orderBeforeDrag.indexOf(targetCard);
+          const expectedOrder = [...orderBeforeDrag];
+          const [source] = expectedOrder.splice(sourceIndex, 1);
+          expectedOrder.splice(targetIndex, 0, source);
+
           cy.intercept('PUT', '/api/description-normalization-rules/reorder').as('mouseDragReorder');
           mouseDrag(createdRules[0].id, createdRules[1].id);
-          cy.wait('@mouseDragReorder').its('response.statusCode').should('eq', 200);
+          cy.wait('@mouseDragReorder').then(({ request, response }) => {
+            expect(response?.statusCode).to.equal(200);
+            expect(request.body.orderedIds).to.deep.equal(
+              expectedOrder.map(card => Number(card.replace('descriptionNormalizationRuleCard-', ''))),
+            );
+          });
+          readOrder().should('deep.equal', expectedOrder);
           cy.reload();
           readOrder().should('deep.equal', expectedOrder);
         });
