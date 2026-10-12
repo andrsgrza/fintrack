@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Modal, ModalBody, ModalHeader } from 'reactstrap';
+import { Alert, Button, Modal, ModalBody, ModalHeader } from 'reactstrap';
 import { Translate } from 'react-jhipster';
 
 import DescriptionNormalizationRuleConfiguredForm from 'app/entities/description-normalization-rule/components/description-normalization-rule-configured-form';
@@ -16,6 +16,7 @@ export type TransactionIngestionRuleCreationKind = 'NORMALIZATION' | 'TRANSACTIO
 
 export interface ITransactionIngestionRuleCreationRowContext {
   ingestionRecordId?: number;
+  recordIndex?: number;
   candidateId?: number;
   originalDescription?: string | null;
   currentDescription?: string | null;
@@ -53,7 +54,7 @@ const rowSaveActions: IContextualRuleSaveAction[] = [
   {
     action: 'REEVALUATE_ALL',
     labelKey: 'fintrackApp.transactionIngestion.workflow.ruleCreation.saveAndReevaluateAll',
-    label: 'Save and reevaluate all',
+    label: 'Save and reevaluate all applicable rows',
     dataCy: 'contextualRuleSaveAndReevaluateAll',
   },
 ];
@@ -63,20 +64,138 @@ const globalSaveActions: IContextualRuleSaveAction[] = [
   {
     action: 'REEVALUATE_ALL',
     labelKey: 'fintrackApp.transactionIngestion.workflow.ruleCreation.saveAndReevaluateAll',
-    label: 'Save and reevaluate all',
+    label: 'Save and reevaluate all applicable rows',
     dataCy: 'contextualRuleSaveAndReevaluateAll',
   },
 ];
 
 const normalizationInitialValue = (row?: ITransactionIngestionRuleCreationRowContext): IDescriptionNormalizationRuleConfigured => ({
   name: row?.currentDescription ? `Normalize ${row.currentDescription}` : '',
-  active: false,
+  // All new configured rules start active. Scratch rules still cannot be saved until a valid condition is added.
+  active: true,
   conditionOperator: RuleConditionLogic.ALL,
   resultingDescription: row?.currentDescription ?? '',
   conditions: row?.originalDescription
     ? [{ operator: DescriptionNormalizationRuleOperator.CONTAINS, value: row.originalDescription, caseSensitive: false }]
     : [],
 });
+
+const ContextualRuleExplanation = ({
+  context,
+  normalizationContextUnavailable,
+  transactionContextUnavailable,
+}: {
+  context: ITransactionIngestionRuleCreationContext;
+  normalizationContextUnavailable: boolean;
+  transactionContextUnavailable: boolean;
+}) => {
+  const row = context.row;
+  const fromRow = Boolean(row);
+
+  if (normalizationContextUnavailable || transactionContextUnavailable) {
+    return (
+      <Alert color="warning" fade={false} data-testid="contextualRuleSourceUnavailable">
+        <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.sourceUnavailable">
+          The selected row no longer has the source information needed to prepare this rule. Refresh the review and try again.
+        </Translate>
+      </Alert>
+    );
+  }
+
+  if (context.kind === 'NORMALIZATION') {
+    return (
+      <Alert color="info" fade={false} data-testid="contextualNormalizationRuleExplanation">
+        <p className="mb-2">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.normalizationExplanation">
+            Description rules match the original file description. The first active match by priority supplies the normalized description.
+          </Translate>
+        </p>
+        {fromRow ? (
+          <>
+            {row?.recordIndex !== undefined ? (
+              <div className="small mb-1" data-testid="contextualRuleSelectedRow">
+                <Translate
+                  contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.selectedRow"
+                  interpolate={{ recordIndex: row.recordIndex }}
+                >
+                  Selected row
+                </Translate>
+              </div>
+            ) : null}
+            <div className="small mb-1">
+              <strong>
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.originalDescription">
+                  Original description
+                </Translate>
+                :
+              </strong>{' '}
+              {row?.originalDescription}
+            </div>
+            <div className="small mb-2">
+              <strong>
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.normalizedDescription">
+                  Normalized description
+                </Translate>
+                :
+              </strong>{' '}
+              {row?.currentDescription}
+            </div>
+          </>
+        ) : null}
+        <small>
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.saveOnlyDoesNotReevaluate">
+            Saving creates the rule only. Reevaluation is a separate action and does not change posted transactions.
+          </Translate>
+        </small>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert color="info" fade={false} data-testid="contextualTransactionRuleExplanation">
+      <p className="mb-2">
+        <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.transactionExplanation">
+          Classification rules generate category and tag suggestions. An earlier eligible category can take precedence, while matching tags
+          can accumulate.
+        </Translate>
+      </p>
+      {fromRow ? (
+        <>
+          {row?.recordIndex !== undefined ? (
+            <div className="small mb-1" data-testid="contextualRuleSelectedRow">
+              <Translate
+                contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.selectedRow"
+                interpolate={{ recordIndex: row.recordIndex }}
+              >
+                Selected row
+              </Translate>
+            </div>
+          ) : null}
+          <div className="small mb-1">
+            <strong>
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.description">Description</Translate>:
+            </strong>{' '}
+            {row?.currentDescription}
+          </div>
+          {row?.flow ? (
+            <div className="small mb-2">
+              <strong>
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.flow">Flow</Translate>:
+              </strong>{' '}
+              {row.flow}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      <small>
+        <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.classificationReevaluationExplanation">
+          Reevaluation refreshes suggestions. Categories and tags are applied only according to the current review action and automation
+          settings.
+        </Translate>
+      </small>
+    </Alert>
+  );
+};
 
 const transactionInitialValue = (row?: ITransactionIngestionRuleCreationRowContext): ITransactionRuleConfigured => ({
   name: row?.currentDescription ? `Rule for ${row.currentDescription}` : '',
@@ -115,6 +234,9 @@ export const TransactionIngestionRuleCreationModal = ({ context, onClose, onSave
   const saveActions = row ? rowSaveActions : globalSaveActions;
   const normalizationInitial = useMemo(() => normalizationInitialValue(row), [row]);
   const transactionInitial = useMemo(() => transactionInitialValue(row), [row]);
+  const normalizationContextUnavailable = Boolean(context?.kind === 'NORMALIZATION' && row && !row.originalDescription?.trim());
+  const transactionContextUnavailable = Boolean(context?.kind === 'TRANSACTION' && row && !row.currentDescription?.trim());
+  const contextUnavailable = normalizationContextUnavailable || transactionContextUnavailable;
 
   return (
     <Modal
@@ -122,26 +244,43 @@ export const TransactionIngestionRuleCreationModal = ({ context, onClose, onSave
       toggle={onClose}
       size="lg"
       scrollable
+      labelledBy="transaction-ingestion-rule-creation-title"
       data-cy="transactionIngestionRuleCreationModal"
       data-testid="transactionIngestionRuleCreationModal"
     >
-      <ModalHeader toggle={onClose}>
+      <ModalHeader id="transaction-ingestion-rule-creation-title" toggle={onClose}>
         {context?.kind === 'NORMALIZATION' ? (
-          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.normalizationTitle">
-            New normalization rule
-          </Translate>
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.normalizationTitle">New Description Rule</Translate>
         ) : (
-          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.transactionTitle">New transaction rule</Translate>
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.transactionTitle">
+            New Classification Rule
+          </Translate>
         )}
       </ModalHeader>
       <ModalBody>
+        {context ? (
+          <ContextualRuleExplanation
+            context={context}
+            normalizationContextUnavailable={normalizationContextUnavailable}
+            transactionContextUnavailable={transactionContextUnavailable}
+          />
+        ) : null}
         {row?.accountName && context?.kind === 'TRANSACTION' ? (
           <small className="text-muted d-block mb-3" data-testid="contextualTransactionRuleAccount">
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.accountContext">Candidate account</Translate>:{' '}
             {row.accountName}
+            <br />
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.accountContextOnly">
+              This account is context only and is not added as a matching condition.
+            </Translate>
           </small>
         ) : null}
-        {context?.kind === 'NORMALIZATION' ? (
+        {contextUnavailable ? (
+          <Button type="button" color="secondary" onClick={onClose}>
+            <Translate contentKey="entity.action.close">Close</Translate>
+          </Button>
+        ) : null}
+        {context?.kind === 'NORMALIZATION' && !contextUnavailable ? (
           <DescriptionNormalizationRuleConfiguredForm
             key={`normalization-${row?.ingestionRecordId ?? 'global'}`}
             initialValue={normalizationInitial}
@@ -150,7 +289,7 @@ export const TransactionIngestionRuleCreationModal = ({ context, onClose, onSave
             onCancel={onClose}
           />
         ) : null}
-        {context?.kind === 'TRANSACTION' ? (
+        {context?.kind === 'TRANSACTION' && !contextUnavailable ? (
           <TransactionRuleConfiguredForm
             key={`transaction-${row?.candidateId ?? 'global'}`}
             initialValue={transactionInitial}

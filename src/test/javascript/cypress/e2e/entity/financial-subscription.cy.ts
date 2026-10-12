@@ -36,11 +36,13 @@ describe('FinancialSubscription e2e test', () => {
   };
 
   const fillCreateForm = (name: string) => {
-    cy.get('[data-cy="name"]').clear().type(name);
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(name);
     cy.get('[data-cy="status"]').select('ACTIVE');
     cy.get('[data-cy="currency"]').select('MXN');
     cy.get('[data-cy="recurrenceUnit"]').select('MONTHLY');
-    cy.get('[data-cy="intervalCount"]').clear().type('1');
+    cy.get('[data-cy="intervalCount"]').clear();
+    cy.get('[data-cy="intervalCount"]').type('1');
     cy.get('[data-cy="startDate"]').type('2026-07-01');
     cy.get('[data-cy="createdAt"]').type('2026-07-08T10:00');
     cy.get('[data-cy="updatedAt"]').type('2026-07-08T10:00');

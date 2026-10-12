@@ -1341,8 +1341,11 @@ export const TransactionIngestionWorkflowDetail = () => {
 
   const rowRuleCreationContext = (row: ICsvIngestionWorkflowRow): ITransactionIngestionRuleCreationRowContext => ({
     ingestionRecordId: row.ingestionRecordId,
+    recordIndex: row.recordIndex,
     candidateId: row.candidate?.id,
-    originalDescription: row.descriptionReview?.originalDescription ?? row.description ?? null,
+    // A normalization rule must match the immutable FILE input. Never replace a missing raw/original value with the
+    // current candidate description, which may already be normalized or manually edited.
+    originalDescription: row.descriptionReview?.originalDescription ?? null,
     currentDescription: row.candidate?.description ?? row.description ?? null,
     flow: row.candidate?.flow ?? row.flow ?? null,
     accountName: row.candidate?.accountName ?? transactionIngestionEntity?.account?.name ?? null,
@@ -1377,9 +1380,15 @@ export const TransactionIngestionWorkflowDetail = () => {
           await reevaluateAllClassificationWithAutomation();
         }
       }
+      let successMessageKey = 'fintrackApp.transactionIngestion.workflow.ruleCreation.saved';
+      if (action === 'REEVALUATE_ROW') {
+        successMessageKey = 'fintrackApp.transactionIngestion.workflow.ruleCreation.savedReevaluatedRow';
+      } else if (action === 'REEVALUATE_ALL') {
+        successMessageKey = 'fintrackApp.transactionIngestion.workflow.ruleCreation.savedReevaluatedAll';
+      }
       setRuleCreationFeedback({
         color: 'success',
-        message: translate('fintrackApp.transactionIngestion.workflow.ruleCreation.saved'),
+        message: translate(successMessageKey),
       });
     } catch (error) {
       setRuleCreationFeedback({
@@ -2201,9 +2210,7 @@ export const TransactionIngestionWorkflowDetail = () => {
             data-cy="workflowNewNormalizationRule"
             data-testid="workflowNewNormalizationRule"
           >
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.newNormalization">
-              New normalization rule
-            </Translate>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.newNormalization">New Description Rule</Translate>
           </Button>
           <Button
             color="secondary"
@@ -2213,7 +2220,9 @@ export const TransactionIngestionWorkflowDetail = () => {
             data-cy="workflowNewTransactionRule"
             data-testid="workflowNewTransactionRule"
           >
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.newTransaction">New transaction rule</Translate>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.newTransaction">
+              New Classification Rule
+            </Translate>
           </Button>
         </div>
         <div className="border rounded p-2 mb-3" data-cy="workflowAutomationConfig" data-testid="workflowAutomationConfig">

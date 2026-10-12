@@ -8,6 +8,7 @@ import CreditAccountDetails from './credit-account-details';
 import FinancialTransaction from './financial-transaction';
 import Category from './category';
 import Tag from './tag';
+import Rules from './rules';
 import TransactionRule from './transaction-rule';
 import TransactionRuleCondition from './transaction-rule-condition';
 import DescriptionNormalizationRule from './description-normalization-rule';
@@ -33,6 +34,7 @@ export default () => {
         <Route path="financial-transaction/*" element={<FinancialTransaction />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />
+        <Route path="rules/*" element={<Rules />} />
         <Route path="transaction-rule/*" element={<TransactionRule />} />
         <Route path="transaction-rule-condition/*" element={<TransactionRuleCondition />} />
         <Route path="description-normalization-rule/*" element={<DescriptionNormalizationRule />} />

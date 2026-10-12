@@ -388,7 +388,7 @@ describe('FinancialTransaction posted transaction UX', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
     await screen.findByTestId('financialTransactionFilterTagsAdd');
-    await waitFor(() => expect((screen.getByTestId('financialTransactionFilterTagsAdd') as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(screen.getByTestId('financialTransactionFilterTagsAdd').disabled).toBe(false));
     const callsBeforePickerSearch = mockGetEntities.mock.calls.length;
     fireEvent.click(screen.getByTestId('financialTransactionFilterTagsAdd'));
     await screen.findByTestId('financialTransactionFilterTagsSearch');
@@ -408,7 +408,7 @@ describe('FinancialTransaction posted transaction UX', () => {
 
     const description = screen.getByLabelText('Search description');
     fireEvent.change(description, { target: { value: 'Bus' } });
-    fireEvent.submit(description.closest('form')!);
+    fireEvent.submit(description.closest('form'));
 
     await waitFor(() =>
       expect(screen.getByTestId('financialTransactionLocation').textContent).toContain('?description.contains=Bus&page=1&sort=id%2Cdesc'),

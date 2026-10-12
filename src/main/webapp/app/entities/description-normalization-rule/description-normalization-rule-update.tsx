@@ -1,206 +1,93 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Col, Row } from 'reactstrap';
-import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Alert, Button } from 'reactstrap';
+import { Translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
-import { IContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
-import DescriptionNormalizationRuleConfiguredForm from './components/description-normalization-rule-configured-form';
-import { useAppDispatch, useAppSelector } from 'app/config/store';
-import { createEntity, getEntity, partialUpdateEntity, reset } from './description-normalization-rule.reducer';
 
+import DescriptionNormalizationRuleConfiguredForm from './components/description-normalization-rule-configured-form';
+import { getConfiguredDescriptionNormalizationRule } from './description-normalization-rule-configured.service';
+import { IDescriptionNormalizationRuleConfigured } from 'app/shared/model/description-normalization-rule-configured.model';
+import { IContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
+import { ProductPage, ProductPageHeader } from 'app/shared/ui/product-page';
+
+const standaloneSaveActions: IContextualRuleSaveAction[] = [
+  { action: 'SAVE', labelKey: 'entity.action.save', label: 'Save', dataCy: 'entityCreateSaveButton' },
+];
+
+/** Standalone configured create/edit route used by the description-rules product manager. */
 export const DescriptionNormalizationRuleUpdate = () => {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { id } = useParams<'id'>();
   const isNew = id === undefined;
-  const rule = useAppSelector(state => state.descriptionNormalizationRule.entity);
-  const loading = useAppSelector(state => state.descriptionNormalizationRule.loading);
-  const updating = useAppSelector(state => state.descriptionNormalizationRule.updating);
-  const updateSuccess = useAppSelector(state => state.descriptionNormalizationRule.updateSuccess);
-  const [conditionCount, setConditionCount] = useState<number | null>(null);
-
-  const standaloneSaveActions: IContextualRuleSaveAction[] = [
-    { action: 'SAVE', labelKey: 'entity.action.save', label: 'Save', dataCy: 'entityCreateSaveButton' },
-  ];
+  const [configuredRule, setConfiguredRule] = useState<IDescriptionNormalizationRuleConfigured | null>(null);
+  const [loading, setLoading] = useState(!isNew);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    if (isNew) {
-      dispatch(reset());
-    } else {
-      dispatch(getEntity(id));
-      axios
-        .get(`api/description-normalization-rules/${id}/conditions`)
-        .then(response => setConditionCount(response.data.length))
-        .catch(() => setConditionCount(null));
-    }
-  }, []);
+    if (isNew || !id) return;
 
-  useEffect(() => {
-    if (updateSuccess) {
-      if (isNew && rule.id) {
-        navigate(`/description-normalization-rule/${rule.id}`);
-      } else {
-        navigate('/description-normalization-rule');
-      }
-    }
-  }, [updateSuccess]);
+    let active = true;
+    setLoading(true);
+    setLoadError(false);
+    getConfiguredDescriptionNormalizationRule(id)
+      .then(response => {
+        if (active) setConfiguredRule(response.data);
+      })
+      .catch(() => {
+        if (active) setLoadError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-  const saveEntity = values => {
-    if (isNew) {
-      dispatch(
-        createEntity({
-          ...values,
-          active: false,
-          priority: undefined,
-          createdAt: undefined,
-          updatedAt: undefined,
-        }),
-      );
-    } else {
-      dispatch(partialUpdateEntity({ ...rule, ...values, priority: undefined, createdAt: undefined, updatedAt: undefined }));
-    }
-  };
+    return () => {
+      active = false;
+    };
+  }, [id, isNew]);
 
-  const defaultValues = () =>
-    isNew
-      ? {
-          active: false,
-          conditionOperator: 'ALL',
-        }
-      : {
-          ...rule,
-        };
+  const headingKey = isNew ? 'fintrackApp.descriptionNormalizationRule.createTitle' : 'fintrackApp.descriptionNormalizationRule.editTitle';
 
-  if (isNew) {
-    return (
-      <div>
-        <Row className="justify-content-center">
-          <Col md="8">
-            <h2 data-cy="DescriptionNormalizationRuleCreateUpdateHeading">
-              <Translate contentKey="fintrackApp.descriptionNormalizationRule.createTitle">Create Description Normalization Rule</Translate>
-            </h2>
-          </Col>
-        </Row>
-        <Row className="justify-content-center">
-          <Col md="8">
-            <DescriptionNormalizationRuleConfiguredForm
-              saveActions={standaloneSaveActions}
-              onSaved={() => navigate('/description-normalization-rule')}
-              onCancel={() => navigate('/description-normalization-rule')}
-            />
-          </Col>
-        </Row>
-      </div>
-    );
-  }
+  const returnPath = !isNew && id ? `/description-normalization-rule/${id}` : '/description-normalization-rule';
 
   return (
-    <div>
-      <Row className="justify-content-center">
-        <Col md="8">
-          <h2 data-cy="DescriptionNormalizationRuleCreateUpdateHeading">
-            <Translate
-              contentKey={
-                isNew ? 'fintrackApp.descriptionNormalizationRule.createTitle' : 'fintrackApp.descriptionNormalizationRule.editTitle'
-              }
-            >
-              Create or edit Description Normalization Rule
-            </Translate>
-          </h2>
-        </Col>
-      </Row>
-      <Row className="justify-content-center">
-        <Col md="8">
-          {loading ? (
-            <p>Loading...</p>
-          ) : (
-            <ValidatedForm defaultValues={defaultValues()} onSubmit={saveEntity}>
-              {!isNew ? <ValidatedField name="id" required readOnly id="description-normalization-rule-id" label="ID" /> : null}
-              <ValidatedField
-                label={translate('fintrackApp.descriptionNormalizationRule.name')}
-                id="description-normalization-rule-name"
-                name="name"
-                data-cy="name"
-                type="text"
-                validate={{ required: { value: true, message: translate('entity.validation.required') } }}
-              />
-              <ValidatedField
-                label={translate('fintrackApp.descriptionNormalizationRule.description')}
-                id="description-normalization-rule-description"
-                name="description"
-                data-cy="description"
-                type="textarea"
-              />
-              <ValidatedField
-                label={translate('fintrackApp.descriptionNormalizationRule.conditionOperator')}
-                id="description-normalization-rule-conditionOperator"
-                name="conditionOperator"
-                data-cy="conditionOperator"
-                type="select"
-              >
-                {Object.keys(RuleConditionLogic).map(key => (
-                  <option value={key} key={key}>
-                    {key}
-                  </option>
-                ))}
-              </ValidatedField>
-              <ValidatedField
-                label={translate('fintrackApp.descriptionNormalizationRule.resultingDescription')}
-                id="description-normalization-rule-resultingDescription"
-                name="resultingDescription"
-                data-cy="resultingDescription"
-                type="text"
-                validate={{ required: { value: true, message: translate('entity.validation.required') } }}
-              />
-              {!isNew ? (
-                <ValidatedField
-                  label={translate('fintrackApp.descriptionNormalizationRule.active')}
-                  id="description-normalization-rule-active"
-                  name="active"
-                  data-cy="active"
-                  check
-                  type="checkbox"
-                  disabled={conditionCount === 0}
-                />
-              ) : null}
-              {!isNew && conditionCount === 0 ? (
-                <small className="text-muted d-block mb-3">
-                  <Translate contentKey="fintrackApp.descriptionNormalizationRule.activeDisabledNoConditions">
-                    Add at least one condition before activating this rule.
-                  </Translate>
-                </small>
-              ) : null}
-              {!isNew ? (
-                <Button tag={Link} to={`/description-normalization-rule/${rule.id}`} color="secondary" className="mb-3">
-                  <Translate contentKey="fintrackApp.descriptionNormalizationRule.manageConditions">Manage conditions</Translate>
-                </Button>
-              ) : (
-                <p className="text-muted">
-                  <Translate contentKey="fintrackApp.descriptionNormalizationRule.createInactiveHelp">
-                    Rules are saved inactive first. Add conditions from the detail page, then activate the rule.
-                  </Translate>
-                </p>
-              )}
-              <div>
-                <Button tag={Link} id="cancel-save" to="/description-normalization-rule" replace color="info">
-                  <FontAwesomeIcon icon="arrow-left" />
-                  &nbsp;
-                  <Translate contentKey="entity.action.back">Back</Translate>
-                </Button>
-                &nbsp;
-                <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
-                  <FontAwesomeIcon icon="save" />
-                  &nbsp;
-                  <Translate contentKey="entity.action.save">Save</Translate>
-                </Button>
-              </div>
-            </ValidatedForm>
-          )}
-        </Col>
-      </Row>
-    </div>
+    <ProductPage>
+      <ProductPageHeader
+        headingId="description-normalization-rule-create-update-heading"
+        dataCy="DescriptionNormalizationRuleCreateUpdateHeading"
+        title={<Translate contentKey={headingKey}>{isNew ? 'Create Description Rule' : 'Edit Description Rule'}</Translate>}
+        subtitle={
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.configuredCreateEditHelp">
+            Define how an original imported description should be normalized for future file-import review.
+          </Translate>
+        }
+        actions={
+          <Button color="secondary" outline size="sm" onClick={() => navigate(returnPath)}>
+            <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.cancel">Cancel</Translate>
+          </Button>
+        }
+      />
+      {loading ? (
+        <p>
+          <Translate contentKey="global.messages.info.loading">Loading...</Translate>
+        </p>
+      ) : null}
+      {loadError ? (
+        <Alert color="danger" role="alert">
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.configuredLoadFailed">
+            The rule could not be loaded. Return to the rule manager and try again.
+          </Translate>
+        </Alert>
+      ) : null}
+      {!loading && !loadError ? (
+        <DescriptionNormalizationRuleConfiguredForm
+          key={configuredRule?.id ?? 'new'}
+          initialValue={configuredRule ?? undefined}
+          saveActions={standaloneSaveActions}
+          onSaved={savedRule => navigate(isNew ? '/description-normalization-rule' : `/description-normalization-rule/${savedRule.id}`)}
+          onCancel={() => navigate(returnPath)}
+        />
+      ) : null}
+    </ProductPage>
   );
 };
 

@@ -5,20 +5,37 @@
         "title": "Reglas de normalización de descripción",
         "refreshListLabel": "Refrescar lista",
         "createLabel": "Crear regla de normalización",
-        "notFound": "No se encontraron reglas de normalización"
+        "notFound": "No se encontraron reglas de normalización",
+        "subtitle": "Estandariza las descripciones originales de importaciones de archivos antes de revisar los movimientos.",
+        "loadFailed": "No se pudieron cargar las reglas de descripción. Intenta refrescar la lista."
       },
       "created": "Se creó una regla de normalización con identificador {{ param }}",
       "updated": "Se actualizó una regla de normalización con identificador {{ param }}",
       "deleted": "Se eliminó una regla de normalización con identificador {{ param }}",
       "delete": {
-        "question": "Esto eliminará la regla de normalización {{ id }} y sus condiciones. Las descripciones crudas importadas y las transacciones no se eliminarán."
+        "question": "Esto eliminará la regla de normalización {{ id }} y sus condiciones. Las descripciones crudas importadas y las transacciones no se eliminarán.",
+        "title": "Eliminar regla de descripción",
+        "warning": "Eliminar esta regla la quita de futuras evaluaciones de normalización. No modifica movimientos publicados ni reprocesa automáticamente importaciones ya revisadas.",
+        "precedence": "Eliminar una regla puede cambiar cuál de las reglas restantes gana para futuras descripciones importadas.",
+        "loadFailed": "No se pudo cargar la regla, por lo que no se puede eliminar de forma segura. Cierra este diálogo e inténtalo de nuevo.",
+        "failed": "No se pudo eliminar la regla. El orden visible no cambió; inténtalo de nuevo."
       },
       "detail": {
-        "title": "Regla de normalización de descripción"
+        "title": "Regla de normalización de descripción",
+        "loadFailed": "No se pudo cargar esta regla de descripción. Vuelve al administrador de reglas e inténtalo de nuevo.",
+        "matching": "Coincidencia",
+        "result": "Resultado",
+        "behavior": "Comportamiento",
+        "allExplanation": "Todas las condiciones de abajo deben coincidir con la descripción original.",
+        "anyExplanation": "Al menos una condición de abajo debe coincidir con la descripción original.",
+        "fileImportScope": "Sólo aplica a descripciones originales de importaciones de archivos, no a borradores manuales.",
+        "firstMatch": "Las reglas activas se evalúan de arriba hacia abajo. La primera que coincida determina la descripción normalizada.",
+        "history": "Los cambios afectan evaluaciones futuras o filas de importación reevaluadas explícitamente; los movimientos publicados no cambian."
       },
-      "createTitle": "Crear regla de normalización",
-      "editTitle": "Editar regla de normalización",
-      "createInactiveHelp": "Las reglas se guardan inactivas primero. Agrega condiciones desde el detalle y actívala cuando esté lista.",
+      "createTitle": "Crear regla de descripción",
+      "editTitle": "Editar regla de descripción",
+      "configuredCreateEditHelp": "Define cómo se normaliza una descripción original importada en futuras revisiones de archivos.",
+      "createInactiveHelp": "Las reglas configuradas nuevas inician activas después de definir una condición válida.",
       "id": "ID",
       "name": "Nombre",
       "description": "Descripción",
@@ -27,6 +44,7 @@
       "order": "Orden",
       "moveUp": "Subir",
       "moveDown": "Bajar",
+      "actions": "Acciones de regla",
       "conditionOperator": "Lógica de condiciones",
       "resultingDescription": "Descripción resultante",
       "createdAt": "Creada el",
@@ -35,8 +53,84 @@
       "conditions": "Condiciones",
       "manageConditions": "Administrar condiciones",
       "addCondition": "Agregar condición",
-      "activeRequiresCondition": "Las reglas activas requieren al menos una condición.",
-      "activeDisabledNoConditions": "Agrega al menos una condición antes de activar esta regla."
+      "activeRequiresCondition": "Las reglas requieren al menos una condición.",
+      "conditionsRequired": "Agrega al menos una condición válida antes de guardar la regla.",
+      "activeDisabledNoConditions": "Agrega al menos una condición antes de activar esta regla.",
+      "configuredLoadFailed": "No se pudo cargar la regla. Vuelve al administrador de reglas e inténtalo de nuevo.",
+      "configuredSaveFailed": "No se pudo guardar la regla. Tus cambios siguen disponibles para reintentarlo.",
+      "configuredValidationFailed": "Completa los campos resaltados antes de guardar.",
+      "validationSummary": "Revisa las secciones resaltadas de la configuración antes de guardar.",
+      "priorityServerManagedHelp": "El orden de reglas se administra desde la lista. Las reglas nuevas se agregan al final.",
+      "operators": {
+        "EXACT": "Igual a",
+        "NOT_EQUALS": "Distinto de",
+        "CONTAINS": "Contiene",
+        "NOT_CONTAINS": "No contiene",
+        "STARTS_WITH": "Empieza con",
+        "ENDS_WITH": "Termina con",
+        "REGEX": "Coincide con expresión regular"
+      },
+      "summaryOperators": {
+        "EXACT": "es igual a",
+        "NOT_EQUALS": "no es igual a",
+        "CONTAINS": "contiene",
+        "NOT_CONTAINS": "no contiene",
+        "STARTS_WITH": "empieza con",
+        "ENDS_WITH": "termina con",
+        "REGEX": "coincide con la expresión"
+      },
+      "status": {
+        "active": "Activa",
+        "inactive": "Inactiva"
+      },
+      "summary": {
+        "matching": "Coincidencia",
+        "matchingConditions": "Condiciones de coincidencia",
+        "result": "Resultados",
+        "then": "Entonces reemplazar la descripción por",
+        "all": "Todas las condiciones deben coincidir",
+        "any": "Puede coincidir cualquier condición",
+        "and": "y",
+        "or": "o",
+        "noConditions": "No hay condiciones configuradas",
+        "moreConditions": "y {{ count }} más",
+        "caseSensitive": "sensible a mayúsculas",
+        "caseInsensitive": "no sensible a mayúsculas",
+        "unknownOperator": "usa un operador desconocido",
+        "missingValue": "un valor faltante"
+      },
+      "empty": {
+        "title": "Aún no hay reglas de descripción",
+        "body": "Crea una regla para estandarizar descripciones originales de futuras importaciones de archivos antes de clasificarlas."
+      },
+      "reorder": {
+        "title": "Orden de evaluación",
+        "explanation": "Las reglas activas se evalúan de arriba hacia abajo. La primera que coincida determina la descripción; las inactivas no participan.",
+        "position": "Posición {{ position }}",
+        "dragHandle": "Arrastra {{ name }} para cambiar su posición de evaluación",
+        "actions": "Acciones de orden",
+        "failed": "No se pudo guardar el orden. Se restauró el último orden confirmado.",
+        "adminUnavailable": "Aquí no se puede reordenar porque esta lista de administrador puede incluir reglas de diferentes usuarios."
+      },
+      "editor": {
+        "identity": "Identidad",
+        "matching": "Coincidencia",
+        "matchingConditions": "Condiciones de coincidencia",
+        "result": "Resultado",
+        "status": "Estado",
+        "allHelp": "Todas las condiciones deben coincidir con la descripción original.",
+        "anyHelp": "Al menos una condición debe coincidir con la descripción original.",
+        "noConditions": "Agrega al menos una condición para definir cuándo coincide esta regla con la descripción original importada.",
+        "regexHelp": "Avanzado: usa una expresión regular válida de Java.",
+        "resultHelp": "Una descripción original que coincida se reemplaza con este valor.",
+        "statusHelp": "Las reglas activas participan en normalizaciones de importaciones futuras; guardar no reprocesa el historial.",
+        "preview": "Vista previa de la configuración",
+        "configurationSummary": "Resumen de configuración",
+        "configurationSummaryHelp": "Describe la configuración de la regla; no evalúa una fila importada.",
+        "previewIf": "SI la descripción original",
+        "previewThen": "ENTONCES reemplazarla por",
+        "previewIncomplete": "Agrega un nombre, resultado y condición válida para revisar este resumen de configuración."
+      }
     },
     "descriptionNormalizationRuleCondition": {
       "operator": "Operador",

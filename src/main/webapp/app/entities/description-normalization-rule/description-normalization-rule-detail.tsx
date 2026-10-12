@@ -1,198 +1,163 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Col, Row, Table } from 'reactstrap';
-import { Translate } from 'react-jhipster';
+import { Alert, Button, Spinner } from 'reactstrap';
+import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAppDispatch, useAppSelector } from 'app/config/store';
-import { IDescriptionNormalizationRuleCondition } from 'app/shared/model/description-normalization-rule-condition.model';
-import { DescriptionNormalizationRuleOperator } from 'app/shared/model/enumerations/description-normalization-rule-operator.model';
-import { getEntity } from './description-normalization-rule.reducer';
+
+import { IDescriptionNormalizationRuleConfigured } from 'app/shared/model/description-normalization-rule-configured.model';
+import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { getConfiguredDescriptionNormalizationRule } from './description-normalization-rule-configured.service';
+import {
+  formatDescriptionNormalizationCondition,
+  formatDescriptionNormalizationLogic,
+  formatDescriptionNormalizationRuleStatus,
+} from './description-normalization-rule-display';
 
 export const DescriptionNormalizationRuleDetail = () => {
-  const dispatch = useAppDispatch();
   const { id } = useParams<'id'>();
-  const rule = useAppSelector(state => state.descriptionNormalizationRule.entity);
-  const [conditions, setConditions] = useState<IDescriptionNormalizationRuleCondition[]>([]);
-  const [editing, setEditing] = useState<IDescriptionNormalizationRuleCondition | null>(null);
-  const [form, setForm] = useState({ operator: 'CONTAINS', value: '', caseSensitive: false });
-
-  const loadConditions = () =>
-    axios.get<IDescriptionNormalizationRuleCondition[]>(`api/description-normalization-rules/${id}/conditions`).then(response => {
-      setConditions(response.data);
-    });
+  const [rule, setRule] = useState<IDescriptionNormalizationRuleConfigured | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    dispatch(getEntity(id));
-    loadConditions();
-  }, []);
-
-  const startAdd = () => {
-    setEditing({ descriptionNormalizationRule: { id: Number(id) } });
-    setForm({ operator: 'CONTAINS', value: '', caseSensitive: false });
-  };
-
-  const startEdit = (condition: IDescriptionNormalizationRuleCondition) => {
-    setEditing(condition);
-    setForm({
-      operator: condition.operator ?? 'CONTAINS',
-      value: condition.value ?? '',
-      caseSensitive: Boolean(condition.caseSensitive),
-    });
-  };
-
-  const saveCondition = async () => {
-    const payload = {
-      ...editing,
-      operator: form.operator,
-      value: form.value,
-      caseSensitive: form.caseSensitive,
-      descriptionNormalizationRule: { id: Number(id) },
+    if (!id) {
+      setLoading(false);
+      setLoadError(true);
+      return undefined;
+    }
+    let active = true;
+    setLoading(true);
+    setLoadError(false);
+    getConfiguredDescriptionNormalizationRule(id)
+      .then(response => {
+        if (active) setRule(response.data);
+      })
+      .catch(() => {
+        if (active) setLoadError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
     };
-    if (editing?.id) {
-      await axios.patch(`api/description-normalization-rule-conditions/${editing.id}`, payload);
-    } else {
-      await axios.post('api/description-normalization-rule-conditions', payload);
-    }
-    setEditing(null);
-    await loadConditions();
-  };
+  }, [id]);
 
-  const deleteCondition = async (conditionId: number) => {
-    if (window.confirm('Delete condition?')) {
-      await axios.delete(`api/description-normalization-rule-conditions/${conditionId}`);
-      await loadConditions();
-    }
-  };
+  if (loading) {
+    return (
+      <ProductPage>
+        <p className="text-muted" role="status">
+          <Spinner tag="span" size="sm" className="me-2" /> <Translate contentKey="global.messages.info.loading">Loading...</Translate>
+        </p>
+      </ProductPage>
+    );
+  }
+
+  if (loadError || !rule) {
+    return (
+      <ProductPage>
+        <Alert color="danger" fade={false} role="alert">
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.loadFailed">
+            This description rule could not be loaded. Return to the rule manager and try again.
+          </Translate>
+        </Alert>
+        <Button tag={Link} to="/description-normalization-rule" color="secondary" outline>
+          <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.back">Back</Translate>
+        </Button>
+      </ProductPage>
+    );
+  }
 
   return (
-    <Row>
-      <Col md="8">
-        <h2 data-cy="descriptionNormalizationRuleDetailsHeading">
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.title">Description Normalization Rule</Translate>
-        </h2>
-        <dl className="jh-entity-details">
-          <dt>
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.name">Name</Translate>
-          </dt>
-          <dd>{rule.name}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.description">Description</Translate>
-          </dt>
-          <dd>{rule.description}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.order">Order</Translate>
-          </dt>
-          <dd>#{(rule.priority ?? 0) + 1}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.conditionOperator">Condition Logic</Translate>
-          </dt>
-          <dd>{rule.conditionOperator}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.resultingDescription">Resulting Description</Translate>
-          </dt>
-          <dd>{rule.resultingDescription}</dd>
-          <dt>
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.active">Active</Translate>
-          </dt>
-          <dd>{rule.active ? 'Active' : 'Inactive'}</dd>
-        </dl>
-        <h3>
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.conditions">Conditions</Translate>
-        </h3>
-        <p className="text-muted">
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.activeRequiresCondition">
-            Active rules require at least one condition.
-          </Translate>
-        </p>
-        <Button color="primary" size="sm" className="mb-2" onClick={startAdd}>
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.addCondition">Add condition</Translate>
-        </Button>
-        {editing ? (
-          <div className="border rounded p-3 mb-3">
-            <label htmlFor="dnr-condition-operator">
-              <Translate contentKey="fintrackApp.descriptionNormalizationRuleCondition.operator">Operator</Translate>
-            </label>
-            <select
-              id="dnr-condition-operator"
-              className="form-control mb-2"
-              value={form.operator}
-              onChange={event => setForm({ ...form, operator: event.target.value })}
-            >
-              {Object.keys(DescriptionNormalizationRuleOperator).map(operator => (
-                <option value={operator} key={operator}>
-                  {operator}
-                </option>
-              ))}
-            </select>
-            <label htmlFor="dnr-condition-value">
-              <Translate contentKey="fintrackApp.descriptionNormalizationRuleCondition.value">Value</Translate>
-            </label>
-            <input
-              id="dnr-condition-value"
-              className="form-control mb-2"
-              value={form.value}
-              onChange={event => setForm({ ...form, value: event.target.value })}
-            />
-            <label className="d-block mb-2">
-              <input
-                type="checkbox"
-                checked={form.caseSensitive}
-                onChange={event => setForm({ ...form, caseSensitive: event.target.checked })}
-              />{' '}
-              <Translate contentKey="fintrackApp.descriptionNormalizationRuleCondition.caseSensitive">Case sensitive</Translate>
-            </label>
-            <Button color="primary" size="sm" onClick={saveCondition}>
-              <Translate contentKey="entity.action.save">Save</Translate>
-            </Button>{' '}
-            <Button color="secondary" size="sm" onClick={() => setEditing(null)}>
-              <Translate contentKey="entity.action.cancel">Cancel</Translate>
+    <ProductPage>
+      <ProductPageHeader
+        headingId="description-normalization-rule-detail-heading"
+        dataCy="descriptionNormalizationRuleDetailsHeading"
+        title={rule.name}
+        metadata={
+          <>
+            <span className={`badge rounded-pill ${rule.active ? 'text-bg-success' : 'text-bg-secondary'}`}>
+              {formatDescriptionNormalizationRuleStatus(rule.active, translate)}
+            </span>
+            <span className="small text-muted" data-cy="descriptionNormalizationRuleDetailPosition">
+              {translate('fintrackApp.descriptionNormalizationRule.reorder.position', { position: (rule.priority ?? 0) + 1 })}
+            </span>
+          </>
+        }
+        subtitle={rule.description ?? undefined}
+        actions={
+          <>
+            <Button tag={Link} to="/description-normalization-rule" color="secondary" outline size="sm">
+              <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.back">Back</Translate>
             </Button>
-          </div>
-        ) : null}
-        <Table responsive>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>
-                <Translate contentKey="fintrackApp.descriptionNormalizationRuleCondition.operator">Operator</Translate>
-              </th>
-              <th>
-                <Translate contentKey="fintrackApp.descriptionNormalizationRuleCondition.value">Value</Translate>
-              </th>
-              <th>
-                <Translate contentKey="fintrackApp.descriptionNormalizationRuleCondition.caseSensitive">Case sensitive</Translate>
-              </th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {conditions.map(condition => (
-              <tr key={condition.id}>
-                <td>{(condition.position ?? 0) + 1}</td>
-                <td>{condition.operator}</td>
-                <td>{condition.value}</td>
-                <td>{condition.caseSensitive ? 'Yes' : 'No'}</td>
-                <td className="text-end">
-                  <Button color="primary" size="sm" className="me-1" onClick={() => startEdit(condition)}>
-                    <Translate contentKey="entity.action.edit">Edit</Translate>
-                  </Button>
-                  <Button color="danger" size="sm" onClick={() => deleteCondition(condition.id)}>
-                    <Translate contentKey="entity.action.delete">Delete</Translate>
-                  </Button>
-                </td>
-              </tr>
+            <Button
+              tag={Link}
+              to={`/description-normalization-rule/${rule.id}/edit`}
+              color="primary"
+              size="sm"
+              data-cy="descriptionNormalizationRuleDetailEdit"
+              data-testid="descriptionNormalizationRuleDetailEdit"
+            >
+              <FontAwesomeIcon icon="pencil-alt" /> <Translate contentKey="entity.action.edit">Edit</Translate>
+            </Button>
+            <Button tag={Link} to={`/description-normalization-rule/${rule.id}/delete`} color="danger" outline size="sm">
+              <FontAwesomeIcon icon="trash" /> <Translate contentKey="entity.action.delete">Delete</Translate>
+            </Button>
+          </>
+        }
+      />
+
+      <div className="d-grid gap-3">
+        <ProductSection title={<Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.matching">Matching</Translate>}>
+          <p className="mb-2">
+            <span className="fw-semibold">{formatDescriptionNormalizationLogic(rule.conditionOperator, translate)}. </span>
+            <Translate
+              contentKey={
+                rule.conditionOperator === 'ANY'
+                  ? 'fintrackApp.descriptionNormalizationRule.detail.anyExplanation'
+                  : 'fintrackApp.descriptionNormalizationRule.detail.allExplanation'
+              }
+            >
+              Every condition below must match the original description.
+            </Translate>
+          </p>
+          <ol className="mb-0 ps-3" data-cy="descriptionNormalizationRuleDetailConditions">
+            {(rule.conditions ?? []).map((condition, index) => (
+              <li key={`${condition.position ?? index}-${condition.operator}-${condition.value}`} className="mb-2">
+                {formatDescriptionNormalizationCondition(condition, translate)}
+              </li>
             ))}
-          </tbody>
-        </Table>
-        <Button tag={Link} to="/description-normalization-rule" replace color="info">
-          <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.back">Back</Translate>
-        </Button>{' '}
-        <Button tag={Link} to={`/description-normalization-rule/${rule.id}/edit`} color="primary">
-          <FontAwesomeIcon icon="pencil-alt" /> <Translate contentKey="entity.action.edit">Edit</Translate>
-        </Button>
-      </Col>
-    </Row>
+          </ol>
+        </ProductSection>
+
+        <ProductSection title={<Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.result">Result</Translate>}>
+          <p className="mb-0">
+            <Translate contentKey="fintrackApp.descriptionNormalizationRule.summary.then">Then replace the description with</Translate>{' '}
+            <span className="fw-semibold">“{rule.resultingDescription}”</span>
+          </p>
+        </ProductSection>
+
+        <ProductSection title={<Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.behavior">Behavior</Translate>}>
+          <ul className="mb-0 ps-3 text-muted">
+            <li>
+              <Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.fileImportScope">
+                Applies only to original descriptions in file imports, not manual transaction drafts.
+              </Translate>
+            </li>
+            <li>
+              <Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.firstMatch">
+                Active rules are evaluated from top to bottom. The first matching rule determines the normalized description.
+              </Translate>
+            </li>
+            <li>
+              <Translate contentKey="fintrackApp.descriptionNormalizationRule.detail.history">
+                Changes affect future evaluations or explicitly reevaluated import rows; previously posted transactions are not changed.
+              </Translate>
+            </li>
+          </ul>
+        </ProductSection>
+      </div>
+    </ProductPage>
   );
 };
 

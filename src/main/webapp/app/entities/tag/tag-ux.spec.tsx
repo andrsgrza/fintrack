@@ -127,7 +127,7 @@ describe('Tag product UX', () => {
 
     expect(screen.getByText('Food shopping')).toBeTruthy();
     expect(screen.getAllByTestId('tagColorChip').length).toBeGreaterThan(0);
-    const tagPrimaryRows = Array.from(document.querySelectorAll('[data-cy="tagPrimaryRow"]')) as HTMLElement[];
+    const tagPrimaryRows = Array.from(document.querySelectorAll('[data-cy="tagPrimaryRow"]'));
     expect(tagPrimaryRows).toHaveLength(tags.length);
     tagPrimaryRows.forEach(row => {
       expect(row.querySelector('[data-cy="tagColorChip"]')).toBeTruthy();
@@ -173,7 +173,7 @@ describe('Tag product UX', () => {
   it('creates a tag using only product fields and the chosen hex color', async () => {
     renderCreateForm();
 
-    expect((screen.getByLabelText('Active') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByLabelText('Active').checked).toBe(true);
     expect(screen.getByTestId('tagBasicInformationSection')).toBeTruthy();
     expect(screen.getByTestId('tagColorSection')).toBeTruthy();
     expect(screen.queryByTestId('tagAppearanceSection')).toBeNull();
@@ -187,11 +187,11 @@ describe('Tag product UX', () => {
     expect(colorControlRow.querySelector('[data-cy="tagColorPicker"]')).toBeTruthy();
     expect(colorControlRow.querySelector('[data-cy="color"]')).toBeTruthy();
     expect(document.querySelector('[data-cy="tagColorPreview"]')).toBeNull();
-    expect((screen.getByLabelText('Active') as HTMLInputElement).parentElement?.className).toContain('form-switch');
+    expect(screen.getByLabelText('Active').parentElement?.className).toContain('form-switch');
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Fuel' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Gas stations' } });
     fireEvent.change(screen.getByLabelText('Choose color'), { target: { value: '#112233' } });
-    expect((screen.getByLabelText('Color') as HTMLInputElement).value).toBe('#112233');
+    expect(screen.getByLabelText('Color').value).toBe('#112233');
     expect(document.querySelector('[data-cy="tagColorPreview"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -208,11 +208,11 @@ describe('Tag product UX', () => {
     renderEditForm();
 
     expect(screen.getByDisplayValue('Food shopping')).toBeTruthy();
-    expect((screen.getByLabelText('Choose color') as HTMLInputElement).value).toBe('#123456');
+    expect(screen.getByLabelText('Choose color').value).toBe('#123456');
     expect(screen.getByTestId('tagStatusHelpButton')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Weekly groceries' } });
     fireEvent.change(screen.getByLabelText('Color'), { target: { value: '#abcdef' } });
-    expect((screen.getByLabelText('Choose color') as HTMLInputElement).value).toBe('#abcdef');
+    expect(screen.getByLabelText('Choose color').value).toBe('#abcdef');
     expect(document.querySelector('[data-cy="tagColorPreview"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -233,7 +233,7 @@ describe('Tag product UX', () => {
 
     await waitFor(() => expect(screen.getByText(/should follow pattern/i)).toBeTruthy());
     expect(mockCreateEntity).not.toHaveBeenCalled();
-    expect((screen.getByLabelText('Color') as HTMLInputElement).value).toBe('#nothex');
+    expect(screen.getByLabelText('Color').value).toBe('#nothex');
   });
 
   it('maps duplicate save failures to a product-safe message and keeps the form open', async () => {

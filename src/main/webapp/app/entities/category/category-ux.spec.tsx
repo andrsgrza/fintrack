@@ -249,15 +249,15 @@ describe('Category product UX', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Flat' }));
     expect(screen.getByRole('button', { name: 'Flat' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: 'Nested' }).getAttribute('aria-pressed')).toBe('false');
-    const flatPaths = Array.from(document.querySelectorAll('[data-cy="categoryFlatPath"]')) as HTMLElement[];
+    const flatPaths = Array.from(document.querySelectorAll('[data-cy="categoryFlatPath"]'));
     expect(flatPaths.map(path => path.textContent)).toContain('Expenses › Transport');
     expect(flatPaths.map(path => path.textContent)).toContain('Expenses › Transport › RideApps › Uber Black');
     expect(screen.queryByText('Expenses > Transport')).toBeNull();
     expect(screen.getAllByTestId('categoryProductList')[0].querySelectorAll('[data-category-depth="0"]')).toHaveLength(5);
     expect(document.querySelector('[data-cy="categoryDisclosure"]')).toBeNull();
 
-    const deepestFlatPath = flatPaths.find(path => path.textContent === 'Expenses › Transport › RideApps › Uber Black') as HTMLElement;
-    const ancestorLinks = Array.from(deepestFlatPath.querySelectorAll('[data-cy="categoryBreadcrumbAncestor"]')) as HTMLAnchorElement[];
+    const deepestFlatPath = flatPaths.find(path => path.textContent === 'Expenses › Transport › RideApps › Uber Black');
+    const ancestorLinks = Array.from(deepestFlatPath.querySelectorAll('[data-cy="categoryBreadcrumbAncestor"]'));
     expect(ancestorLinks.map(link => link.textContent)).toEqual(['Expenses', 'Transport', 'RideApps']);
     expect(ancestorLinks.map(link => link.getAttribute('href'))).toEqual(['/category/10', '/category/11', '/category/12']);
     expect(deepestFlatPath.querySelector('a[href="/category/13"]')).toBeNull();
@@ -275,7 +275,7 @@ describe('Category product UX', () => {
     const childPath = Array.from(document.querySelectorAll('[data-cy="categoryFlatPath"]')).find(
       path => path.textContent === 'Transport › Bus',
     ) as HTMLElement;
-    const parentLink = childPath.querySelector('[data-cy="categoryBreadcrumbAncestor"]') as HTMLAnchorElement;
+    const parentLink = childPath.querySelector('[data-cy="categoryBreadcrumbAncestor"]');
     expect(parentLink.getAttribute('href')).toBe('/category/1');
     expect(childPath.querySelector('a[href="/category/3"]')).toBeNull();
 
@@ -305,7 +305,7 @@ describe('Category product UX', () => {
     expect(screen.queryByTestId('categoryDetailAppearance')).toBeNull();
     expect(screen.queryByText('#123456')).toBeNull();
     expect(screen.getByRole('heading', { name: /Subcategories/ }).textContent).toContain('(1)');
-    const inactiveChildLink = screen.getByRole('link', { name: 'Bus' }) as HTMLAnchorElement;
+    const inactiveChildLink = screen.getByRole('link', { name: 'Bus' });
     expect(inactiveChildLink.getAttribute('href')).toBe('/category/3');
     expect(inactiveChildLink.className).toContain('category-child-link');
     expect(inactiveChildLink.className).not.toContain('text-primary');
@@ -337,7 +337,7 @@ describe('Category product UX', () => {
     };
     renderDetail(categories[0], [...categories, activeChild]);
 
-    const links = ['Bus', 'Taxi'].map(name => screen.getByRole('link', { name }) as HTMLAnchorElement);
+    const links = ['Bus', 'Taxi'].map(name => screen.getByRole('link', { name }));
     expect(links.map(link => link.getAttribute('href'))).toEqual(['/category/3', '/category/4']);
     links.forEach(link => {
       const childRow = link.closest('[data-cy="categoryChildRow"]');
@@ -366,8 +366,8 @@ describe('Category product UX', () => {
     expect(colorControlRow.querySelector('[data-cy="color"]')).toBeTruthy();
     expect(document.querySelector('[data-cy="categoryColorPreview"]')).toBeNull();
     expect(screen.queryByLabelText('Icon')).toBeNull();
-    expect((screen.getByLabelText('Active') as HTMLInputElement).parentElement?.className).toContain('form-switch');
-    const parentSelect = screen.getByLabelText('Parent category') as HTMLSelectElement;
+    expect(screen.getByLabelText('Active').parentElement?.className).toContain('form-switch');
+    const parentSelect = screen.getByLabelText('Parent category');
     expect(Array.from(parentSelect.options).map(option => option.textContent)).toEqual(['', 'Transport', 'Transport › Bus']);
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Subway' } });
@@ -389,9 +389,9 @@ describe('Category product UX', () => {
 
     expect(screen.getByDisplayValue('Public bus rides')).toBeTruthy();
     expect(screen.getByDisplayValue('Transport')).toBeTruthy();
-    expect((screen.getByLabelText('Parent category') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByLabelText('Parent category').disabled).toBe(true);
     expect(screen.getByText('Parent category cannot be changed after creation.')).toBeTruthy();
-    expect((screen.getByLabelText('Type') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByLabelText('Type').disabled).toBe(true);
     expect(screen.getByText('Use this category for outgoing transactions.')).toBeTruthy();
   });
 
@@ -416,7 +416,7 @@ describe('Category product UX', () => {
 
     fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'BOTH' } });
     fireEvent.change(screen.getByLabelText('Color'), { target: { value: '#112233' } });
-    expect((screen.getByLabelText('Choose color') as HTMLInputElement).value).toBe('#112233');
+    expect(screen.getByLabelText('Choose color').value).toBe('#112233');
     expect(document.querySelector('[data-cy="categoryColorPreview"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 

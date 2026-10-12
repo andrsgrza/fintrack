@@ -2492,16 +2492,19 @@ class TransactionRuleResourceIT {
 
     @Test
     @Transactional
-    void createConfiguredTransactionRuleWithNoConditionsFails() throws Exception {
-        TransactionRuleConfiguredRequestDTO request = configuredRequest(
-            null,
-            Set.of(createTagDTO(TagResourceIT.createEntity(em))),
-            List.of()
-        );
+    void createConfiguredTransactionRuleWithNoConditionsFailsWhetherInactiveOrActive() throws Exception {
+        for (boolean active : List.of(false, true)) {
+            TransactionRuleConfiguredRequestDTO request = configuredRequest(
+                null,
+                Set.of(createTagDTO(TagResourceIT.createEntity(em))),
+                List.of()
+            );
+            request.setActive(active);
 
-        restTransactionRuleMockMvc
-            .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
-            .andExpect(status().isBadRequest());
+            restTransactionRuleMockMvc
+                .perform(post(ENTITY_CONFIGURED_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request)))
+                .andExpect(status().isBadRequest());
+        }
     }
 
     @Test
@@ -2879,6 +2882,40 @@ class TransactionRuleResourceIT {
         assertThat(response.getPriority()).isEqualTo(priority);
         assertThat(response.getCreatedAt()).isEqualTo(createdAt);
         assertThat(response.getUpdatedAt()).isAfterOrEqualTo(createdAt);
+    }
+
+    @Test
+    @Transactional
+    void updateConfiguredTransactionRuleWithoutConditionsFailsWhetherInactiveOrActiveWithoutReplacingItsConditions() throws Exception {
+        for (boolean active : List.of(false, true)) {
+            TransactionRule rule = createEntity(em);
+            rule.setName("Configured update missing conditions " + active);
+            rule.setActive(active);
+            rule = transactionRuleRepository.saveAndFlush(rule);
+            createCondition(rule);
+
+            TransactionRuleConfiguredRequestDTO request = configuredRequest(
+                null,
+                Set.of(createTagDTO(TagResourceIT.createEntity(em))),
+                List.of()
+            );
+            request.setName(rule.getName());
+            request.setActive(active);
+
+            restTransactionRuleMockMvc
+                .perform(
+                    put(ENTITY_CONFIGURED_API_URL_ID, rule.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsBytes(request))
+                )
+                .andExpect(status().isBadRequest());
+
+            restTransactionRuleMockMvc
+                .perform(get(ENTITY_CONFIGURED_API_URL_ID, rule.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(active))
+                .andExpect(jsonPath("$.conditions.length()").value(1));
+        }
     }
 
     @Test

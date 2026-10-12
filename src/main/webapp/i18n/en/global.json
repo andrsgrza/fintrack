@@ -13,6 +13,7 @@
         "financialTransaction": "Financial Transaction",
         "category": "Category",
         "tag": "Tags",
+        "rules": "Rules",
         "transactionRule": "Transaction Rule",
         "transactionRuleCondition": "Transaction Rule Condition",
         "descriptionNormalizationRule": "Description Normalization Rule",

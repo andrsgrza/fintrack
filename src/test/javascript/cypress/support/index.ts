@@ -18,3 +18,4 @@ import './commands';
 import './navbar';
 import './entity';
 import './management';
+import 'cypress-real-events';

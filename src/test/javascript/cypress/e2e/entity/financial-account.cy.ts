@@ -40,23 +40,31 @@ describe('FinancialAccount e2e test', () => {
   };
 
   const fillCreateForm = (name: string) => {
-    cy.get('[data-cy="name"]').clear().type(name);
-    cy.get('[data-cy="institutionName"]').clear().type('E2E Bank');
+    cy.get('[data-cy="name"]').clear();
+    cy.get('[data-cy="name"]').type(name);
+    cy.get('[data-cy="institutionName"]').clear();
+    cy.get('[data-cy="institutionName"]').type('E2E Bank');
     cy.get('[data-cy="accountType"]').select('DEBIT');
     cy.get('[data-cy="currency"]').select('MXN');
-    cy.get('[data-cy="initialBalance"]').clear().type('1000');
+    cy.get('[data-cy="initialBalance"]').clear();
+    cy.get('[data-cy="initialBalance"]').type('1000');
     cy.get('[data-cy="initialBalanceDate"]').type('2026-07-08');
   };
 
   const fillCreditCardForm = (name: string) => {
     fillCreateForm(name);
     cy.get('[data-cy="accountType"]').select('CREDIT_CARD');
-    cy.get('[data-cy="initialBalance"]').clear().type('1000');
+    cy.get('[data-cy="initialBalance"]').clear();
+    cy.get('[data-cy="initialBalance"]').type('1000');
     cy.get('[data-cy="initialBalanceDate"]').type('2026-07-08');
-    cy.get('[data-cy="creditCardCreditLimit"]').clear().type('5000');
-    cy.get('[data-cy="creditCardStatementDay"]').clear().type('15');
-    cy.get('[data-cy="creditCardPaymentDueDay"]').clear().type('5');
-    cy.get('[data-cy="creditCardAnnualInterestRate"]').clear().type('65');
+    cy.get('[data-cy="creditCardCreditLimit"]').clear();
+    cy.get('[data-cy="creditCardCreditLimit"]').type('5000');
+    cy.get('[data-cy="creditCardStatementDay"]').clear();
+    cy.get('[data-cy="creditCardStatementDay"]').type('15');
+    cy.get('[data-cy="creditCardPaymentDueDay"]').clear();
+    cy.get('[data-cy="creditCardPaymentDueDay"]').type('5');
+    cy.get('[data-cy="creditCardAnnualInterestRate"]').clear();
+    cy.get('[data-cy="creditCardAnnualInterestRate"]').type('65');
   };
 
   const getOverviewCard = () => cy.get(`[data-cy="financialAccountOverviewCard"][data-account-id="${financialAccount.id}"]`);
@@ -395,7 +403,7 @@ describe('FinancialAccount e2e test', () => {
 
         cy.get('[data-cy="financialTransactionClearFilters"]').click();
         cy.wait('@unfilteredTransactionList').then(({ request }) => {
-          expect(new URL(request.url).searchParams.get('accountId.equals')).to.be.null;
+          assert.isNull(new URL(request.url).searchParams.get('accountId.equals'));
         });
         cy.get('[data-cy="financialTransactionFilterAccount"]').should('have.value', '');
         cy.contains(entityTableSelector, otherAccountTransactionDescription).should('exist');
@@ -440,7 +448,8 @@ describe('FinancialAccount e2e test', () => {
     it('creates a debit account through one configured product request', () => {
       const accountName = `create-${Date.now()}`;
       fillCreateForm(accountName);
-      cy.get('[data-cy="color"]').clear().type('#9A3D81');
+      cy.get('[data-cy="color"]').clear();
+      cy.get('[data-cy="color"]').type('#9A3D81');
       cy.get('[data-cy="user"]').should('not.exist');
       cy.get(entityCreateSaveButtonSelector).click();
 
@@ -470,7 +479,8 @@ describe('FinancialAccount e2e test', () => {
       cy.get(entityEditButtonSelector).click();
       cy.get('[data-cy="accountType"]').should('be.disabled');
       cy.get('[data-cy="currency"]').should('be.disabled');
-      cy.get('[data-cy="creditCardCreditLimit"]').clear().type('6500');
+      cy.get('[data-cy="creditCardCreditLimit"]').clear();
+      cy.get('[data-cy="creditCardCreditLimit"]').type('6500');
       cy.get(entityCreateSaveButtonSelector).click();
       cy.wait('@putConfiguredRequest').then(({ request, response }) => {
         expect(response?.statusCode).to.equal(200);

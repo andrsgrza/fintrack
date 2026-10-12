@@ -83,7 +83,7 @@ const renderRoute = (path: string) =>
   );
 
 const selectAccount = async () => {
-  const account = (await screen.findByLabelText('Account')) as HTMLSelectElement;
+  const account = await screen.findByLabelText('Account');
   await waitFor(() => expect(account.options.length).toBeGreaterThan(1));
   fireEvent.change(account, { target: { value: '10' } });
   return account;
@@ -93,7 +93,7 @@ const uploadFile = () => {
   const file = new File(['transactionDate,postingDate,description,signedAmount,currency,externalReference,notes'], 'upload.csv', {
     type: 'text/csv',
   });
-  const input = screen.getByLabelText('CSV file') as HTMLInputElement;
+  const input = screen.getByLabelText('CSV file');
   fireEvent.change(input, { target: { files: [file] } });
   return input;
 };

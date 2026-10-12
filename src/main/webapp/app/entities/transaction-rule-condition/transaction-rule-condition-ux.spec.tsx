@@ -191,7 +191,7 @@ describe('TransactionRuleCondition UX', () => {
     expect(screen.getByRole('heading', { name: 'Create Transaction Rule Condition' })).toBeTruthy();
     expect(screen.getByText('Technical/debug screen')).toBeTruthy();
     expect(screen.getByText(technicalBannerText)).toBeTruthy();
-    expect((screen.getByLabelText('Transaction Rule') as HTMLSelectElement).value).toBe('1');
+    expect(screen.getByLabelText('Transaction Rule').value).toBe('1');
     expect(screen.queryByLabelText('Position')).toBeNull();
   });
 
@@ -201,7 +201,7 @@ describe('TransactionRuleCondition UX', () => {
     expect(screen.getByRole('heading', { name: 'Edit Transaction Rule Condition' })).toBeTruthy();
     expect(screen.getByText('Technical/debug screen')).toBeTruthy();
     expect(screen.getByText(technicalBannerText)).toBeTruthy();
-    expect((screen.getByLabelText('Transaction Rule') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByLabelText('Transaction Rule').disabled).toBe(true);
     expect(screen.queryByLabelText('Position')).toBeNull();
   });
 
@@ -267,7 +267,7 @@ describe('TransactionRuleCondition UX', () => {
     const operatorSelect = screen.getByLabelText('Operator');
     expect(within(operatorSelect).getByRole('option', { name: 'Before' })).toBeTruthy();
     expect(within(operatorSelect).getByRole('option', { name: 'Between' })).toBeTruthy();
-    expect((screen.getByLabelText('Value') as HTMLInputElement).type).toBe('date');
+    expect(screen.getByLabelText('Value').type).toBe('date');
   });
 
   it('filters operators for ACCOUNT and renders the active-only account selector for equals', async () => {
@@ -288,9 +288,9 @@ describe('TransactionRuleCondition UX', () => {
 
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'ORIGIN' } });
 
-    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'MANUAL' })).toBeTruthy();
-    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'FILE_IMPORT' })).toBeTruthy();
-    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'API' })).toBeTruthy();
+    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'Manual entry' })).toBeTruthy();
+    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'File import' })).toBeTruthy();
+    expect(within(screen.getByLabelText('Value')).getByRole('option', { name: 'API import' })).toBeTruthy();
   });
 
   it('renders IN and NOT_IN as text input with helper text', () => {
@@ -299,7 +299,7 @@ describe('TransactionRuleCondition UX', () => {
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'AMOUNT' } });
     fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'IN' } });
 
-    expect((screen.getByLabelText('Value') as HTMLInputElement).type).toBe('text');
+    expect(screen.getByLabelText('Value').type).toBe('text');
     expect(screen.getByText('Use comma-separated decimal values, e.g. 100.00,250.50')).toBeTruthy();
   });
 
@@ -310,8 +310,24 @@ describe('TransactionRuleCondition UX', () => {
     fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'CONTAINS' } });
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'FLOW' } });
 
-    expect((screen.getByLabelText('Operator') as HTMLSelectElement).value).toBe('EQUALS');
-    expect((screen.getByLabelText('Value') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByLabelText('Operator').value).toBe('EQUALS');
+    expect(screen.getByLabelText('Value').value).toBe('');
+    expect(document.querySelector('[data-cy="conditionValueResetNotice"]')?.textContent).toContain(
+      'The previous value is not compatible with this field or operator and was cleared.',
+    );
+  });
+
+  it('clears an enum value when changing between Flow and Origin', () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'FLOW' } });
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'OUT' } });
+    fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'ORIGIN' } });
+
+    expect(screen.getByLabelText('Value').value).toBe('');
+    expect(document.querySelector('[data-cy="conditionValueResetNotice"]')?.textContent).toContain(
+      'The previous value is not compatible with this field or operator and was cleared.',
+    );
   });
 
   it('changing away from BETWEEN hides and clears second value', () => {

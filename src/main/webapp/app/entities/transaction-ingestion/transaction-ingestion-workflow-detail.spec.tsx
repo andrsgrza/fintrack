@@ -10,6 +10,7 @@ import enIngestionStatus from 'app/../i18n/en/ingestionStatus.json';
 import enIngestionRecordStatus from 'app/../i18n/en/ingestionRecordStatus.json';
 import enCategory from 'app/../i18n/en/category.json';
 import enTag from 'app/../i18n/en/tag.json';
+import enTransactionRule from 'app/../i18n/en/transactionRule.json';
 import { TransactionIngestion } from './transaction-ingestion';
 import { TransactionIngestionWorkflowDetail } from './transaction-ingestion-workflow-detail';
 
@@ -96,6 +97,7 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enIngestionRecordStatus);
   TranslatorContext.registerTranslations('en', enCategory);
   TranslatorContext.registerTranslations('en', enTag);
+  TranslatorContext.registerTranslations('en', enTransactionRule);
   TranslatorContext.setLocale('en');
 };
 
@@ -152,7 +154,7 @@ const expectSelectedTagNames = (candidateId: number, names: string[]) => {
 };
 
 const addCandidateTag = async (candidateId: number, name: string, search = name) => {
-  const addButton = screen.getByTestId(`classificationTags-${candidateId}Add`) as HTMLButtonElement;
+  const addButton = screen.getByTestId(`classificationTags-${candidateId}Add`);
   await waitFor(() => expect(addButton.disabled).toBe(false));
   fireEvent.click(addButton);
   const picker = await screen.findByTestId(`classificationTags-${candidateId}Picker`);
@@ -972,7 +974,7 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
     renderPersistedReview();
 
-    const categorySelect = (await screen.findByTestId('classificationCategory-400')) as HTMLSelectElement;
+    const categorySelect = await screen.findByTestId('classificationCategory-400');
     const tagsSelector = screen.getByTestId('classificationTags-400');
     expect(categorySelect.value).toBe('77');
     expect(Array.from(categorySelect.options).map(option => option.textContent)).toContain('Historical salary (Inactive)');
@@ -1010,9 +1012,9 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.getByRole('button', { name: /apply all suggested descriptions/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /apply all suggested categories/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /apply all suggested tags/i })).toBeTruthy();
-    expect((screen.getByRole('button', { name: /apply all suggested descriptions/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: /apply all suggested categories/i }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole('button', { name: /apply all suggested tags/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: /apply all suggested descriptions/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /apply all suggested categories/i }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: /apply all suggested tags/i }).disabled).toBe(false);
     expect(screen.queryByRole('button', { name: /^apply all classification suggestions$/i })).toBeNull();
     expect(screen.getByTestId('workflowRowReevaluate-300')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /refresh suggestions/i })).toBeNull();
@@ -1033,10 +1035,10 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByTestId('workflowAutomationConfig');
-    expect((screen.getByTestId('workflowAutoApplyDescriptions') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByTestId('workflowAutoApplyCategories') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByTestId('workflowAutoApplyTags') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByTestId('workflowProtectManualChanges') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByTestId('workflowAutoApplyDescriptions').checked).toBe(false);
+    expect(screen.getByTestId('workflowAutoApplyCategories').checked).toBe(false);
+    expect(screen.getByTestId('workflowAutoApplyTags').checked).toBe(false);
+    expect(screen.getByTestId('workflowProtectManualChanges').checked).toBe(true);
     expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
     expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/rule-preview'))).toHaveLength(1);
   });
@@ -1282,7 +1284,7 @@ describe('TransactionIngestion file workflow', () => {
 
     await screen.findByTestId('classificationSuggestedCategory-400');
     expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Transport');
-    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+    expect(screen.getByTestId('classificationCategory-400').value).toBe('9');
   });
 
   it('applies all suggested categories without reevaluating, preserves manual selections, and retains tag suggestions', async () => {
@@ -1404,8 +1406,8 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByTestId('classificationSuggestedCategory-411');
-    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('9');
-    expect((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByTestId('classificationCategory-410').value).toBe('9');
+    expect(screen.getByTestId('classificationCategory-411').value).toBe('');
 
     const applyAllButton = screen.getByRole('button', { name: /apply all suggested categories/i });
     fireEvent.click(applyAllButton);
@@ -1423,9 +1425,9 @@ describe('TransactionIngestion file workflow', () => {
     resolveBatchApply(batchApplyResponse);
 
     await waitFor(() => expect(mockAxiosGet).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).value).toBe('7'));
+    await waitFor(() => expect(screen.getByTestId('classificationCategory-411').value).toBe('7'));
     expectSelectedTagNames(411, []);
-    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('9');
+    expect(screen.getByTestId('classificationCategory-410').value).toBe('9');
     expectSelectedTagNames(410, ['Business']);
     expect(screen.queryByTestId('classificationSuggestedCategory-411')).toBeNull();
     expect(screen.getByTestId('classificationSuggestedTags-411').textContent).toContain('Ride share');
@@ -1494,7 +1496,7 @@ describe('TransactionIngestion file workflow', () => {
       expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/apply-rules', { scope: 'TAGS' }),
     );
     await waitFor(() => expectSelectedTagNames(400, ['Business']));
-    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByTestId('classificationCategory-400').value).toBe('');
     expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Salary');
     expect(confirmImportCalls()).toHaveLength(0);
   });
@@ -1526,7 +1528,7 @@ describe('TransactionIngestion file workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply all suggested categories/i }));
 
     await screen.findByText('Could not apply all pending category or tag suggestions. Existing selections were preserved.');
-    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByTestId('classificationCategory-400').value).toBe('');
     expectSelectedTagNames(400, ['Business']);
     expect(confirmImportCalls()).toHaveLength(0);
   });
@@ -1607,19 +1609,19 @@ describe('TransactionIngestion file workflow', () => {
         protectManualChanges: true,
       }),
     );
-    await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate categories/i }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(screen.getByRole('button', { name: /reevaluate categories/i }).disabled).toBe(false));
 
     fireEvent.click(screen.getByRole('button', { name: /reevaluate categories/i }));
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', { scope: 'CATEGORY' }),
     );
-    await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate tags/i }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(screen.getByRole('button', { name: /reevaluate tags/i }).disabled).toBe(false));
 
     fireEvent.click(screen.getByRole('button', { name: /reevaluate tags/i }));
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', { scope: 'TAGS' }),
     );
-    await waitFor(() => expect((screen.getByRole('button', { name: /reevaluate all/i }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(screen.getByRole('button', { name: /reevaluate all/i }).disabled).toBe(false));
 
     fireEvent.click(screen.getByRole('button', { name: /reevaluate all/i }));
     await waitFor(() =>
@@ -1629,7 +1631,7 @@ describe('TransactionIngestion file workflow', () => {
       }),
     );
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
-    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+    expect(screen.getByTestId('classificationCategory-400').value).toBe('9');
     expectSelectedTagNames(400, ['Business']);
     expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
     expect(confirmImportCalls()).toHaveLength(0);
@@ -1756,7 +1758,7 @@ describe('TransactionIngestion file workflow', () => {
     await waitFor(() =>
       expect(screen.getByTestId('descriptionReview-reevaluationSuggestion-300').textContent).toContain('Salary normalized'),
     );
-    expect((screen.getByTestId('workflowApplyAllDescriptionSuggestions') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('workflowApplyAllDescriptionSuggestions').disabled).toBe(true);
     expect(within(rowForRecord(300)).getAllByText('Manual salary').length).toBeGreaterThan(0);
     expect(mockAxiosPost.mock.calls.filter(([url]) => url.includes('/candidates/apply-rules'))).toHaveLength(0);
     expect(confirmImportCalls()).toHaveLength(0);
@@ -1808,8 +1810,8 @@ describe('TransactionIngestion file workflow', () => {
     await screen.findByTestId('classificationSuggestedCategory-400');
     expect(screen.queryByTestId('classificationApplySuggestedCategory-400')).toBeNull();
     expect(screen.queryByTestId('classificationApplySuggestedTags-400')).toBeNull();
-    expect((screen.getByTestId('workflowApplyAllSuggestedCategories') as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByTestId('workflowApplyAllSuggestedTags') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('workflowApplyAllSuggestedCategories').disabled).toBe(true);
+    expect(screen.getByTestId('workflowApplyAllSuggestedTags').disabled).toBe(true);
     expect(screen.getByTestId('classificationSuggestionCount').textContent).toBe('0');
 
     mockAxiosPost.mockClear();
@@ -1829,7 +1831,7 @@ describe('TransactionIngestion file workflow', () => {
     );
     expect(screen.queryByTestId('descriptionReview-reevaluationSuggestion-300')).toBeNull();
     expect(screen.queryByTestId('workflowApplyDescriptionSuggestion-300')).toBeNull();
-    expect((screen.getByTestId('workflowApplyAllDescriptionSuggestions') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('workflowApplyAllDescriptionSuggestions').disabled).toBe(true);
   });
 
   it('explicitly applies one suggested description without applying classification or confirming import', async () => {
@@ -1914,7 +1916,7 @@ describe('TransactionIngestion file workflow', () => {
     );
     await screen.findByTestId('descriptionReview-badge-300');
     expect(within(rowForRecord(300)).getAllByText('UBER').length).toBeGreaterThan(0);
-    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9');
+    expect(screen.getByTestId('classificationCategory-400').value).toBe('9');
     expectSelectedTagNames(400, ['Business']);
     expect(screen.getByTestId('classificationSuggestedCategory-400')).toBeTruthy();
     expect(screen.getByTestId('classificationSuggestedTags-400')).toBeTruthy();
@@ -1995,7 +1997,7 @@ describe('TransactionIngestion file workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /reevaluate descriptions/i }));
 
     await screen.findByTestId('workflowApplyAllDescriptionSuggestions');
-    expect((screen.getByTestId('workflowApplyAllDescriptionSuggestions') as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId('workflowApplyAllDescriptionSuggestions').disabled).toBe(false);
     mockAxiosPost.mockResolvedValueOnce({
       data: {
         transactionIngestionId: 100,
@@ -2103,13 +2105,13 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Salary');
     expect(screen.getByTestId('classificationSuggestedTags-400').textContent).toContain('Business');
     expect(screen.getByTestId('classificationMatchedRules-400').textContent).toContain('Salary rule');
-    expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByTestId('classificationCategory-400').value).toBe('');
 
     fireEvent.change(screen.getByTestId('classificationCategory-400'), { target: { value: '9' } });
     await waitFor(() =>
       expect(mockAxiosPatch).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/400/classification', { categoryId: 9 }),
     );
-    await waitFor(() => expect((screen.getByTestId('classificationCategory-400') as HTMLSelectElement).value).toBe('9'));
+    await waitFor(() => expect(screen.getByTestId('classificationCategory-400').value).toBe('9'));
     await waitFor(() => expectSelectedTagNames(400, ['Ride share', 'Cash']));
     expect(screen.getByTestId('classificationSuggestedTags-400').textContent).toContain('Business');
     expect(screen.getByTestId('classificationTags-400').querySelector('select[multiple]')).toBeNull();
@@ -2264,20 +2266,21 @@ describe('TransactionIngestion file workflow', () => {
 
     await screen.findByTestId('classificationSuggestedCategory-410');
     expect(screen.getByTestId('classificationSuggestedCategory-410').textContent).toContain('Transport');
-    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByTestId('classificationCategory-410').value).toBe('');
     expect(
-      within(screen.getByTestId('classificationCategory-410').closest('td')!).getByTestId('classificationApplySuggestedCategory-410'),
+      within(screen.getByTestId('classificationCategory-410').closest('td')).getByTestId('classificationApplySuggestedCategory-410'),
     ).toBeTruthy();
     expect(
-      within(screen.getByTestId('classificationTags-410').closest('td')!).getByTestId('classificationApplySuggestedTags-410'),
+      within(screen.getByTestId('classificationTags-410').closest('td')).getByTestId('classificationApplySuggestedTags-410'),
     ).toBeTruthy();
     expect(screen.queryByTestId('classificationApply-410')).toBeNull();
     expect(screen.queryByTestId('classificationSuggestedCategory-411')).toBeNull();
     expect(screen.queryByTestId('classificationMatchedRules-411')).toBeNull();
-    expect((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).value).toBe('');
-    expect(
-      Array.from((screen.getByTestId('classificationCategory-411') as HTMLSelectElement).options).map(option => option.textContent),
-    ).toEqual(['No category', 'Salary']);
+    expect(screen.getByTestId('classificationCategory-411').value).toBe('');
+    expect(Array.from(screen.getByTestId('classificationCategory-411').options).map(option => option.textContent)).toEqual([
+      'No category',
+      'Salary',
+    ]);
 
     mockAxiosPost.mockResolvedValueOnce({
       data: {
@@ -2308,7 +2311,7 @@ describe('TransactionIngestion file workflow', () => {
         scope: 'CATEGORY',
       }),
     );
-    expect((screen.getByTestId('classificationCategory-410') as HTMLSelectElement).value).toBe('7');
+    expect(screen.getByTestId('classificationCategory-410').value).toBe('7');
     expect(screen.getByTestId('classificationSuggestedTags-410').textContent).toContain('Ride share');
 
     mockAxiosPost.mockResolvedValueOnce({
@@ -2397,7 +2400,7 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce(classificationPreviewResponse);
     renderPersistedReview();
 
-    expect(((await screen.findByTestId('classificationCategory-400')) as HTMLSelectElement).value).toBe('9');
+    expect((await screen.findByTestId('classificationCategory-400')).value).toBe('9');
     expectSelectedTagNames(400, ['Business']);
   });
 
@@ -2455,7 +2458,7 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect(await screen.findByText('Review every valid row before confirming import.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: /confirm import/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /confirm import/i }).disabled).toBe(true);
     expect(screen.getByTestId('classificationStatus-420').textContent).toContain('Not evaluated');
     expect(screen.getByTestId('classificationStatus-421').textContent).toContain('Stale');
   });
@@ -2655,7 +2658,7 @@ describe('TransactionIngestion file workflow', () => {
     expect(mockAxiosPatch).not.toHaveBeenCalled();
   });
 
-  it('renders global contextual rule actions and opens a normalization editor without navigating away from the persisted review', async () => {
+  it('renders global contextual rule actions and opens both scratch editors without navigating away from the persisted review', async () => {
     const readyResponse = withCandidates(
       {
         data: {
@@ -2675,10 +2678,15 @@ describe('TransactionIngestion file workflow', () => {
     );
     renderPersistedReview();
 
-    expect(await screen.findByRole('button', { name: /new transaction rule/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /new normalization rule/i }));
-    expect((await screen.findAllByText('New normalization rule')).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('button', { name: /new classification rule/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /new description rule/i }));
+    expect((await screen.findAllByText('New Description Rule')).length).toBeGreaterThan(0);
     expect(screen.getByTestId('transactionIngestionRuleCreationModal')).toBeTruthy();
+    expect(screen.getByTestId('contextualNormalizationRuleExplanation')).toBeTruthy();
+    fireEvent.click(within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new classification rule/i }));
+    expect((await screen.findAllByText('New Classification Rule')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('contextualTransactionRuleExplanation')).toBeTruthy();
     expect(window.location.pathname).toBe('/');
   });
 
@@ -2720,8 +2728,9 @@ describe('TransactionIngestion file workflow', () => {
     fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateNormalization-300'));
 
-    expect((screen.getByTestId('contextualDescriptionRuleResult') as HTMLInputElement).value).toBe('Uber');
-    expect((screen.getByTestId('contextualDescriptionRuleConditionValue-0') as HTMLInputElement).value).toBe('UBER *TRIP 123');
+    expect(screen.getByTestId('contextualRuleSelectedRow').textContent).toContain('Selected row #1');
+    expect(screen.getByTestId('contextualDescriptionRuleResult').value).toBe('Uber');
+    expect(screen.getByTestId('contextualDescriptionRuleConditionValue-0').value).toBe('UBER *TRIP 123');
 
     fireEvent.click(within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', { name: /^save$/i }));
 
@@ -2729,7 +2738,7 @@ describe('TransactionIngestion file workflow', () => {
       expect(mockAxiosPost).toHaveBeenCalledWith(
         'api/description-normalization-rules/configured',
         expect.objectContaining({
-          active: false,
+          active: true,
           resultingDescription: 'Uber',
           conditions: [expect.objectContaining({ operator: 'CONTAINS', value: 'UBER *TRIP 123', position: 0 })],
         }),
@@ -2770,19 +2779,20 @@ describe('TransactionIngestion file workflow', () => {
     const workflowRow = await screen.findByTestId('workflowRow-300');
     fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
-    await screen.findByRole('option', { name: 'Transport' });
-    await screen.findByRole('option', { name: 'Ride share' });
+    expect(screen.getByTestId('contextualRuleSelectedRow').textContent).toContain('Selected row #1');
+    await waitFor(() => expect(screen.getByTestId('transactionRuleCategoryIdentity').textContent).toContain('Transport'));
+    await waitFor(() => expect(screen.getByTestId('transactionRuleResultTagsChip').textContent).toContain('Ride share'));
+    const reevaluateButton = within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', {
+      name: /save and reevaluate this row/i,
+    });
+    await waitFor(() => expect(reevaluateButton.disabled).toBe(false));
+    fireEvent.click(reevaluateButton);
 
-    expect((screen.getByTestId('contextualTransactionRuleCategory') as HTMLSelectElement).value).toBe('7');
-    expect((screen.getByTestId('contextualTransactionRuleTags') as HTMLSelectElement).value).toBe('3');
-    fireEvent.click(
-      within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', {
-        name: /save and reevaluate this row/i,
-      }),
-    );
-
+    let configuredCall: [string, { conditions?: unknown[] }] | undefined;
     await waitFor(() => {
-      const configuredCall = mockAxiosPost.mock.calls.find(([url]) => url === 'api/transaction-rules/configured');
+      configuredCall = mockAxiosPost.mock.calls.find(([url]) => url === 'api/transaction-rules/configured') as
+        | [string, { conditions?: unknown[] }]
+        | undefined;
       expect(configuredCall).toBeDefined();
       expect(configuredCall?.[1]).toEqual(
         expect.objectContaining({
@@ -2795,6 +2805,7 @@ describe('TransactionIngestion file workflow', () => {
         }),
       );
     });
+    expect(configuredCall?.[1].conditions).not.toEqual(expect.arrayContaining([expect.objectContaining({ field: 'ACCOUNT' })]));
     expect(
       mockAxiosPost.mock.calls.some(
         ([url, payload]) =>
@@ -2804,5 +2815,164 @@ describe('TransactionIngestion file workflow', () => {
       ),
     ).toBe(true);
     expect(mockAxiosPatch).not.toHaveBeenCalled();
+  });
+
+  it('creates a scratch normalization rule and reevaluates only applicable rows in the current ingestion', async () => {
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [persistedReviewResponse.data.rows[0]],
+        },
+      },
+      { 300: { id: 400, description: 'Salary', flow: 'IN' } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation((url: string) => {
+      if (url === 'api/transaction-ingestions/100/candidates/rule-preview') {
+        return Promise.resolve(classificationPreviewResponse);
+      }
+      if (url === 'api/description-normalization-rules/configured') {
+        return Promise.resolve({ data: { id: 901, name: 'Normalize salary', active: false } });
+      }
+      if (url === 'api/transaction-ingestions/100/descriptions/reevaluate') {
+        return Promise.resolve({ data: { transactionIngestionId: 100, rows: [{ ingestionRecordId: 300, action: 'NO_MATCH' }] } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPersistedReview();
+
+    fireEvent.click(await screen.findByRole('button', { name: /new description rule/i }));
+    const modal = await screen.findByTestId('transactionIngestionRuleCreationModal');
+    expect(within(modal).getByTestId('contextualNormalizationRuleExplanation').textContent).toContain('original file description');
+    fireEvent.change(within(modal).getByLabelText('Name'), { target: { value: 'Normalize salary' } });
+    fireEvent.change(within(modal).getByLabelText('Resulting description'), { target: { value: 'Salary' } });
+    fireEvent.click(within(modal).getByRole('button', { name: /add condition/i }));
+    fireEvent.change(within(modal).getByTestId('contextualDescriptionRuleConditionValue-0'), { target: { value: 'SALARY' } });
+    expect(within(modal).getByTestId('active')).toHaveProperty('checked', true);
+    fireEvent.click(within(modal).getByRole('button', { name: /save and reevaluate all applicable rows/i }));
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        'api/description-normalization-rules/configured',
+        expect.objectContaining({ name: 'Normalize salary', active: true }),
+      ),
+    );
+    expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/descriptions/reevaluate', {
+      apply: false,
+      protectManualChanges: true,
+    });
+    expect((await screen.findByTestId('workflowRuleCreationFeedback')).textContent).toContain(
+      'applicable rows in this import were reevaluated',
+    );
+  });
+
+  it('does not invent an original description when a selected normalization-rule row is stale', async () => {
+    const row = { ...persistedReviewResponse.data.rows[0], description: 'Normalized value', descriptionReview: null };
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [row],
+        },
+      },
+      { 300: { id: 400, description: 'Normalized value', flow: 'IN' } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation((url: string) =>
+      url === 'api/transaction-ingestions/100/candidates/rule-preview'
+        ? Promise.resolve(classificationPreviewResponse)
+        : Promise.resolve({ data: {} }),
+    );
+    renderPersistedReview();
+
+    const workflowRow = await screen.findByTestId('workflowRow-300');
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    fireEvent.click(await screen.findByTestId('workflowRowCreateNormalization-300'));
+
+    expect(await screen.findByTestId('contextualRuleSourceUnavailable')).toBeTruthy();
+    expect(screen.queryByTestId('descriptionNormalizationRuleContextualForm')).toBeNull();
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/description-normalization-rules/configured')).toHaveLength(0);
+  });
+
+  it('blocks an inactive row output from becoming a new transaction-rule result', async () => {
+    const row = { ...persistedReviewResponse.data.rows[0], description: 'Taxi', flow: 'OUT' };
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [row],
+        },
+      },
+      { 300: { id: 400, description: 'Taxi', flow: 'OUT', categoryId: 7, categoryName: 'Former transport' } },
+    );
+    mockGetSelectableCategories.mockResolvedValue([
+      { id: 7, name: 'Former transport', categoryType: 'EXPENSE', active: false },
+      { id: 8, name: 'Restaurants', categoryType: 'EXPENSE', active: true },
+    ]);
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation((url: string) =>
+      url === 'api/transaction-ingestions/100/candidates/rule-preview'
+        ? Promise.resolve(classificationPreviewResponse)
+        : Promise.resolve({ data: {} }),
+    );
+    renderPersistedReview();
+
+    const workflowRow = await screen.findByTestId('workflowRow-300');
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
+
+    const modal = screen.getByTestId('transactionIngestionRuleCreationModal');
+    await waitFor(() => expect(within(modal).getByRole('button', { name: /^save$/i }).disabled).toBe(false));
+    const saveButton = within(modal).getByRole('button', { name: /^save$/i });
+    fireEvent.click(saveButton);
+    expect(await screen.findByText(/inactive category or tag cannot be used/i)).toBeTruthy();
+  });
+
+  it('reports reevaluation failure after saving a contextual rule without creating it twice', async () => {
+    const row = { ...persistedReviewResponse.data.rows[0], description: 'Taxi', flow: 'OUT' };
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [row],
+        },
+      },
+      { 300: { id: 400, description: 'Taxi', flow: 'OUT', categoryId: 7, categoryName: 'Transport' } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockImplementation((url: string, payload?: { candidateIds?: number[] }) => {
+      if (url === 'api/transaction-ingestions/100/candidates/rule-preview') {
+        return payload?.candidateIds?.length ? Promise.reject(new Error('preview failed')) : Promise.resolve(classificationPreviewResponse);
+      }
+      if (url === 'api/transaction-rules/configured') {
+        return Promise.resolve({ data: { id: 902, name: 'Rule for Taxi' } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPersistedReview();
+
+    const workflowRow = await screen.findByTestId('workflowRow-300');
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
+    await waitFor(() => expect(screen.getByTestId('transactionRuleCategoryIdentity').textContent).toContain('Transport'));
+    const reevaluateButton = within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', {
+      name: /save and reevaluate this row/i,
+    });
+    await waitFor(() => expect(reevaluateButton.disabled).toBe(false));
+    fireEvent.click(reevaluateButton);
+
+    await waitFor(() => expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-rules/configured')).toHaveLength(1));
+    expect((await screen.findByTestId('workflowRuleCreationFeedback')).textContent).toContain(
+      'Rule saved, but reevaluation could not be completed.',
+    );
   });
 });

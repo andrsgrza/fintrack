@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePopper } from 'react-popper';
-import { Badge, Button } from 'reactstrap';
+import { Badge, Button, FormGroup, FormText, Input, Label } from 'reactstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCircleInfo } from '@fortawesome/free-solid-svg-icons';
 
@@ -109,5 +109,64 @@ export const CompactProductStatusControl = ({
       onChange={event => onActiveChange(event.target.checked)}
     />
     <ProductStatusHelp id={`${id}-help`} label={label} help={help} dataCyPrefix={dataCyPrefix} />
+  </div>
+);
+
+type ProductStatusToggleProps = {
+  id: string;
+  name: string;
+  active: boolean;
+  onActiveChange: (active: boolean) => void;
+  label: React.ReactNode;
+  help: React.ReactNode;
+  activeLabel: string;
+  inactiveLabel: string;
+  dataCyPrefix: string;
+  disabled?: boolean;
+};
+
+/**
+ * Full-width status control for product editors. It keeps the switch label and
+ * explanatory text in separate groups so the state remains easy to scan in
+ * both page and modal compositions.
+ */
+export const ProductStatusToggle = ({
+  id,
+  name,
+  active,
+  onActiveChange,
+  label,
+  help,
+  activeLabel,
+  inactiveLabel,
+  dataCyPrefix,
+  disabled = false,
+}: ProductStatusToggleProps) => (
+  <div data-cy={`${dataCyPrefix}StatusControl`} data-testid={`${dataCyPrefix}StatusControl`}>
+    <div className="d-flex flex-wrap align-items-center gap-2">
+      <FormGroup check className="form-switch mb-0">
+        <Input
+          id={id}
+          name={name}
+          data-cy="active"
+          data-testid="active"
+          type="checkbox"
+          role="switch"
+          checked={active}
+          disabled={disabled}
+          aria-checked={active}
+          onChange={event => onActiveChange(event.target.checked)}
+        />
+        <Label check for={id}>
+          {label}
+        </Label>
+      </FormGroup>
+      <Badge color={active ? 'success' : 'secondary'} pill data-cy={`${dataCyPrefix}StatusValue`}>
+        {active ? activeLabel : inactiveLabel}
+      </Badge>
+    </div>
+    <FormText className="d-block mt-2" data-cy={`${dataCyPrefix}StatusHelp`} data-testid={`${dataCyPrefix}StatusHelp`}>
+      {help}
+    </FormText>
   </div>
 );

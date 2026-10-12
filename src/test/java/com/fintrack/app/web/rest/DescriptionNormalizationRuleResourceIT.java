@@ -2,6 +2,7 @@ package com.fintrack.app.web.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -17,12 +18,14 @@ import com.fintrack.app.domain.enumeration.DescriptionNormalizationRuleOperator;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.repository.DescriptionNormalizationRuleConditionRepository;
 import com.fintrack.app.repository.DescriptionNormalizationRuleRepository;
+import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.dto.DescriptionNormalizationRuleDTO;
 import com.fintrack.app.service.dto.DescriptionNormalizationRuleReorderRequestDTO;
 import com.fintrack.app.service.mapper.DescriptionNormalizationRuleMapper;
 import com.fintrack.app.service.rules.DescriptionNormalizationRuleEvaluationService;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 @IntegrationTest
@@ -128,6 +132,206 @@ class DescriptionNormalizationRuleResourceIT {
 
         assertThat(ruleRepository.count()).isEqualTo(rulesBefore);
         assertThat(conditionRepository.count()).isZero();
+    }
+
+    @Test
+    @Transactional
+    void configuredCreateRejectsMissingConditionsForActiveAndInactiveRules() throws Exception {
+        long rulesBefore = ruleRepository.count();
+        for (boolean active : List.of(false, true)) {
+            Map<String, Object> request = configuredRequest("Missing conditions " + active, null, active, "ALL", "Normalized", List.of());
+
+            mockMvc
+                .perform(
+                    post(ENTITY_API_URL + "/configured").contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request))
+                )
+                .andExpect(status().isBadRequest());
+        }
+
+        assertThat(ruleRepository.count()).isEqualTo(rulesBefore);
+        assertThat(conditionRepository.count()).isZero();
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateReplacesTheCompleteConditionSetPreservesOwnerAndPriorityAndEvaluatesTheNewRule() throws Exception {
+        DescriptionNormalizationRule persisted = persistRule("Normalize ride", 7);
+        Instant createdAt = persisted.getCreatedAt();
+        Long ownerId = persisted.getUser().getId();
+        createCondition(persisted, 0).setValue("old merchant");
+        conditionRepository.flush();
+
+        Map<String, Object> request = configuredRequest(
+            "Normalize ride updated",
+            "Changed as one configured aggregate",
+            true,
+            "ANY",
+            "Ride share",
+            List.of(configuredCondition("STARTS_WITH", "LYFT", false), configuredCondition("REGEX", "UBER\\s+TRIP", false))
+        );
+
+        mockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", persisted.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(request))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Normalize ride updated"))
+            .andExpect(jsonPath("$.active").value(true))
+            .andExpect(jsonPath("$.priority").value(7))
+            .andExpect(jsonPath("$.conditions.length()").value(2))
+            .andExpect(jsonPath("$.conditions[0].operator").value("STARTS_WITH"))
+            .andExpect(jsonPath("$.conditions[1].operator").value("REGEX"));
+
+        mockMvc
+            .perform(get(ENTITY_API_URL + "/{id}/configured", persisted.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.priority").value(7))
+            .andExpect(jsonPath("$.conditions[0].value").value("LYFT"))
+            .andExpect(jsonPath("$.conditions[1].value").value("UBER\\s+TRIP"));
+
+        em.flush();
+        em.clear();
+        DescriptionNormalizationRule updated = ruleRepository.findById(persisted.getId()).orElseThrow();
+        assertThat(updated.getUser().getId()).isEqualTo(ownerId);
+        assertThat(updated.getPriority()).isEqualTo(7);
+        assertThat(updated.getCreatedAt()).isEqualTo(createdAt);
+        assertThat(conditionRepository.findByDescriptionNormalizationRuleIdOrderByPositionAscIdAsc(updated.getId()))
+            .extracting(DescriptionNormalizationRuleCondition::getValue)
+            .containsExactly("LYFT", "UBER\\s+TRIP");
+        assertThat(evaluationService.evaluate("user", "lyft trip").resultingDescription()).isEqualTo("Ride share");
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateValidatesBeforeReplacingConditions() throws Exception {
+        DescriptionNormalizationRule persisted = persistRule("Normalize merchant", 3);
+        createCondition(persisted, 0).setValue("original value");
+        conditionRepository.flush();
+
+        Map<String, Object> invalidRequest = configuredRequest(
+            "A changed name which must not persist",
+            null,
+            true,
+            "ALL",
+            "Updated",
+            List.of(configuredCondition("CONTAINS", " ", false))
+        );
+        mockMvc
+            .perform(
+                put(ENTITY_API_URL + "/{id}/configured", persisted.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(om.writeValueAsBytes(invalidRequest))
+            )
+            .andExpect(status().isBadRequest());
+
+        mockMvc
+            .perform(put(ENTITY_API_URL + "/{id}/configured", persisted.getId()).contentType(MediaType.APPLICATION_JSON).content("null"))
+            .andExpect(status().isBadRequest());
+
+        em.clear();
+        assertThat(conditionRepository.findByDescriptionNormalizationRuleIdOrderByPositionAscIdAsc(persisted.getId()))
+            .extracting(DescriptionNormalizationRuleCondition::getValue)
+            .containsExactly("original value");
+        assertThat(ruleRepository.findById(persisted.getId()).orElseThrow().getName()).isEqualTo("Normalize merchant");
+    }
+
+    @Test
+    @Transactional
+    void repeatedConfiguredUpdatesDoNotAccumulateConditions() throws Exception {
+        DescriptionNormalizationRule persisted = persistRule("Normalize merchant", 3);
+        createCondition(persisted, 0).setValue("original value");
+        conditionRepository.flush();
+
+        Map<String, Object> firstValidRequest = configuredRequest(
+            "Normalize merchant",
+            null,
+            false,
+            "ALL",
+            "Merchant",
+            List.of(configuredCondition("CONTAINS", "one", false), configuredCondition("ENDS_WITH", "two", true))
+        );
+        putConfigured(persisted.getId(), firstValidRequest).andExpect(status().isOk());
+        Map<String, Object> secondValidRequest = configuredRequest(
+            "Normalize merchant",
+            null,
+            false,
+            "ANY",
+            "Merchant",
+            List.of(configuredCondition("EXACT", "only final condition", false))
+        );
+        putConfigured(persisted.getId(), secondValidRequest).andExpect(status().isOk());
+
+        em.flush();
+        em.clear();
+        assertThat(conditionRepository.findByDescriptionNormalizationRuleIdOrderByPositionAscIdAsc(persisted.getId()))
+            .extracting(DescriptionNormalizationRuleCondition::getValue)
+            .containsExactly("only final condition");
+    }
+
+    @Test
+    @Transactional
+    void configuredUpdateRejectsMissingConditionsForInactiveAndActiveRules() throws Exception {
+        DescriptionNormalizationRule persisted = persistRule("Inactive configurable", 0);
+        Map<String, Object> inactiveRequest = configuredRequest("Inactive configurable", null, false, "ALL", "Normalized", List.of());
+
+        putConfigured(persisted.getId(), inactiveRequest).andExpect(status().isBadRequest());
+
+        Map<String, Object> invalidActiveRequest = configuredRequest("Inactive configurable", null, true, "ALL", "Normalized", List.of());
+        putConfigured(persisted.getId(), invalidActiveRequest).andExpect(status().isBadRequest());
+
+        em.clear();
+        assertThat(ruleRepository.findById(persisted.getId()).orElseThrow().getActive()).isFalse();
+        assertThat(conditionRepository.countByDescriptionNormalizationRuleId(persisted.getId())).isZero();
+    }
+
+    @Test
+    @Transactional
+    void configuredEndpointsAreOwnerScopedAndReturnMissingRulesAsNotFound() throws Exception {
+        DescriptionNormalizationRule foreign = rule("Foreign configured", 0);
+        foreign.setUser(createOtherUser());
+        foreign = ruleRepository.saveAndFlush(foreign);
+        createCondition(foreign, 0).setValue("foreign value");
+        conditionRepository.flush();
+
+        Map<String, Object> request = configuredRequest(
+            "Attempted update",
+            null,
+            true,
+            "ALL",
+            "Nope",
+            List.of(configuredCondition("CONTAINS", "new", false))
+        );
+        putConfigured(foreign.getId(), request).andExpect(status().isBadRequest());
+        mockMvc.perform(get(ENTITY_API_URL + "/{id}/configured", foreign.getId())).andExpect(status().isNotFound());
+        putConfigured(Long.MAX_VALUE, request).andExpect(status().isBadRequest());
+
+        assertThat(conditionRepository.findByDescriptionNormalizationRuleIdOrderByPositionAscIdAsc(foreign.getId()))
+            .extracting(DescriptionNormalizationRuleCondition::getValue)
+            .containsExactly("foreign value");
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(authorities = AuthoritiesConstants.ADMIN)
+    void configuredUpdateAllowsTheExistingAdminAccessPolicyWithoutChangingForeignOwnership() throws Exception {
+        DescriptionNormalizationRule foreign = rule("Foreign configured", 4);
+        User otherUser = createOtherUser();
+        foreign.setUser(otherUser);
+        foreign = ruleRepository.saveAndFlush(foreign);
+        createCondition(foreign, 0);
+
+        putConfigured(
+            foreign.getId(),
+            configuredRequest("Admin updated", null, true, "ALL", "Updated", List.of(configuredCondition("CONTAINS", "admin", false)))
+        )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.priority").value(4));
+
+        em.flush();
+        em.clear();
+        assertThat(ruleRepository.findById(foreign.getId()).orElseThrow().getUser().getId()).isEqualTo(otherUser.getId());
     }
 
     @Test
@@ -295,6 +499,34 @@ class DescriptionNormalizationRuleResourceIT {
         DescriptionNormalizationRuleCondition persisted = conditionRepository.saveAndFlush(condition);
         rule.getConditions().add(persisted);
         return persisted;
+    }
+
+    private ResultActions putConfigured(Long id, Map<String, Object> request) throws Exception {
+        return mockMvc.perform(
+            put(ENTITY_API_URL + "/{id}/configured", id).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request))
+        );
+    }
+
+    private Map<String, Object> configuredRequest(
+        String name,
+        String description,
+        boolean active,
+        String conditionOperator,
+        String resultingDescription,
+        List<Map<String, Object>> conditions
+    ) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("name", name);
+        request.put("description", description);
+        request.put("active", active);
+        request.put("conditionOperator", conditionOperator);
+        request.put("resultingDescription", resultingDescription);
+        request.put("conditions", conditions);
+        return request;
+    }
+
+    private Map<String, Object> configuredCondition(String operator, String value, boolean caseSensitive) {
+        return Map.of("operator", operator, "value", value, "caseSensitive", caseSensitive);
     }
 
     private static User currentUser(EntityManager em) {

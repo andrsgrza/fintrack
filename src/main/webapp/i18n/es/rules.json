@@ -1,0 +1,25 @@
+{
+  "fintrackApp": {
+    "rules": {
+      "title": "Reglas",
+      "subtitle": "Automatiza cómo se normalizan y clasifican tus movimientos.",
+      "back": "Volver a reglas",
+      "description": {
+        "title": "Reglas de descripción",
+        "summary": "Estandariza las descripciones originales de los archivos importados antes de clasificarlos.",
+        "original": "Evalúan la descripción original de los archivos importados.",
+        "priority": "Las reglas activas se evalúan por prioridad.",
+        "firstMatch": "La primera coincidencia determina la descripción normalizada.",
+        "action": "Administrar reglas de descripción"
+      },
+      "classification": {
+        "title": "Reglas de clasificación",
+        "summary": "Asigna sugerencias de categorías y etiquetas según los datos de tus movimientos.",
+        "attributes": "Evalúan atributos de tus movimientos en flujos compatibles de importación y captura manual.",
+        "categoryPriority": "Varias reglas pueden coincidir; la prioridad decide qué categoría tiene precedencia.",
+        "tags": "Las etiquetas de las reglas coincidentes pueden acumularse.",
+        "action": "Administrar reglas de clasificación"
+      }
+    }
+  }
+}

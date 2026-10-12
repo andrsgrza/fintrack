@@ -16,6 +16,8 @@ import {
   getAllowedOperators,
   getSecondValueInputKind,
   getValueInputKind,
+  isDateField,
+  isTextField,
   requiresSecondValue,
   supportsCaseSensitive as fieldSupportsCaseSensitive,
 } from '../transaction-rule-condition-form-helpers';
@@ -101,6 +103,7 @@ export const TransactionRuleConditionFormSection = ({
   const [value, setValue] = useState('');
   const [secondValue, setSecondValue] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
+  const [inputResetNotice, setInputResetNotice] = useState<string | null>(null);
   const [selectedTransactionRuleId, setSelectedTransactionRuleId] = useState<string | number | undefined>(
     fixedTransactionRuleId ?? initialCondition?.transactionRule?.id ?? requestedTransactionRuleId ?? undefined,
   );
@@ -117,6 +120,7 @@ export const TransactionRuleConditionFormSection = ({
     setValue(initialCondition?.value ?? '');
     setSecondValue(initialCondition?.secondValue ?? '');
     setCaseSensitive(Boolean(initialCondition?.caseSensitive));
+    setInputResetNotice(null);
     setSelectedTransactionRuleId(
       fixedTransactionRuleId ?? initialCondition?.transactionRule?.id ?? requestedTransactionRuleId ?? undefined,
     );
@@ -155,24 +159,29 @@ export const TransactionRuleConditionFormSection = ({
     return undefined;
   }, [selectedField, value]);
 
-  const resetConditionValues = (nextField: TransactionRuleField, nextOperator: RuleOperator) => {
-    setValue('');
-    setSecondValue('');
-    if (!fieldSupportsCaseSensitive(nextField)) {
-      setCaseSensitive(false);
-    }
-    if (!requiresSecondValue(nextOperator)) {
-      setSecondValue('');
-    }
-  };
-
   const handleFieldChange = event => {
     const nextField = event.target.value as TransactionRuleField;
     const nextAllowedOperators = getAllowedOperators(nextField);
     const nextOperator = nextAllowedOperators.includes(selectedOperator) ? selectedOperator : nextAllowedOperators[0];
+    const currentInputKind = getValueInputKind(selectedField, selectedOperator);
+    const nextInputKind = getValueInputKind(nextField, nextOperator);
+    const canPreserveValue =
+      currentInputKind === nextInputKind &&
+      nextOperator === selectedOperator &&
+      (selectedField === nextField ||
+        (isTextField(selectedField) && isTextField(nextField)) ||
+        (isDateField(selectedField) && isDateField(nextField)));
+    const requiresValueReset = !canPreserveValue;
     setSelectedField(nextField);
     setSelectedOperator(nextOperator);
-    resetConditionValues(nextField, nextOperator);
+    if (requiresValueReset) {
+      setValue('');
+      setInputResetNotice(translate('fintrackApp.transactionRuleCondition.form.valueReset'));
+    } else {
+      setInputResetNotice(null);
+    }
+    if (!requiresSecondValue(nextOperator)) setSecondValue('');
+    if (!fieldSupportsCaseSensitive(nextField)) setCaseSensitive(false);
   };
 
   const handleOperatorChange = event => {
@@ -185,6 +194,9 @@ export const TransactionRuleConditionFormSection = ({
     }
     if (currentInputKind !== nextInputKind) {
       setValue('');
+      setInputResetNotice(translate('fintrackApp.transactionRuleCondition.form.valueReset'));
+    } else {
+      setInputResetNotice(null);
     }
     if (!fieldSupportsCaseSensitive(selectedField)) {
       setCaseSensitive(false);
@@ -314,6 +326,11 @@ export const TransactionRuleConditionFormSection = ({
             </option>
           ))}
         </ValidatedField>
+      ) : null}
+      {inputResetNotice ? (
+        <FormText className="d-block" data-cy="conditionValueResetNotice">
+          {inputResetNotice}
+        </FormText>
       ) : null}
       {valueInputKind === 'text' || valueInputKind === 'number' || valueInputKind === 'date' ? (
         <>

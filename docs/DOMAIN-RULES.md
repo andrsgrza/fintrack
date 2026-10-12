@@ -861,7 +861,7 @@ Suggested copy: _"This will delete this rule condition. The rule itself will not
 
 ### UX — smart condition form
 
-The standalone TransactionRuleCondition create/edit form and embedded TransactionRule detail condition editor are no longer raw generated enum forms. They guide the user toward combinations accepted by the backend:
+The standalone TransactionRuleCondition create/edit form and the configured TransactionRule editor are no longer raw generated enum forms. They guide the user toward combinations accepted by the backend:
 
 | Field type                          | UI behavior                                                                                                                                                                                     | Status   |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -874,7 +874,7 @@ The standalone TransactionRuleCondition create/edit form and embedded Transactio
 | `secondValue`                       | Visible only for `BETWEEN`; hidden operators submit/clear it as `null`                                                                                                                          | **Done** |
 | `caseSensitive`                     | Visible only for text fields; hidden fields submit `false`                                                                                                                                      | **Done** |
 | Field/operator changes              | Incompatible operator/value/secondValue are cleared or reset client-side                                                                                                                        | **Done** |
-| Embedded table display              | TransactionRule detail shows a normalized condition summary; raw `value`, `secondValue`, and `caseSensitive` are not separate embedded table columns                                            | **Done** |
+| Product detail display              | TransactionRule detail renders the complete configured condition set as normalized typed summaries; it has no child-condition write controls or raw value columns                               | **Done** |
 
 ### Out of scope
 
@@ -978,7 +978,7 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 | Reactivate with zero conditions      | Reject                                          | Yes              | `400 invalid` | **Done**        |
 | Create condition under inactive rule | Does not auto-reactivate                        | Yes              | —             | **Done** in TRC |
 
-**UI/API flow:** create inactive draft → add conditions through `TransactionRuleCondition` → activate rule.
+**Product UI/API flow:** configured create/edit keeps draft conditions locally and sends the complete parent, outputs, logic, and conditions through the atomic configured command. It does not create an empty parent draft. Generated parent/child CRUD remains a technical/debug compatibility surface.
 
 ### Configured rule command API
 
@@ -988,7 +988,7 @@ Rule execution engine; batch reclassification; unique `position`; new enum value
 - `GET /api/transaction-rules/{id}/configured`
 - `PUT /api/transaction-rules/{id}/configured`
 
-This API accepts/returns the parent rule plus its ordered conditions in one configured DTO. It is backend support only in this slice; the existing generated/product UI flow can still create an inactive parent first and manage conditions from detail.
+This API accepts/returns the parent rule plus its ordered conditions in one configured DTO. It is the product create/edit contract; generic parent/child CRUD remains only a technical/debug compatibility surface.
 
 Configured create/update rules:
 
@@ -997,6 +997,7 @@ Configured create/update rules:
 - Incoming configured condition ids are not used for reparenting; conditions are treated as the configured rule's child collection.
 - The final configured state must satisfy the same name/output/owner validations as the normal TransactionRule service.
 - The final configured state must have at least one condition.
+- The command is atomic but has no aggregate version/locking contract; concurrent successful saves remain last-write-wins.
 
 ### Resulting category type vs FLOW compatibility
 
@@ -1021,26 +1022,25 @@ The same guard is enforced by the configured command API, old TransactionRule ac
 
 ### Parent-centered UX / API
 
-| Rule                                    | Decision                                                                                                           | Status       |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------ |
-| Related conditions endpoint             | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule                             | **Done**     |
-| Related condition ordering              | Sort by `position ASC`, then `id ASC`; distinct from TransactionRule priority/order                                | **Done**     |
-| Related condition access                | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all                           | **Done**     |
-| Create flow                             | Create saves an inactive parent first, then redirects to detail so conditions can be added after the parent exists | **Done**     |
-| Create page children                    | No embedded condition editor and no client-side draft conditions on create                                         | **Done**     |
-| Rule detail condition collection editor | Inline create/update/delete using existing TransactionRuleCondition endpoints                                      | **Done**     |
-| Rule edit general-fields page           | No embedded condition editor; includes Manage conditions link and background condition count for Active safety     | **Done**     |
-| Rule list/detail semantic summaries     | List/detail avoid raw generated field dumps and show read-only order, status, condition logic, outputs, metadata   | **Done**     |
-| View/edit layout parity                 | Detail and edit share Identity → Matching logic → Result → Status/Metadata ordering; detail manages conditions     | **Done**     |
-| Embedded parent behavior                | Does not show/edit `transactionRule`; create submits current parent id; edit does not reparent                     | **Done**     |
-| Active toggle UX                        | Disabled when conditions are empty/unavailable; backend remains source of truth                                    | **Done**     |
-| Add condition side effect               | Adding a condition does not auto-activate the parent rule                                                          | **Done**     |
-| Create-with-conditions command          | Backend configured command API creates/updates parent plus condition collection atomically                         | **Done**     |
-| Draft child collection on create        | Client-side draft conditions before parent id exists                                                               | **Deferred** |
-| Row-positioned inline edit              | Current editor renders add/edit form above the table, not directly under the row                                   | **Deferred** |
-| Server-managed condition position       | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`                | **Done**     |
-| Condition reorder UI/API                | No drag/drop, manual position input, or reorder endpoint yet                                                       | **Deferred** |
-| Rule execution engine                   | Backend evaluator exists; embedded UI still does not preview/apply rules                                           | **Done**     |
+| Rule                                | Decision                                                                                                                                       | Status       |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Related conditions endpoint         | `GET /api/transaction-rules/{id}/conditions` returns conditions for an accessible rule                                                         | **Done**     |
+| Related condition ordering          | Sort by `position ASC`, then `id ASC`; distinct from TransactionRule priority/order                                                            | **Done**     |
+| Related condition access            | Normal users get own rules only; foreign/inaccessible parent → `404`; admin may read all                                                       | **Done**     |
+| Create flow                         | Product create holds local draft conditions and saves the complete aggregate through the configured command                                    | **Done**     |
+| Create page children                | Product create/edit includes an inline local conditions editor; no child endpoint call occurs before parent save                               | **Done**     |
+| Rule product detail                 | Read-only `GET /configured` presentation; all condition editing belongs to the configured rule editor                                          | **Done**     |
+| Rule list/detail semantic summaries | List/detail avoid raw generated field dumps and show read-only order, status, typed condition logic, product outputs, and evaluation semantics | **Done**     |
+| Detail/edit relationship            | Detail explains current configured state; edit is the single product write route                                                               | **Done**     |
+| Technical child parent behavior     | Standalone technical child create resolves the current parent; edit does not reparent                                                          | **Done**     |
+| Active toggle UX                    | Disabled when conditions are empty/unavailable; backend remains source of truth                                                                | **Done**     |
+| Add condition side effect           | Adding a condition does not auto-activate the parent rule                                                                                      | **Done**     |
+| Create-with-conditions command      | Backend configured command API creates/updates parent plus condition collection atomically                                                     | **Done**     |
+| Draft child collection on create    | Client-side draft conditions before parent id exists                                                                                           | **Done**     |
+| Row-positioned inline edit          | Current editor renders add/edit form above the table, not directly under the row                                                               | **Deferred** |
+| Server-managed condition position   | Create appends with `max(position)+1`; delete does not reindex; same-position ties sort by `id ASC`                                            | **Done**     |
+| Condition reorder UI/API            | No drag/drop, manual position input, or reorder endpoint yet                                                                                   | **Deferred** |
+| Rule execution engine               | Backend evaluator exists; embedded UI still does not preview/apply rules                                                                       | **Done**     |
 
 ### Output PATCH semantics
 
@@ -1088,7 +1088,7 @@ Suggested copy: _"This will delete the rule. Its conditions will also be deleted
 | Lower `priority` evaluates earlier            | Phase 1 evaluator uses `priority ASC, id ASC`; see [RULE-ENGINE.md](RULE-ENGINE.md)                                                                                                                                      | **Done**     |
 | Tags union from all matching rules            | Phase 1 evaluator accumulates tag suggestions; see [RULE-ENGINE.md](RULE-ENGINE.md)                                                                                                                                      | **Done**     |
 | Duplicate priorities                          | Not allowed by service-managed per-user consecutive ordering                                                                                                                                                             | **Done**     |
-| Manual rule reorder                           | Move up / Move down sends full ordered ids; backend validates exact owner set                                                                                                                                            | **Done**     |
+| Manual rule reorder                           | Classification Rules arrows and drag-and-drop send the same complete owner id sequence; backend validates exact owner set, inactive rules remain in the order, and mixed-owner admin lists expose no reorder controls    | **Done**     |
 | Manual/source FT fields override rule outputs | Explicit category/tags win by default; evaluator/preview returns suggestions/conflicts without mutating                                                                                                                  | **Done**     |
 | Rule workflow endpoint                        | `POST /api/financial-transactions/rule-preview` previews an unsaved draft; no save/mutation/application                                                                                                                  | **Done**     |
 | Rule execution engine                         | Direct `FinancialTransaction` create/apply, backend FinancialTransaction preview, backend candidate preview/apply, and manual candidate suggestions UI exist; existing-transaction reevaluation and bulk remain deferred | **Partial**  |
@@ -1581,11 +1581,19 @@ Description normalization rules are separate from `TransactionRule`.
 - Description normalization evaluates only the imported original description.
 - It produces one output: `resultingDescription`.
 - First matching active rule wins by `priority ASC`, then `id ASC`.
-- `active=true` requires at least one condition.
+- Generic compatibility writes retain their existing `active=true` condition guard. Configured product create/update requires at least one complete condition whether the rule is active or inactive.
 - New rules append last for the current user.
 - Rule priority is server-managed and user-scoped.
 - Rule names are unique per owner, case-insensitive and trim-insensitive.
 - `createdAt` and `updatedAt` are server-owned.
+
+Configured product writes use the parent aggregate endpoints `POST /api/description-normalization-rules/configured`, `GET /api/description-normalization-rules/{id}/configured`, and `PUT /api/description-normalization-rules/{id}/configured`. A configured `PUT` updates the editable parent fields and replaces the submitted complete condition set in one transaction. It validates a proposed configuration before deleting existing conditions, preserves the existing owner, id, creation time, and priority, and never reevaluates historic ingestion rows or changes FinancialTransactions. Owner scoping and the existing administrator access policy apply to the parent; clients cannot supply an owner.
+
+There is no `@Version` or pessimistic-lock protocol for this aggregate. Each configured save is atomic, but two concurrent successful edits have normal last-commit-wins semantics; a later save can replace an earlier session's condition set.
+
+The Description Rules product manager always represents the complete owner rule order, including inactive rules. It submits the complete id sequence to the existing owner-scoped reorder command, which assigns priorities `0..n`. Arrow moves and drag-and-drop are only two UI mechanisms for that one command. A failed reorder restores the last server-confirmed order. The administrator list can span owners while the backend reorder endpoint cannot, so it intentionally exposes no cross-owner reorder action.
+
+The product detail is read-only and uses the configured aggregate for its full conditions. It explains original-description FILE-import scope, active top-to-bottom first-match-wins behavior, and non-retroactivity. Editing still uses configured `GET`/`PUT`; deleting a rule reindexes future owner order but never alters historic transactions or automatically reprocesses reviewed imports.
 
 `DescriptionNormalizationRuleCondition`:
 
@@ -1606,6 +1614,9 @@ The single FILE-ingestion review can create both rule types without leaving the 
 - A row `TransactionRule` prefill uses the persisted `FILE_IMPORT` candidate description, its current `FLOW`, and only its persisted selected category/tags as outputs. It does **not** turn account context or transient suggestions into conditions or outputs.
 - Rule creation is atomic and server-managed: priority, condition positions, timestamps, ownership, normalization-rule validation, and rollback on invalid input are handled by `POST /api/description-normalization-rules/configured`. Transaction rules reuse `POST /api/transaction-rules/configured`.
 - Saving a contextual rule by itself changes neither `rawData`, `IngestionRecord`, nor `TransactionCandidate`, and does not create a `FinancialTransaction` or confirm the import. Re-evaluation is an explicit second action.
+- A missing immutable original description or missing current candidate description prevents row-contextual creation rather than substituting a different field. The modal retains the review context and explains the unavailable source.
+- Row reevaluation is restricted to that row's `IngestionRecord` for normalization or that candidate for classification. All-applicable reevaluation is restricted to eligible rows of the current ingestion, never historical transactions or other ingestions. Classification reevaluation remains preview-only unless its existing local auto-apply configuration is enabled; application respects current manual-provenance protection.
+- New TransactionRule outputs cannot reference an inactive category or tag. Existing rules may retain a historical inactive output, but row-contextual new-rule creation requires the user to reconcile it with an active output. A saved rule followed by a failed reevaluation is reported as saved-with-follow-up-failure; it is not re-created.
 
 ### FinancialAccount inactive eligibility (ACC-UX-3A)
 

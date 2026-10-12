@@ -1515,16 +1515,16 @@ Rehabilitated create/delete (sin selector User). API payload sin `user`.
 
 ### Summary counts
 
-| Type            | File                           | Tests   | Custom vs generated                                                                                                                                                      |
-| --------------- | ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Integration IT  | `TransactionRuleResourceIT`    | **143** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + configured rule API + categoryType/FLOW guard + JHipster CRUD/filters        |
-| Unit — service  | `TransactionRuleServiceTest`   | **25**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                             |
-| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                                |
-| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                |
-| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                |
-| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                |
-| Frontend UX     | `transaction-rule-ux.spec.tsx` | **33**  | Product-oriented list/detail summaries, Move up / Move down reorder UX, configured create/edit flow, edit hydration, grouped edit form, detail embedded condition editor |
-| E2E             | `transaction-rule.cy.ts`       | **7**   | Configured create/edit workflow + categoryType/FLOW guard + technical/debug surface smoke                                                                                |
+| Type            | File                           | Tests   | Custom vs generated                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------- | ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration IT  | `TransactionRuleResourceIT`    | **147** | Ownership/link/domain/API ergonomics custom tests + server-managed priority/order/reorder + configured rule API + categoryType/FLOW guard + JHipster CRUD/filters                                                                                                                                                                                                                                    |
+| Unit — service  | `TransactionRuleServiceTest`   | **24**  | All custom (ownership, owner-scoped links, cleanup, timestamp guards, server-managed priority/order/reorder)                                                                                                                                                                                                                                                                                         |
+| Unit — domain   | `TransactionRuleTest`          | **6**   | Generated                                                                                                                                                                                                                                                                                                                                                                                            |
+| Unit — mapper   | `TransactionRuleMapperTest`    | **1**   | Generated                                                                                                                                                                                                                                                                                                                                                                                            |
+| Unit — DTO      | `TransactionRuleDTOTest`       | **1**   | Generated                                                                                                                                                                                                                                                                                                                                                                                            |
+| Unit — criteria | `TransactionRuleCriteriaTest`  | **5**   | Generated                                                                                                                                                                                                                                                                                                                                                                                            |
+| Frontend UX     | `transaction-rule-ux.spec.tsx` | **42**  | Classification manager cards, localized condition/result summaries, active/inactive output state, arrows + drag shared complete-order persistence/recovery, mixed-owner admin safety, configured editor coverage, and configured read-only detail/delete coverage                                                                                                                                    |
+| E2E             | `transaction-rule.cy.ts`       | **11**  | Configured create/edit workflow with active-by-default and inactive-status preservation/toggle behavior, progressive validation, multiple typed conditions and ProductTagSelector tags, read-only detail, product delete confirmation, categoryType/FLOW guard, technical/debug surface smoke, Rules landing, classification-result presentation, arrow reorder and genuine browser drag persistence |
 
 **Run:**
 
@@ -1580,15 +1580,15 @@ Same matrix as Tag/Category/Budget/FinancialSubscription.
 
 #### Frontend UX — `transaction-rule-ux.spec.tsx` — ✅
 
-| Area                 | What it checks                                                                                                                                                                                              |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Product list         | List hides generated ID/created columns, requests `priority ASC, id ASC`, and shows Name/Status/Order/Conditions/Result/Updated/Actions                                                                     |
-| Compact detail       | Detail renders Identity, Matching logic, Result, Status / Metadata, and embedded Conditions; no document-like When/Then headings                                                                            |
-| Configured create    | Create hides timestamps/priority, renders active/output/conditionLogic plus inline local conditions, blocks zero conditions/outputs, and posts to `POST /api/transaction-rules/configured`                  |
-| Configured edit      | Edit loads `GET /api/transaction-rules/{id}/configured`, hydrates parent/output/active/conditions, and saves through `PUT /api/transaction-rules/{id}/configured` without priority                          |
-| Category/FLOW guard  | EXPENSE auto-adds/locks `FLOW EQUALS OUT`, BOTH/null removes frontend auto-FLOW, `ANY` is blocked for EXPENSE/INCOME, and incompatible user-authored FLOW blocks Save                                       |
-| Server-managed order | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                                                               |
-| Manual reorder       | List defensively renders `priority ASC, id ASC`, omits impossible first-up/last-down controls, sends full swapped ordered ids from the priority-ordered array, reloads on success, and shows inline failure |
+| Area                 | What it checks                                                                                                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Product list         | Product manager loads `priority ASC, id ASC`, bounded per-rule condition batches, and category/tag/account identities; cards show name, status, 1-based order, readable IF/THEN configuration, and compact actions                                                             |
+| Read-only detail     | Detail loads the configured aggregate; it renders all typed conditions, product category/tag outputs, historical inactive output state, priority/multi-rule/workflow explanations, and no inline condition write controls                                                      |
+| Configured create    | Create hides timestamps/priority, renders active/output/conditionLogic plus inline local conditions, blocks zero conditions/outputs, and posts to `POST /api/transaction-rules/configured`                                                                                     |
+| Configured edit      | Edit loads `GET /api/transaction-rules/{id}/configured`, hydrates parent/output/active/conditions, and saves through `PUT /api/transaction-rules/{id}/configured` without priority                                                                                             |
+| Category/FLOW guard  | EXPENSE auto-adds/locks `FLOW EQUALS OUT`, BOTH/null removes frontend auto-FLOW, `ANY` is blocked for EXPENSE/INCOME, and incompatible user-authored FLOW blocks Save                                                                                                          |
+| Server-managed order | Create/edit do not render or submit priority; detail shows read-only 1-based Evaluation order                                                                                                                                                                                  |
+| Manual reorder       | Arrows are disabled at boundaries and actual pointer/touch/keyboard drag is available; both send the full priority-ordered owner id sequence, reload on success, restore confirmed order on failure, include inactive rules, and are unavailable to mixed-owner administrators |
 
 Manual verification checklist:
 
@@ -1694,11 +1694,13 @@ Configured workflow coverage:
 
 - create EXPENSE rule through `/transaction-rule/new`, with required locked `FLOW EQUALS OUT`;
 - create INCOME rule through `/transaction-rule/new`, with required locked `FLOW EQUALS IN`;
+- untouched create has neutral validation; a Save attempt exposes missing-condition feedback without sending a configured create;
+- configured create starts active; editing an inactive configured rule preserves that state and exposes the accessible status toggle;
 - regression for selecting `ANY` before selecting an EXPENSE category: UI forces `ALL`, disables `ANY`, and adds locked `FLOW OUT`;
 - BOTH category allows `ANY` and does not auto-create required Flow;
 - tag-only output allows `ANY` and does not auto-create required Flow;
 - edit existing configured rule, hydrate parent fields/conditions, change EXPENSE category to INCOME, and persist `FLOW IN`;
-- technical/debug smoke: TransactionRule detail labels the persisted condition editor, and standalone TransactionRuleCondition page shows the Technical/debug banner.
+- technical/debug smoke: the product TransactionRule detail is read-only, while the standalone TransactionRuleCondition page remains available with the Technical/debug banner.
 
 Test data is created through API per test: one EXPENSE category, one INCOME category, one BOTH category, and one tag. Rules are created through configured API only for seed/edit setup; product create cases use the UI.
 
@@ -1972,13 +1974,13 @@ Service tests cover parent immutability, merged-state validation, duplicate norm
 - field/operator changes clearing incompatible values;
 - `ACCOUNT EQUALS` submitting the selected account id as a string and hidden `caseSensitive=false`.
 
-`transaction-rule-ux.spec.tsx` also verifies the embedded TransactionRule detail table uses the normalized `Condition` summary, does not render raw `Value` / `Second Value` / `Case Sensitive` headers, keeps Edit/Delete, and does not render View.
+`transaction-rule-ux.spec.tsx` also verifies the product TransactionRule detail uses `GET /configured`, renders every typed condition without raw `Value` / `Second Value` / `Case Sensitive` fields, explains ALL/ANY and multi-rule behavior, renders category/tag identity including historical inactive outputs, and exposes no inline condition controls.
 
 The same spec covers the configured TransactionRule product create/edit flow:
 
 - create/edit render the configured inline Conditions editor;
 - list Create routes to `/transaction-rule/new`, the configured product create route;
-- detail labels the embedded persisted condition editor as technical/debug because it writes through child condition endpoints;
+- detail loads the configured aggregate, routes Edit to the configured editor, and routes Delete through the product confirmation;
 - create does not call the old draft reducer path and posts to `POST /api/transaction-rules/configured`;
 - edit loads `GET /api/transaction-rules/{id}/configured`;
 - edit saves through `PUT /api/transaction-rules/{id}/configured`;
@@ -1988,6 +1990,11 @@ The same spec covers the configured TransactionRule product create/edit flow:
 - `ANY` is blocked for EXPENSE/INCOME outputs;
 - user-authored incompatible FLOW blocks Save instead of being silently mutated;
 - configured payloads omit priority and removed/deferred outputs.
+- product category identity/picker and `ProductTagSelector` support category-only, tag-only, and combined outputs while retaining loaded inactive historical outputs and excluding them from new choices;
+- the live IF/THEN configuration summary reflects draft ALL/ANY, typed conditions, and product result identities without evaluating a transaction;
+- failed configured saves retain the complete draft and duplicate clicks do not issue a second command.
+
+`transaction-rule-condition-ux.spec.tsx` additionally verifies that a field/operator transition clears only incompatible values, displays the reset explanation, and clears a `FLOW` value when switching to the distinct `ORIGIN` enum domain.
 
 ### Transaction Ingestion contextual rule creation
 
@@ -2916,9 +2923,13 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - Unified category/tag decisions survive refresh because workflow row candidate summaries reload persisted selections.
 - Transaction Ingestion tag-selector coverage uses the shared `ProductTagSelector`: no native tag multi-select remains; persisted tags render as color-accented removable pills; active-only Add tag search prevents duplicates; inactive historical selections remain visible/removable but are unavailable for new assignment. The existing ingestion-scoped classification PATCH remains the only persistence path. Jest and Cypress keep transient rule suggestions distinct from persisted pills, cover remove/add/reload, per-row and batch apply, reevaluate, auto-apply, and protected manual selections.
 - Cypress coverage for the real workflow lives in `src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts`.
-  Run it with a dedicated clean user so existing manual TransactionRules cannot influence suggestions:
-  `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
+  The default local Liquibase seed account is `user` / `user`; use it for a clean local database or override `INGESTION_E2E_USERNAME` and `INGESTION_E2E_PASSWORD` with a dedicated account when one has been provisioned:
+  `INGESTION_E2E_USERNAME=user INGESTION_E2E_PASSWORD=user npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
+  `e2e:headless` first waits for application health on the configured default backend port (normally `http://127.0.0.1:8080/management/health`). When intentionally validating an isolated app on another local port, run Cypress directly with its matching base URL after the app health endpoint is UP, for example:
+  `npm run e2e:cypress -- --config baseUrl=http://localhost:18080 --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
 - The workflow E2E also asserts all four global reevaluation controls and the eligible-row action are visible, sends their description/candidate-preview requests with the correct global or row scope, and proves no rule-apply or confirm-no-suggestions request occurs until the test explicitly applies the relevant domain suggestion. It verifies per-row category/tag apply uses `CATEGORY`/`TAGS`, the global category action leaves tag suggestions pending until the global tag action runs, and description application does not invoke category/tag rule application or Confirm Import.
+- Contextual-rule Jest coverage verifies scratch and selected-row normalization/classification forms, immutable-original/current-candidate prefill, selected-row identity, no implicit `ACCOUNT` condition, active-only outputs for new TransactionRules, save-only isolation, row/all reevaluation scopes, source-unavailable handling, and save-success/reevaluation-failure feedback without duplicate create requests. The Description Rule form also has a pending-save duplicate-submit regression test.
+- The Transaction Ingestion workflow E2E creates both rule kinds from scratch and from a row, exercises save-only plus row/all reevaluation actions, confirms the normalization/classification explanations and prefilled typed conditions, and asserts that scoped requests stay within the current ingestion. It continues through review/application and Confirm Import.
 - Cypress workflow hardening coverage also includes:
   - invalid CSV header stays on `/transaction-ingestion/new`, shows a backend error, and does not navigate to review;
   - `PARTIALLY_READY` uploads render rejected row errors, do not prepare candidates, and do not enable candidate classification controls;
@@ -2926,8 +2937,8 @@ CSV review row action tests continue to cover the canonical mutation flow:
   - disabling one valid row excludes it from candidate-backed classification preview and import while importing the remaining enabled valid row.
 - `src/test/javascript/cypress/e2e/entity/transaction-ingestion.cy.ts` is now a lightweight workflow smoke spec, not a generated CRUD spec. It checks list/menu load, `/transaction-ingestion/new`, workflow detail navigation, and absence of the old generated Edit product action.
 - `src/test/javascript/cypress/e2e/entity/file-ingestion.cy.ts` and `src/test/javascript/cypress/e2e/entity/ingestion-record.cy.ts` are technical/debug smoke specs. They verify the generated/debug pages remain reachable and marked technical without restoring old product CRUD expectations.
-- Run the current ingestion E2E pattern with:
-  `INGESTION_E2E_USERNAME=cypress_ingestion INGESTION_E2E_PASSWORD=cypress_ingestion npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
+- Run the current ingestion E2E pattern against a clean local seed database with:
+  `INGESTION_E2E_USERNAME=user INGESTION_E2E_PASSWORD=user npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion*.cy.ts"`.
 - confirm import requires every current `VALID` row to have exactly one reviewed, valid, `READY_TO_POST` `FILE_IMPORT` candidate. Confirm no longer parses the old `records/categoryId/tagIds` request body; persisted candidates win.
 - confirm import rejects corrupt pre-completed `FILE_IMPORT` candidate state all-or-nothing: imported row with a remaining candidate, candidate linked to a disabled/non-valid row, candidate/record ingestion mismatch, any candidate with a final-transaction link, and a valid row whose candidate is orphaned from the ingestion.
 - confirm import does not run the Rule Engine itself and does not persist selections/evaluation results into `rawData`.
@@ -3055,6 +3066,12 @@ Copy this block when hardening the next entity:
 
 ## Description normalization rule tests
 
+## Rules landing navigation tests
+
+`rules.spec.tsx` verifies the authenticated `/rules` route's two distinct product destinations, localized English/Spanish copy, and links to the preserved Description Normalization Rule and Transaction Rule manager URLs. `menu.spec.tsx` verifies that the shared authenticated entity menu has one Rules entry in both languages, removes the two redundant product-facing manager entries, and retains the technical TransactionRuleCondition entry.
+
+`rules.cy.ts` is the browser navigation smoke: it opens Rules from the authenticated entity menu, enters each existing manager from the landing, returns through Rules, and confirms both direct manager URLs still load. It does not create or modify rules.
+
 Current automated coverage includes:
 
 - `TextConditionMatcherTest`
@@ -3067,6 +3084,18 @@ Current automated coverage includes:
   - first matching rule wins;
   - empty-condition rules do not match defensively;
   - ALL/ANY matching behavior.
+- `DescriptionNormalizationRuleResourceIT`
+  - configured create and configured `GET`/`PUT` aggregate contracts;
+  - full condition replacement, add/remove/value/operator changes, repeated saves, priority and owner preservation;
+  - invalid configured commands preserve the existing parent/conditions; both inactive and active configured rules reject empty condition collections;
+  - owner-scoped rejection, missing-rule handling, and current administrator access behavior.
+- `description-normalization-rule-ux.spec.tsx`
+  - ordered product-card rendering, active/inactive state, ALL/ANY/operator/value/case-sensitivity summaries, empty and Spanish states, and read-only detail composition;
+  - up/down and dnd-kit completion both submit the same complete owner id list, include inactive rules, disable boundary moves, restore confirmed order after failure, and suppress unsafe mixed-owner administrator reorder;
+  - shared configured create/edit loading, active-by-default creation, persisted edit status, progressive validation, sentence-case operator controls, atomic update navigation back to detail, and product deletion failure handling.
+- `description-normalization-rule.cy.ts`
+  - isolated browser create → configured edit → reload flow, active-by-default creation, progressive zero-condition validation, sentence-case operator labels, inactive-status preservation/toggle behavior, condition replacement, and priority preservation;
+  - Rules landing navigation, arrow reorder persistence, real pointer drag-and-drop reorder persistence, inactive-rule representation, read-only detail, configured edit return, and deletion list refresh.
 
 Recommended focused commands:
 

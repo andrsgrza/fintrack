@@ -179,7 +179,7 @@ Edit should mirror detail, replacing values with inputs.
 
 If a detail section exists, the equivalent editable fields should appear in the same relative place on edit, unless the fields are read-only, server-managed, or only make sense in detail.
 
-TransactionRule applies this pattern: detail and configured edit share Identity → Matching logic → Result → Status / Metadata ordering. Detail shows values and embedded conditions. Configured create/edit show inputs plus an inline local conditions editor.
+TransactionRule applies the same orientation principle without duplicating its editor: the detail explains Matching, Suggested results, and Evaluation behavior; configured create/edit contains the corresponding inputs plus an inline local conditions editor.
 
 ## Edit form hydration
 
@@ -383,13 +383,13 @@ TransactionRule create/edit manage rule metadata, outputs, active state, conditi
 
 Product create no longer creates an empty inactive draft. It keeps unsaved conditions in local frontend state and saves the complete configured rule in one command.
 
-Product save is blocked when the rule has:
+Product save is blocked, whether the rule is active or inactive, when the rule has:
 
 - zero conditions;
 - zero outputs (`resultingCategory` or `resultingTags`);
 - an EXPENSE/INCOME resulting category without compatible FLOW semantics.
 
-TransactionRule detail/view may still show the embedded editable conditions collection editor for direct maintenance/debug compatibility, but product create/edit no longer depend on detail as the only condition-management surface. TR-3 marks this embedded persisted editor as a technical/debug section so it is not confused with the product create/edit workflow.
+TransactionRule detail/view is a read-only product explanation backed by the configured aggregate API. It never creates, edits, or deletes child conditions; configured create/edit is the only product rule-writing flow. Standalone TransactionRuleCondition routes remain available for technical/debug direct maintenance.
 
 TransactionRule list/detail use product-oriented summaries instead of generated field dumps.
 
@@ -403,26 +403,13 @@ The list shows:
 - updated timestamp;
 - actions.
 
-Detail uses compact sections aligned with edit:
+Detail uses a product header (name, status, one-based evaluation position, Edit/Delete/Back actions) plus three read-only sections:
 
-- Identity;
-- Matching logic;
-- Result;
-- Status / Metadata;
-- embedded Conditions.
+- Matching — complete typed condition list and accurate ALL/ANY explanation;
+- Suggested results — category identity, tag pills, and visible historical inactive-output state;
+- Evaluation behavior — priority position, multi-rule category/tag semantics, configuration-vs-execution boundary, and workflow applicability.
 
-TransactionRule detail and edit follow View/Edit layout parity.
-
-Both screens use the same conceptual grouping:
-
-- Identity;
-- Matching logic;
-- Result;
-- Status / Metadata.
-
-Detail shows values in those groups.
-
-Edit shows inputs in those groups.
+Detail is intentionally not a second condition editor. Edit contains the corresponding configured inputs.
 
 TransactionRule create/edit additionally render the configured inline Conditions editor.
 
@@ -435,7 +422,6 @@ The configured inline editor:
 
 ### Components used
 
-- `transaction-rule-conditions-collection-editor.tsx`
 - `transaction-rule-local-conditions-editor.tsx`
 - `transaction-rule-condition-form-section.tsx`
 
@@ -448,7 +434,7 @@ We did not embed:
 - `transaction-rule-condition-update.tsx`
 - `transaction-rule-condition-detail.tsx`
 
-The embedded editors reuse the condition form section, not the standalone CRUD page.
+The configured editor reuses the condition form section, not the standalone CRUD page.
 
 ### Parent relationship behavior
 
@@ -456,7 +442,7 @@ The embedded TransactionRuleCondition form does not show or edit the `transactio
 
 In configured create/edit, the parent is the containing configured TransactionRule form. Conditions are local drafts until the parent configured command is saved.
 
-In detail/debug maintenance, the parent TransactionRule is fixed by the containing TransactionRule detail page. Embedded create submits the current rule as the fixed parent. Embedded edit PATCHes only editable condition fields and does not reparent.
+The product detail has no child write operation. Technical/debug child routes retain their existing parent access and immutability rules.
 
 ### Condition loading
 
@@ -464,9 +450,7 @@ The product edit form loads parent + ordered conditions from:
 
 `GET /api/transaction-rules/{id}/configured`
 
-The detail/debug editor loads conditions from:
-
-`GET /api/transaction-rules/{id}/conditions`
+The product detail loads the complete parent plus ordered conditions from the same configured aggregate endpoint. It performs an additional read-only account catalog lookup only to replace account condition ids with names.
 
 The frontend does not fetch all TransactionRuleConditions and filter client-side for this workflow.
 
@@ -478,14 +462,6 @@ The configured create/edit local conditions editor supports:
 - local inline edit;
 - local inline delete;
 - locked auto-required FLOW condition display for EXPENSE/INCOME categories.
-
-The TransactionRule detail collection editor supports:
-
-- inline add;
-- inline edit;
-- inline delete.
-
-The embedded table does not show a View button because the condition is already visible in the parent context.
 
 Standalone TransactionRuleCondition list/detail/create/edit routes remain available for deep links, debugging, and direct maintenance. TR-3 marks those standalone generated screens with a Technical/debug banner and the Entities menu marks TransactionRuleCondition as Technical. They are not the product workflow for creating or editing TransactionRules.
 
@@ -500,9 +476,9 @@ Generated TransactionRule and TransactionRuleCondition backend endpoints remain 
 
 These generated endpoints are technical/direct-maintenance surfaces. Configured endpoints remain the product source of truth for TransactionRule create/edit, and backend strict validation still protects generated paths while they exist.
 
-### Embedded table display
+### Read-only condition display
 
-The embedded TransactionRuleCondition table shows a normalized `Condition` summary plus actions.
+The product TransactionRule detail shows every configured condition as a normalized typed summary. It has no inline condition actions.
 
 It does not expose raw technical child fields as separate embedded columns:
 
@@ -540,7 +516,7 @@ Position does not affect `ALL` / `ANY` logical semantics.
 
 TransactionRule priority/order is server-managed, unique/consecutive per user, reindexed on rule delete, stored 0-based, and displayed 1-based in the UI.
 
-TransactionRule list is the only manual reorder surface. It always renders rules in evaluation order (`priority ASC, id ASC`) and provides only possible Move up / Move down controls per row: the first row does not render Move up, the last row does not render Move down, and a single-row list renders neither. Each move swaps adjacent rules in that priority-ordered array, sends the full current-user ordered id list to `PUT /api/transaction-rules/reorder`, then reloads from the backend. The backend validates exact current-user membership and normalizes priorities to `0..n`.
+TransactionRule list is the only manual reorder surface. It is a complete Classification Rules manager, rendering rules in evaluation order (`priority ASC, id ASC`) as cards with readable condition summaries, a category identity and tag pills, status, and one-based evaluation position. Move up / Move down controls remain visible but disabled at the respective boundaries; a keyboard-accessible `@dnd-kit` handle also supports pointer, touch, and keyboard reorder. Both interactions swap/reposition the same complete current-user array, submit every ordered id to `PUT /api/transaction-rules/reorder`, then reload from the backend. A failed persistence restores the last confirmed order. The backend validates exact current-user membership and normalizes priorities to `0..n`; an administrator list may span owners, so it shows no reorder controls.
 
 `TransactionRuleCondition.position` orders conditions inside one rule.
 
@@ -562,7 +538,7 @@ It:
 - still submits the selected account id as the string `value` expected by the backend;
 - keeps `IN` / `NOT_IN` as comma-separated text in this slice.
 
-The configured TransactionRule create/edit editor and the embedded TransactionRule detail editor reuse the same smart condition form section/helper behavior.
+The configured TransactionRule create/edit editor uses the smart condition form section/helper behavior. The product detail reuses only its typed condition summary formatter.
 
 ### Category/FLOW guard in product create/edit
 
@@ -575,22 +551,25 @@ When a resulting category is selected:
 - user-authored incompatible FLOW conditions are not silently mutated; save is blocked with a validation message;
 - `ANY` condition logic is disabled/blocked for EXPENSE/INCOME outputs.
 
+### Configured editor product composition
+
+The configured TransactionRule editor uses the same product composition for create and edit: **Identity → Matching conditions → Results → Configuration summary → Status**. It is not a generated CRUD form and it does not expose rule priority or owner controls. The live summary describes the draft configuration only; it does not execute a rule or claim that a transaction matches.
+
+The result category picker renders the selected category as a color-accented identity with its immediate hierarchy context and translated type. Its picker offers only active current-owner categories for new choices. `ProductTagSelector` renders colored result-tag pills, allows multiple active current-owner additions, and preserves a currently selected inactive historical tag with an explicit inactive label. A historical inactive category/tag may remain in an unrelated configured update, but cannot be selected anew and is not represented as a currently eligible automatic output.
+
+The inline typed condition form restricts operators and controls by field. When a field or operator transition makes a value incompatible, it clears only that incompatible value and explains the reset; compatible text-field and date-field transitions retain the draft value. `FLOW` and `ORIGIN` are separate enum domains even though both render as selects, so switching between them clears the incompatible enum value.
+
+Configured create/update is one atomic parent command. The UI prevents duplicate submissions, keeps the complete draft in place on an API error, and returns to the manager after a successful command. There is no aggregate version contract: concurrent successful configured updates retain the existing backend last-write-wins behavior.
+
 ### Delete behavior
 
-Deleting a condition uses the existing DELETE endpoint.
-
-If the last condition is deleted, the backend deactivates the parent rule.
-
-Adding a condition does not automatically activate the parent rule.
-
-The TransactionRule detail page refreshes parent state after condition mutations.
+Deleting a TransactionRule from its product detail deletes the rule and its conditions through the existing rule delete endpoint, reindexes the owner's future evaluation order, and returns to the manager. The confirmation explicitly says that posted transactions and previously reviewed candidates are not changed or automatically reevaluated. Technical condition deletion remains on the standalone technical route; deleting its last condition still deactivates the parent rule.
 
 ### Deferred
 
 Deferred for this workflow:
 
 - row-positioned inline edit;
-- TransactionRule drag-and-drop UI;
 - condition reorder UI/API;
 - rule execution engine;
 - override confirmation UI;
@@ -713,15 +692,27 @@ The following generated backend write endpoints remain temporarily behavior-comp
 
 Canonical ingestion product writes should use the TransactionIngestion workflow command endpoints. Generic reducer thunks and endpoint tests may remain while backend compatibility remains. A later backend hardening slice may reject or remove these generated write paths after no active product/debug consumer exists.
 
+## Rules landing and navigation
+
+`/rules` is the user-facing Rules landing within the authenticated product navigation. It uses the standard wide `ProductPage` composition with one `ProductPageHeader` and two responsive `ProductSection` cards: Description Rules and Classification Rules. Each card is a normal keyboard-accessible link-style action to its preserved manager route (`/description-normalization-rule` and `/transaction-rule` respectively); it does not combine the rule engines or expose generated entity terminology.
+
+The main entity menu exposes one **Rules / Reglas** entry. The separate product-facing Description Normalization Rule and Transaction Rule menu entries are removed, while the intentionally technical TransactionRuleCondition entry remains available with its Technical badge. The same authenticated entity menu is used for ordinary users and administrators, so this change introduces no new authorization path.
+
+The Description Rules manager now provides both arrow controls and keyboard-accessible `@dnd-kit` drag-and-drop ordering. It operates against the complete authenticated-owner collection and restores the confirmed order after a failed persistence attempt. Transaction Rule manager ordering polish remains separate.
+
 ## DescriptionNormalizationRule UI composition
 
 Description normalization rules follow the same parent-centered composition pattern as TransactionRule:
 
-- list page owns reorder controls;
+- list page is a wide product manager with ordered rule cards, active/inactive status, readable ALL/ANY condition summaries, result summaries, a back-to-Rules action, and owner-safe reorder controls;
 - product create uses the configured parent + local conditions command and does not create an empty draft;
-- configured create keeps local conditions until one atomic save; legacy detail condition management remains technical/direct-maintenance compatibility;
-- edit page retains scalar parent editing and detail condition maintenance for existing rules;
+- standalone create and edit share one configured form: **Identity → Matching conditions → Results → Configuration summary → Status**, with local condition add/edit/remove and a live human-readable configuration summary;
+- configured create and edit use `POST`, `GET`, and `PUT /api/description-normalization-rules[/id]/configured`; edit loads every ordered condition and saves the complete replacement atomically while priority stays server-managed;
+- save failures preserve the local draft and show the backend validation message; progressive client validation prevents blank identity/result/condition values and a missing condition for either active or inactive rules after Save is attempted;
+- detail is a read-only product view: Matching exposes every condition and grouping semantics, Result shows the replacement, and Behavior explains FILE-import scope, first-match-wins order, and non-retroactivity; it links only to configured edit/delete actions;
 - condition forms have no field selector because every condition evaluates original imported description.
+
+The detail no longer embeds child-condition CRUD. Those generated endpoints continue as technical compatibility surfaces, but product editing always uses the configured aggregate editor. Delete confirmation names the future-only and precedence effects rather than exposing a raw entity warning.
 
 The product route is:
 
@@ -733,20 +724,22 @@ Standalone generated/debug condition screens are not the product flow for managi
 
 ### Transaction Ingestion contextual rule editor
 
-The unified FILE-ingestion review opens the existing full configured rule editors inside a modal rather than navigating to generated entity screens. The global **New normalization rule** and **New transaction rule** actions start blank product forms. An eligible row's **Create rule** menu offers the same forms with editable review-only prefills.
+The unified FILE-ingestion review opens the existing full configured rule editors inside a modal rather than navigating to generated entity screens. The global **New Description Rule** and **New Classification Rule** actions start blank product forms. An eligible row's **Create rule** menu offers the same forms with editable review-only prefills.
 
-- Normalization-rule row prefill: condition value = immutable original description; result = current normalized/manual description.
-- Transaction-rule row prefill: `DESCRIPTION CONTAINS` current persisted candidate description and `FLOW EQUALS` current candidate flow; persisted candidate category/tags are outputs. Account context is informational and never becomes an automatic condition; transient suggestions are never persisted as outputs.
-- Save only writes the formal rule. Save + reevaluate this row/all runs the existing scoped reevaluation command only after save succeeds. None of these actions confirms import or writes category/tags to `rawData`.
+- Normalization-rule row prefill: condition value = immutable original description; result = current normalized/manual description. If that original value is unavailable, the modal shows an honest unavailable-source state rather than substituting a current value.
+- Transaction-rule row prefill: `DESCRIPTION CONTAINS` current persisted candidate description and `FLOW EQUALS` current candidate flow; persisted candidate category/tags are outputs. Account context is informational and never becomes an automatic condition; transient suggestions are never persisted as outputs. Inactive row outputs remain visible for reconciliation but cannot be saved as new rule outputs.
+- The modal identifies the selected row, has an accessible labelled heading, uses the full engine-specific configured editor, and keeps catalog-dependent save actions disabled while their outputs load.
+- Save only writes the formal rule. Save + reevaluate this row/all runs the existing scoped reevaluation command only after save succeeds. A row action targets its record/candidate; an all action targets eligible rows of the same ingestion. The UI labels classification reevaluation as suggestions unless the existing local auto-apply option is on. None of these actions confirms import or writes category/tags to `rawData`; a saved-rule/failed-reevaluation outcome is shown as partial success.
 
 ## TransactionRule generated technical/debug surfaces
 
 TR-3 clarifies the TransactionRule UI split:
 
 - `/transaction-rule/new` is the product create route and uses `POST /api/transaction-rules/configured`.
+- `/transaction-rule/:id` is the read-only product detail and uses `GET /api/transaction-rules/{id}/configured`.
 - `/transaction-rule/:id/edit` is the product edit route and uses `GET/PUT /api/transaction-rules/{id}/configured`.
 - Standalone TransactionRuleCondition routes remain available only for technical/debug/direct maintenance and show a Technical/debug banner.
-- TransactionRule detail may retain the persisted child condition editor, but it is labeled as a technical/debug editor because it writes directly to child condition endpoints.
+- Product TransactionRule detail has no child condition editor; the standalone TransactionRuleCondition route remains the technical/debug surface.
 - No UI text should recommend the old “create empty parent, then add conditions later” product flow.
 - No ingestion category/tag review work was added as part of this TransactionRule branch.
 - UserPreference remains deferred.

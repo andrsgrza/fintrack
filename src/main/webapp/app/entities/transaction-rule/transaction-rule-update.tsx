@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Alert, Col, Row } from 'reactstrap';
+import { Alert, Button } from 'reactstrap';
 import { Translate, translate } from 'react-jhipster';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 import { ITransactionRuleConfigured } from 'app/shared/model/transaction-rule-configured.model';
 import { IContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
+import { ProductPage, ProductPageHeader } from 'app/shared/ui/product-page';
 import TransactionRuleConfiguredForm from './components/transaction-rule-configured-form';
 import { getConfiguredTransactionRule } from './transaction-rule-configured.service';
 
@@ -32,37 +34,49 @@ export const TransactionRuleUpdate = () => {
       .finally(() => setLoading(false));
   }, [id, isNew]);
 
+  const returnPath = !isNew && id ? `/transaction-rule/${id}` : '/transaction-rule';
+
   return (
-    <div>
-      <Row className="justify-content-center">
-        <Col md="8">
-          <h2 id="fintrackApp.transactionRule.home.createOrEditLabel" data-cy="TransactionRuleCreateUpdateHeading">
-            <Translate contentKey={isNew ? 'fintrackApp.transactionRule.createTitle' : 'fintrackApp.transactionRule.editTitle'}>
-              {isNew ? 'Create Transaction Rule' : 'Edit Transaction Rule'}
-            </Translate>
-          </h2>
-        </Col>
-      </Row>
-      <Row className="justify-content-center">
-        <Col md="8">
-          {loading ? <p>Loading...</p> : null}
-          {error ? (
-            <Alert color="danger" fade={false}>
-              {error}
-            </Alert>
-          ) : null}
-          {!loading && !error ? (
-            <TransactionRuleConfiguredForm
-              key={configuredRule?.id ?? 'new'}
-              initialValue={configuredRule ?? undefined}
-              saveActions={standaloneSaveActions}
-              onSaved={() => navigate('/transaction-rule')}
-              onCancel={() => navigate('/transaction-rule')}
-            />
-          ) : null}
-        </Col>
-      </Row>
-    </div>
+    <ProductPage>
+      <ProductPageHeader
+        headingId="fintrackApp.transactionRule.home.createOrEditLabel"
+        dataCy="TransactionRuleCreateUpdateHeading"
+        title={
+          <Translate contentKey={isNew ? 'fintrackApp.transactionRule.createTitle' : 'fintrackApp.transactionRule.editTitle'}>
+            {isNew ? 'Create Classification Rule' : 'Edit Classification Rule'}
+          </Translate>
+        }
+        subtitle={
+          <Translate contentKey="fintrackApp.transactionRule.configuredCreateEditHelp">
+            Configure the complete rule before saving.
+          </Translate>
+        }
+        actions={
+          <Button color="secondary" outline size="sm" onClick={() => navigate(returnPath)}>
+            <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.cancel">Cancel</Translate>
+          </Button>
+        }
+      />
+      {loading ? (
+        <p>
+          <Translate contentKey="global.messages.info.loading">Loading...</Translate>
+        </p>
+      ) : null}
+      {error ? (
+        <Alert color="danger" fade={false} role="alert">
+          {error}
+        </Alert>
+      ) : null}
+      {!loading && !error ? (
+        <TransactionRuleConfiguredForm
+          key={configuredRule?.id ?? 'new'}
+          initialValue={configuredRule ?? undefined}
+          saveActions={standaloneSaveActions}
+          onSaved={savedRule => navigate(isNew ? '/transaction-rule' : `/transaction-rule/${savedRule.id}`)}
+          onCancel={() => navigate(returnPath)}
+        />
+      ) : null}
+    </ProductPage>
   );
 };
 

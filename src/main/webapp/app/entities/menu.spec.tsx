@@ -55,4 +55,27 @@ describe('Entities menu technical markers', () => {
 
     expect(screen.getByRole('menuitem', { name: 'Etiquetas' }).getAttribute('href')).toBe('/tag');
   });
+
+  it('uses one Rules product entry in English and Spanish instead of independent rule-manager entries', () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <EntitiesMenu />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('menuitem', { name: 'Rules' }).getAttribute('href')).toBe('/rules');
+    expect(screen.queryByRole('menuitem', { name: 'Transaction Rule' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Description Normalization Rule' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: /transaction rule condition technical/i })).toBeTruthy();
+
+    unmount();
+    TranslatorContext.setLocale('es');
+    render(
+      <MemoryRouter>
+        <EntitiesMenu />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('menuitem', { name: 'Reglas' }).getAttribute('href')).toBe('/rules');
+  });
 });

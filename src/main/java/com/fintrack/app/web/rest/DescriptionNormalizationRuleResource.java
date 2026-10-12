@@ -100,6 +100,28 @@ public class DescriptionNormalizationRuleResource {
         }
     }
 
+    /**
+     * {@code PUT /description-normalization-rules/:id/configured} : Update a complete normalization rule atomically.
+     */
+    @PutMapping("/{id}/configured")
+    public ResponseEntity<DescriptionNormalizationRuleConfiguredResponseDTO> updateConfiguredDescriptionNormalizationRule(
+        @PathVariable(value = "id", required = false) final Long id,
+        @RequestBody(required = false) DescriptionNormalizationRuleConfiguredRequestDTO request
+    ) {
+        if (!ruleService.isAccessible(id)) {
+            throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
+        }
+        DescriptionNormalizationRuleConfiguredResponseDTO result;
+        try {
+            result = configurationService.update(id, request);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+        }
+        return ResponseEntity.ok()
+            .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, result.getId().toString()))
+            .body(result);
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<DescriptionNormalizationRuleDTO> updateDescriptionNormalizationRule(
         @PathVariable(value = "id", required = false) final Long id,
@@ -170,6 +192,16 @@ public class DescriptionNormalizationRuleResource {
     @GetMapping("/{id}")
     public ResponseEntity<DescriptionNormalizationRuleDTO> getDescriptionNormalizationRule(@PathVariable("id") Long id) {
         return ResponseUtil.wrapOrNotFound(ruleService.findOne(id));
+    }
+
+    /**
+     * {@code GET /description-normalization-rules/:id/configured} : get a normalization rule with all ordered conditions.
+     */
+    @GetMapping("/{id}/configured")
+    public ResponseEntity<DescriptionNormalizationRuleConfiguredResponseDTO> getConfiguredDescriptionNormalizationRule(
+        @PathVariable("id") Long id
+    ) {
+        return ResponseUtil.wrapOrNotFound(configurationService.findOne(id));
     }
 
     @GetMapping("/{id}/conditions")

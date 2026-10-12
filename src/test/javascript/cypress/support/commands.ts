@@ -115,7 +115,7 @@ Cypress.Commands.add('login', (username: string, password: string) => {
 declare global {
   namespace Cypress {
     interface Chainable {
-      authenticatedRequest(data): Cypress.Chainable;
+      authenticatedRequest<T = unknown>(data: Cypress.RequestOptions): Cypress.Chainable<Cypress.Response<T>>;
       login(username: string, password: string): Cypress.Chainable;
     }
   }

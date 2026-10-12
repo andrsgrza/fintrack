@@ -12,8 +12,8 @@ import {
 describe('TransactionIngestion workflow smoke e2e test', () => {
   const transactionIngestionPageUrl = '/transaction-ingestion';
   const transactionIngestionPageUrlPattern = new RegExp('/transaction-ingestion(\\?.*)?$');
-  const username = Cypress.env('INGESTION_E2E_USERNAME') ?? 'cypress_ingestion';
-  const password = Cypress.env('INGESTION_E2E_PASSWORD') ?? 'cypress_ingestion';
+  const username = Cypress.env('INGESTION_E2E_USERNAME') ?? 'user';
+  const password = Cypress.env('INGESTION_E2E_PASSWORD') ?? 'user';
 
   interface E2EEntity {
     id: number;

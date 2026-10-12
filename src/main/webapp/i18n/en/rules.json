@@ -1,0 +1,25 @@
+{
+  "fintrackApp": {
+    "rules": {
+      "title": "Rules",
+      "subtitle": "Automate how your transactions are normalized and classified.",
+      "back": "Back to rules",
+      "description": {
+        "title": "Description Rules",
+        "summary": "Standardize original descriptions from imported files before classifying them.",
+        "original": "They evaluate the original description from imported files.",
+        "priority": "Active rules are evaluated in priority order.",
+        "firstMatch": "The first matching rule determines the normalized description.",
+        "action": "Manage description rules"
+      },
+      "classification": {
+        "title": "Classification Rules",
+        "summary": "Assign category and tag suggestions from your transaction data.",
+        "attributes": "They evaluate transaction attributes in supported import and manual workflows.",
+        "categoryPriority": "Multiple rules can match; priority determines which category takes precedence.",
+        "tags": "Tags from matching rules can accumulate.",
+        "action": "Manage classification rules"
+      }
+    }
+  }
+}

@@ -97,15 +97,16 @@ FINTRACK already implements the rule authoring model:
 - priorities are unique and consecutive per user.
 - new rules are appended at the end.
 - deleting a rule reindexes priorities for that user.
-- users reorder rules through Move up / Move down on the TransactionRule list.
-- drag-and-drop priority UI is deferred.
+- the Classification Rules manager keeps the complete current-owner list in `priority ASC, id ASC` order and supports both Move up / Move down controls and keyboard-accessible pointer/touch drag-and-drop.
+- arrows and drag-and-drop both submit the same complete current-owner id sequence to `PUT /api/transaction-rules/reorder`; a failed request restores the last server-confirmed order.
+- an administrator list can span owners while that command is current-user scoped, so the manager deliberately does not expose reorder controls there.
 - `TransactionRuleCondition.position` is server-managed.
 - condition position orders conditions inside one rule.
 - condition position does not reindex on delete.
 - TransactionRule product create/edit use the configured parent + conditions command API.
 - TransactionRule create/edit manage metadata, outputs, active state, condition logic, and local inline conditions together.
 - TransactionRule create does not create empty inactive drafts.
-- TransactionRule detail may still expose embedded condition management for direct maintenance/debug compatibility, but TR-3 labels that editor technical/debug because it writes directly to child condition endpoints.
+- TransactionRule detail is a read-only product explanation backed by the configured aggregate API: it presents all stored conditions and outputs, but never writes child conditions.
 - Standalone TransactionRuleCondition generated screens remain available only for technical/debug/direct maintenance and are marked as such in the UI/menu.
 - Generated TransactionRule write endpoints and TransactionRuleCondition CRUD endpoints remain available temporarily, but configured endpoints are the product create/edit source of truth.
 - active/configured TransactionRule requires at least one condition and at least one output.
@@ -136,6 +137,10 @@ The product create/edit UI mirrors this guard:
 - BOTH/null outputs remove only frontend auto-created FLOW conditions;
 - user-authored incompatible FLOW conditions are not silently changed and block save;
 - `ANY` is disabled/blocked for EXPENSE/INCOME resulting categories.
+
+Configured rule create/edit is an authoring surface, not an evaluation debugger. It renders a live localized IF/THEN summary of the draft using the same typed-condition summary logic as the manager; it does not evaluate a transaction or mutate any candidate/FinancialTransaction. Result category selection uses a product category identity/picker and result tags use `ProductTagSelector`. New choices are active and owner-scoped; a loaded historical inactive category/tag output remains visible and can be retained on an unrelated save, but it cannot be newly selected and evaluator behavior remains `OUTPUT_INACTIVE` (not a suggestion).
+
+The configured endpoint is one atomic aggregate write that preserves owner and priority. It has no version field or conflict protocol, so concurrent successful saves follow existing last-write-wins semantics. This editor behavior does not alter Transaction Ingestion contextual creation: plain save creates the rule only, while the existing explicit reevaluation actions remain the only reevaluation path.
 
 The pure evaluator is implemented. FinancialTransaction create applies category/tag suggestions in `FILL_EMPTY_ONLY` mode. Existing transaction reevaluation and bulk execution remain deferred.
 
@@ -707,7 +712,7 @@ The single ingestion review applies classification suggestions from their corres
 
 The unified ingestion review exposes explicit scoped reevaluation controls and a local configuration panel: auto-apply descriptions, categories, tags, and protect manual changes. All three auto-apply controls default off and protection defaults on; this configuration is page-local and is not persisted. With a scope off, reevaluation returns only a suggestion. The distinct Apply group exposes description/category/tag batch actions at all times; per-row actions live beside their Description, Category, or Tags suggestion. Description application uses its provenance command, while category/tag application sends independent `CATEGORY` or `TAGS` scopes and remains `FILL_EMPTY_ONLY`. With automatic scope enabled, the matching reevaluation path persists that scope: category/tag automation synchronizes only its scoped outputs, and description automation uses the existing normalized-description provenance model. A protected manual current value remains selected while its rule recommendation can remain visible; unprotected automatic application may replace or clear it. No automatic or explicit review operation calls Confirm Import or creates a FinancialTransaction.
 
-The review can also author a rule inline. A new rule has no retrospective effect merely by being saved: it joins normal owner-scoped evaluation order for future evaluations. A contextual **Save + reevaluate** action explicitly invokes the existing description or candidate rule command after the configured rule has been persisted. For a row TransactionRule, the generated `DESCRIPTION` and `FLOW` conditions derive only from persisted candidate state; the current account is context, not an implied rule condition, and transient preview suggestions are not rule outputs.
+The review can also author a rule inline. A new rule has no retrospective effect merely by being saved: it joins normal owner-scoped evaluation order for future evaluations. A contextual **Save + reevaluate** action explicitly invokes the existing description or candidate rule command after the configured rule has been persisted. For a row TransactionRule, the generated `DESCRIPTION` and `FLOW` conditions derive only from persisted candidate state; the current account is context, not an implied rule condition, and transient preview suggestions are not rule outputs. Row actions are limited to that record/candidate; all-applicable actions are limited to the current ingestion's eligible scope. If automatic application is off, the follow-up produces suggestions, not applied classification. If saving succeeds and that distinct follow-up fails, the UI reports the saved rule and does not retry its create request.
 
 Candidate-backed Confirm Import uses the existing `POST /api/transaction-ingestions/{id}/confirm` path. For non-completed imports, every current `VALID` row must have exactly one reviewed `FILE_IMPORT` candidate with `status=READY_TO_POST`, `validationStatus=VALID`, and `classificationReviewStatus` of `SUGGESTED`, `USER_SELECTED`, or `NOT_APPLICABLE`. Confirm creates `FinancialTransaction` rows from candidate fields/category/tags, links `IngestionRecord`s to the created transactions, clears candidate-tag joins, deletes the pre-post candidates, preserves `rawData`, and completes the parent ingestion all-or-nothing. Completed retry remains idempotent and creates no duplicates.
 
@@ -726,6 +731,22 @@ Description normalization is not part of the category/tag Transaction Rule Engin
 - It does not run on manual FinancialTransaction create/update/PATCH.
 - It does not run during Confirm Import.
 - It does not invoke category/tag TransactionRule evaluation.
+
+### Configured DescriptionNormalizationRule editing
+
+The Description Normalization Rule product editor persists the parent and all matching conditions as one aggregate. It uses:
+
+- `POST /api/description-normalization-rules/configured`;
+- `GET /api/description-normalization-rules/{id}/configured`;
+- `PUT /api/description-normalization-rules/{id}/configured`.
+
+Configured `PUT` validates the complete requested configuration before condition replacement, then updates the parent and replaces ordered conditions in one transaction. Owner, rule identity, and priority remain server-managed; normal rule reorder remains the only priority-changing operation. This write does not execute normalization, reevaluate imported rows, mutate `rawData`, or alter FinancialTransactions. Existing generated/detail condition endpoints remain temporarily available for technical maintenance; the product detail is now read-only and directs edits through this configured editor.
+
+Both configured Description Normalization Rule create and update require at least one complete matching condition, regardless of the rule's active state. Status controls future evaluation only; it is not a way to persist an incomplete configured aggregate.
+
+The aggregate has no version column or lock-based conflict response. A failed command cannot leave a partial parent/condition collection, but concurrent editors still have last-successful-save-wins behavior.
+
+The Description Rules manager shows the whole current-owner collection ordered by `priority ASC, id ASC`, including inactive rules. It describes condition configuration rather than re-evaluating it: ALL means every displayed condition must match; ANY means at least one may match; each condition retains its operator, value, and case-sensitivity display. Reordering always sends the complete owner id list to `PUT /api/description-normalization-rules/reorder`; drag-and-drop and arrows share it. The manager safely suppresses reorder for a mixed-owner administrator list because that endpoint remains current-user scoped.
 
 ### Matcher helper boundary
 

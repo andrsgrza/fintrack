@@ -21,9 +21,11 @@ const translations = {
   'fintrackApp.transactionRuleCondition.summary.notIn': '{{field}} is not one of {{value}}',
 };
 
+const interpolationValue = (value: unknown) => (typeof value === 'string' || typeof value === 'number' ? `${value}` : '');
+
 const translate = (key: string, options?: Record<string, unknown>) =>
   Object.entries(options ?? {}).reduce(
-    (label, [optionKey, optionValue]) => label.replace(`{{${optionKey}}}`, String(optionValue)),
+    (label, [optionKey, optionValue]) => label.replace(`{{${optionKey}}}`, interpolationValue(optionValue)),
     translations[key] ?? key,
   );
 

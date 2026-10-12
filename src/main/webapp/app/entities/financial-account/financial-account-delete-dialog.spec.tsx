@@ -10,6 +10,7 @@ import {
   IFinancialAccountDeletionBlocker,
   IFinancialAccountDeletionPreview,
 } from 'app/shared/model/financial-account-deletion-preview.model';
+import { FinancialAccountDeleteDialog } from './financial-account-delete-dialog';
 
 const mockGetFinancialAccountForDeletion = jest.fn();
 const mockGetFinancialAccountDeletionPreview = jest.fn();
@@ -20,8 +21,6 @@ jest.mock('./financial-account-hard-delete.service', () => ({
   getFinancialAccountDeletionPreview: (...args: unknown[]) => mockGetFinancialAccountDeletionPreview(...args),
   hardDeleteFinancialAccount: (...args: unknown[]) => mockHardDeleteFinancialAccount(...args),
 }));
-
-const { FinancialAccountDeleteDialog } = require('./financial-account-delete-dialog');
 
 const safePreview = (overrides: Partial<IFinancialAccountDeletionPreview> = {}): IFinancialAccountDeletionPreview => ({
   accountId: 42,
@@ -88,7 +87,7 @@ describe('FinancialAccountDeleteDialog', () => {
     renderDialog();
 
     expect(screen.getByTestId('financialAccountDeletePreviewLoading')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Permanently delete' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Permanently delete' }).disabled).toBe(true);
   });
 
   it('renders meaningful safe-preview consequences and omits zero counts', async () => {
@@ -104,7 +103,7 @@ describe('FinancialAccountDeleteDialog', () => {
     expect(screen.getByText("This account's card details")).toBeTruthy();
     expect(screen.queryByText('0 imports')).toBeNull();
     expect(screen.getByText('Will be preserved')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Permanently delete' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Permanently delete' }).disabled).toBe(false);
   });
 
   it.each(blockerCases)('renders product copy for the %s blocker and disables delete', async (code, expectedCopy) => {
@@ -114,7 +113,7 @@ describe('FinancialAccountDeleteDialog', () => {
     renderDialog();
 
     expect((await screen.findByTestId(`financialAccountDeleteBlocker-${code}`)).textContent).toContain(expectedCopy);
-    expect((screen.getByRole('button', { name: 'Permanently delete' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Permanently delete' }).disabled).toBe(true);
   });
 
   it('calls only the hard-delete command and returns to the overview on success', async () => {
@@ -141,7 +140,7 @@ describe('FinancialAccountDeleteDialog', () => {
     expect((await screen.findByTestId('financialAccountDeleteBlocker-RULE_ACCOUNT_CONDITION_REFERENCE')).textContent).toContain(
       'A rule uses this account as a condition.',
     );
-    expect((screen.getByRole('button', { name: 'Permanently delete' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Permanently delete' }).disabled).toBe(true);
     expect(screen.queryByTestId('financialAccountDeleteError')).toBeNull();
   });
 
@@ -152,7 +151,7 @@ describe('FinancialAccountDeleteDialog', () => {
     expect((await screen.findByTestId('financialAccountDeletePreviewError')).textContent).toContain(
       'Could not load deletion information. Close this dialog and try again.',
     );
-    expect((screen.getByRole('button', { name: 'Permanently delete' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Permanently delete' }).disabled).toBe(true);
   });
 
   it('takes the user to account edit when choosing to deactivate instead', async () => {

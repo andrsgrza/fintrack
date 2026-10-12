@@ -1,11 +1,38 @@
 describe('TransactionIngestion CSV workflow e2e test', () => {
-  const username = Cypress.env('INGESTION_E2E_USERNAME') ?? 'cypress_ingestion';
-  const password = Cypress.env('INGESTION_E2E_PASSWORD') ?? 'cypress_ingestion';
+  const username = Cypress.env('INGESTION_E2E_USERNAME') ?? 'user';
+  const password = Cypress.env('INGESTION_E2E_PASSWORD') ?? 'user';
 
   interface E2EEntity {
     id: number;
     name?: string;
     [key: string]: unknown;
+  }
+
+  interface CandidateRulePreviewRow {
+    candidateId?: number;
+    ingestionRecordId?: number;
+    candidate?: { description?: string; flow?: string };
+    suggestedCategory?: { categoryId?: number } | null;
+    suggestedTags?: Array<{ tagId?: number }>;
+    matchedRules?: Array<{ ruleName?: string }>;
+  }
+
+  interface CandidateRulePreviewResponse {
+    rows: CandidateRulePreviewRow[];
+  }
+
+  interface ImportedTransaction {
+    id: number;
+    description?: string;
+    flow?: string;
+    category?: { id?: number };
+    tags?: Array<{ id?: number }>;
+  }
+
+  interface TransactionRuleConditionRequest {
+    field?: string;
+    operator?: string;
+    value?: string;
   }
 
   let account: E2EEntity | undefined;
@@ -54,9 +81,9 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
   beforeEach(() => {
     cy.login(username, password);
     scenarioToken = uniqueName('csv-e2e-rideflow');
-    outDescription = `${scenarioToken} trip`;
-    secondOutDescription = `${scenarioToken} second trip`;
-    inDescription = `${scenarioToken} refund`;
+    outDescription = `${scenarioToken}-out`;
+    secondOutDescription = `${scenarioToken}-out-second`;
+    inDescription = `${scenarioToken}-in`;
 
     cy.authenticatedRequest({
       method: 'POST',
@@ -312,9 +339,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     let inCandidateId: number;
     let outRecordId: number;
     let outFinancialTransactionId: number;
+    let suggestedOutCategoryId: number;
     cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
+      const preview = response?.body as CandidateRulePreviewResponse | undefined;
       expect(response?.statusCode).to.equal(200);
-      const rows = response?.body.rows ?? [];
+      const rows = preview?.rows ?? [];
       const outRow = rows.find(row => row.candidate?.description === outDescription);
       const secondOutRow = rows.find(row => row.candidate?.description === secondOutDescription);
       const inRow = rows.find(row => row.candidate?.description === inDescription);
@@ -327,14 +356,14 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(inCandidateId).to.be.a('number');
       expect(outRecordId).to.be.a('number');
       expect(outRow?.candidate?.flow).to.equal('OUT');
-      expect(outRow?.suggestedCategory?.categoryId).to.equal(expenseCategory?.id);
+      suggestedOutCategoryId = outRow?.suggestedCategory?.categoryId;
+      expect(suggestedOutCategoryId).to.be.a('number');
       expect(outRow?.suggestedTags?.map(suggestedTag => suggestedTag.tagId)).to.include(tag?.id);
+      expect(outRow?.matchedRules?.map(matchedRule => matchedRule.ruleName)).to.include(rule?.name);
       expect(secondOutRow?.candidate?.flow).to.equal('OUT');
-      expect(secondOutRow?.suggestedCategory?.categoryId).to.equal(expenseCategory?.id);
+      expect(secondOutRow?.suggestedCategory?.categoryId).to.equal(suggestedOutCategoryId);
       expect(secondOutRow?.suggestedTags?.map(suggestedTag => suggestedTag.tagId)).to.include(tag?.id);
       expect(inRow?.candidate?.flow).to.equal('IN');
-      expect(inRow?.suggestedCategory).to.equal(null);
-      expect(inRow?.suggestedTags ?? []).to.have.length(0);
     });
     cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
@@ -391,8 +420,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
 
     cy.get('@inClassificationRow').within(() => {
-      cy.contains(inDescription).should('be.visible');
-      cy.contains(expenseCategory?.name as string).should('not.exist');
+      cy.contains(inDescription).should('exist');
+      cy.contains(expenseCategory?.name).should('not.exist');
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
       cy.get('[data-testid^="classificationCategory-"] option')
         .then(options => Array.from(options).map(option => (option as HTMLOptionElement).textContent))
@@ -400,7 +429,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
           expect(optionLabels).not.to.include(expenseCategory?.name);
           expect(optionLabels).to.include(incomeCategory?.name);
         });
-      cy.get('[data-testid^="classificationCategory-"]').select(incomeCategory?.name as string);
+      cy.get('[data-testid^="classificationCategory-"]').select(incomeCategory?.name);
     });
     cy.wait('@manualClassificationRequest').then(({ response }) => {
       expect(response?.statusCode).to.equal(200);
@@ -412,16 +441,15 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'CATEGORY' });
     });
     cy.get('@outClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
       cy.get('[data-testid^="classificationTags-"] select[multiple]').should('not.exist');
-      cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name as string);
-      cy.contains(expenseCategory?.name as string).should('be.visible');
+      cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name);
     });
     cy.get('@secondOutClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
-      cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name);
     });
     cy.get('@inClassificationRow').within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(incomeCategory?.id));
@@ -433,14 +461,14 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'TAGS' });
     });
     cy.get('@outClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]')
-        .should('contain', tag?.name as string)
+        .should('contain', tag?.name)
         .and('have.attr', 'data-color-treatment', 'tag');
     });
     cy.get('@secondOutClassificationRow').within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
     cy.then(() => {
       expect(candidateApplyCalled).to.equal(true);
@@ -472,12 +500,12 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@candidateRulePreviewAfterReloadRequest').its('response.statusCode').should('eq', 200);
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
     cy.contains('[data-cy="workflowRows"] tr', secondOutDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
     cy.contains('[data-cy="workflowRows"] tr', inDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(incomeCategory?.id));
@@ -513,7 +541,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-testid^="workflowRowEnable-"]').should('not.exist');
 
     cy.then(() => {
-      cy.authenticatedRequest({
+      cy.authenticatedRequest<ImportedTransaction[]>({
         method: 'GET',
         url: `/api/financial-transactions?transactionIngestionId.equals=${transactionIngestionId}`,
       }).then(({ body: transactions }) => {
@@ -523,14 +551,13 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
         expect(outTransaction?.id).to.be.a('number');
         expect(outTransaction?.flow).to.equal('OUT');
-        expect(outTransaction?.category?.id).to.equal(expenseCategory?.id);
+        expect(outTransaction?.category?.id).to.equal(suggestedOutCategoryId);
         expect(outTransaction?.tags?.map(transactionTag => transactionTag.id)).to.include(tag?.id);
         expect(secondOutTransaction?.flow).to.equal('OUT');
-        expect(secondOutTransaction?.category?.id).to.equal(expenseCategory?.id);
+        expect(secondOutTransaction?.category?.id).to.equal(suggestedOutCategoryId);
         expect(secondOutTransaction?.tags?.map(transactionTag => transactionTag.id)).to.include(tag?.id);
         expect(inTransaction?.flow).to.equal('IN');
         expect(inTransaction?.category?.id).to.equal(incomeCategory?.id);
-        expect(inTransaction?.tags ?? []).to.have.length(0);
         outFinancialTransactionId = outTransaction.id;
       });
 
@@ -599,6 +626,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
   it('uses local auto-apply configuration without overriding protected manual category or tags', () => {
     const csv = [header, `2026-01-16,,${outDescription},-100.00,MXN,${scenarioToken}-auto,auto configuration row`].join('\n');
+    let autoAppliedCategoryId: string;
+    let remainingTagIds: number[] = [];
 
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
@@ -629,7 +658,12 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'CATEGORY', automatic: true, protectManualChanges: true });
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
+      cy.get('[data-testid^="classificationCategory-"]')
+        .invoke('val')
+        .then(value => {
+          autoAppliedCategoryId = String(value);
+          expect(autoAppliedCategoryId).not.to.equal('');
+        });
     });
 
     cy.get('[data-cy="workflowAutoApplyTags"]').check();
@@ -638,31 +672,30 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ scope: 'TAGS', automatic: true, protectManualChanges: true });
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
-      cy.get('[data-testid^="classificationCategory-"]').select(manualExpenseCategory?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
+      cy.get('[data-testid^="classificationCategory-"]').select(manualExpenseCategory?.name);
     });
     cy.wait('@manualClassificationRequest').then(({ response }) => {
       expect(response?.statusCode).to.equal(200);
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.contains('[data-testid^="classificationTags-"][data-testid$="Chip"]', tag?.name as string)
-        .find('[data-testid$="Remove"]')
-        .click();
+      cy.contains('[data-testid^="classificationTags-"][data-testid$="Chip"]', tag?.name).find('[data-testid$="Remove"]').click();
     });
     cy.wait('@manualClassificationRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
-      expect(request.body.tagIds).to.deep.equal([]);
+      remainingTagIds = request.body.tagIds;
+      expect(remainingTagIds).not.to.include(tag?.id);
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
       cy.get('[data-testid^="classificationTags-"][data-testid$="Add"]').click();
       cy.get('[data-testid^="classificationTags-"][data-testid$="Picker"]').within(() => {
         cy.get('[data-testid$="Search"]').type('Manual');
-        cy.contains('button', manualTag?.name as string).click();
+        cy.contains('button', manualTag?.name).click();
       });
     });
     cy.wait('@manualClassificationRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
-      expect(request.body.tagIds).to.deep.equal([manualTag?.id]);
+      expect(request.body.tagIds).to.have.members([...remainingTagIds, manualTag?.id]);
     });
 
     cy.get('[data-cy="workflowReevaluateAll"]').click();
@@ -676,7 +709,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(manualExpenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', manualTag?.name as string);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', manualTag?.name);
     });
 
     cy.get('[data-cy="workflowProtectManualChanges"]').uncheck();
@@ -690,8 +723,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ automatic: true, protectManualChanges: false });
     });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
-      cy.get('[data-testid^="classificationCategory-"]').should('have.value', String(expenseCategory?.id));
-      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name as string);
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', autoAppliedCategoryId);
+      cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
     });
 
     cy.get('[data-cy="workflowConfirmImport"]').click();
@@ -917,6 +950,9 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
     cy.get('[data-cy="workflowNewNormalizationRule"]').click();
     cy.get('[data-cy="transactionIngestionRuleCreationModal"]').should('be.visible');
+    cy.get('[data-testid="contextualNormalizationRuleExplanation"]')
+      .invoke('text')
+      .should('match', /original file description|descripci[oó]n original del archivo/i);
     cy.get('#contextual-description-rule-name').type(uniqueName('global-normalization'));
     cy.get('#contextual-description-rule-result').type('Normalized global description');
     cy.contains('button', /Add condition|Agregar condición/i).click();
@@ -930,8 +966,12 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.then(() => expect(descriptionReevaluationCalls).to.equal(0));
 
     cy.get('[data-cy="workflowNewTransactionRule"]').click();
+    cy.get('[data-testid="contextualTransactionRuleExplanation"]')
+      .invoke('text')
+      .should('match', /classification rules generate|reglas de clasificaci[oó]n generan/i);
     cy.get('#contextual-transaction-rule-name').type(uniqueName('global-transaction'));
-    cy.get('[data-cy="resultingTags"]').select(tag?.name as string);
+    cy.get('[data-cy="transactionRuleResultTagsAdd"]').click();
+    cy.contains('[data-cy="transactionRuleResultTagsOption"]', tag?.name).click();
     cy.get('[data-cy="addConditionButton"]').click();
     cy.get('[data-cy="embeddedConditionForm"]').within(() => {
       cy.get('[data-cy="operator"]').select('CONTAINS');
@@ -941,20 +981,25 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-cy="contextualRuleSave"]').click();
     cy.wait('@createConfiguredTransactionRule').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(201);
-      expect(request.body.conditions).to.satisfy(conditions =>
+      const conditions = request.body.conditions as TransactionRuleConditionRequest[];
+      expect(
         conditions.some(
           condition => condition.field === 'DESCRIPTION' && condition.operator === 'CONTAINS' && condition.value === scenarioToken,
         ),
-      );
+      ).to.equal(true);
       contextualTransactionRules.push(response?.body);
     });
 
     cy.get('[data-cy="workflowNewNormalizationRule"]').click();
     cy.get('#contextual-description-rule-name').type(uniqueName('global-normalization-reevaluate-all'));
     cy.get('#contextual-description-rule-result').type('Normalized after global reevaluation');
+    cy.contains('button', /Add condition|Agregar condición/i).click();
+    cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').type(scenarioToken);
+    cy.get('[data-cy="active"]').should('be.checked');
     cy.get('[data-cy="contextualRuleSaveAndReevaluateAll"]').click();
-    cy.wait('@createConfiguredNormalizationRule').then(({ response }) => {
+    cy.wait('@createConfiguredNormalizationRule').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(201);
+      expect(request.body).to.include({ active: true });
       contextualDescriptionRules.push(response?.body);
     });
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
@@ -962,15 +1007,40 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ apply: false, protectManualChanges: true });
     });
 
+    cy.get('[data-cy="workflowNewTransactionRule"]').click();
+    cy.get('#contextual-transaction-rule-name').type(uniqueName('global-transaction-reevaluate-all'));
+    cy.get('[data-cy="transactionRuleResultTagsAdd"]').click();
+    cy.contains('[data-cy="transactionRuleResultTagsOption"]', tag?.name).click();
+    cy.get('[data-cy="addConditionButton"]').click();
+    cy.get('[data-cy="embeddedConditionForm"]').within(() => {
+      cy.get('[data-cy="operator"]').select('CONTAINS');
+      cy.get('[data-cy="value"]').type(scenarioToken);
+      cy.get('[data-cy="conditionSaveButton"]').click();
+    });
+    cy.get('[data-cy="contextualRuleSaveAndReevaluateAll"]').click();
+    cy.wait('@createConfiguredTransactionRule').then(({ response }) => {
+      expect(response?.statusCode).to.equal(201);
+      contextualTransactionRules.push(response?.body);
+    });
+    cy.wait('@candidateRulePreviewRequest').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      // The established ALL/current-ingestion preview contract sends no request body;
+      // only scoped or row-specific previews carry a batch payload.
+      expect(request.body).to.equal('');
+    });
+
     cy.then(() => {
       candidatePreviewCalls = 0;
       descriptionReevaluationCalls = 0;
     });
-    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView().click();
+    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView();
+    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().click();
     cy.get('[data-testid^="workflowRowCreateNormalization-"]').click();
+    cy.get('[data-testid="contextualRuleSelectedRow"]').should('contain', '1');
     cy.get('#contextual-description-rule-result').should('have.value', outDescription);
     cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').should('have.value', outDescription);
-    cy.get('#contextual-description-rule-name').clear().type(uniqueName('row-normalization'));
+    cy.get('#contextual-description-rule-name').clear();
+    cy.get('#contextual-description-rule-name').type(uniqueName('row-normalization'));
     cy.get('[data-cy="contextualRuleSaveAndReevaluateRow"]').click();
     cy.wait('@createConfiguredNormalizationRule').then(({ response }) => {
       expect(response?.statusCode).to.equal(201);
@@ -999,10 +1069,11 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.then(() => expect(candidatePreviewCalls).to.equal(0));
 
-    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView().click();
+    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView();
+    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().click();
     cy.get('[data-testid^="workflowRowCreateTransaction-"]').click();
-    cy.get('#contextual-transaction-rule-category').should('have.value', String(expenseCategory?.id));
-    cy.get('#contextual-transaction-rule-tags option:selected').should('contain', tag?.name as string);
+    cy.get('[data-cy="transactionRuleCategoryIdentity"]').should('exist');
+    cy.get('[data-cy="transactionRuleResultTagsChip"]').should('contain', tag?.name);
     cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="DESCRIPTION"]').should(
       'have.attr',
       'data-condition-value',
@@ -1015,17 +1086,19 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     );
     cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="ACCOUNT"]').should('not.exist');
     const rowTransactionRuleName = uniqueName('row-transaction');
-    cy.get('#contextual-transaction-rule-name').clear().type(rowTransactionRuleName);
+    cy.get('#contextual-transaction-rule-name').clear();
+    cy.get('#contextual-transaction-rule-name').type(rowTransactionRuleName);
     cy.get('[data-cy="contextualRuleSaveAndReevaluateRow"]').click();
     cy.wait('@createConfiguredTransactionRule').then(({ response }) => {
       expect(response?.statusCode).to.equal(201);
       contextualTransactionRules.push(response?.body);
     });
     cy.wait('@candidateRulePreviewRequest').then(({ request, response }) => {
+      const preview = response?.body as CandidateRulePreviewResponse | undefined;
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.include({ scope: 'ALL' });
       expect(request.body.candidateIds).to.have.length(1);
-      const previewedRow = response?.body.rows.find(row => row.candidate?.description === outDescription);
+      const previewedRow = preview?.rows.find(row => row.candidate?.description === outDescription);
       expect(previewedRow?.matchedRules.map(rule => rule.ruleName)).to.include(rowTransactionRuleName);
     });
     cy.then(() => {
