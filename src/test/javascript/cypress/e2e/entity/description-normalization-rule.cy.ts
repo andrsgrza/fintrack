@@ -31,13 +31,15 @@ describe('DescriptionNormalizationRule configured editor e2e test', () => {
     cy.intercept('POST', '/api/description-normalization-rules/configured').as('createConfiguredRule');
     cy.visit(`${pageUrl}/new`);
     cy.getEntityCreateUpdateHeading('DescriptionNormalizationRule').should('exist');
+    cy.get('[data-cy="descriptionNormalizationRuleValidationSummary"]').should('not.exist');
     cy.get('[data-cy="descriptionNormalizationRuleName"]').type(ruleName);
     cy.get('[data-cy="descriptionNormalizationRuleResult"]').type('Uber');
-    cy.get('[data-cy="descriptionNormalizationRuleActive"]').check();
+    cy.get('[data-cy="active"]').should('be.checked');
     cy.get(entityCreateSaveButtonSelector).click();
-    cy.get('[data-cy="descriptionNormalizationRuleFormError"]').should('be.visible');
+    cy.get('[data-cy="descriptionNormalizationRuleValidationSummary"]').should('be.visible');
 
     cy.get('[data-cy="addDescriptionNormalizationRuleCondition"]').click();
+    cy.get('[data-cy="descriptionNormalizationRuleConditionOperator-0"] option[value="CONTAINS"]').should('have.text', 'Contiene');
     cy.get('[data-cy="descriptionNormalizationRuleConditionValue-0"]').type('UBER');
     cy.get('[data-cy="addDescriptionNormalizationRuleCondition"]').click();
     cy.get('[data-cy="descriptionNormalizationRuleConditionOperator-1"]').select('REGEX');
@@ -62,7 +64,7 @@ describe('DescriptionNormalizationRule configured editor e2e test', () => {
       cy.get('[data-cy="descriptionNormalizationRuleConditionValue-0"]').should('have.value', 'UBER');
       cy.get('[data-cy="descriptionNormalizationRuleConditionValue-1"]').should('have.value', 'RIDE.*');
 
-      cy.get('[data-cy="descriptionNormalizationRuleConditionLogic"]').select('ANY');
+      cy.get('[data-cy="conditionLogicAny"]').check();
       cy.get('[data-cy="descriptionNormalizationRuleConditionValue-0"]').clear();
       cy.get('[data-cy="descriptionNormalizationRuleConditionValue-0"]').type('UBER EATS');
       cy.get('[data-cy="deleteDescriptionNormalizationRuleCondition-1"]').click();
@@ -82,13 +84,46 @@ describe('DescriptionNormalizationRule configured editor e2e test', () => {
       cy.intercept('GET', `/api/description-normalization-rules/${configuredRuleId}/configured`).as('reloadedConfiguredRule');
       cy.visit(`${pageUrl}/${configuredRuleId}/edit`);
       cy.wait('@reloadedConfiguredRule').its('response.statusCode').should('eq', 200);
-      cy.get('[data-cy="descriptionNormalizationRuleConditionLogic"]').should('have.value', 'ANY');
+      cy.get('[data-cy="conditionLogicAny"]').should('be.checked');
       cy.get('[data-cy="descriptionNormalizationRuleConditionValue-0"]').should('have.value', 'UBER EATS');
       cy.get('[data-cy="descriptionNormalizationRuleConditionValue-1"]').should('not.exist');
 
       cy.visit(`${pageUrl}/${configuredRuleId}`);
       cy.getEntityDetailsHeading('descriptionNormalizationRule').should('exist');
     });
+  });
+
+  it('preserves an inactive configured rule on edit and exposes the product status toggle', () => {
+    const ruleName = uniqueName('dnr-inactive');
+
+    cy.authenticatedRequest({
+      method: 'POST',
+      url: '/api/description-normalization-rules/configured',
+      body: {
+        name: ruleName,
+        active: false,
+        conditionOperator: 'ALL',
+        resultingDescription: 'Inactive normalized value',
+        conditions: [{ operator: 'CONTAINS', value: 'INACTIVE', caseSensitive: false }],
+      },
+    }).then(({ body }) => {
+      createdRuleIds.push(body.id);
+      cy.intercept('GET', `/api/description-normalization-rules/${body.id}/configured`).as('inactiveConfiguredRule');
+      cy.visit(`${pageUrl}/${body.id}/edit`);
+      cy.wait('@inactiveConfiguredRule').its('response.statusCode').should('eq', 200);
+    });
+
+    cy.get('[data-cy="active"]').should('not.be.checked');
+    cy.get('[data-cy="active"]').click();
+    cy.get('[data-cy="active"]').should('be.checked');
+    cy.get('[data-cy="descriptionNormalizationRuleStatusHelp"]').should('be.visible');
+    cy.intercept('PUT', '**/configured').as('activateConfiguredRule');
+    cy.get(entityCreateSaveButtonSelector).click();
+    cy.wait('@activateConfiguredRule').then(({ response }) => {
+      expect(response?.body.active).to.equal(true);
+      cy.visit(`${pageUrl}/${response?.body.id}/edit`);
+    });
+    cy.get('[data-cy="active"]').should('be.checked');
   });
 
   it('manages the complete description-rule order with arrows and a real mouse drag, then reads, edits, and deletes a rule', () => {

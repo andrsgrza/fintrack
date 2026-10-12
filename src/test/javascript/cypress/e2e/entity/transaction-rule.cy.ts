@@ -50,7 +50,7 @@ describe('TransactionRule configured workflow e2e test', () => {
       })
       .then(({ body }) => body);
 
-  const createConfiguredRule = (name: string, resultingCategory: E2EEntity, flowValue: 'IN' | 'OUT') =>
+  const createConfiguredRule = (name: string, resultingCategory: E2EEntity, flowValue: 'IN' | 'OUT', active = true) =>
     cy
       .authenticatedRequest({
         method: 'POST',
@@ -59,7 +59,7 @@ describe('TransactionRule configured workflow e2e test', () => {
           name,
           description: 'Configured E2E seed rule',
           conditionLogic: 'ALL',
-          active: true,
+          active,
           resultingCategory: { id: resultingCategory.id },
           resultingTags: [],
           conditions: [
@@ -101,6 +101,8 @@ describe('TransactionRule configured workflow e2e test', () => {
     cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
     cy.getEntityCreateUpdateHeading('TransactionRule').should('exist');
+    cy.get('[data-cy="active"]').should('be.checked');
+    cy.get('[data-cy="configuredValidationMessages"]').should('not.exist');
   };
 
   const selectCategory = (category: E2EEntity) => {
@@ -272,6 +274,36 @@ describe('TransactionRule configured workflow e2e test', () => {
       .and('contain', 'sin duplicados');
     cy.get('[data-cy="addConditionButton"]').should('not.exist');
     cy.get('[data-cy="conditionsTechnicalEditorNote"]').should('not.exist');
+  });
+
+  it('shows configured validation only after an invalid save is attempted', () => {
+    visitCreate();
+
+    cy.get(entityCreateSaveButtonSelector).click();
+    cy.get('[data-cy="configuredValidationMessages"]').should('be.visible').and('contain', 'La regla debe tener al menos una condición.');
+    cy.get('[data-cy="noConditionsValidation"]').should('have.class', 'text-danger');
+  });
+
+  it('preserves an inactive configured rule on edit and exposes the product status toggle', () => {
+    const ruleName = uniqueName('tr-inactive-rule');
+
+    createConfiguredRule(ruleName, bothCategory, 'OUT', false).then(rule => {
+      cy.intercept('GET', `/api/transaction-rules/${rule.id}/configured`).as('inactiveConfiguredRule');
+      cy.visit(`/transaction-rule/${rule.id}/edit`);
+      cy.wait('@inactiveConfiguredRule').its('response.statusCode').should('eq', 200);
+    });
+
+    cy.get('[data-cy="active"]').should('not.be.checked');
+    cy.get('[data-cy="active"]').click();
+    cy.get('[data-cy="active"]').should('be.checked');
+    cy.get('[data-cy="transactionRuleStatusHelp"]').should('be.visible');
+    cy.intercept('PUT', '**/configured').as('activateConfiguredRule');
+    cy.get(entityCreateSaveButtonSelector).click();
+    cy.wait('@activateConfiguredRule').then(({ response }) => {
+      expect(response?.body.active).to.equal(true);
+      cy.visit(`/transaction-rule/${response?.body.id}/edit`);
+    });
+    cy.get('[data-cy="active"]').should('be.checked');
   });
 
   it('creates an INCOME rule through the configured product flow', () => {

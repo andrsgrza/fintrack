@@ -36,9 +36,9 @@
         "forbidden": "You do not have access to this classification rule.",
         "loadFailed": "This classification rule could not be loaded. Return to the rule manager and try again."
       },
-      "createTitle": "Create Transaction Rule",
-      "editTitle": "Edit Transaction Rule",
-      "configuredCreateEditHelp": "Configure metadata, outputs, conditions, and active state before saving.",
+      "createTitle": "Create Classification Rule",
+      "editTitle": "Edit Classification Rule",
+      "configuredCreateEditHelp": "Define matching conditions and category or tag results for future transaction review.",
       "configuredConditionsHelp": "Define conditions before saving this rule.",
       "configuredLoadFailed": "Transaction rule configuration could not be loaded.",
       "configuredSaveFailed": "Transaction rule configuration could not be saved.",
@@ -56,7 +56,8 @@
         "configurationPreviewHelp": "This describes the rule configuration; it does not evaluate a specific transaction.",
         "statusHelp": "Active rules participate in future classification evaluations. Changing this never reclassifies historical transactions.",
         "expenseFlowNotice": "An expense category requires Flow = Expense and ALL matching. The required Flow condition is shown below.",
-        "incomeFlowNotice": "An income category requires Flow = Income and ALL matching. The required Flow condition is shown below."
+        "incomeFlowNotice": "An income category requires Flow = Income and ALL matching. The required Flow condition is shown below.",
+        "validationSummary": "Review the highlighted rule configuration sections before saving."
       },
       "id": "ID",
       "name": "Name",
@@ -121,8 +122,9 @@
       },
       "sections": {
         "identity": "Identity",
-        "matching": "Matching logic",
-        "result": "Result",
+        "matching": "Matching conditions",
+        "result": "Results",
+        "configurationSummary": "Configuration summary",
         "status": "Status",
         "statusMetadata": "Status / Metadata",
         "when": "When",
@@ -157,6 +159,7 @@
       "activeDisabledNoConditions": "Add at least one condition before activating this rule.",
       "validation": {
         "conditionsRequired": "Transaction rule must have at least one condition.",
+        "conditionsIncomplete": "Complete every condition field before saving this rule.",
         "outputRequired": "Select at least one output: category or tags.",
         "outputsUnavailable": "Active categories and tags must load before this rule can be saved.",
         "inactiveOutputsCannotBeUsedForNewRule": "An inactive category or tag cannot be used to create a new rule. Remove it or choose an active output.",

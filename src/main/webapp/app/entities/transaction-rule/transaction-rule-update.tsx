@@ -43,7 +43,7 @@ export const TransactionRuleUpdate = () => {
         dataCy="TransactionRuleCreateUpdateHeading"
         title={
           <Translate contentKey={isNew ? 'fintrackApp.transactionRule.createTitle' : 'fintrackApp.transactionRule.editTitle'}>
-            {isNew ? 'Create Transaction Rule' : 'Edit Transaction Rule'}
+            {isNew ? 'Create Classification Rule' : 'Edit Classification Rule'}
           </Translate>
         }
         subtitle={

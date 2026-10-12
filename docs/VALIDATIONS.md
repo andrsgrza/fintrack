@@ -396,7 +396,7 @@ _Last updated: 2026-07-13 — validation catalog aligned with FinancialAccount b
 - `active` is required.
 - `priority` is required, non-negative, and server-managed.
 - `createdAt` and `updatedAt` are server-owned.
-- `active=true` requires at least one condition.
+- Generic compatibility writes retain the `active=true` guard; configured product create/update requires at least one complete condition whether the rule is active or inactive.
 - `POST /api/description-normalization-rules/configured` accepts the complete parent plus ordered local conditions and creates them atomically. The client cannot set owner, priority, positions, or timestamps; invalid parent/condition input rolls back the full command without an orphan rule.
 - Transaction Ingestion contextual creation uses that configured command and the existing configured TransactionRule command. Its row prefills are editable client-side defaults only; they do not weaken either rule type's normal validation or owner-scoped output validation.
 - Saving a contextual rule alone never mutates an `IngestionRecord`, `TransactionCandidate`, `rawData`, or import lifecycle state. Only the explicit follow-up reevaluation action can evaluate the newly saved rule.

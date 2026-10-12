@@ -383,7 +383,7 @@ TransactionRule create/edit manage rule metadata, outputs, active state, conditi
 
 Product create no longer creates an empty inactive draft. It keeps unsaved conditions in local frontend state and saves the complete configured rule in one command.
 
-Product save is blocked when the rule has:
+Product save is blocked, whether the rule is active or inactive, when the rule has:
 
 - zero conditions;
 - zero outputs (`resultingCategory` or `resultingTags`);
@@ -706,9 +706,9 @@ Description normalization rules follow the same parent-centered composition patt
 
 - list page is a wide product manager with ordered rule cards, active/inactive status, readable ALL/ANY condition summaries, result summaries, a back-to-Rules action, and owner-safe reorder controls;
 - product create uses the configured parent + local conditions command and does not create an empty draft;
-- standalone create and edit share one configured form: Identity → Matching → Result → Status, with local condition add/edit/remove and a live human-readable configuration summary;
+- standalone create and edit share one configured form: **Identity → Matching conditions → Results → Configuration summary → Status**, with local condition add/edit/remove and a live human-readable configuration summary;
 - configured create and edit use `POST`, `GET`, and `PUT /api/description-normalization-rules[/id]/configured`; edit loads every ordered condition and saves the complete replacement atomically while priority stays server-managed;
-- save failures preserve the local draft and show the backend validation message; client validation prevents blank identity/result/condition values and an active rule with no conditions;
+- save failures preserve the local draft and show the backend validation message; progressive client validation prevents blank identity/result/condition values and a missing condition for either active or inactive rules after Save is attempted;
 - detail is a read-only product view: Matching exposes every condition and grouping semantics, Result shows the replacement, and Behavior explains FILE-import scope, first-match-wins order, and non-retroactivity; it links only to configured edit/delete actions;
 - condition forms have no field selector because every condition evaluates original imported description.
 

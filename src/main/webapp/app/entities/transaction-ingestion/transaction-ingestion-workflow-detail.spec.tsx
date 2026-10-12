@@ -2851,7 +2851,7 @@ describe('TransactionIngestion file workflow', () => {
     fireEvent.change(within(modal).getByLabelText('Resulting description'), { target: { value: 'Salary' } });
     fireEvent.click(within(modal).getByRole('button', { name: /add condition/i }));
     fireEvent.change(within(modal).getByTestId('contextualDescriptionRuleConditionValue-0'), { target: { value: 'SALARY' } });
-    fireEvent.click(within(modal).getByLabelText('Active'));
+    expect(within(modal).getByTestId('active')).toHaveProperty('checked', true);
     fireEvent.click(within(modal).getByRole('button', { name: /save and reevaluate all applicable rows/i }));
 
     await waitFor(() =>
@@ -2928,10 +2928,11 @@ describe('TransactionIngestion file workflow', () => {
     fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
 
+    const modal = screen.getByTestId('transactionIngestionRuleCreationModal');
+    await waitFor(() => expect(within(modal).getByRole('button', { name: /^save$/i }).disabled).toBe(false));
+    const saveButton = within(modal).getByRole('button', { name: /^save$/i });
+    fireEvent.click(saveButton);
     expect(await screen.findByText(/inactive category or tag cannot be used/i)).toBeTruthy();
-    expect(within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', { name: /^save$/i }).disabled).toBe(
-      true,
-    );
   });
 
   it('reports reevaluation failure after saving a contextual rule without creating it twice', async () => {

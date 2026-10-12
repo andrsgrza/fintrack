@@ -32,9 +32,10 @@
         "firstMatch": "Las reglas activas se evalúan de arriba hacia abajo. La primera que coincida determina la descripción normalizada.",
         "history": "Los cambios afectan evaluaciones futuras o filas de importación reevaluadas explícitamente; los movimientos publicados no cambian."
       },
-      "createTitle": "Crear regla de normalización",
-      "editTitle": "Editar regla de normalización",
-      "createInactiveHelp": "Las reglas se guardan inactivas primero. Agrega condiciones desde el detalle y actívala cuando esté lista.",
+      "createTitle": "Crear regla de descripción",
+      "editTitle": "Editar regla de descripción",
+      "configuredCreateEditHelp": "Define cómo se normaliza una descripción original importada en futuras revisiones de archivos.",
+      "createInactiveHelp": "Las reglas configuradas nuevas inician activas después de definir una condición válida.",
       "id": "ID",
       "name": "Nombre",
       "description": "Descripción",
@@ -52,12 +53,24 @@
       "conditions": "Condiciones",
       "manageConditions": "Administrar condiciones",
       "addCondition": "Agregar condición",
-      "activeRequiresCondition": "Las reglas activas requieren al menos una condición.",
+      "activeRequiresCondition": "Las reglas requieren al menos una condición.",
+      "conditionsRequired": "Agrega al menos una condición válida antes de guardar la regla.",
       "activeDisabledNoConditions": "Agrega al menos una condición antes de activar esta regla.",
       "configuredLoadFailed": "No se pudo cargar la regla. Vuelve al administrador de reglas e inténtalo de nuevo.",
       "configuredSaveFailed": "No se pudo guardar la regla. Tus cambios siguen disponibles para reintentarlo.",
       "configuredValidationFailed": "Completa los campos resaltados antes de guardar.",
+      "validationSummary": "Revisa las secciones resaltadas de la configuración antes de guardar.",
+      "priorityServerManagedHelp": "El orden de reglas se administra desde la lista. Las reglas nuevas se agregan al final.",
       "operators": {
+        "EXACT": "Igual a",
+        "NOT_EQUALS": "Distinto de",
+        "CONTAINS": "Contiene",
+        "NOT_CONTAINS": "No contiene",
+        "STARTS_WITH": "Empieza con",
+        "ENDS_WITH": "Termina con",
+        "REGEX": "Coincide con expresión regular"
+      },
+      "summaryOperators": {
         "EXACT": "es igual a",
         "NOT_EQUALS": "no es igual a",
         "CONTAINS": "contiene",
@@ -72,7 +85,8 @@
       },
       "summary": {
         "matching": "Coincidencia",
-        "result": "Resultado",
+        "matchingConditions": "Condiciones de coincidencia",
+        "result": "Resultados",
         "then": "Entonces reemplazar la descripción por",
         "all": "Todas las condiciones deben coincidir",
         "any": "Puede coincidir cualquier condición",
@@ -101,18 +115,21 @@
       "editor": {
         "identity": "Identidad",
         "matching": "Coincidencia",
+        "matchingConditions": "Condiciones de coincidencia",
         "result": "Resultado",
         "status": "Estado",
         "allHelp": "Todas las condiciones deben coincidir con la descripción original.",
         "anyHelp": "Al menos una condición debe coincidir con la descripción original.",
-        "noConditions": "Aún no hay condiciones.",
+        "noConditions": "Agrega al menos una condición para definir cuándo coincide esta regla con la descripción original importada.",
         "regexHelp": "Avanzado: usa una expresión regular válida de Java.",
         "resultHelp": "Una descripción original que coincida se reemplaza con este valor.",
         "statusHelp": "Las reglas activas participan en normalizaciones de importaciones futuras; guardar no reprocesa el historial.",
         "preview": "Vista previa de la configuración",
+        "configurationSummary": "Resumen de configuración",
+        "configurationSummaryHelp": "Describe la configuración de la regla; no evalúa una fila importada.",
         "previewIf": "SI la descripción original",
         "previewThen": "ENTONCES reemplazarla por",
-        "previewIncomplete": "Completa el nombre, el resultado y cada condición para ver este resumen de configuración."
+        "previewIncomplete": "Agrega un nombre, resultado y condición válida para revisar este resumen de configuración."
       }
     },
     "descriptionNormalizationRuleCondition": {

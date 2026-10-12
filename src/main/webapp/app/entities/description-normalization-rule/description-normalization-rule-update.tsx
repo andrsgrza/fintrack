@@ -54,7 +54,12 @@ export const DescriptionNormalizationRuleUpdate = () => {
       <ProductPageHeader
         headingId="description-normalization-rule-create-update-heading"
         dataCy="DescriptionNormalizationRuleCreateUpdateHeading"
-        title={<Translate contentKey={headingKey}>Create or edit Description Normalization Rule</Translate>}
+        title={<Translate contentKey={headingKey}>{isNew ? 'Create Description Rule' : 'Edit Description Rule'}</Translate>}
+        subtitle={
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.configuredCreateEditHelp">
+            Define how an original imported description should be normalized for future file-import review.
+          </Translate>
+        }
         actions={
           <Button color="secondary" outline size="sm" onClick={() => navigate(returnPath)}>
             <FontAwesomeIcon icon="arrow-left" /> <Translate contentKey="entity.action.cancel">Cancel</Translate>

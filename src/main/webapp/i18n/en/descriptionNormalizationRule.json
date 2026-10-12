@@ -32,9 +32,10 @@
         "firstMatch": "Active rules are evaluated from top to bottom. The first matching rule determines the normalized description.",
         "history": "Changes affect future evaluations or explicitly reevaluated import rows; previously posted transactions are not changed."
       },
-      "createTitle": "Create Description Normalization Rule",
-      "editTitle": "Edit Description Normalization Rule",
-      "createInactiveHelp": "Rules are saved inactive first. Add conditions from the detail page, then activate the rule when ready.",
+      "createTitle": "Create Description Rule",
+      "editTitle": "Edit Description Rule",
+      "configuredCreateEditHelp": "Define how an original imported description should be normalized for future file-import review.",
+      "createInactiveHelp": "New configured rules start active after you define a valid condition.",
       "id": "ID",
       "name": "Name",
       "description": "Description",
@@ -52,12 +53,24 @@
       "conditions": "Conditions",
       "manageConditions": "Manage conditions",
       "addCondition": "Add condition",
-      "activeRequiresCondition": "Active rules require at least one condition.",
+      "activeRequiresCondition": "Rules require at least one condition.",
+      "conditionsRequired": "Add at least one valid condition before saving this rule.",
       "activeDisabledNoConditions": "Add at least one condition before activating this rule.",
       "configuredLoadFailed": "The rule could not be loaded. Return to the rule manager and try again.",
       "configuredSaveFailed": "The rule could not be saved. Your changes are still available to retry.",
       "configuredValidationFailed": "Complete the highlighted fields before saving.",
+      "validationSummary": "Review the highlighted rule configuration sections before saving.",
+      "priorityServerManagedHelp": "Rule order is managed from the rules list. New rules are added last.",
       "operators": {
+        "EXACT": "Equals",
+        "NOT_EQUALS": "Does not equal",
+        "CONTAINS": "Contains",
+        "NOT_CONTAINS": "Does not contain",
+        "STARTS_WITH": "Starts with",
+        "ENDS_WITH": "Ends with",
+        "REGEX": "Matches expression"
+      },
+      "summaryOperators": {
         "EXACT": "equals",
         "NOT_EQUALS": "does not equal",
         "CONTAINS": "contains",
@@ -72,7 +85,8 @@
       },
       "summary": {
         "matching": "Matching",
-        "result": "Result",
+        "matchingConditions": "Matching conditions",
+        "result": "Results",
         "then": "Then replace the description with",
         "all": "All conditions must match",
         "any": "Any condition may match",
@@ -101,18 +115,21 @@
       "editor": {
         "identity": "Identity",
         "matching": "Matching",
+        "matchingConditions": "Matching conditions",
         "result": "Result",
         "status": "Status",
         "allHelp": "Every condition must match the original description.",
         "anyHelp": "At least one condition must match the original description.",
-        "noConditions": "No conditions have been added.",
+        "noConditions": "Add at least one condition to define when this rule matches the original imported description.",
         "regexHelp": "Advanced: use a valid Java regular expression.",
         "resultHelp": "A matching original description is replaced with this value.",
         "statusHelp": "Active rules participate in future import normalization; saving does not reprocess history.",
         "preview": "Configuration preview",
+        "configurationSummary": "Configuration summary",
+        "configurationSummaryHelp": "This describes the rule configuration; it does not evaluate an imported row.",
         "previewIf": "IF original description",
         "previewThen": "THEN replace it with",
-        "previewIncomplete": "Complete the name, result, and every condition to see this configuration summary."
+        "previewIncomplete": "Add a name, result, and valid condition to review this configuration summary."
       }
     },
     "descriptionNormalizationRuleCondition": {

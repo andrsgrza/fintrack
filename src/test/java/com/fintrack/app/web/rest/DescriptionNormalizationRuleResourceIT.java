@@ -136,6 +136,24 @@ class DescriptionNormalizationRuleResourceIT {
 
     @Test
     @Transactional
+    void configuredCreateRejectsMissingConditionsForActiveAndInactiveRules() throws Exception {
+        long rulesBefore = ruleRepository.count();
+        for (boolean active : List.of(false, true)) {
+            Map<String, Object> request = configuredRequest("Missing conditions " + active, null, active, "ALL", "Normalized", List.of());
+
+            mockMvc
+                .perform(
+                    post(ENTITY_API_URL + "/configured").contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(request))
+                )
+                .andExpect(status().isBadRequest());
+        }
+
+        assertThat(ruleRepository.count()).isEqualTo(rulesBefore);
+        assertThat(conditionRepository.count()).isZero();
+    }
+
+    @Test
+    @Transactional
     void configuredUpdateReplacesTheCompleteConditionSetPreservesOwnerAndPriorityAndEvaluatesTheNewRule() throws Exception {
         DescriptionNormalizationRule persisted = persistRule("Normalize ride", 7);
         Instant createdAt = persisted.getCreatedAt();
@@ -254,11 +272,11 @@ class DescriptionNormalizationRuleResourceIT {
 
     @Test
     @Transactional
-    void configuredUpdateSupportsInactiveRulesWithoutConditionsButRejectsActivatingThem() throws Exception {
+    void configuredUpdateRejectsMissingConditionsForInactiveAndActiveRules() throws Exception {
         DescriptionNormalizationRule persisted = persistRule("Inactive configurable", 0);
         Map<String, Object> inactiveRequest = configuredRequest("Inactive configurable", null, false, "ALL", "Normalized", List.of());
 
-        putConfigured(persisted.getId(), inactiveRequest).andExpect(status().isOk()).andExpect(jsonPath("$.conditions").isEmpty());
+        putConfigured(persisted.getId(), inactiveRequest).andExpect(status().isBadRequest());
 
         Map<String, Object> invalidActiveRequest = configuredRequest("Inactive configurable", null, true, "ALL", "Normalized", List.of());
         putConfigured(persisted.getId(), invalidActiveRequest).andExpect(status().isBadRequest());

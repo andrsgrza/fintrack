@@ -1581,7 +1581,7 @@ Description normalization rules are separate from `TransactionRule`.
 - Description normalization evaluates only the imported original description.
 - It produces one output: `resultingDescription`.
 - First matching active rule wins by `priority ASC`, then `id ASC`.
-- `active=true` requires at least one condition.
+- Generic compatibility writes retain their existing `active=true` condition guard. Configured product create/update requires at least one complete condition whether the rule is active or inactive.
 - New rules append last for the current user.
 - Rule priority is server-managed and user-scoped.
 - Rule names are unique per owner, case-insensitive and trim-insensitive.

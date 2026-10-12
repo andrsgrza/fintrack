@@ -710,7 +710,7 @@ FILE ingestion upload now has an optional pre-review description normalization s
 
 The review page contains global actions for a new description-normalization rule and a new category/tag TransactionRule, plus an eligible-row Create rule menu. The actions use the normal configured rule forms inside the current page; they do not navigate to generated CRUD screens.
 
-- Global actions begin with a blank rule form.
+- Global actions begin with a blank, active rule form. Row-prefilled configured forms use the same active-by-default creation state; opening an existing rule for edit instead preserves its stored status.
 - A row normalization rule begins with original `rawData.raw.description` in its first condition and the current normalized/manual description as its result.
 - A row TransactionRule begins with `DESCRIPTION CONTAINS` the persisted candidate description and `FLOW EQUALS` the persisted candidate flow. Its persisted category/tags are outputs. Account context and transient suggestions are deliberately not converted into conditions or outputs.
 - A selected row is identified in the modal. If the immutable original description (normalization) or current candidate description (classification) is unavailable, the modal explains that source state and does not invent a fallback rule.

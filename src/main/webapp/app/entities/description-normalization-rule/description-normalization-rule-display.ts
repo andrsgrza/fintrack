@@ -24,7 +24,7 @@ export const formatDescriptionNormalizationCondition = (
   translate: TranslateFn,
 ) => {
   const operator = condition.operator
-    ? translate(`fintrackApp.descriptionNormalizationRule.operators.${condition.operator}`)
+    ? translate(`fintrackApp.descriptionNormalizationRule.summaryOperators.${condition.operator}`)
     : translate('fintrackApp.descriptionNormalizationRule.summary.unknownOperator');
   const value = condition.value ? `“${condition.value}”` : translate('fintrackApp.descriptionNormalizationRule.summary.missingValue');
   const sensitivity = condition.caseSensitive

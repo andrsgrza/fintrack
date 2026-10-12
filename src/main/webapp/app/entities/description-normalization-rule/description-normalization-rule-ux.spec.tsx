@@ -249,6 +249,61 @@ describe('DescriptionNormalizationRule product UX', () => {
     expect(await screen.findByTestId('rule-detail-destination')).toBeTruthy();
   });
 
+  it('starts a new configured rule active with neutral condition guidance, then exposes validation only after saving is attempted', async () => {
+    render(
+      <MemoryRouter initialEntries={['/description-normalization-rule/new']}>
+        <Routes>
+          <Route path="/description-normalization-rule/new" element={<DescriptionNormalizationRuleUpdate />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const activeControl = await screen.findByLabelText('Active');
+    expect(activeControl).toHaveProperty('checked', true);
+    expect(screen.queryByTestId('descriptionNormalizationRuleValidationSummary')).toBeNull();
+    expect(screen.getByText('Matching conditions')).toBeTruthy();
+    expect(screen.getByTestId('descriptionNormalizationRuleConditionsGuidance').className).toContain('text-muted');
+
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(screen.getByTestId('descriptionNormalizationRuleValidationSummary')).toBeTruthy();
+    expect(screen.getByTestId('descriptionNormalizationRuleConditionsGuidance').className).toContain('text-danger');
+    expect(mockAxiosPost).not.toHaveBeenCalled();
+  });
+
+  it('preserves an existing inactive configured rule and lets the user intentionally toggle it', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: { ...secondRule, conditions: [{ operator: 'CONTAINS', value: 'OXXO', caseSensitive: false, position: 0 }] },
+    });
+    render(
+      <MemoryRouter initialEntries={['/description-normalization-rule/2/edit']}>
+        <Routes>
+          <Route path="/description-normalization-rule/:id/edit" element={<DescriptionNormalizationRuleUpdate />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const activeControl = await screen.findByLabelText('Active');
+    expect(activeControl).toHaveProperty('checked', false);
+    expect(screen.getByTestId('descriptionNormalizationRuleStatusHelp').className).toContain('d-block');
+
+    fireEvent.click(activeControl);
+    expect(activeControl).toHaveProperty('checked', true);
+  });
+
+  it('uses uppercase operator labels in controls while retaining natural-language summaries', async () => {
+    render(
+      <MemoryRouter initialEntries={['/description-normalization-rule/new']}>
+        <Routes>
+          <Route path="/description-normalization-rule/new" element={<DescriptionNormalizationRuleUpdate />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /add condition/i }));
+    expect(screen.getByRole('option', { name: 'Contains' })).toBeTruthy();
+  });
+
   it('prevents duplicate configured creates while the first description-rule save is pending', async () => {
     mockAxiosPost.mockImplementation(() => new Promise(() => undefined));
     render(

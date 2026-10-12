@@ -71,9 +71,8 @@ const globalSaveActions: IContextualRuleSaveAction[] = [
 
 const normalizationInitialValue = (row?: ITransactionIngestionRuleCreationRowContext): IDescriptionNormalizationRuleConfigured => ({
   name: row?.currentDescription ? `Normalize ${row.currentDescription}` : '',
-  // A row prefill always provides the required condition, so it can participate in an immediate reevaluation.
-  // Scratch rules stay inactive until the user has configured at least one condition.
-  active: Boolean(row?.originalDescription),
+  // All new configured rules start active. Scratch rules still cannot be saved until a valid condition is added.
+  active: true,
   conditionOperator: RuleConditionLogic.ALL,
   resultingDescription: row?.currentDescription ?? '',
   conditions: row?.originalDescription

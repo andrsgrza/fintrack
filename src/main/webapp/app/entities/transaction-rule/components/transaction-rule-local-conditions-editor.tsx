@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Button, FormText, Table } from 'reactstrap';
+import { Button, FormText, Table } from 'reactstrap';
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -19,6 +19,7 @@ interface TransactionRuleLocalConditionsEditorProps {
   conditions: LocalTransactionRuleCondition[];
   onChange: (conditions: LocalTransactionRuleCondition[]) => void;
   lockedFlow?: keyof typeof TransactionFlow | null;
+  showValidation?: boolean;
 }
 
 const newClientId = () => `condition-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -40,7 +41,12 @@ const isLockedFlowCondition = (condition: LocalTransactionRuleCondition, lockedF
       condition.value === lockedFlow,
   );
 
-export const TransactionRuleLocalConditionsEditor = ({ conditions, onChange, lockedFlow }: TransactionRuleLocalConditionsEditorProps) => {
+export const TransactionRuleLocalConditionsEditor = ({
+  conditions,
+  onChange,
+  lockedFlow,
+  showValidation = false,
+}: TransactionRuleLocalConditionsEditorProps) => {
   const [editingCondition, setEditingCondition] = useState<LocalTransactionRuleCondition | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const sortedConditions = useMemo(() => sortConditions(conditions), [conditions]);
@@ -137,11 +143,17 @@ export const TransactionRuleLocalConditionsEditor = ({ conditions, onChange, loc
       ) : null}
 
       {sortedConditions.length === 0 ? (
-        <Alert color="warning" fade={false} data-cy="noConditionsValidation">
-          <Translate contentKey="fintrackApp.transactionRule.validation.conditionsRequired">
-            Transaction rule must have at least one condition.
+        <p className={showValidation ? 'small text-danger mb-3' : 'text-muted mb-3'} data-cy="noConditionsValidation">
+          <Translate
+            contentKey={
+              showValidation
+                ? 'fintrackApp.transactionRule.validation.conditionsRequired'
+                : 'fintrackApp.transactionRule.configuredConditionsHelp'
+            }
+          >
+            Define conditions before saving this rule.
           </Translate>
-        </Alert>
+        </p>
       ) : null}
 
       {sortedConditions.length > 0 ? (

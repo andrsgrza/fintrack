@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Badge, Button, Col, Form, FormGroup, FormText, Input, Label, Row } from 'reactstrap';
+import { Alert, Badge, Button, Col, Form, FormFeedback, FormGroup, FormText, Input, Label, Row } from 'reactstrap';
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -15,8 +15,9 @@ import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition
 import { RuleOperator } from 'app/shared/model/enumerations/rule-operator.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { TransactionRuleField } from 'app/shared/model/enumerations/transaction-rule-field.model';
+import { ProductConditionLogicControl } from 'app/shared/ui/product-condition-logic-control';
 import { ProductSection } from 'app/shared/ui/product-page';
-import { ProductStatusHelp } from 'app/shared/ui/product-status-control';
+import { ProductStatusToggle } from 'app/shared/ui/product-status-control';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
 import { mapIdList } from 'app/shared/util/entity-utils';
 import { createConfiguredTransactionRule, updateConfiguredTransactionRule } from '../transaction-rule-configured.service';
@@ -70,6 +71,13 @@ const normalizePositions = (conditions: LocalTransactionRuleCondition[]) =>
   conditions.map((condition, index) => ({ ...condition, position: index }));
 
 const hasAnyOutput = (categoryId: string, tagIds: string[]) => Boolean(categoryId) || tagIds.length > 0;
+const isCompleteCondition = (condition: LocalTransactionRuleCondition) =>
+  Boolean(
+    condition.field &&
+      condition.operator &&
+      condition.value?.trim() &&
+      (condition.operator !== RuleOperator.BETWEEN || condition.secondValue?.trim()),
+  );
 const serverErrorMessage = error => error?.response?.data?.detail ?? error?.response?.data?.message;
 const categoryLabel = (category: RuleCategory) => [category?.parentCategoryName, category?.name].filter(Boolean).join(' › ');
 
@@ -344,6 +352,7 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
   const [savingAction, setSavingAction] = useState<ContextualRuleSaveAction | null>(null);
   const savingRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const selectedCategory = useMemo<ICategorySelectable | null>(() => {
     const selectableCategory = categories.find(category => category.id?.toString() === selectedCategoryId);
@@ -422,6 +431,9 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
     const creatingRule = initialValue?.id === undefined;
     if (!ruleName.trim()) messages.push(translate('entity.validation.required'));
     if (!conditions.length) messages.push(translate('fintrackApp.transactionRule.validation.conditionsRequired'));
+    if (conditions.length && conditions.some(condition => !isCompleteCondition(condition))) {
+      messages.push(translate('fintrackApp.transactionRule.validation.conditionsIncomplete'));
+    }
     if (!hasAnyOutput(selectedCategoryId, selectedTagIds))
       messages.push(translate('fintrackApp.transactionRule.validation.outputRequired'));
     if (catalogError) {
@@ -461,7 +473,9 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
 
   const save = async (event: FormEvent, action: ContextualRuleSaveAction) => {
     event.preventDefault();
-    if (savingRef.current || validationMessages.length) return;
+    if (savingRef.current) return;
+    setSubmitAttempted(true);
+    if (validationMessages.length) return;
     savingRef.current = true;
     setErrorMessage(null);
     setSavingAction(action);
@@ -493,9 +507,19 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
           {errorMessage}
         </Alert>
       ) : null}
-      {validationMessages.length ? (
-        <Alert color="warning" data-cy="configuredValidationMessages" fade={false} role="alert">
-          <ul className="mb-0">
+      {submitAttempted && validationMessages.length ? (
+        <Alert
+          color="danger"
+          className="py-2 mb-3"
+          data-cy="configuredValidationMessages"
+          data-testid="configuredValidationMessages"
+          fade={false}
+          role="alert"
+        >
+          <Translate contentKey="fintrackApp.transactionRule.editor.validationSummary">
+            Review the highlighted rule configuration sections before saving.
+          </Translate>
+          <ul className="mb-0 mt-1 small">
             {validationMessages.map(message => (
               <li key={message}>{message}</li>
             ))}
@@ -516,9 +540,11 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
             data-cy="name"
             value={ruleName}
             onChange={event => setRuleName(event.target.value)}
+            invalid={submitAttempted && !ruleName.trim()}
             required
             maxLength={100}
           />
+          {submitAttempted && !ruleName.trim() ? <FormFeedback>{translate('entity.validation.required')}</FormFeedback> : null}
         </FormGroup>
         <FormGroup className="mb-0">
           <Label for="contextual-transaction-rule-description">
@@ -537,55 +563,36 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
 
       <ProductSection
         className="mt-3"
-        title={<Translate contentKey="fintrackApp.transactionRule.sections.matching">Matching logic</Translate>}
+        title={<Translate contentKey="fintrackApp.transactionRule.sections.matching">Matching conditions</Translate>}
         dataCy="transactionRuleMatchingSection"
       >
-        <fieldset className="mb-3" data-cy="transactionRuleConditionLogic">
-          <legend className="h6 mb-1">
-            <Translate contentKey="fintrackApp.transactionRule.conditionLogic">Condition logic</Translate>
-          </legend>
-          <FormText className="d-block mb-2">
-            <Translate contentKey={`fintrackApp.transactionRule.when.${conditionLogic === RuleConditionLogic.ALL ? 'all' : 'any'}`}>
-              Apply when all conditions match.
-            </Translate>
-          </FormText>
-          <div className="d-flex flex-wrap gap-3">
-            {Object.values(RuleConditionLogic).map(value => {
-              const disabled = Boolean(requiredFlow) && value === RuleConditionLogic.ANY;
-              return (
-                <FormGroup check key={value}>
-                  <Input
-                    id={`contextual-transaction-rule-logic-${value}`}
-                    data-cy={value === RuleConditionLogic.ALL ? 'conditionLogicAll' : 'conditionLogicAny'}
-                    type="radio"
-                    name="conditionLogic"
-                    value={value}
-                    checked={conditionLogic === value}
-                    disabled={disabled}
-                    onChange={() => setConditionLogic(value)}
-                  />
-                  <Label check for={`contextual-transaction-rule-logic-${value}`}>
-                    {translate(`fintrackApp.RuleConditionLogic.${value}`)}
-                  </Label>
-                </FormGroup>
-              );
-            })}
-          </div>
-        </fieldset>
-        {requiredFlow ? (
-          <Alert color="info" fade={false} className="small" data-cy="transactionRuleRequiredFlowNotice">
-            <Translate
-              contentKey={
-                requiredFlow === TransactionFlow.OUT
-                  ? 'fintrackApp.transactionRule.editor.expenseFlowNotice'
-                  : 'fintrackApp.transactionRule.editor.incomeFlowNotice'
-              }
-            >
-              This category needs a matching Flow condition, so all conditions must match.
-            </Translate>
-          </Alert>
-        ) : null}
-        <TransactionRuleLocalConditionsEditor conditions={conditions} onChange={setConditions} lockedFlow={requiredFlow} />
+        <ProductConditionLogicControl
+          idPrefix="contextual-transaction-rule"
+          dataCyPrefix="transactionRule"
+          value={conditionLogic}
+          onChange={setConditionLogic}
+          label={translate('fintrackApp.transactionRule.conditionLogic')}
+          allLabel={translate('fintrackApp.RuleConditionLogic.ALL')}
+          anyLabel={translate('fintrackApp.RuleConditionLogic.ANY')}
+          help={translate(`fintrackApp.transactionRule.when.${conditionLogic === RuleConditionLogic.ALL ? 'all' : 'any'}`)}
+          anyDisabled={Boolean(requiredFlow)}
+          restrictionHelp={
+            requiredFlow
+              ? translate(
+                  requiredFlow === TransactionFlow.OUT
+                    ? 'fintrackApp.transactionRule.editor.expenseFlowNotice'
+                    : 'fintrackApp.transactionRule.editor.incomeFlowNotice',
+                )
+              : undefined
+          }
+          restrictionDataCy="transactionRuleRequiredFlowNotice"
+        />
+        <TransactionRuleLocalConditionsEditor
+          conditions={conditions}
+          onChange={setConditions}
+          lockedFlow={requiredFlow}
+          showValidation={submitAttempted}
+        />
       </ProductSection>
 
       <ProductSection
@@ -646,34 +653,18 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
         className="mt-3"
         dataCy="transactionRuleStatusSection"
       >
-        <div className="d-flex flex-wrap align-items-center gap-2" data-cy="transactionRuleStatusControl">
-          <Badge color={active ? 'success' : 'secondary'} pill data-cy="transactionRuleStatusValue">
-            {active ? translate('fintrackApp.transactionRule.status.active') : translate('fintrackApp.transactionRule.status.inactive')}
-          </Badge>
-          <FormGroup check className="form-switch mb-0">
-            <Input
-              id="contextual-transaction-rule-active"
-              data-cy="active"
-              type="checkbox"
-              checked={active}
-              onChange={event => setActive(event.target.checked)}
-            />
-            <Label check for="contextual-transaction-rule-active">
-              <Translate contentKey="fintrackApp.transactionRule.active">Active</Translate>
-            </Label>
-          </FormGroup>
-          <ProductStatusHelp
-            id="contextual-transaction-rule-active-help"
-            label={translate('fintrackApp.transactionRule.status.label')}
-            help={translate('fintrackApp.transactionRule.editor.statusHelp')}
-            dataCyPrefix="transactionRule"
-          />
-        </div>
-        <FormText className="d-block mt-2">
-          <Translate contentKey="fintrackApp.transactionRule.editor.statusHelp">
-            Active rules participate in future classification evaluations. Changing this never reclassifies historical transactions.
-          </Translate>
-        </FormText>
+        <ProductStatusToggle
+          id="contextual-transaction-rule-active"
+          name="transactionRuleActive"
+          active={active}
+          onActiveChange={setActive}
+          label={translate('fintrackApp.transactionRule.active')}
+          help={translate('fintrackApp.transactionRule.editor.statusHelp')}
+          activeLabel={translate('fintrackApp.transactionRule.status.active')}
+          inactiveLabel={translate('fintrackApp.transactionRule.status.inactive')}
+          dataCyPrefix="transactionRule"
+          disabled={savingAction !== null}
+        />
       </ProductSection>
 
       <FormText className="d-block my-3">
@@ -682,7 +673,7 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
         </Translate>
       </FormText>
       <div className="d-flex flex-wrap gap-2">
-        <Button type="button" color="secondary" onClick={onCancel} disabled={savingAction !== null}>
+        <Button type="button" color="secondary" outline onClick={onCancel} disabled={savingAction !== null}>
           <Translate contentKey="entity.action.cancel">Cancel</Translate>
         </Button>
         {saveActions.map(saveAction => (
@@ -692,7 +683,7 @@ export const TransactionRuleConfiguredForm = ({ initialValue, saveActions, onSav
             key={saveAction.action}
             data-cy={saveAction.dataCy}
             data-testid={saveAction.dataCy}
-            disabled={savingAction !== null || catalogLoading || validationMessages.length > 0}
+            disabled={savingAction !== null || catalogLoading}
             onClick={saveAction.action === 'SAVE' ? undefined : event => save(event, saveAction.action)}
           >
             {savingAction === saveAction.action ? <FontAwesomeIcon icon="sync" spin /> : <FontAwesomeIcon icon="save" />}{' '}

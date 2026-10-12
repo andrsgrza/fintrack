@@ -564,26 +564,41 @@ describe('TransactionRule UX', () => {
     renderCreateForm();
     await waitForSelectableOutputs();
 
-    expect(screen.getByRole('heading', { name: 'Create Transaction Rule' })).toBeTruthy();
-    expect(screen.getByText('Configure metadata, outputs, conditions, and active state before saving.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Create Classification Rule' })).toBeTruthy();
+    expect(screen.getByText('Define matching conditions and category or tag results for future transaction review.')).toBeTruthy();
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Priority')).toBeNull();
     expect(screen.queryByLabelText('Resulting Financial Subscription')).toBeNull();
-    expect(screen.getByLabelText('Active')).toBeTruthy();
+    expect(screen.getByLabelText('Active')).toHaveProperty('checked', true);
     expect(screen.getByRole('heading', { name: 'Conditions' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^add condition$/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^save$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /^save$/i }).disabled).toBe(false);
+    expect(screen.queryByTestId('configuredValidationMessages')).toBeNull();
     expect(screen.getByText('Rule order is managed from the rules list. New rules are added last.')).toBeTruthy();
+  });
+
+  it('uses the shared active toggle and keeps its help text separate from the label', async () => {
+    renderCreateForm();
+    await waitForSelectableOutputs();
+
+    const activeControl = screen.getByLabelText('Active');
+    expect(activeControl.parentElement?.className).toContain('form-switch');
+    expect(screen.getByTestId('transactionRuleStatusHelp').className).toContain('d-block');
+
+    fireEvent.click(activeControl);
+    expect(activeControl).toHaveProperty('checked', false);
   });
 
   it('blocks configured create save with zero conditions and zero outputs', async () => {
     renderCreateForm();
     await waitForSelectableOutputs();
 
-    expect(screen.getAllByText('Transaction rule must have at least one condition.')).toHaveLength(2);
-    expect(screen.getByText('Select at least one output: category or tags.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^save$/i }).disabled).toBe(true);
+    expect(screen.queryByTestId('configuredValidationMessages')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    expect(screen.getByTestId('configuredValidationMessages').textContent).toContain('Transaction rule must have at least one condition.');
+    expect(screen.getByTestId('configuredValidationMessages').textContent).toContain('Select at least one output: category or tags.');
+    expect(mockAxiosPost).not.toHaveBeenCalled();
   });
 
   it('auto-adds and locks the required expense Flow OUT condition', async () => {
@@ -788,12 +803,13 @@ describe('TransactionRule UX', () => {
       ]),
     );
 
-    expect(await screen.findByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Edit Classification Rule' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Identity' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Matching logic' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Result' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Matching conditions' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Results' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Status' })).toBeTruthy();
     expect(screen.getByLabelText('Active')).toBeTruthy();
+    expect(screen.getByLabelText('Active')).toHaveProperty('checked', false);
     expect(screen.queryByLabelText('Created At')).toBeNull();
     expect(screen.queryByLabelText('Updated At')).toBeNull();
     expect(screen.queryByLabelText('Priority')).toBeNull();
@@ -914,9 +930,12 @@ describe('TransactionRule UX', () => {
       ]),
     );
 
+    await waitForSelectableOutputs();
+    expect(screen.queryByTestId('configuredValidationMessages')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /^save$/i }));
     expect(await screen.findByText('Expense categories require Flow = OUT.')).toBeTruthy();
     expect(screen.getByText('The selected category is incompatible with an existing Flow condition.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^save$/i }).disabled).toBe(true);
+    expect(mockAxiosPut).not.toHaveBeenCalled();
   });
 
   it('hydrates resulting category, tags, and active on edit', async () => {
@@ -950,7 +969,7 @@ describe('TransactionRule UX', () => {
   it('handles edit background condition load failure without breaking rule edit page', async () => {
     renderEditForm('error');
 
-    expect(screen.getByRole('heading', { name: 'Edit Transaction Rule' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Edit Classification Rule' })).toBeTruthy();
     expect(await screen.findByText('Transaction rule configuration could not be loaded.')).toBeTruthy();
     expect(screen.queryByLabelText('Active')).toBeNull();
   });

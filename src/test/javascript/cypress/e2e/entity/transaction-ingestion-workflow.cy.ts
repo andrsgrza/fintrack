@@ -995,7 +995,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('#contextual-description-rule-result').type('Normalized after global reevaluation');
     cy.contains('button', /Add condition|Agregar condición/i).click();
     cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').type(scenarioToken);
-    cy.get('[data-cy="descriptionNormalizationRuleActive"]').check();
+    cy.get('[data-cy="active"]').should('be.checked');
     cy.get('[data-cy="contextualRuleSaveAndReevaluateAll"]').click();
     cy.wait('@createConfiguredNormalizationRule').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(201);

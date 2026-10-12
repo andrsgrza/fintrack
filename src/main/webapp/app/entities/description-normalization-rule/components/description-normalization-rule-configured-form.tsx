@@ -14,6 +14,9 @@ import {
 import { ContextualRuleSaveAction, IContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
 import { DescriptionNormalizationRuleOperator } from 'app/shared/model/enumerations/description-normalization-rule-operator.model';
 import { RuleConditionLogic } from 'app/shared/model/enumerations/rule-condition-logic.model';
+import { ProductConditionLogicControl } from 'app/shared/ui/product-condition-logic-control';
+import { ProductSection } from 'app/shared/ui/product-page';
+import { ProductStatusToggle } from 'app/shared/ui/product-status-control';
 
 interface DescriptionNormalizationRuleConfiguredFormProps {
   initialValue?: IDescriptionNormalizationRuleConfigured;
@@ -47,26 +50,40 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
 }: DescriptionNormalizationRuleConfiguredFormProps) => {
   const [name, setName] = useState(initialValue?.name ?? '');
   const [description, setDescription] = useState(initialValue?.description ?? '');
-  const [active, setActive] = useState(initialValue?.active ?? false);
-  const [conditionOperator, setConditionOperator] = useState(initialValue?.conditionOperator ?? RuleConditionLogic.ALL);
+  const [active, setActive] = useState(initialValue?.active ?? true);
+  const [conditionOperator, setConditionOperator] = useState<RuleConditionLogic>(
+    (initialValue?.conditionOperator ?? RuleConditionLogic.ALL) as RuleConditionLogic,
+  );
   const [resultingDescription, setResultingDescription] = useState(initialValue?.resultingDescription ?? '');
   const [conditions, setConditions] = useState<IDescriptionNormalizationRuleConfiguredCondition[]>(initialValue?.conditions ?? []);
   const [savingAction, setSavingAction] = useState<ContextualRuleSaveAction | null>(null);
   const savingRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const configuredRule = useMemo<IDescriptionNormalizationRuleConfigured>(
     () => ({
       name,
       description,
       active,
-      conditionOperator,
+      conditionOperator: conditionOperator as keyof typeof RuleConditionLogic,
       resultingDescription,
       conditions: normalizeConditions(conditions),
     }),
     [active, conditionOperator, conditions, description, name, resultingDescription],
   );
+
+  const validationErrors = useMemo<ValidationErrors>(() => {
+    const errors: ValidationErrors = {};
+    if (!name.trim()) errors.name = translate('entity.validation.required');
+    if (!resultingDescription.trim()) errors.resultingDescription = translate('entity.validation.required');
+    if (conditions.length === 0) errors.conditions = translate('fintrackApp.descriptionNormalizationRule.conditionsRequired');
+    conditions.forEach((condition, index) => {
+      if (!condition.operator) errors[`condition-operator-${index}`] = translate('entity.validation.required');
+      if (!condition.value?.trim()) errors[`condition-value-${index}`] = translate('entity.validation.required');
+    });
+    return errors;
+  }, [conditions, name, resultingDescription]);
 
   const updateCondition = (index: number, update: Partial<IDescriptionNormalizationRuleConfiguredCondition>) => {
     setConditions(current =>
@@ -74,33 +91,14 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
     );
   };
 
-  const validateDraft = (): ValidationErrors => {
-    const errors: ValidationErrors = {};
-    if (!name.trim()) errors.name = translate('entity.validation.required');
-    if (!resultingDescription.trim()) errors.resultingDescription = translate('entity.validation.required');
-    if (active && conditions.length === 0) {
-      errors.conditions = translate('fintrackApp.descriptionNormalizationRule.activeRequiresCondition');
-    }
-    conditions.forEach((condition, index) => {
-      if (!condition.operator) errors[`condition-operator-${index}`] = translate('entity.validation.required');
-      if (!condition.value?.trim()) errors[`condition-value-${index}`] = translate('entity.validation.required');
-    });
-    return errors;
-  };
-
   const save = async (event: FormEvent, action: ContextualRuleSaveAction) => {
     event.preventDefault();
-    if (savingRef.current) {
-      return;
-    }
-    const draftErrors = validateDraft();
-    setValidationErrors(draftErrors);
-    if (Object.keys(draftErrors).length > 0) {
-      setError(translate('fintrackApp.descriptionNormalizationRule.configuredValidationFailed'));
-      return;
-    }
+    if (savingRef.current) return;
 
-    setError(null);
+    setSubmitAttempted(true);
+    if (Object.keys(validationErrors).length > 0) return;
+
+    setServerError(null);
     savingRef.current = true;
     setSavingAction(action);
     try {
@@ -109,7 +107,7 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
         : await createConfiguredDescriptionNormalizationRule(configuredRule);
       await onSaved(response.data, action);
     } catch (requestError) {
-      setError(serverErrorMessage(requestError) ?? translate('fintrackApp.descriptionNormalizationRule.configuredSaveFailed'));
+      setServerError(serverErrorMessage(requestError) ?? translate('fintrackApp.descriptionNormalizationRule.configuredSaveFailed'));
     } finally {
       savingRef.current = false;
       setSavingAction(null);
@@ -120,19 +118,34 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
   const previewReady = Boolean(
     name.trim() && resultingDescription.trim() && completeConditions.length === conditions.length && conditions.length > 0,
   );
+  const hasValidationErrors = Object.keys(validationErrors).length > 0;
 
   return (
     <Form noValidate onSubmit={event => save(event, 'SAVE')} data-cy="descriptionNormalizationRuleContextualForm">
-      {error ? (
+      {serverError ? (
         <Alert color="danger" fade={false} role="alert" data-cy="descriptionNormalizationRuleFormError">
-          {error}
+          {serverError}
+        </Alert>
+      ) : null}
+      {submitAttempted && hasValidationErrors ? (
+        <Alert
+          color="danger"
+          fade={false}
+          className="py-2 mb-3"
+          role="alert"
+          data-cy="descriptionNormalizationRuleValidationSummary"
+          data-testid="descriptionNormalizationRuleValidationSummary"
+        >
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.validationSummary">
+            Review the highlighted rule configuration sections before saving.
+          </Translate>
         </Alert>
       ) : null}
 
-      <section className="mb-4" aria-labelledby="description-normalization-rule-identity-heading">
-        <h3 className="h5" id="description-normalization-rule-identity-heading">
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.identity">Identity</Translate>
-        </h3>
+      <ProductSection
+        title={<Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.identity">Identity</Translate>}
+        dataCy="descriptionNormalizationRuleIdentitySection"
+      >
         <FormGroup>
           <Label for="contextual-description-rule-name">
             <Translate contentKey="fintrackApp.descriptionNormalizationRule.name">Name</Translate>
@@ -142,11 +155,11 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
             data-cy="descriptionNormalizationRuleName"
             value={name}
             onChange={event => setName(event.target.value)}
-            invalid={Boolean(validationErrors.name)}
+            invalid={submitAttempted && Boolean(validationErrors.name)}
             required
             maxLength={100}
           />
-          {validationErrors.name ? <FormFeedback>{validationErrors.name}</FormFeedback> : null}
+          {submitAttempted && validationErrors.name ? <FormFeedback>{validationErrors.name}</FormFeedback> : null}
         </FormGroup>
         <FormGroup className="mb-0">
           <Label for="contextual-description-rule-description">
@@ -160,44 +173,33 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
             maxLength={500}
           />
         </FormGroup>
-      </section>
+      </ProductSection>
 
-      <section className="mb-4" aria-labelledby="description-normalization-rule-matching-heading">
-        <h3 className="h5" id="description-normalization-rule-matching-heading">
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.matching">Matching</Translate>
-        </h3>
-        <FormGroup>
-          <Label for="contextual-description-rule-condition-operator">
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.conditionOperator">Condition operator</Translate>
-          </Label>
-          <Input
-            id="contextual-description-rule-condition-operator"
-            data-cy="descriptionNormalizationRuleConditionLogic"
-            type="select"
-            value={conditionOperator}
-            onChange={event => setConditionOperator(event.target.value as keyof typeof RuleConditionLogic)}
-          >
-            {Object.keys(RuleConditionLogic).map(value => (
-              <option value={value} key={value}>
-                {translate(`fintrackApp.RuleConditionLogic.${value}`)}
-              </option>
-            ))}
-          </Input>
-          <FormText>
-            <Translate
-              contentKey={`fintrackApp.descriptionNormalizationRule.editor.${conditionOperator === RuleConditionLogic.ALL ? 'allHelp' : 'anyHelp'}`}
-            >
-              Every condition must match the original description.
-            </Translate>
-          </FormText>
-        </FormGroup>
-        <div className="d-flex justify-content-between align-items-center mb-2">
+      <ProductSection
+        className="mt-3"
+        title={<Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.matchingConditions">Matching conditions</Translate>}
+        dataCy="descriptionNormalizationRuleMatchingSection"
+      >
+        <ProductConditionLogicControl
+          idPrefix="contextual-description-rule"
+          dataCyPrefix="descriptionNormalizationRule"
+          value={conditionOperator}
+          onChange={setConditionOperator}
+          label={translate('fintrackApp.descriptionNormalizationRule.conditionOperator')}
+          allLabel={translate('fintrackApp.RuleConditionLogic.ALL')}
+          anyLabel={translate('fintrackApp.RuleConditionLogic.ANY')}
+          help={translate(
+            `fintrackApp.descriptionNormalizationRule.editor.${conditionOperator === RuleConditionLogic.ALL ? 'allHelp' : 'anyHelp'}`,
+          )}
+        />
+        <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
           <h4 className="h6 mb-0">
             <Translate contentKey="fintrackApp.descriptionNormalizationRule.conditions">Conditions</Translate>
           </h4>
           <Button
             type="button"
             color="secondary"
+            outline
             size="sm"
             data-cy="addDescriptionNormalizationRuleCondition"
             onClick={() => setConditions(current => [...current, createCondition()])}
@@ -206,18 +208,25 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
             <Translate contentKey="fintrackApp.descriptionNormalizationRule.addCondition">Add condition</Translate>
           </Button>
         </div>
-        {validationErrors.conditions ? (
-          <Alert color="warning" fade={false}>
-            {validationErrors.conditions}
-          </Alert>
-        ) : null}
         {conditions.length === 0 ? (
-          <p className="text-muted mb-0">
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.noConditions">No conditions have been added.</Translate>
+          <p
+            className={submitAttempted && validationErrors.conditions ? 'small text-danger mb-0' : 'text-muted mb-0'}
+            data-cy="descriptionNormalizationRuleConditionsGuidance"
+            data-testid="descriptionNormalizationRuleConditionsGuidance"
+          >
+            <Translate
+              contentKey={
+                submitAttempted && validationErrors.conditions
+                  ? 'fintrackApp.descriptionNormalizationRule.conditionsRequired'
+                  : 'fintrackApp.descriptionNormalizationRule.editor.noConditions'
+              }
+            >
+              Add at least one condition to define when this rule matches the original imported description.
+            </Translate>
           </p>
         ) : null}
         {conditions.map((condition, index) => (
-          <div className="border rounded p-3 mb-2" key={index} data-testid={`contextualDescriptionRuleCondition-${index}`}>
+          <div className="border rounded-2 p-3 mt-2" key={index} data-testid={`contextualDescriptionRuleCondition-${index}`}>
             <FormGroup>
               <Label for={`contextual-description-rule-condition-operator-${index}`}>
                 <Translate contentKey="fintrackApp.descriptionNormalizationRuleCondition.operator">Operator</Translate>
@@ -227,7 +236,7 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
                 data-cy={`descriptionNormalizationRuleConditionOperator-${index}`}
                 type="select"
                 value={condition.operator ?? ''}
-                invalid={Boolean(validationErrors[`condition-operator-${index}`])}
+                invalid={submitAttempted && Boolean(validationErrors[`condition-operator-${index}`])}
                 onChange={event =>
                   updateCondition(index, { operator: event.target.value as keyof typeof DescriptionNormalizationRuleOperator })
                 }
@@ -238,7 +247,7 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
                   </option>
                 ))}
               </Input>
-              {validationErrors[`condition-operator-${index}`] ? (
+              {submitAttempted && validationErrors[`condition-operator-${index}`] ? (
                 <FormFeedback>{validationErrors[`condition-operator-${index}`]}</FormFeedback>
               ) : null}
             </FormGroup>
@@ -251,12 +260,12 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
                 data-cy={`descriptionNormalizationRuleConditionValue-${index}`}
                 data-testid={`contextualDescriptionRuleConditionValue-${index}`}
                 value={condition.value ?? ''}
-                invalid={Boolean(validationErrors[`condition-value-${index}`])}
+                invalid={submitAttempted && Boolean(validationErrors[`condition-value-${index}`])}
                 onChange={event => updateCondition(index, { value: event.target.value })}
                 required
                 maxLength={1000}
               />
-              {validationErrors[`condition-value-${index}`] ? (
+              {submitAttempted && validationErrors[`condition-value-${index}`] ? (
                 <FormFeedback>{validationErrors[`condition-value-${index}`]}</FormFeedback>
               ) : null}
               {condition.operator === DescriptionNormalizationRuleOperator.REGEX ? (
@@ -281,6 +290,7 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
             <Button
               type="button"
               color="danger"
+              outline
               size="sm"
               data-cy={`deleteDescriptionNormalizationRuleCondition-${index}`}
               data-testid={`deleteDescriptionNormalizationRuleCondition-${index}`}
@@ -290,12 +300,13 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
             </Button>
           </div>
         ))}
-      </section>
+      </ProductSection>
 
-      <section className="mb-4" aria-labelledby="description-normalization-rule-result-heading">
-        <h3 className="h5" id="description-normalization-rule-result-heading">
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.result">Result</Translate>
-        </h3>
+      <ProductSection
+        className="mt-3"
+        title={<Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.result">Results</Translate>}
+        dataCy="descriptionNormalizationRuleResultsSection"
+      >
         <FormGroup className="mb-0">
           <Label for="contextual-description-rule-result">
             <Translate contentKey="fintrackApp.descriptionNormalizationRule.resultingDescription">Resulting description</Translate>
@@ -305,51 +316,34 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
             data-cy="descriptionNormalizationRuleResult"
             data-testid="contextualDescriptionRuleResult"
             value={resultingDescription}
-            invalid={Boolean(validationErrors.resultingDescription)}
+            invalid={submitAttempted && Boolean(validationErrors.resultingDescription)}
             onChange={event => setResultingDescription(event.target.value)}
             required
             maxLength={500}
           />
-          {validationErrors.resultingDescription ? <FormFeedback>{validationErrors.resultingDescription}</FormFeedback> : null}
+          {submitAttempted && validationErrors.resultingDescription ? (
+            <FormFeedback>{validationErrors.resultingDescription}</FormFeedback>
+          ) : null}
           <FormText>
             <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.resultHelp">
               A matching original description is replaced with this value.
             </Translate>
           </FormText>
         </FormGroup>
-      </section>
+      </ProductSection>
 
-      <section className="mb-4" aria-labelledby="description-normalization-rule-status-heading">
-        <h3 className="h5" id="description-normalization-rule-status-heading">
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.status">Status</Translate>
-        </h3>
-        <FormGroup check className="mb-0">
-          <Input
-            id="contextual-description-rule-active"
-            data-cy="descriptionNormalizationRuleActive"
-            type="checkbox"
-            checked={active}
-            onChange={event => setActive(event.target.checked)}
-          />
-          <Label check for="contextual-description-rule-active">
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.active">Active</Translate>
-          </Label>
-          <FormText>
-            <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.statusHelp">
-              Active rules participate in future import normalization; saving does not reprocess history.
-            </Translate>
-          </FormText>
-        </FormGroup>
-      </section>
-
-      <section
-        className="border rounded bg-light p-3 mb-4"
-        aria-labelledby="description-normalization-rule-preview-heading"
-        data-cy="descriptionNormalizationRuleConfigurationPreview"
+      <ProductSection
+        className="mt-3"
+        title={
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.configurationSummary">Configuration summary</Translate>
+        }
+        dataCy="descriptionNormalizationRuleConfigurationPreview"
       >
-        <h3 className="h5" id="description-normalization-rule-preview-heading">
-          <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.preview">Configuration preview</Translate>
-        </h3>
+        <FormText className="d-block mb-3">
+          <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.configurationSummaryHelp">
+            This describes the rule configuration; it does not evaluate an imported row.
+          </Translate>
+        </FormText>
         {previewReady ? (
           <>
             <p className="mb-1">
@@ -358,8 +352,10 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
               </strong>
               {completeConditions.map((condition, index) => (
                 <React.Fragment key={`${condition.operator}-${condition.value}-${index}`}>
-                  {index > 0 ? ` ${translate(`fintrackApp.RuleConditionLogic.${conditionOperator}`)} ` : ' '}
-                  {translate(`fintrackApp.descriptionNormalizationRule.operators.${condition.operator}`)} “{condition.value?.trim()}”
+                  {index > 0
+                    ? ` ${translate(`fintrackApp.descriptionNormalizationRule.summary.${conditionOperator === RuleConditionLogic.ALL ? 'and' : 'or'}`)} `
+                    : ' '}
+                  {translate(`fintrackApp.descriptionNormalizationRule.summaryOperators.${condition.operator}`)} “{condition.value?.trim()}”
                 </React.Fragment>
               ))}
             </p>
@@ -373,14 +369,38 @@ export const DescriptionNormalizationRuleConfiguredForm = ({
         ) : (
           <p className="mb-0 text-muted">
             <Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.previewIncomplete">
-              Complete the name, result, and every condition to see this configuration summary.
+              Add a name, result, and valid condition to review this configuration summary.
             </Translate>
           </p>
         )}
-      </section>
+      </ProductSection>
 
+      <ProductSection
+        className="mt-3"
+        title={<Translate contentKey="fintrackApp.descriptionNormalizationRule.editor.status">Status</Translate>}
+        dataCy="descriptionNormalizationRuleStatusSection"
+      >
+        <ProductStatusToggle
+          id="contextual-description-rule-active"
+          name="descriptionNormalizationRuleActive"
+          active={active}
+          onActiveChange={setActive}
+          label={translate('fintrackApp.descriptionNormalizationRule.active')}
+          help={translate('fintrackApp.descriptionNormalizationRule.editor.statusHelp')}
+          activeLabel={translate('fintrackApp.descriptionNormalizationRule.status.active')}
+          inactiveLabel={translate('fintrackApp.descriptionNormalizationRule.status.inactive')}
+          dataCyPrefix="descriptionNormalizationRule"
+          disabled={savingAction !== null}
+        />
+      </ProductSection>
+
+      <FormText className="d-block my-3">
+        <Translate contentKey="fintrackApp.descriptionNormalizationRule.priorityServerManagedHelp">
+          Rule order is managed from the rules list. New rules are added last.
+        </Translate>
+      </FormText>
       <div className="d-flex flex-wrap gap-2">
-        <Button type="button" color="secondary" onClick={onCancel} disabled={savingAction !== null}>
+        <Button type="button" color="secondary" outline onClick={onCancel} disabled={savingAction !== null}>
           <Translate contentKey="entity.action.cancel">Cancel</Translate>
         </Button>
         {saveActions.map(saveAction => (

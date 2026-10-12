@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Creates or replaces the configured state of a DescriptionNormalizationRule as one transaction.
  *
  * The generated parent and condition write routes remain available for technical maintenance. Product
- * composition uses this command so an active rule can never be persisted without its required conditions.
+ * composition uses this command so a configured rule can never be persisted without its required conditions.
  */
 @Service
 @Transactional
@@ -184,8 +184,8 @@ public class DescriptionNormalizationRuleConfigurationService {
         if (ruleRepository.existsByUserLoginAndNormalizedName(rule.getUser().getLogin(), rule.getName().toLowerCase(), excludeId)) {
             throw new IllegalArgumentException("Description normalization rule name already exists");
         }
-        if (Boolean.TRUE.equals(rule.getActive()) && conditions.isEmpty()) {
-            throw new IllegalArgumentException("Active description normalization rule must have at least one condition");
+        if (conditions.isEmpty()) {
+            throw new IllegalArgumentException("Description normalization rule must have at least one condition");
         }
 
         Set<String> duplicateKeys = new HashSet<>();
