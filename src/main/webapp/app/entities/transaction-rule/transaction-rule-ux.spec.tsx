@@ -573,6 +573,7 @@ describe('TransactionRule UX', () => {
     expect(screen.getByLabelText('Active')).toHaveProperty('checked', true);
     expect(screen.getByRole('heading', { name: 'Conditions' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^add condition$/i })).toBeTruthy();
+    expect(screen.getAllByText('Define conditions before saving this rule.')).toHaveLength(1);
     expect(screen.getByRole('button', { name: /^save$/i }).disabled).toBe(false);
     expect(screen.queryByTestId('configuredValidationMessages')).toBeNull();
     expect(screen.getByText('Rule order is managed from the rules list. New rules are added last.')).toBeTruthy();

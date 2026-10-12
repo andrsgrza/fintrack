@@ -103,10 +103,6 @@ export const TransactionRuleLocalConditionsEditor = ({
         ) : null}
       </div>
 
-      <p className="text-muted">
-        <Translate contentKey="fintrackApp.transactionRule.configuredConditionsHelp">Define conditions before saving this rule.</Translate>
-      </p>
-
       {showAddForm ? (
         <div className="border rounded p-3 mb-3" data-cy="embeddedConditionForm">
           <h4>
