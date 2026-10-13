@@ -5,6 +5,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
   interface E2EEntity {
     id: number;
     name?: string;
+    color?: string;
     [key: string]: unknown;
   }
 
@@ -25,8 +26,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     id: number;
     description?: string;
     flow?: string;
-    category?: { id?: number };
-    tags?: Array<{ id?: number }>;
+    category?: { id?: number; name?: string; color?: string; active?: boolean };
+    tags?: Array<{ id?: number; name?: string; color?: string; active?: boolean }>;
   }
 
   interface TransactionRuleConditionRequest {
@@ -403,6 +404,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     let inCandidateId: number;
     let outRecordId: number;
     let outFinancialTransactionId: number;
+    let secondOutFinancialTransactionId: number;
     let suggestedOutCategoryId: number;
     cy.wait('@candidateRulePreviewRequest').then(({ response }) => {
       const preview = response?.body as CandidateRulePreviewResponse | undefined;
@@ -700,6 +702,53 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-testid^="workflowRowDisable-"]').should('not.exist');
     cy.get('[data-testid^="workflowRowEnable-"]').should('not.exist');
 
+    cy.contains('[data-cy="workflowRows"] tr', outDescription).within(() => {
+      cy.get('[data-testid^="classificationCategoryFinal-"]')
+        .should('be.visible')
+        .and('have.text', expenseCategory?.name)
+        .and('not.have.class', 'visually-hidden')
+        .then($category => {
+          const element = $category[0];
+          const styles = window.getComputedStyle(element);
+          expect(styles.display).not.to.equal('none');
+          expect(styles.visibility).not.to.equal('hidden');
+          expect(styles.color).not.to.equal('rgba(0, 0, 0, 0)');
+          expect(styles.backgroundColor).not.to.equal('rgba(0, 0, 0, 0)');
+          expect(element.getBoundingClientRect().width).to.be.greaterThan(0);
+          expect(element.getBoundingClientRect().height).to.be.greaterThan(0);
+        });
+      cy.get('[data-testid^="classificationTagsFinal-"]')
+        .should('contain', tag?.name)
+        .find('[data-cy="transactionTagChip"]')
+        .should('have.attr', 'data-color-treatment', 'tag')
+        .and($tagChip => {
+          const styles = window.getComputedStyle($tagChip[0]);
+          expect(styles.backgroundColor).not.to.equal('rgba(0, 0, 0, 0)');
+          expect($tagChip.attr('style')).to.contain('background-color');
+        });
+      cy.get('select').should('not.exist');
+    });
+    cy.contains('[data-cy="workflowRows"] tr', outDescription)
+      .find('[data-testid^="classificationCategoryFinal-"]')
+      .parents('.candidate-review-classification-control')
+      .screenshot('ingestion-polish-4-completed-category-visible');
+
+    cy.viewport(375, 667);
+    cy.get('[data-testid="candidateReviewMobileCards"]').should('exist');
+    cy.contains('[data-testid^="workflowMobileCard-"]', outDescription).within(() => {
+      cy.get('[data-testid^="classificationCategoryFinal-"]')
+        .should('be.visible')
+        .and('have.text', expenseCategory?.name)
+        .and('not.have.class', 'visually-hidden');
+      cy.get('select').should('not.exist');
+      cy.get('[data-testid^="workflowMobileToggleDetails-"]').click();
+      cy.get('[data-testid^="classificationCategoryFinal-"]').should('have.length', 1).and('contain', expenseCategory?.name);
+      cy.get('[data-testid^="classificationTagsFinal-"]').should('contain', tag?.name);
+      cy.get('select').should('not.exist');
+    });
+    cy.contains('[data-testid^="workflowMobileCard-"]', outDescription).screenshot('ingestion-polish-4-mobile-completed-category-visible');
+    cy.viewport(1280, 720);
+
     cy.then(() => {
       cy.authenticatedRequest<ImportedTransaction[]>({
         method: 'GET',
@@ -712,6 +761,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
         expect(outTransaction?.id).to.be.a('number');
         expect(outTransaction?.flow).to.equal('OUT');
         expect(outTransaction?.category?.id).to.equal(suggestedOutCategoryId);
+        expect(outTransaction?.category?.name).to.equal(expenseCategory?.name);
         expect(outTransaction?.tags?.map(transactionTag => transactionTag.id)).to.include(tag?.id);
         expect(secondOutTransaction?.flow).to.equal('OUT');
         expect(secondOutTransaction?.category?.id).to.equal(suggestedOutCategoryId);
@@ -719,6 +769,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
         expect(inTransaction?.flow).to.equal('IN');
         expect(inTransaction?.category?.id).to.equal(incomeCategory?.id);
         outFinancialTransactionId = outTransaction.id;
+        secondOutFinancialTransactionId = secondOutTransaction?.id;
       });
 
       cy.authenticatedRequest({
@@ -734,6 +785,35 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
           expect(rawData.normalized).not.to.have.property('tagIds');
           expect(rawData.review ?? {}).not.to.have.property('category');
           expect(rawData.review ?? {}).not.to.have.property('tags');
+        });
+      });
+
+      cy.then(() => {
+        expect(secondOutFinancialTransactionId).to.be.a('number');
+        expect(manualExpenseCategory?.id).to.be.a('number');
+        expect(manualTag?.id).to.be.a('number');
+        cy.authenticatedRequest<ImportedTransaction>({
+          method: 'PATCH',
+          url: `/api/financial-transactions/${secondOutFinancialTransactionId}`,
+          body: {
+            category: { id: manualExpenseCategory?.id },
+            tags: [{ id: manualTag?.id }],
+          },
+        }).then(({ status, body }) => {
+          expect(status).to.equal(200);
+          expect(body.category?.id).to.equal(manualExpenseCategory?.id);
+          expect(body.tags?.map(transactionTag => transactionTag.id)).to.deep.equal([manualTag?.id]);
+        });
+        cy.reload();
+        cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+        cy.contains('[data-cy="workflowRows"] tr', secondOutDescription).within(() => {
+          cy.get('[data-testid^="classificationCategoryFinal-"]').should('have.text', manualExpenseCategory?.name);
+          cy.get('[data-testid^="classificationTagsFinal-"]')
+            .should('contain', manualTag?.name)
+            .find('[data-cy="transactionTagChip"]')
+            .should('have.length', 1)
+            .and('have.attr', 'data-color-treatment', 'tag');
+          cy.get('select').should('not.exist');
         });
       });
 

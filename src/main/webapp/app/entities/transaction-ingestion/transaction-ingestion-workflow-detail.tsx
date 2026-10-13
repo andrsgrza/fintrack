@@ -36,6 +36,7 @@ import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
+import { TransactionTagChips } from 'app/entities/financial-transaction/transaction-presentation';
 import { getEntity } from './transaction-ingestion.reducer';
 import {
   applyFileImportCandidateRules,
@@ -83,10 +84,21 @@ interface ICsvIngestionDescriptionReview {
   editedBy?: string | null;
 }
 
+interface ICompletedWorkflowCategory {
+  id?: number;
+  name?: string;
+  color?: string | null;
+  active?: boolean;
+  parentCategory?: {
+    id?: number;
+    name?: string;
+  } | null;
+}
+
 interface ICompletedWorkflowFinancialTransaction {
   id?: number;
-  category?: { id?: number; name?: string; color?: string | null } | null;
-  tags?: Array<{ id?: number; name?: string; color?: string | null }>;
+  category?: ICompletedWorkflowCategory | null;
+  tags?: Array<{ id?: number; name?: string; color?: string | null; active?: boolean | null }>;
 }
 
 interface ICsvIngestionWorkflowRow {
@@ -217,6 +229,14 @@ const categoryIdentityStyle = (color?: string | null): React.CSSProperties | und
         borderInlineStart: `0.3rem solid ${color}`,
       }
     : undefined;
+
+const completedCategoryLabel = (category?: ICompletedWorkflowCategory | null) => {
+  if (!category?.name) {
+    return undefined;
+  }
+
+  return category.parentCategory?.name ? `${category.parentCategory.name} › ${category.name}` : category.name;
+};
 
 const useMobileCandidateReview = () => {
   const query = '(max-width: 991.98px)';
@@ -2340,8 +2360,9 @@ export const TransactionIngestionWorkflowDetail = () => {
     const previewCategoryName = suggestedCategoryName(preview);
     const categorySuggestionApplicable = hasApplicableSuggestedCategory(candidate, preview);
     const editable = reviewActionsEnabled && row.status === 'VALID' && Boolean(candidateId) && !rowBlocked;
-    const categoryValue = completedFinancialTransaction?.category?.name ?? candidate?.categoryName;
-    const categoryColor = categories.find(category => category.id === candidate?.categoryId)?.color;
+    const completedCategory = completedFinancialTransaction?.category;
+    const categoryValue = completedCategoryLabel(completedCategory) ?? candidate?.categoryName;
+    const categoryColor = completedCategory?.color ?? categories.find(category => category.id === candidate?.categoryId)?.color;
 
     return (
       <div className="candidate-review-classification-control">
@@ -2371,9 +2392,25 @@ export const TransactionIngestionWorkflowDetail = () => {
             ))}
           </Input>
         ) : completedFinancialTransaction?.id ? (
-          <span className="visually-hidden" data-testid={`classificationCategoryFinal-${completedFinancialTransaction.id}`}>
-            {completedFinancialTransaction.category?.name ?? ''}
-          </span>
+          categoryValue ? (
+            <span
+              className="candidate-review-category-value candidate-review-category-read-only mt-1"
+              style={categoryIdentityStyle(categoryColor)}
+              data-testid={`classificationCategoryFinal-${completedFinancialTransaction.id}`}
+            >
+              {categoryValue}
+              {completedCategory?.active === false ? (
+                <span className="candidate-review-category-inactive"> ({translate('fintrackApp.category.inactive')})</span>
+              ) : null}
+            </span>
+          ) : (
+            <span
+              className="candidate-review-category-empty text-muted d-inline-block mt-1"
+              data-testid={`classificationCategoryEmptyFinal-${completedFinancialTransaction.id}`}
+            >
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.noCategory">No category</Translate>
+            </span>
+          )
         ) : candidateId ? (
           <span className="visually-hidden" data-testid={`classificationCategoryReadOnly-${candidateId}`}>
             {candidate?.categoryName ?? ''}
@@ -2461,12 +2498,14 @@ export const TransactionIngestionWorkflowDetail = () => {
             }
           />
         ) : completedFinancialTransaction?.id ? (
-          <span data-testid={`classificationTagsFinal-${completedFinancialTransaction.id}`}>
-            {(completedFinancialTransaction.tags ?? [])
-              .map(tag => tag.name)
-              .filter(Boolean)
-              .join(', ')}
-          </span>
+          <div className="candidate-review-completed-tags mt-1" data-testid={`classificationTagsFinal-${completedFinancialTransaction.id}`}>
+            <TransactionTagChips
+              tags={completedFinancialTransaction.tags ?? []}
+              maxVisible={Number.MAX_SAFE_INTEGER}
+              showEmpty
+              showInactiveLabel
+            />
+          </div>
         ) : candidateId ? (
           <span data-testid={`classificationTagsReadOnly-${candidateId}`}>{(candidate?.tagNames ?? []).join(', ')}</span>
         ) : row.status === 'VALID' ? (
@@ -3115,6 +3154,11 @@ export const TransactionIngestionWorkflowDetail = () => {
             <div className="candidate-review-mobile" data-testid="candidateReviewMobileCards">
               {visibleRows.map(row => {
                 const candidate = row.candidate;
+                const completedFinancialTransaction = row.financialTransaction;
+                const completedCategory = completedFinancialTransaction?.category;
+                const mobileCategoryName = completedCategoryLabel(completedCategory) ?? candidate?.categoryName;
+                const mobileCategoryColor =
+                  completedCategory?.color ?? categories.find(category => category.id === candidate?.categoryId)?.color;
                 const identity = rowIdentity(row);
                 const expanded = expandedRowIds.has(identity);
                 const recordKey = row.ingestionRecordId ?? row.recordIndex;
@@ -3132,12 +3176,29 @@ export const TransactionIngestionWorkflowDetail = () => {
                           <Badge color={recordStatusColor(row.status)} pill data-testid={`workflowMobileRowStatus-${recordKey}`}>
                             {recordStatusLabel(row.status)}
                           </Badge>
-                          {candidate?.categoryName && !expanded ? (
+                          {mobileCategoryName && !expanded ? (
                             <span
                               className="candidate-review-category-value"
-                              style={categoryIdentityStyle(categories.find(category => category.id === candidate.categoryId)?.color)}
+                              style={categoryIdentityStyle(mobileCategoryColor)}
+                              data-testid={
+                                completedFinancialTransaction?.id
+                                  ? `classificationCategoryFinal-${completedFinancialTransaction.id}`
+                                  : undefined
+                              }
                             >
-                              {candidate.categoryName}
+                              {mobileCategoryName}
+                              {completedCategory?.active === false ? (
+                                <span className="candidate-review-category-inactive"> ({translate('fintrackApp.category.inactive')})</span>
+                              ) : null}
+                            </span>
+                          ) : !expanded && completedFinancialTransaction?.id ? (
+                            <span
+                              className="candidate-review-category-empty text-muted"
+                              data-testid={`classificationCategoryEmptyFinal-${completedFinancialTransaction.id}`}
+                            >
+                              <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.noCategory">
+                                No category
+                              </Translate>
                             </span>
                           ) : null}
                           {rowHasAvailableSuggestions(row) ? (

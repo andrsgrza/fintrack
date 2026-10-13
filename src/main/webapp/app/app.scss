@@ -167,6 +167,29 @@ a {
   overflow-wrap: anywhere;
 }
 
+.candidate-review-category-read-only {
+  color: var(--bs-body-color);
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.candidate-review-category-inactive {
+  color: var(--bs-secondary-color);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.candidate-review-category-empty {
+  overflow-wrap: anywhere;
+}
+
+.candidate-review-completed-tags [data-cy='transactionTagChip'] {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .candidate-review-classification-label {
   color: var(--bs-secondary-color);
   display: block;

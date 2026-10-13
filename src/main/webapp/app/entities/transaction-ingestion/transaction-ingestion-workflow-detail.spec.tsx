@@ -11,6 +11,7 @@ import enIngestionRecordStatus from 'app/../i18n/en/ingestionRecordStatus.json';
 import enCategory from 'app/../i18n/en/category.json';
 import enTag from 'app/../i18n/en/tag.json';
 import enTransactionRule from 'app/../i18n/en/transactionRule.json';
+import enFinancialTransaction from 'app/../i18n/en/financialTransaction.json';
 import esTransactionIngestion from 'app/../i18n/es/transactionIngestion.json';
 import esTransactionFlow from 'app/../i18n/es/transactionFlow.json';
 import esIngestionStatus from 'app/../i18n/es/ingestionStatus.json';
@@ -18,6 +19,7 @@ import esIngestionRecordStatus from 'app/../i18n/es/ingestionRecordStatus.json';
 import esCategory from 'app/../i18n/es/category.json';
 import esTag from 'app/../i18n/es/tag.json';
 import esTransactionRule from 'app/../i18n/es/transactionRule.json';
+import esFinancialTransaction from 'app/../i18n/es/financialTransaction.json';
 import { TransactionIngestion } from './transaction-ingestion';
 import { TransactionIngestionWorkflowDetail } from './transaction-ingestion-workflow-detail';
 
@@ -105,6 +107,7 @@ const registerTranslations = () => {
   TranslatorContext.registerTranslations('en', enCategory);
   TranslatorContext.registerTranslations('en', enTag);
   TranslatorContext.registerTranslations('en', enTransactionRule);
+  TranslatorContext.registerTranslations('en', enFinancialTransaction);
   TranslatorContext.setLocale('en');
 };
 
@@ -116,6 +119,7 @@ const registerSpanishTranslations = () => {
   TranslatorContext.registerTranslations('es', esCategory);
   TranslatorContext.registerTranslations('es', esTag);
   TranslatorContext.registerTranslations('es', esTransactionRule);
+  TranslatorContext.registerTranslations('es', esFinancialTransaction);
   TranslatorContext.setLocale('es');
 };
 
@@ -2930,10 +2934,200 @@ describe('TransactionIngestion file workflow', () => {
     await expandRowForRecord(300);
     expect(within(await expandRowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
     expect(screen.getByTestId('descriptionReview-ruleName-300').textContent).toContain('Normalize Uber');
-    expect(screen.getByTestId('classificationCategoryFinal-9001').textContent).toBe('Salary');
+    const categoryIdentity = screen.getByTestId('classificationCategoryFinal-9001');
+    expect(categoryIdentity.textContent).toBe('Salary');
+    expect(categoryIdentity.className).toContain('candidate-review-category-value');
+    expect(categoryIdentity.className).not.toContain('visually-hidden');
+    expect(rowForRecord(300).querySelectorAll('[data-testid="classificationCategoryFinal-9001"]')).toHaveLength(1);
     expect(screen.getByTestId('classificationTagsFinal-9001').textContent).toBe('Business');
     expect(screen.queryByTestId('classificationCategoryReadOnly-400')).toBeNull();
     expect(screen.queryByTestId('classificationTagsReadOnly-400')).toBeNull();
+  });
+
+  it('renders completed category and multiple colored, read-only tag identities without duplicates', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'COMPLETED',
+        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            status: 'IMPORTED',
+            financialTransactionId: 9001,
+            financialTransaction: {
+              id: 9001,
+              category: { id: 7, name: 'Transport', color: '#0B6E4F', active: true },
+              tags: [
+                { id: 5, name: 'Business', color: '#3B82F6' },
+                { id: 6, name: 'A deliberately long completed tag name that must remain readable', color: '#9333EA', active: false },
+              ],
+            },
+            candidate: null,
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    const row = await screen.findByTestId('workflowRow-300');
+    const categoryIdentity = screen.getByTestId('classificationCategoryFinal-9001');
+    expect(categoryIdentity.textContent).toBe('Transport');
+    expect(categoryIdentity.getAttribute('style')).toContain('border-inline-start');
+    expect(categoryIdentity.classList.contains('visually-hidden')).toBe(false);
+    expect(row.querySelectorAll('[data-testid="classificationCategoryFinal-9001"]')).toHaveLength(1);
+    const completedTags = within(row).getByTestId('classificationTagsFinal-9001');
+    const tagChips = completedTags.querySelectorAll('[data-cy="transactionTagChip"]');
+    expect(completedTags.className).toContain('candidate-review-completed-tags');
+    expect(tagChips).toHaveLength(2);
+    expect(tagChips[0].textContent).toBe('Business');
+    expect(tagChips[0].getAttribute('style')).toContain('#3B82F6');
+    expect(tagChips[0].getAttribute('data-color-treatment')).toBe('tag');
+    expect(tagChips[1].textContent).toContain('A deliberately long completed tag name that must remain readable');
+    expect(tagChips[1].textContent).toContain('(Inactive)');
+    expect(within(completedTags).getAllByText('Business')).toHaveLength(1);
+    expect(row.querySelector('select')).toBeNull();
+    expect(row.querySelector('[data-testid^="classificationTags-"][data-testid$="Add"]')).toBeNull();
+  });
+
+  it('renders an honest visible fallback for an uncategorized completed movement', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'COMPLETED',
+        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            status: 'IMPORTED',
+            financialTransactionId: 9002,
+            financialTransaction: { id: 9002, category: null, tags: [] },
+            candidate: null,
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    const row = await screen.findByTestId('workflowRow-300');
+    const emptyCategory = screen.getByTestId('classificationCategoryEmptyFinal-9002');
+    expect(emptyCategory.textContent).toBe('No category');
+    expect(emptyCategory.classList.contains('visually-hidden')).toBe(false);
+    expect(row.querySelectorAll('[data-testid="classificationCategoryEmptyFinal-9002"]')).toHaveLength(1);
+    expect(within(row).getByTestId('classificationTagsFinal-9002').textContent).toContain('No tags');
+    expect(row.querySelector('select')).toBeNull();
+  });
+
+  it('uses the Spanish completed tags empty state without making classification editable', async () => {
+    registerSpanishTranslations();
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'COMPLETED',
+        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            status: 'IMPORTED',
+            financialTransactionId: 9005,
+            financialTransaction: { id: 9005, category: { id: 7, name: 'Transporte', color: '#0B6E4F' }, tags: [] },
+            candidate: null,
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    const row = await screen.findByTestId('workflowRow-300');
+    expect(within(row).getByTestId('classificationCategoryFinal-9005').textContent).toBe('Transporte');
+    expect(within(row).getByTestId('classificationTagsFinal-9005').textContent).toContain('Sin etiquetas');
+    expect(row.querySelector('input, select, textarea')).toBeNull();
+    expect(row.querySelector('[data-testid^="classificationTags-"][data-testid$="Add"]')).toBeNull();
+  });
+
+  it('keeps an inactive historical completed category visible with its hierarchy', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'COMPLETED',
+        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [
+          {
+            ...persistedReviewResponse.data.rows[0],
+            status: 'IMPORTED',
+            financialTransactionId: 9003,
+            financialTransaction: {
+              id: 9003,
+              category: {
+                id: 70,
+                name: 'Archived ride apps',
+                color: '#663399',
+                active: false,
+                parentCategory: { id: 71, name: 'Transport' },
+              },
+              tags: [{ id: 5, name: 'Business' }],
+            },
+            candidate: null,
+          },
+        ],
+      },
+    });
+    renderPersistedReview();
+
+    const categoryIdentity = await screen.findByTestId('classificationCategoryFinal-9003');
+    expect(categoryIdentity.textContent).toContain('Transport › Archived ride apps');
+    expect(categoryIdentity.textContent).toContain('(Inactive)');
+    expect(categoryIdentity.getAttribute('style')).toContain('border-inline-start');
+    expect(categoryIdentity.classList.contains('visually-hidden')).toBe(false);
+    expect(screen.getByTestId('classificationTagsFinal-9003').textContent).toBe('Business');
+  });
+
+  it('shows one completed category identity in a mobile card and keeps it read-only after expansion', async () => {
+    const previousMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: jest.fn().mockImplementation(() => ({
+        matches: true,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      })),
+    });
+
+    try {
+      mockAxiosGet.mockResolvedValue({
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'COMPLETED',
+          counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+          rows: [
+            {
+              ...persistedReviewResponse.data.rows[0],
+              status: 'IMPORTED',
+              financialTransactionId: 9004,
+              financialTransaction: {
+                id: 9004,
+                category: { id: 7, name: 'Transport', color: '#0B6E4F', active: true },
+                tags: [{ id: 5, name: 'Business' }],
+              },
+              candidate: null,
+            },
+          ],
+        },
+      });
+      renderPersistedReview();
+
+      const card = await screen.findByTestId('workflowMobileCard-300');
+      expect(within(card).getByTestId('classificationCategoryFinal-9004').textContent).toBe('Transport');
+      expect(card.querySelectorAll('[data-testid="classificationCategoryFinal-9004"]')).toHaveLength(1);
+      expect(card.querySelector('select')).toBeNull();
+
+      fireEvent.click(screen.getByTestId('workflowMobileToggleDetails-300'));
+      expect(within(card).getByTestId('classificationCategoryFinal-9004').textContent).toBe('Transport');
+      expect(card.querySelectorAll('[data-testid="classificationCategoryFinal-9004"]')).toHaveLength(1);
+      expect(card.querySelector('select')).toBeNull();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: previousMatchMedia });
+    }
   });
 
   it('confirm API error rechecks the workflow and keeps an uncertainty message in the dialog', async () => {
