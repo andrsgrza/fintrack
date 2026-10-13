@@ -448,8 +448,38 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.contains('[data-cy="workflowRows"] tr', outDescription).as('outClassificationRow');
     cy.contains('[data-cy="workflowRows"] tr', secondOutDescription).as('secondOutClassificationRow');
     cy.contains('[data-cy="workflowRows"] tr', inDescription).as('inClassificationRow');
+    cy.get('@outClassificationRow').within(() => {
+      cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
+      cy.get('.candidate-review-category-value').should('not.exist');
+      cy.get('[data-testid^="classificationSuggestedCategory-"]').should('contain', expenseCategory?.name);
+      cy.get('[data-testid^="classificationApplySuggestedCategory-"]')
+        .should('have.attr', 'aria-label')
+        .and('contain', expenseCategory?.name);
+      cy.get('[data-testid^="classificationApplySuggestedCategory-"]')
+        .invoke('text')
+        .should('match', /Apply|Aplicar/);
+      cy.get('[data-cy^="classificationTags-"][data-cy$="Empty"]')
+        .invoke('text')
+        .should('match', /No tags|Sin etiquetas/);
+      cy.get('[data-testid^="classificationSuggestedTags-"]').should('contain', tag?.name);
+      cy.get('[data-testid^="classificationApplySuggestedTags-"]').should('have.attr', 'aria-label').and('contain', tag?.name);
+      cy.get('[data-testid^="classificationApplySuggestedTags-"]')
+        .invoke('text')
+        .should('match', /Apply|Aplicar/);
+    });
     cy.get('[data-cy="workflowCandidateReviewQueue"]').scrollIntoView();
-    cy.screenshot('ingestion-polish-2-desktop-queue', { capture: 'viewport' });
+    cy.screenshot('ingestion-polish-3-current-and-suggested-classification', { capture: 'viewport' });
+
+    expandWorkflowRow(outDescription);
+    workflowDetailFor(outDescription).within(() => {
+      cy.get('[data-testid^="classificationStatus-"]')
+        .invoke('text')
+        .should('match', /Not evaluated|No evaluada/);
+      cy.get('[data-testid^="classificationPreviewStateHelp-"]')
+        .invoke('text')
+        .should('match', /not saved|No está guardada/);
+    });
+    cy.screenshot('ingestion-polish-3-persisted-status-and-preview', { capture: 'viewport' });
 
     cy.get('[data-cy="workflowReevaluateDescriptions"]').should('be.visible').click();
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
@@ -640,6 +670,9 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
     cy.intercept('POST', '/api/transaction-ingestions/*/confirm').as('confirmImportRequest');
     cy.get('[data-cy="workflowConfirmImport"]').click();
+    cy.get('[data-cy="workflowConfirmDialog"]').should('be.visible');
+    cy.get('@confirmImportRequest.all').should('have.length', 0);
+    cy.get('[data-cy="workflowConfirmDialogSubmit"]').click();
     cy.wait('@confirmImportRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(response?.body.status).to.equal('COMPLETED');
@@ -970,6 +1003,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
 
     cy.get('[data-cy="workflowConfirmImport"]').click();
+    cy.get('[data-cy="workflowConfirmDialog"]').should('be.visible');
+    cy.get('[data-cy="workflowConfirmDialogSubmit"]').click();
     cy.wait('@confirmImportRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(response?.body.status).to.equal('COMPLETED');
@@ -1415,6 +1450,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
 
     cy.intercept('POST', '/api/transaction-ingestions/*/confirm').as('confirmImportRequest');
     cy.get('[data-cy="workflowConfirmImport"]').click();
+    cy.get('[data-cy="workflowConfirmDialog"]').should('be.visible');
+    cy.get('[data-cy="workflowConfirmDialogSubmit"]').click();
     cy.wait('@confirmImportRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(response?.body.status).to.equal('COMPLETED');

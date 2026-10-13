@@ -13,6 +13,10 @@ import {
   FormGroup,
   Input,
   Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Row,
   Spinner,
   Table,
@@ -626,6 +630,7 @@ export const TransactionIngestionWorkflowDetail = () => {
   const previewedCandidateKeyRef = useRef<string | null>(null);
   const automaticApplicationRunRef = useRef(false);
   const automaticApplicationSequenceRef = useRef(0);
+  const confirmationRequestInFlightRef = useRef(false);
   const isMobileCandidateReview = useMobileCandidateReview();
 
   const [accountId, setAccountId] = useState('');
@@ -643,6 +648,9 @@ export const TransactionIngestionWorkflowDetail = () => {
   const [loadingReview, setLoadingReview] = useState(false);
   const [reviewActionInProgress, setReviewActionInProgress] = useState<number | null>(null);
   const [confirmingImport, setConfirmingImport] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmDialogError, setConfirmDialogError] = useState<string | null>(null);
+  const [confirmationResult, setConfirmationResult] = useState<ICsvIngestionConfirmImportResponse | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<ICsvIngestionWorkflowRowEditDraft>({});
   const [editSessionWarning, setEditSessionWarning] = useState<string | null>(null);
@@ -655,7 +663,7 @@ export const TransactionIngestionWorkflowDetail = () => {
   const [loadingClassification, setLoadingClassification] = useState(false);
   const [classificationActionInProgress, setClassificationActionInProgress] = useState<number | null>(null);
   const [applyingAllScopedSuggestions, setApplyingAllScopedSuggestions] = useState(false);
-  const [classificationSuggestionApplyWarning, setClassificationSuggestionApplyWarning] = useState<string | null>(null);
+  const [reviewOperationFeedback, setReviewOperationFeedback] = useState<{ color: 'success' | 'warning'; message: string } | null>(null);
   const [descriptionReevaluationByRecordId, setDescriptionReevaluationByRecordId] = useState<
     Record<number, IDescriptionReevaluationResult>
   >({});
@@ -1345,9 +1353,14 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setReevaluationInProgress({ kind: 'DESCRIPTIONS' });
     try {
       await reevaluateDescriptions(undefined, automationConfig.autoApplyDescriptions);
+      setReviewOperationFeedback({
+        color: 'success',
+        message: translate('fintrackApp.transactionIngestion.workflow.reviewFeedback.descriptionsReevaluated'),
+      });
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionReevaluationFailed'));
     } finally {
@@ -1360,10 +1373,15 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setDescriptionApplicationInProgress(row.ingestionRecordId);
     try {
       // A per-row click is explicit consent to replace a USER_EDIT value with the currently reevaluated rule result.
       await reevaluateDescriptions([row.ingestionRecordId], true, false);
+      setReviewOperationFeedback({
+        color: 'success',
+        message: translate('fintrackApp.transactionIngestion.workflow.reviewFeedback.descriptionApplied'),
+      });
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionApplyFailed'));
     } finally {
@@ -1380,10 +1398,15 @@ export const TransactionIngestionWorkflowDetail = () => {
     }
 
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setDescriptionApplicationInProgress('ALL');
     try {
       // Batch application remains subject to the page's manual-change protection setting.
       await reevaluateDescriptions(descriptionSuggestionRecordIds, true, automationConfig.protectManualChanges);
+      setReviewOperationFeedback({
+        color: 'success',
+        message: translate('fintrackApp.transactionIngestion.workflow.reviewFeedback.descriptionsApplied'),
+      });
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.descriptionApplyAllFailed'));
     } finally {
@@ -1396,9 +1419,18 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setReevaluationInProgress({ kind: scope });
     try {
       await reevaluateClassificationWithAutomation(scope);
+      setReviewOperationFeedback({
+        color: 'success',
+        message: translate(
+          scope === 'CATEGORY'
+            ? 'fintrackApp.transactionIngestion.workflow.reviewFeedback.categoriesReevaluated'
+            : 'fintrackApp.transactionIngestion.workflow.reviewFeedback.tagsReevaluated',
+        ),
+      });
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationPreviewFailed'));
     } finally {
@@ -1411,6 +1443,7 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setReevaluationInProgress({ kind: 'ALL' });
     let descriptionsSucceeded = false;
     let classificationSucceeded = false;
@@ -1434,6 +1467,11 @@ export const TransactionIngestionWorkflowDetail = () => {
               : 'fintrackApp.transactionIngestion.workflow.errors.reevaluationFailed',
           ),
         );
+      } else {
+        setReviewOperationFeedback({
+          color: 'success',
+          message: translate('fintrackApp.transactionIngestion.workflow.reviewFeedback.allReevaluated'),
+        });
       }
       setReevaluationInProgress(null);
     }
@@ -1451,6 +1489,7 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setReevaluationInProgress({ kind: 'ROW', recordId: row.ingestionRecordId });
     let descriptionsSucceeded = false;
     let classificationSucceeded = false;
@@ -1474,6 +1513,11 @@ export const TransactionIngestionWorkflowDetail = () => {
               : 'fintrackApp.transactionIngestion.workflow.errors.reevaluationFailed',
           ),
         );
+      } else {
+        setReviewOperationFeedback({
+          color: 'success',
+          message: translate('fintrackApp.transactionIngestion.workflow.reviewFeedback.rowReevaluated'),
+        });
       }
       setReevaluationInProgress(null);
     }
@@ -1673,6 +1717,7 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setClassificationActionInProgress(candidateId);
     try {
       const response = await applyFileImportCandidateRules(workflow.transactionIngestionId, [candidateId], scope);
@@ -1680,6 +1725,16 @@ export const TransactionIngestionWorkflowDetail = () => {
       applyRows.forEach(row => updateCandidateInWorkflow(row.candidate));
       clearPersistedClassificationPreviews(applyRows, scope);
       await reloadWorkflowAfterRuleApply(workflow.transactionIngestionId);
+      setReviewOperationFeedback({
+        color: applyRows.some(row => row.action === 'SKIPPED') ? 'warning' : 'success',
+        message: translate(
+          applyRows.some(row => row.action === 'SKIPPED')
+            ? 'fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllPartial'
+            : scope === 'CATEGORY'
+              ? 'fintrackApp.transactionIngestion.workflow.reviewFeedback.categoryApplied'
+              : 'fintrackApp.transactionIngestion.workflow.reviewFeedback.tagsApplied',
+        ),
+      });
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationUpdateFailed'));
     } finally {
@@ -1698,7 +1753,7 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
-    setClassificationSuggestionApplyWarning(null);
+    setReviewOperationFeedback(null);
     setApplyingAllScopedSuggestions(true);
     try {
       // Omitting candidateIds applies this domain's current FILE_IMPORT suggestions across the ingestion.
@@ -1708,9 +1763,19 @@ export const TransactionIngestionWorkflowDetail = () => {
       clearPersistedClassificationPreviews(applyRows, scope);
       await reloadWorkflowAfterRuleApply(workflow.transactionIngestionId);
       if (applyRows.some(row => row.action === 'SKIPPED')) {
-        setClassificationSuggestionApplyWarning(
-          translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllPartial'),
-        );
+        setReviewOperationFeedback({
+          color: 'warning',
+          message: translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllPartial'),
+        });
+      } else {
+        setReviewOperationFeedback({
+          color: 'success',
+          message: translate(
+            scope === 'CATEGORY'
+              ? 'fintrackApp.transactionIngestion.workflow.reviewFeedback.categoriesApplied'
+              : 'fintrackApp.transactionIngestion.workflow.reviewFeedback.allTagsApplied',
+          ),
+        });
       }
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationApplyAllFailed'));
@@ -1724,10 +1789,15 @@ export const TransactionIngestionWorkflowDetail = () => {
       return;
     }
     setBackendError(null);
+    setReviewOperationFeedback(null);
     setClassificationActionInProgress(candidateId);
     try {
       const response = await confirmNoSuggestions(workflow.transactionIngestionId, candidateId);
       updateCandidateInWorkflow(response.data.candidate);
+      setReviewOperationFeedback({
+        color: 'success',
+        message: translate('fintrackApp.transactionIngestion.workflow.reviewFeedback.noSuggestionsConfirmed'),
+      });
     } catch (error) {
       setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.confirmNoSuggestionsFailed'));
     } finally {
@@ -1740,26 +1810,66 @@ export const TransactionIngestionWorkflowDetail = () => {
     return validRows.find(row => candidateBlocksClassification(row) || !candidateHasReviewedClassification(row.candidate));
   };
 
-  const confirmImport = async () => {
-    if (!workflow?.transactionIngestionId || hasUnsavedRowEdit) {
+  const openConfirmDialog = () => {
+    if (!confirmAvailable || hasUnsavedRowEdit || confirmingImport) {
       return;
     }
+    setConfirmDialogError(null);
+    setConfirmDialogOpen(true);
+  };
+
+  const closeConfirmDialog = () => {
+    if (!confirmingImport) {
+      setConfirmDialogOpen(false);
+      setConfirmDialogError(null);
+    }
+  };
+
+  const refreshWorkflowAfterUncertainConfirm = async (workflowId: number) => {
+    try {
+      const response = await axios.get<ICsvIngestionWorkflowResponse>(`api/transaction-ingestions/${workflowId}/workflow`);
+      setWorkflow(response.data);
+      return response.data;
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!workflow?.transactionIngestionId || hasUnsavedRowEdit || confirmingImport || confirmationRequestInFlightRef.current) {
+      return;
+    }
+    confirmationRequestInFlightRef.current = true;
     setBackendError(null);
+    setConfirmDialogError(null);
     setConfirmingImport(true);
     try {
       const reloadedWorkflow = await loadWorkflow(workflow.transactionIngestionId);
       const blockedRow = validateConfirmCandidates(reloadedWorkflow);
       if (blockedRow) {
-        setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationConfirmBlocked'));
+        setConfirmDialogError(translate('fintrackApp.transactionIngestion.workflow.errors.classificationConfirmBlocked'));
+        return;
+      }
+      if (reloadedWorkflow.status !== 'READY' || (reloadedWorkflow.counts?.validRows ?? 0) === 0) {
+        setConfirmDialogError(translate('fintrackApp.transactionIngestion.workflow.errors.confirmNoLongerAvailable'));
         return;
       }
       const response = await axios.post<ICsvIngestionConfirmImportResponse>(
         `api/transaction-ingestions/${workflow.transactionIngestionId}/confirm`,
       );
       applyConfirmResponse(response.data);
+      setConfirmationResult(response.data);
+      setConfirmDialogOpen(false);
     } catch (error) {
-      setBackendError(translate('fintrackApp.transactionIngestion.workflow.errors.confirmFailed'));
+      const reloadedWorkflow = await refreshWorkflowAfterUncertainConfirm(workflow.transactionIngestionId);
+      if (reloadedWorkflow?.status === 'COMPLETED') {
+        setConfirmationResult(null);
+        setConfirmDialogOpen(false);
+      } else {
+        setConfirmDialogError(translate('fintrackApp.transactionIngestion.workflow.errors.confirmUncertain'));
+      }
     } finally {
+      confirmationRequestInFlightRef.current = false;
       setConfirmingImport(false);
     }
   };
@@ -1895,6 +2005,134 @@ export const TransactionIngestionWorkflowDetail = () => {
       />
     );
   };
+
+  const renderConfirmDialog = () => {
+    const status = workflow?.status;
+    const account = transactionIngestionEntity.account;
+
+    return (
+      <Modal
+        isOpen={confirmDialogOpen}
+        toggle={closeConfirmDialog}
+        centered
+        backdrop="static"
+        aria-labelledby="workflow-confirm-dialog-title"
+        data-cy="workflowConfirmDialog"
+        data-testid="workflowConfirmDialog"
+      >
+        <ModalHeader toggle={confirmingImport ? undefined : closeConfirmDialog} id="workflow-confirm-dialog-title">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.title">Confirm import</Translate>
+        </ModalHeader>
+        <ModalBody>
+          <p>
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.explanation">
+              This will create final financial transactions from the eligible candidates saved in this review.
+            </Translate>
+          </p>
+          <p className="text-muted small">
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.backendAuthority">
+              Rule previews are not decisions. Disabled rows are excluded, and the server validates the latest saved state before creating
+              transactions.
+            </Translate>
+          </p>
+          <dl className="row mb-0" data-cy="workflowConfirmDialogSummary">
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.account">Account</Translate>
+            </dt>
+            <dd className="col-sm-7">{account ? formatFinancialAccountLabel(account) : '—'}</dd>
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.originalFilename">Original filename</Translate>
+            </dt>
+            <dd className="col-sm-7 text-break">{fileMetadata?.originalFilename || '—'}</dd>
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.status">Status</Translate>
+            </dt>
+            <dd className="col-sm-7">{renderIngestionStatus(status)}</dd>
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.recordsReceived">Records received</Translate>
+            </dt>
+            <dd className="col-sm-7">{counts.recordsReceived ?? 0}</dd>
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.validRows">Valid rows</Translate>
+            </dt>
+            <dd className="col-sm-7">{counts.validRows ?? 0}</dd>
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.candidateRowsReviewed">
+                Candidate rows reviewed
+              </Translate>
+            </dt>
+            <dd className="col-sm-7">{reviewedClassificationRows}</dd>
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.invalidRows">Invalid rows</Translate>
+            </dt>
+            <dd className="col-sm-7">{counts.invalidRows ?? 0}</dd>
+            <dt className="col-sm-5">
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.disabledRows">Disabled rows</Translate>
+            </dt>
+            <dd className="col-sm-7">{counts.recordsSkipped ?? 0}</dd>
+          </dl>
+          {confirmDialogError ? (
+            <Alert color="danger" className="mt-3 mb-0" fade={false} data-testid="workflowConfirmDialogError">
+              {confirmDialogError}
+            </Alert>
+          ) : null}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            color="secondary"
+            outline
+            onClick={closeConfirmDialog}
+            disabled={confirmingImport}
+            data-cy="workflowConfirmDialogCancel"
+            data-testid="workflowConfirmDialogCancel"
+          >
+            <Translate contentKey="entity.action.cancel">Cancel</Translate>
+          </Button>
+          <Button
+            color="success"
+            onClick={confirmImport}
+            disabled={confirmingImport || workflow?.status !== 'READY' || (workflow?.counts?.validRows ?? 0) === 0}
+            data-cy="workflowConfirmDialogSubmit"
+            data-testid="workflowConfirmDialogSubmit"
+          >
+            {confirmingImport ? <Spinner size="sm" /> : null}{' '}
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.submit">Create transactions</Translate>
+          </Button>
+        </ModalFooter>
+      </Modal>
+    );
+  };
+
+  const renderCompletionCounts = () => (
+    <dl className="row row-cols-2 row-cols-md-4 g-2 mb-0 mt-2" data-cy="workflowCompletionCounts" data-testid="workflowCompletionCounts">
+      <div className="col">
+        <dt className="small text-muted fw-semibold mb-1">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.created">Created</Translate>
+        </dt>
+        <dd className="mb-0">{counts.recordsCreated ?? 0}</dd>
+      </div>
+      <div className="col">
+        <dt className="small text-muted fw-semibold mb-1">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.skipped">Skipped</Translate>
+        </dt>
+        <dd className="mb-0">{counts.recordsSkipped ?? 0}</dd>
+      </div>
+      <div className="col">
+        <dt className="small text-muted fw-semibold mb-1">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.rejected">Rejected</Translate>
+        </dt>
+        <dd className="mb-0">{counts.recordsRejected ?? 0}</dd>
+      </div>
+      {confirmationResult ? (
+        <div className="col">
+          <dt className="small text-muted fw-semibold mb-1">
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.createdNow">Created now</Translate>
+          </dt>
+          <dd className="mb-0">{confirmationResult.createdNow ?? 0}</dd>
+        </div>
+      ) : null}
+    </dl>
+  );
 
   const renderReviewSummary = () => {
     if (!workflow) {
@@ -2107,21 +2345,18 @@ export const TransactionIngestionWorkflowDetail = () => {
 
     return (
       <div className="candidate-review-classification-control">
-        {categoryValue ? (
-          <span
-            className="candidate-review-category-value"
-            style={categoryIdentityStyle(categoryColor)}
-            data-testid={reviewTestId('classificationCurrentCategory', candidateId, presentation)}
-          >
-            {categoryValue}
-          </span>
-        ) : null}
+        <span className="candidate-review-classification-label">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.currentCategory">Current category</Translate>
+        </span>
         {editable ? (
           <Input
             bsSize="sm"
             type="select"
-            className="mt-1"
-            aria-label={`${translate('fintrackApp.transactionIngestion.workflow.classification.category')} ${row.recordIndex}`}
+            className="candidate-review-classification-editor mt-1"
+            style={categoryIdentityStyle(categoryColor)}
+            aria-label={translate('fintrackApp.transactionIngestion.workflow.classification.editCategory', {
+              recordIndex: row.recordIndex ?? '',
+            })}
             value={candidate?.categoryId ?? ''}
             disabled={actionBusy || hasUnsavedRowEdit}
             onChange={event => candidateId !== undefined && updateClassificationCategory(candidateId, event.target.value)}
@@ -2129,7 +2364,7 @@ export const TransactionIngestionWorkflowDetail = () => {
           >
             <option value="">{translate('fintrackApp.transactionIngestion.workflow.classification.noCategory')}</option>
             {compatibleCategories.map(category => (
-              <option value={category.id} key={category.id}>
+              <option value={category.id} key={category.id} disabled={category.active === false && category.id !== candidate?.categoryId}>
                 {category.name}
                 {category.active === false ? ` (${translate('fintrackApp.category.inactive')})` : ''}
               </option>
@@ -2149,27 +2384,40 @@ export const TransactionIngestionWorkflowDetail = () => {
           </small>
         ) : null}
         {previewCategoryName ? (
-          <small
+          <div
             className="candidate-review-suggestion d-block mt-2"
             data-testid={reviewTestId('classificationSuggestedCategory', candidateId, presentation)}
           >
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.suggested">Suggested</Translate>:{' '}
-            {previewCategoryName}
-          </small>
-        ) : null}
-        {editable && categorySuggestionApplicable ? (
-          <Button
-            size="sm"
-            color="primary"
-            className="mt-1"
-            disabled={actionBusy || hasUnsavedRowEdit}
-            onClick={() => candidateId !== undefined && applySuggestionsForCandidate(candidateId, 'CATEGORY')}
-            data-testid={reviewTestId('classificationApplySuggestedCategory', candidateId, presentation)}
-          >
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applySuggestedCategory">
-              Apply suggested category
-            </Translate>
-          </Button>
+            <span>
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.suggested">Suggested</Translate>:{' '}
+              {previewCategoryName}
+            </span>
+            {editable && categorySuggestionApplicable ? (
+              <Button
+                size="sm"
+                color="primary"
+                className="candidate-review-suggestion-apply"
+                disabled={actionBusy || hasUnsavedRowEdit}
+                aria-label={translate('fintrackApp.transactionIngestion.workflow.classification.applySuggestedCategoryAria', {
+                  category: previewCategoryName,
+                  description: row.description ?? `#${row.recordIndex ?? ''}`,
+                })}
+                onClick={() => candidateId !== undefined && applySuggestionsForCandidate(candidateId, 'CATEGORY')}
+                data-testid={reviewTestId('classificationApplySuggestedCategory', candidateId, presentation)}
+              >
+                {classificationActionInProgress === candidateId ? (
+                  <>
+                    <Spinner size="sm" />{' '}
+                    <span className="visually-hidden">
+                      <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applying">Applying</Translate>
+                    </span>
+                  </>
+                ) : (
+                  <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.apply">Apply</Translate>
+                )}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     );
@@ -2192,6 +2440,9 @@ export const TransactionIngestionWorkflowDetail = () => {
 
     return (
       <div className="candidate-review-classification-control">
+        <span className="candidate-review-classification-label">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.currentTags">Current tags</Translate>
+        </span>
         {editable ? (
           <ProductTagSelector
             id={`classification-tags-${presentation}-${candidateId}`}
@@ -2224,27 +2475,40 @@ export const TransactionIngestionWorkflowDetail = () => {
           </small>
         ) : null}
         {(preview?.suggestedTags ?? []).length > 0 ? (
-          <small
+          <div
             className="candidate-review-suggestion d-block mt-2"
             data-testid={reviewTestId('classificationSuggestedTags', candidateId, presentation)}
           >
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.suggested">Suggested</Translate>:{' '}
-            {(preview?.suggestedTags ?? []).map(tag => suggestedTagName(tag)).join(', ')}
-          </small>
-        ) : null}
-        {editable && tagSuggestionApplicable ? (
-          <Button
-            size="sm"
-            color="primary"
-            className="mt-1"
-            disabled={actionBusy || hasUnsavedRowEdit}
-            onClick={() => candidateId !== undefined && applySuggestionsForCandidate(candidateId, 'TAGS')}
-            data-testid={reviewTestId('classificationApplySuggestedTags', candidateId, presentation)}
-          >
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applySuggestedTags">
-              Apply suggested tags
-            </Translate>
-          </Button>
+            <span>
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.suggested">Suggested</Translate>:{' '}
+              {(preview?.suggestedTags ?? []).map(tag => suggestedTagName(tag)).join(', ')}
+            </span>
+            {editable && tagSuggestionApplicable ? (
+              <Button
+                size="sm"
+                color="primary"
+                className="candidate-review-suggestion-apply"
+                disabled={actionBusy || hasUnsavedRowEdit}
+                aria-label={translate('fintrackApp.transactionIngestion.workflow.classification.applySuggestedTagsAria', {
+                  tags: (preview?.suggestedTags ?? []).map(tag => suggestedTagName(tag)).join(', '),
+                  description: row.description ?? `#${row.recordIndex ?? ''}`,
+                })}
+                onClick={() => candidateId !== undefined && applySuggestionsForCandidate(candidateId, 'TAGS')}
+                data-testid={reviewTestId('classificationApplySuggestedTags', candidateId, presentation)}
+              >
+                {classificationActionInProgress === candidateId ? (
+                  <>
+                    <Spinner size="sm" />{' '}
+                    <span className="visually-hidden">
+                      <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applying">Applying</Translate>
+                    </span>
+                  </>
+                ) : (
+                  <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.apply">Apply</Translate>
+                )}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     );
@@ -2546,6 +2810,7 @@ export const TransactionIngestionWorkflowDetail = () => {
   ) => {
     const candidateId = candidate?.id;
     const suffix = presentation === 'desktop' ? '' : '-mobile';
+    const hasApplicablePreview = hasApplicableSuggestedCategory(candidate, preview) || hasApplicableSuggestedTags(candidate, preview);
 
     return (
       <Col lg="6">
@@ -2558,10 +2823,23 @@ export const TransactionIngestionWorkflowDetail = () => {
           <>
             <div data-testid={`classificationStatus-${candidateId}`}>
               <strong>
-                <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.status">Classification</Translate>:
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.reviewStatus">
+                  Saved review status
+                </Translate>
+                :
               </strong>{' '}
               {renderCandidateClassificationStatus(candidate)}
             </div>
+            {hasApplicablePreview ? (
+              <small
+                className="candidate-review-state-help d-block mt-1"
+                data-testid={`classificationPreviewStateHelp-${candidateId}${suffix}`}
+              >
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.suggestionIsPreview">
+                  This is a current rule preview. It is not saved and does not change the persisted review status.
+                </Translate>
+              </small>
+            ) : null}
             {renderClassificationNotes(preview)}
             {reviewActionsEnabled && row.status === 'VALID' && preview && !preview.hasSuggestions ? (
               <Button
@@ -2854,7 +3132,7 @@ export const TransactionIngestionWorkflowDetail = () => {
                           <Badge color={recordStatusColor(row.status)} pill data-testid={`workflowMobileRowStatus-${recordKey}`}>
                             {recordStatusLabel(row.status)}
                           </Badge>
-                          {candidate?.categoryName ? (
+                          {candidate?.categoryName && !expanded ? (
                             <span
                               className="candidate-review-category-value"
                               style={categoryIdentityStyle(categories.find(category => category.id === candidate.categoryId)?.color)}
@@ -2926,7 +3204,7 @@ export const TransactionIngestionWorkflowDetail = () => {
           </Translate>
         </Alert>
         <h4 className="h6 mb-2">
-          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.title">Rules</Translate>
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.ruleCreation.createTitle">Create rules</Translate>
         </h4>
         <div className="d-flex flex-wrap gap-2 mb-3" data-cy="workflowRuleCreationActions">
           <Button
@@ -2953,9 +3231,14 @@ export const TransactionIngestionWorkflowDetail = () => {
           </Button>
         </div>
         <div className="border rounded p-2 mb-3" data-cy="workflowAutomationConfig" data-testid="workflowAutomationConfig">
-          <strong>
+          <h4 className="h6 mb-1">
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.title">Automatic review</Translate>
-          </strong>
+          </h4>
+          <small className="text-muted d-block">
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.automation.help">
+              These page-local settings determine whether reevaluation also saves eligible results.
+            </Translate>
+          </small>
           <div className="d-flex flex-wrap gap-3 mt-2">
             <FormGroup check>
               <Input
@@ -3060,6 +3343,11 @@ export const TransactionIngestionWorkflowDetail = () => {
         <h4 className="h6 mb-2">
           <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.title">Reevaluate</Translate>
         </h4>
+        <small className="text-muted d-block mb-2">
+          <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.help">
+            Recalculate results using the current rules. With auto-apply enabled, eligible results can also be saved.
+          </Translate>
+        </small>
         <div className="d-flex flex-wrap gap-2" data-cy="workflowReevaluationControls">
           <Button
             color="secondary"
@@ -3102,61 +3390,68 @@ export const TransactionIngestionWorkflowDetail = () => {
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.reevaluation.all">Reevaluate all</Translate>
           </Button>
         </div>
-        <div className="d-flex flex-wrap align-items-center gap-2 mt-3" data-cy="workflowSuggestionApplicationControls">
-          <h4 className="h6 mb-0 me-1">
+        <div className="mt-3" data-cy="workflowSuggestionApplicationControls">
+          <h4 className="h6 mb-1">
             <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applicationTitle">Apply</Translate>
           </h4>
-          <Button
-            color="primary"
-            size="sm"
-            disabled={descriptionSuggestionRecordIds.length === 0 || classificationReevaluationRunning || hasUnsavedRowEdit}
-            onClick={applyAllDescriptionSuggestions}
-            data-cy="workflowApplyAllDescriptionSuggestions"
-            data-testid="workflowApplyAllDescriptionSuggestions"
-          >
-            {descriptionApplicationInProgress === 'ALL' ? <Spinner size="sm" /> : null}{' '}
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.applyAllSuggestions">
-              Apply all suggested descriptions
+          <small className="text-muted d-block mb-2">
+            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applicationHelp">
+              Save eligible suggestions on candidates. These actions use the entire import, not just the visible rows.
             </Translate>
-          </Button>
-          <Button
-            color="success"
-            size="sm"
-            disabled={
-              categorySuggestionCandidateIds.length === 0 ||
-              !classificationReevaluationAvailable ||
-              classificationReevaluationRunning ||
-              classificationActionInProgress !== null ||
-              hasUnsavedRowEdit
-            }
-            onClick={() => applyAllSuggestionsForScope('CATEGORY')}
-            data-cy="workflowApplyAllSuggestedCategories"
-            data-testid="workflowApplyAllSuggestedCategories"
-          >
-            {applyingAllScopedSuggestions ? <Spinner size="sm" /> : null}{' '}
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestedCategories">
-              Apply all suggested categories
-            </Translate>
-          </Button>
-          <Button
-            color="success"
-            size="sm"
-            disabled={
-              tagSuggestionCandidateIds.length === 0 ||
-              !classificationReevaluationAvailable ||
-              classificationReevaluationRunning ||
-              classificationActionInProgress !== null ||
-              hasUnsavedRowEdit
-            }
-            onClick={() => applyAllSuggestionsForScope('TAGS')}
-            data-cy="workflowApplyAllSuggestedTags"
-            data-testid="workflowApplyAllSuggestedTags"
-          >
-            {applyingAllScopedSuggestions ? <Spinner size="sm" /> : null}{' '}
-            <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestedTags">
-              Apply all suggested tags
-            </Translate>
-          </Button>
+          </small>
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            <Button
+              color="primary"
+              size="sm"
+              disabled={descriptionSuggestionRecordIds.length === 0 || classificationReevaluationRunning || hasUnsavedRowEdit}
+              onClick={applyAllDescriptionSuggestions}
+              data-cy="workflowApplyAllDescriptionSuggestions"
+              data-testid="workflowApplyAllDescriptionSuggestions"
+            >
+              {descriptionApplicationInProgress === 'ALL' ? <Spinner size="sm" /> : null}{' '}
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.descriptionReview.applyAllSuggestions">
+                Apply all suggested descriptions
+              </Translate>
+            </Button>
+            <Button
+              color="success"
+              size="sm"
+              disabled={
+                categorySuggestionCandidateIds.length === 0 ||
+                !classificationReevaluationAvailable ||
+                classificationReevaluationRunning ||
+                classificationActionInProgress !== null ||
+                hasUnsavedRowEdit
+              }
+              onClick={() => applyAllSuggestionsForScope('CATEGORY')}
+              data-cy="workflowApplyAllSuggestedCategories"
+              data-testid="workflowApplyAllSuggestedCategories"
+            >
+              {applyingAllScopedSuggestions ? <Spinner size="sm" /> : null}{' '}
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestedCategories">
+                Apply all suggested categories
+              </Translate>
+            </Button>
+            <Button
+              color="success"
+              size="sm"
+              disabled={
+                tagSuggestionCandidateIds.length === 0 ||
+                !classificationReevaluationAvailable ||
+                classificationReevaluationRunning ||
+                classificationActionInProgress !== null ||
+                hasUnsavedRowEdit
+              }
+              onClick={() => applyAllSuggestionsForScope('TAGS')}
+              data-cy="workflowApplyAllSuggestedTags"
+              data-testid="workflowApplyAllSuggestedTags"
+            >
+              {applyingAllScopedSuggestions ? <Spinner size="sm" /> : null}{' '}
+              <Translate contentKey="fintrackApp.transactionIngestion.workflow.classification.applyAllSuggestedTags">
+                Apply all suggested tags
+              </Translate>
+            </Button>
+          </div>
         </div>
       </ProductSection>
     ) : null;
@@ -3182,9 +3477,15 @@ export const TransactionIngestionWorkflowDetail = () => {
         </Alert>
       ) : null}
 
-      {classificationSuggestionApplyWarning ? (
-        <Alert color="warning" data-cy="workflowApplyAllWarning" data-testid="workflowApplyAllWarning" fade={false}>
-          {classificationSuggestionApplyWarning}
+      {reviewOperationFeedback ? (
+        <Alert
+          color={reviewOperationFeedback.color}
+          role="status"
+          data-cy="workflowOperationFeedback"
+          data-testid={reviewOperationFeedback.color === 'warning' ? 'workflowApplyAllWarning' : 'workflowOperationFeedback'}
+          fade={false}
+        >
+          {reviewOperationFeedback.message}
         </Alert>
       ) : null}
 
@@ -3221,20 +3522,55 @@ export const TransactionIngestionWorkflowDetail = () => {
                   Fix or disable rejected rows before importing.
                 </Translate>
               )}
+              <div className="mt-1">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.partiallyReadyGuidance">
+                  Resolve the rows shown in the review queue. Confirmation stays unavailable until the workflow is ready.
+                </Translate>
+              </div>
             </Alert>
           ) : null}
 
           {workflow.status === 'COMPLETED' ? (
-            <Alert color="success" data-cy="workflowCompleted" fade={false}>
-              <Translate contentKey="fintrackApp.transactionIngestion.workflow.importCompleted">Import completed.</Translate>
+            <Alert color="success" data-cy="workflowCompleted" data-testid="workflowCompleted" fade={false}>
+              <strong>
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.importCompleted">Import completed.</Translate>
+              </strong>
+              <div className="mt-1">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.completedExplanation">
+                  The final transaction records were created from the confirmed review.
+                </Translate>
+              </div>
+              {renderCompletionCounts()}
+              <div className="mt-3 d-flex flex-wrap gap-2">
+                <Button tag={Link} to="/financial-transaction" color="success" outline size="sm" data-cy="workflowViewTransactions">
+                  <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.viewTransactions">
+                    View transactions
+                  </Translate>
+                </Button>
+              </div>
             </Alert>
           ) : null}
 
           {workflow.status === 'PARTIALLY_COMPLETED' ? (
             <Alert color="warning" data-cy="workflowPartiallyCompleted" data-testid="workflowPartiallyCompleted" fade={false}>
-              <Translate contentKey="fintrackApp.transactionIngestion.workflow.importPartiallyCompleted">
-                Import partially completed.
-              </Translate>
+              <strong>
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.importPartiallyCompleted">
+                  Import partially completed.
+                </Translate>
+              </strong>
+              <div className="mt-1">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.partiallyCompletedGuidance">
+                  This is a final recovery state. Review the recorded outcome; confirmation cannot be resumed from this page.
+                </Translate>
+              </div>
+              {renderCompletionCounts()}
+              <div className="mt-3 d-flex flex-wrap gap-2">
+                <Button tag={Link} to="/financial-transaction" color="warning" outline size="sm" data-cy="workflowViewTransactions">
+                  <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.viewTransactions">
+                    View transactions
+                  </Translate>
+                </Button>
+              </div>
             </Alert>
           ) : null}
 
@@ -3247,8 +3583,23 @@ export const TransactionIngestionWorkflowDetail = () => {
 
           {failed ? (
             <Alert color="danger" data-cy="workflowFailed" data-testid="workflowFailed" fade={false}>
-              <Translate contentKey="fintrackApp.transactionIngestion.workflow.importFailed">Import failed.</Translate>
+              <strong>
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.importFailed">Import failed.</Translate>
+              </strong>
               {transactionIngestionEntity.errorMessage ? <div className="mt-1">{transactionIngestionEntity.errorMessage}</div> : null}
+              <div className="mt-1">
+                <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmation.failedGuidance">
+                  No transactions were created. Return to imports to review this record or start a new import.
+                </Translate>
+              </div>
+              <div className="mt-3 d-flex flex-wrap gap-2">
+                <Button tag={Link} to="/transaction-ingestion" color="danger" outline size="sm">
+                  <Translate contentKey="fintrackApp.transactionIngestion.workflow.backToImports">Back to imports</Translate>
+                </Button>
+                <Button tag={Link} to="/transaction-ingestion/new" color="danger" size="sm" data-cy="workflowStartNewImport">
+                  <Translate contentKey="fintrackApp.transactionIngestion.home.newFileImportLabel">New file import</Translate>
+                </Button>
+              </div>
             </Alert>
           ) : null}
 
@@ -3289,16 +3640,16 @@ export const TransactionIngestionWorkflowDetail = () => {
                   classificationConfirmBlocked ||
                   hasUnsavedRowEdit
                 }
-                onClick={confirmImport}
+                onClick={openConfirmDialog}
                 data-cy="workflowConfirmImport"
               >
-                {confirmingImport ? <Spinner size="sm" /> : null}{' '}
                 <Translate contentKey="fintrackApp.transactionIngestion.workflow.confirmImport">Confirm Import</Translate>
               </Button>
             </div>
           ) : null}
         </>
       ) : null}
+      {renderConfirmDialog()}
       <TransactionIngestionRuleCreationModal
         context={ruleCreationContext}
         onClose={() => setRuleCreationContext(null)}

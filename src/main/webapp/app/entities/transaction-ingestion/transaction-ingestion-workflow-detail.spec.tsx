@@ -171,6 +171,16 @@ const expectRowStatus = (recordId: number, status: string) => {
   expect(screen.getByTestId(`workflowRowStatus-${recordId}`).textContent).toBe(status);
 };
 
+const openConfirmImportDialog = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: /^confirm import$/i }));
+  return screen.findByTestId('workflowConfirmDialog');
+};
+
+const submitConfirmImportDialog = async () => {
+  await openConfirmImportDialog();
+  fireEvent.click(screen.getByTestId('workflowConfirmDialogSubmit'));
+};
+
 const selectedTagNames = (candidateId: number) =>
   within(screen.getByTestId(`classificationTags-${candidateId}`))
     .queryAllByTestId(`classificationTags-${candidateId}Chip`)
@@ -536,6 +546,82 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
     expect((await screen.findAllByText('Failed')).length).toBeGreaterThan(0);
     expect(screen.getByTestId('workflowFailed')).toBeTruthy();
+  });
+
+  it('opens confirmation as a review step and cancels without sending confirm', async () => {
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 2, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [persistedReviewResponse.data.rows[0], persistedReviewResponse.data.rows[2]],
+        },
+      },
+      { 300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary' } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockResolvedValue({ data: { transactionIngestionId: 100, rows: [] } });
+    renderPersistedReview();
+
+    const dialog = await openConfirmImportDialog();
+    expect(within(dialog).getByText('Checking account')).toBeTruthy();
+    expect(within(dialog).getByText('workflow.csv')).toBeTruthy();
+    expect(within(dialog).getByText('2')).toBeTruthy();
+    expect(
+      within(dialog).getByText(
+        'Rule previews are not decisions. Disabled rows are excluded, and the server validates the latest saved state before creating transactions.',
+      ),
+    ).toBeTruthy();
+    expect(confirmImportCalls()).toHaveLength(0);
+
+    fireEvent.click(screen.getByTestId('workflowConfirmDialogCancel'));
+    expect(confirmImportCalls()).toHaveLength(0);
+  });
+
+  it('submits confirmation only once while the request is pending', async () => {
+    const readyResponse = withCandidates(
+      {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [persistedReviewResponse.data.rows[0]],
+        },
+      },
+      { 300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary' } },
+    );
+    mockAxiosGet.mockResolvedValue(readyResponse);
+    mockAxiosPost.mockResolvedValue({ data: { transactionIngestionId: 100, rows: [] } });
+    renderPersistedReview();
+
+    await screen.findByRole('button', { name: /^confirm import$/i });
+    await waitFor(() => expect(mockAxiosPost).toHaveBeenCalled());
+    mockAxiosPost.mockClear();
+    let resolveConfirm: (value: unknown) => void = () => undefined;
+    mockAxiosPost.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveConfirm = resolve;
+        }),
+    );
+
+    await openConfirmImportDialog();
+    const submit = screen.getByTestId('workflowConfirmDialogSubmit');
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(confirmImportCalls()).toHaveLength(1));
+    resolveConfirm({
+      data: {
+        transactionIngestionId: 100,
+        status: 'COMPLETED',
+        createdNow: 1,
+        counts: { recordsReceived: 1, recordsCreated: 1, recordsSkipped: 0, recordsRejected: 0, validRows: 0, invalidRows: 0 },
+        rows: [{ ...persistedReviewResponse.data.rows[0], status: 'IMPORTED', financialTransactionId: 9001 }],
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId('workflowCompleted')).toBeTruthy());
   });
 
   it('renders deleted-after-import rows as completed historical records without review actions', async () => {
@@ -1191,7 +1277,9 @@ describe('TransactionIngestion file workflow', () => {
           rows: [persistedReviewResponse.data.rows[0]],
         },
       };
-      const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+      const candidateResponse = withCandidates(readyResponse, {
+        300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary' },
+      });
       mockAxiosGet.mockResolvedValue(candidateResponse);
       mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
       renderPersistedReview();
@@ -1199,13 +1287,15 @@ describe('TransactionIngestion file workflow', () => {
       await screen.findByTestId('candidateReviewMobileCards');
       expect(screen.queryByTestId('workflowRow-300')).toBeNull();
       expect(screen.getByTestId('workflowMobileCard-300').textContent).toContain('Salary');
+      expect(screen.getByTestId('workflowMobileCard-300').querySelectorAll('.candidate-review-category-value')).toHaveLength(1);
       expect(screen.queryByTestId('mobileclassificationCategory-400')).toBeNull();
 
       mockAxiosPatch.mockClear();
       mockAxiosPost.mockClear();
       fireEvent.click(screen.getByTestId('workflowMobileToggleDetails-300'));
       expect(screen.getByTestId('workflowMobileToggleDetails-300').getAttribute('aria-expanded')).toBe('true');
-      expect(screen.getByTestId('mobileclassificationCategory-400')).toBeTruthy();
+      expect(screen.getByTestId('workflowMobileCard-300').querySelectorAll('.candidate-review-category-value')).toHaveLength(0);
+      expect(screen.getByTestId('mobileclassificationCategory-400').value).toBe('9');
       expect(screen.getByTestId('mobileclassificationTags-400')).toBeTruthy();
       expect(screen.getByTestId('workflowRowEdit-300-mobile')).toBeTruthy();
       expect(mockAxiosPatch).not.toHaveBeenCalled();
@@ -2359,7 +2449,7 @@ describe('TransactionIngestion file workflow', () => {
         rows: [{ ...persistedReviewResponse.data.rows[0], status: 'IMPORTED', financialTransactionId: 9001 }],
       },
     });
-    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+    await submitConfirmImportDialog();
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
   });
@@ -2422,6 +2512,9 @@ describe('TransactionIngestion file workflow', () => {
       .mockResolvedValueOnce(candidateResponse)
       .mockResolvedValueOnce(categoryAppliedWorkflow)
       .mockResolvedValue(reviewedResponse);
+    mockGetSelectableCategories.mockResolvedValue(
+      baseState.category.entities.map(category => (category.id === 7 ? { ...category, color: '#0B6E4F' } : category)),
+    );
     mockAxiosPost.mockResolvedValueOnce(prepareCandidatesResponse).mockResolvedValueOnce({
       data: {
         transactionIngestionId: 100,
@@ -2469,13 +2562,24 @@ describe('TransactionIngestion file workflow', () => {
 
     await screen.findByTestId('classificationSuggestedCategory-410');
     expect(screen.getByTestId('classificationSuggestedCategory-410').textContent).toContain('Transport');
-    expect(screen.getByTestId('classificationCategory-410').value).toBe('');
+    const uncategorizedSelect = screen.getByTestId('classificationCategory-410');
+    const uncategorizedCell = uncategorizedSelect.closest('td') as HTMLElement;
+    expect(uncategorizedSelect.value).toBe('');
+    expect(uncategorizedCell.querySelectorAll('select')).toHaveLength(1);
+    expect(uncategorizedCell.querySelectorAll('.candidate-review-category-value')).toHaveLength(0);
+    expect(uncategorizedCell.querySelectorAll('[data-testid^="classificationCurrentCategory-"]')).toHaveLength(0);
+    expect(Array.from(uncategorizedSelect.options).filter(option => option.textContent === 'No category')).toHaveLength(1);
     expect(
       within(screen.getByTestId('classificationCategory-410').closest('td')).getByTestId('classificationApplySuggestedCategory-410'),
     ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply suggested category Transport to Uber trip' })).toBeTruthy();
     expect(
       within(screen.getByTestId('classificationTags-410').closest('td')).getByTestId('classificationApplySuggestedTags-410'),
     ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply suggested tags Ride share to Uber trip' })).toBeTruthy();
+    await expandRowForRecord(310);
+    expect(screen.getByTestId('classificationStatus-410').textContent).toContain('Not evaluated');
+    expect(screen.getByTestId('classificationPreviewStateHelp-410').textContent).toContain('not saved');
     expect(screen.queryByTestId('classificationApply-410')).toBeNull();
     expect(screen.queryByTestId('classificationSuggestedCategory-411')).toBeNull();
     expect(screen.queryByTestId('classificationMatchedRules-411')).toBeNull();
@@ -2515,6 +2619,11 @@ describe('TransactionIngestion file workflow', () => {
       }),
     );
     expect(screen.getByTestId('classificationCategory-410').value).toBe('7');
+    expect(screen.getByTestId('classificationCategory-410').getAttribute('style')).toContain('border-inline-start: 0.3rem solid #0B6E4F');
+    expect(uncategorizedCell.querySelectorAll('select')).toHaveLength(1);
+    expect(uncategorizedCell.querySelectorAll('.candidate-review-category-value')).toHaveLength(0);
+    expect(screen.queryByTestId('classificationApplySuggestedCategory-410')).toBeNull();
+    expect((await screen.findByTestId('workflowOperationFeedback')).textContent).toContain('suggested category was saved');
     expect(screen.getByTestId('classificationSuggestedTags-410').textContent).toContain('Ride share');
 
     mockAxiosPost.mockResolvedValueOnce({
@@ -2576,7 +2685,7 @@ describe('TransactionIngestion file workflow', () => {
         ],
       },
     });
-    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+    await submitConfirmImportDialog();
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
   });
@@ -2701,7 +2810,7 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+    await submitConfirmImportDialog();
 
     expect(await screen.findByText('Review every valid row before confirming import.')).toBeTruthy();
     expect(confirmImportCalls()).toHaveLength(0);
@@ -2720,7 +2829,11 @@ describe('TransactionIngestion file workflow', () => {
     const candidateResponse = withCandidates(readyResponse, {
       300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary', tagIds: [5], tagNames: ['Business'] },
     });
-    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosGet
+      .mockResolvedValueOnce(readyResponse)
+      .mockResolvedValueOnce(candidateResponse)
+      .mockResolvedValueOnce(candidateResponse)
+      .mockResolvedValue(candidateResponse);
     mockAxiosPost
       .mockResolvedValueOnce(prepareCandidatesResponse)
       .mockResolvedValueOnce(classificationPreviewResponse)
@@ -2752,7 +2865,7 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+    await submitConfirmImportDialog();
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenLastCalledWith('api/transaction-ingestions/100/confirm'));
     await waitFor(() => expect(screen.getAllByText('Import completed').length).toBeGreaterThan(0));
@@ -2823,7 +2936,7 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByTestId('classificationTagsReadOnly-400')).toBeNull();
   });
 
-  it('confirm API error displays review error', async () => {
+  it('confirm API error rechecks the workflow and keeps an uncertainty message in the dialog', async () => {
     const readyResponse = {
       data: {
         ...persistedReviewResponse.data,
@@ -2835,7 +2948,11 @@ describe('TransactionIngestion file workflow', () => {
     const candidateResponse = withCandidates(readyResponse, {
       300: { id: 400, classificationReviewStatus: 'SUGGESTED', categoryId: 9, categoryName: 'Salary', tagIds: [5], tagNames: ['Business'] },
     });
-    mockAxiosGet.mockResolvedValueOnce(readyResponse).mockResolvedValueOnce(candidateResponse).mockResolvedValueOnce(candidateResponse);
+    mockAxiosGet
+      .mockResolvedValueOnce(readyResponse)
+      .mockResolvedValueOnce(candidateResponse)
+      .mockResolvedValueOnce(candidateResponse)
+      .mockResolvedValue(candidateResponse);
     mockAxiosPost
       .mockResolvedValueOnce(prepareCandidatesResponse)
       .mockResolvedValueOnce(classificationPreviewResponse)
@@ -2843,9 +2960,13 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+    await submitConfirmImportDialog();
 
-    expect(await screen.findByText('Could not confirm import. Check the review status and try again.')).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'We could not verify whether the confirmation completed. The latest workflow state was rechecked; do not retry until it is clear.',
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText('Import completed')).toBeNull();
     expect(screen.getByRole('button', { name: /confirm import/i })).toBeTruthy();
     expect(screen.getByText('Categories and tags are saved on candidates before confirming the import.')).toBeTruthy();

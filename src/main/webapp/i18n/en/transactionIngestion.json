@@ -134,6 +134,22 @@
         "rowDisabled": "Row disabled",
         "rowEnabled": "Row enabled",
         "confirmImport": "Confirm Import",
+        "confirmation": {
+          "title": "Confirm import",
+          "explanation": "This will create final financial transactions from the eligible candidates saved in this review.",
+          "backendAuthority": "Rule previews are not decisions. Disabled rows are excluded, and the server validates the latest saved state before creating transactions.",
+          "candidateRowsReviewed": "Candidate rows reviewed",
+          "submit": "Create transactions",
+          "created": "Created",
+          "skipped": "Skipped",
+          "rejected": "Rejected",
+          "createdNow": "Created now",
+          "completedExplanation": "The final transaction records were created from the confirmed review.",
+          "viewTransactions": "View transactions",
+          "partiallyReadyGuidance": "Resolve the rows shown in the review queue. Confirmation stays unavailable until the workflow is ready.",
+          "partiallyCompletedGuidance": "This is a final recovery state. Review the recorded outcome; confirmation cannot be resumed from this page.",
+          "failedGuidance": "No transactions were created. Return to imports to review this record or start a new import."
+        },
         "fixRejectedRows": "Fix or disable rejected rows before importing.",
         "noValidRows": "There are no valid rows to import.",
         "importCompleted": "Import completed.",
@@ -156,6 +172,7 @@
         },
         "reevaluation": {
           "title": "Reevaluate",
+          "help": "Recalculate results using the current rules. With auto-apply enabled, eligible results can also be saved.",
           "descriptions": "Reevaluate descriptions",
           "categories": "Reevaluate categories",
           "tags": "Reevaluate tags",
@@ -164,6 +181,7 @@
         },
         "ruleCreation": {
           "title": "Rules",
+          "createTitle": "Create rules",
           "newNormalization": "New Description Rule",
           "newTransaction": "New Classification Rule",
           "createFromRow": "Create rule",
@@ -190,6 +208,7 @@
         },
         "automation": {
           "title": "Automatic review",
+          "help": "These page-local settings determine whether reevaluation also saves eligible results.",
           "descriptions": "Auto-apply descriptions",
           "categories": "Auto-apply categories",
           "tags": "Auto-apply tags",
@@ -198,6 +217,15 @@
         },
         "classification": {
           "persistedNotice": "Categories and tags are saved on candidates before confirming the import.",
+          "currentCategory": "Current category",
+          "currentTags": "Current tags",
+          "editCategory": "Edit category for movement {{recordIndex}}",
+          "suggestionIsPreview": "This is a current rule preview. It is not saved and does not change the persisted review status.",
+          "reviewStatus": "Saved review status",
+          "apply": "Apply",
+          "applying": "Applying",
+          "applySuggestedCategoryAria": "Apply suggested category {{category}} to {{description}}",
+          "applySuggestedTagsAria": "Apply suggested tags {{tags}} to {{description}}",
           "reviewedRows": "Reviewed",
           "notEvaluatedRows": "Not evaluated",
           "staleRows": "Stale",
@@ -214,6 +242,7 @@
           "skippedOutputs": "Skipped",
           "rowBlocked": "Candidate cannot be classified.",
           "applicationTitle": "Apply",
+          "applicationHelp": "Save eligible suggestions on candidates. These actions use the entire import, not just the visible rows.",
           "applySuggestedCategory": "Apply suggested category",
           "applySuggestedTags": "Apply suggested tags",
           "applyAllSuggestedCategories": "Apply all suggested categories",
@@ -226,6 +255,20 @@
           "USER_SELECTED": "User selected",
           "STALE": "Stale",
           "NOT_APPLICABLE": "Not applicable"
+        },
+        "reviewFeedback": {
+          "descriptionsReevaluated": "Description rules were reevaluated. The auto-apply setting was respected.",
+          "categoriesReevaluated": "Category rules were reevaluated. The auto-apply setting was respected.",
+          "tagsReevaluated": "Tag rules were reevaluated. The auto-apply setting was respected.",
+          "allReevaluated": "Description and classification rules were reevaluated. Auto-apply settings were respected.",
+          "rowReevaluated": "This movement was reevaluated. Auto-apply settings were respected.",
+          "descriptionApplied": "The suggested description was saved.",
+          "descriptionsApplied": "Eligible suggested descriptions were saved.",
+          "categoryApplied": "The suggested category was saved.",
+          "tagsApplied": "The suggested tags were saved.",
+          "categoriesApplied": "Eligible suggested categories were saved.",
+          "allTagsApplied": "Eligible suggested tags were saved.",
+          "noSuggestionsConfirmed": "This movement was marked as having no suggestions."
         },
         "ingestionStatus": {
           "READY": "Ready to import",
@@ -254,7 +297,9 @@
           "reevaluationPartialFailed": "Some reevaluation results completed, but another review scope failed. Existing values were preserved.",
           "classificationConfirmBlocked": "Review all valid rows before confirming import.",
           "confirmNoSuggestionsFailed": "Could not confirm that this row has no suggestions.",
-          "confirmFailed": "Could not confirm import. Check the review status and try again."
+          "confirmFailed": "Could not confirm import. Check the review status and try again.",
+          "confirmNoLongerAvailable": "This import is no longer ready to confirm. Review the latest workflow state.",
+          "confirmUncertain": "We could not verify whether the confirmation completed. The latest workflow state was rechecked; do not retry until it is clear."
         }
       }
     }

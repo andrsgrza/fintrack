@@ -167,9 +167,35 @@ a {
   overflow-wrap: anywhere;
 }
 
+.candidate-review-classification-label {
+  color: var(--bs-secondary-color);
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.candidate-review-classification-editor {
+  max-width: 100%;
+  font-weight: 600;
+}
+
 .candidate-review-suggestion {
   color: var(--bs-secondary-color);
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
   overflow-wrap: anywhere;
+}
+
+.candidate-review-suggestion-apply {
+  flex: 0 0 auto;
+}
+
+.candidate-review-state-help {
+  color: var(--bs-secondary-color);
 }
 
 .candidate-review-expanded-row > td {

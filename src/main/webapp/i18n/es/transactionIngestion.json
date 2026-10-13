@@ -134,6 +134,22 @@
         "rowDisabled": "Fila deshabilitada",
         "rowEnabled": "Fila habilitada",
         "confirmImport": "Confirmar importación",
+        "confirmation": {
+          "title": "Confirmar importación",
+          "explanation": "Esta acción creará transacciones financieras definitivas a partir de los candidatos elegibles guardados en esta revisión.",
+          "backendAuthority": "Las vistas previas de reglas no son decisiones. Las filas deshabilitadas se excluyen y el servidor valida el último estado guardado antes de crear transacciones.",
+          "candidateRowsReviewed": "Filas de candidato revisadas",
+          "submit": "Crear transacciones",
+          "created": "Creadas",
+          "skipped": "Omitidas",
+          "rejected": "Rechazadas",
+          "createdNow": "Creadas ahora",
+          "completedExplanation": "Los registros de transacciones definitivos se crearon a partir de la revisión confirmada.",
+          "viewTransactions": "Ver transacciones",
+          "partiallyReadyGuidance": "Resuelve las filas mostradas en la cola de revisión. La confirmación seguirá sin estar disponible hasta que el flujo esté listo.",
+          "partiallyCompletedGuidance": "Este es un estado final de recuperación. Revisa el resultado registrado; la confirmación no se puede reanudar desde esta página.",
+          "failedGuidance": "No se crearon transacciones. Vuelve a importaciones para revisar este registro o inicia una importación nueva."
+        },
         "fixRejectedRows": "Corrige o deshabilita las filas rechazadas antes de importar.",
         "noValidRows": "No hay filas válidas para importar.",
         "importCompleted": "Importación completada.",
@@ -156,6 +172,7 @@
         },
         "reevaluation": {
           "title": "Reevaluar",
+          "help": "Recalcula resultados con las reglas actuales. Con autoaplicar activo, los resultados elegibles también pueden guardarse.",
           "descriptions": "Reevaluar descripciones",
           "categories": "Reevaluar categorías",
           "tags": "Reevaluar etiquetas",
@@ -164,6 +181,7 @@
         },
         "ruleCreation": {
           "title": "Reglas",
+          "createTitle": "Crear reglas",
           "newNormalization": "Nueva regla de descripción",
           "newTransaction": "Nueva regla de clasificación",
           "createFromRow": "Crear regla",
@@ -190,6 +208,7 @@
         },
         "automation": {
           "title": "Revisión automática",
+          "help": "Estas opciones locales determinan si la reevaluación también guarda resultados elegibles.",
           "descriptions": "Autoaplicar descripciones",
           "categories": "Autoaplicar categorías",
           "tags": "Autoaplicar etiquetas",
@@ -198,6 +217,15 @@
         },
         "classification": {
           "persistedNotice": "Las categorías y etiquetas se guardan en candidatos antes de confirmar la importación.",
+          "currentCategory": "Categoría actual",
+          "currentTags": "Etiquetas actuales",
+          "editCategory": "Editar categoría del movimiento {{recordIndex}}",
+          "suggestionIsPreview": "Esta es una vista previa de las reglas actuales. No está guardada ni cambia el estado de revisión persistido.",
+          "reviewStatus": "Estado de revisión guardado",
+          "apply": "Aplicar",
+          "applying": "Aplicando",
+          "applySuggestedCategoryAria": "Aplicar la categoría sugerida {{category}} a {{description}}",
+          "applySuggestedTagsAria": "Aplicar las etiquetas sugeridas {{tags}} a {{description}}",
           "reviewedRows": "Revisadas",
           "notEvaluatedRows": "No evaluadas",
           "staleRows": "Desactualizadas",
@@ -214,6 +242,7 @@
           "skippedOutputs": "Omitidos",
           "rowBlocked": "El candidato no puede clasificarse.",
           "applicationTitle": "Aplicar",
+          "applicationHelp": "Guarda sugerencias elegibles en candidatos. Estas acciones usan toda la importación, no sólo las filas visibles.",
           "applySuggestedCategory": "Aplicar categoría sugerida",
           "applySuggestedTags": "Aplicar etiquetas sugeridas",
           "applyAllSuggestedCategories": "Aplicar todas las categorías sugeridas",
@@ -226,6 +255,20 @@
           "USER_SELECTED": "Seleccionada por usuario",
           "STALE": "Desactualizada",
           "NOT_APPLICABLE": "No aplica"
+        },
+        "reviewFeedback": {
+          "descriptionsReevaluated": "Se reevaluaron las reglas de descripción. Se respetó la configuración de autoaplicar.",
+          "categoriesReevaluated": "Se reevaluaron las reglas de categoría. Se respetó la configuración de autoaplicar.",
+          "tagsReevaluated": "Se reevaluaron las reglas de etiquetas. Se respetó la configuración de autoaplicar.",
+          "allReevaluated": "Se reevaluaron las reglas de descripción y clasificación. Se respetó la configuración de autoaplicar.",
+          "rowReevaluated": "Se reevaluó este movimiento. Se respetó la configuración de autoaplicar.",
+          "descriptionApplied": "Se guardó la descripción sugerida.",
+          "descriptionsApplied": "Se guardaron las descripciones sugeridas elegibles.",
+          "categoryApplied": "Se guardó la categoría sugerida.",
+          "tagsApplied": "Se guardaron las etiquetas sugeridas.",
+          "categoriesApplied": "Se guardaron las categorías sugeridas elegibles.",
+          "allTagsApplied": "Se guardaron las etiquetas sugeridas elegibles.",
+          "noSuggestionsConfirmed": "Este movimiento se marcó sin sugerencias."
         },
         "ingestionStatus": {
           "READY": "Lista para importar",
@@ -254,7 +297,9 @@
           "reevaluationPartialFailed": "Algunas reevaluaciones terminaron, pero otro alcance de revisión falló. Se conservaron los valores actuales.",
           "classificationConfirmBlocked": "Revisa todas las filas válidas antes de confirmar la importación.",
           "confirmNoSuggestionsFailed": "No se pudo confirmar que esta fila no tiene sugerencias.",
-          "confirmFailed": "No se pudo confirmar la importación. Revisa el estado de la vista previa e inténtalo de nuevo."
+          "confirmFailed": "No se pudo confirmar la importación. Revisa el estado de la vista previa e inténtalo de nuevo.",
+          "confirmNoLongerAvailable": "Esta importación ya no está lista para confirmar. Revisa el estado más reciente del flujo.",
+          "confirmUncertain": "No se pudo verificar si la confirmación terminó. Se volvió a consultar el estado más reciente; no la repitas hasta tener claridad."
         }
       }
     }
