@@ -78,6 +78,22 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
   };
 
+  const workflowRowFor = (description: string) =>
+    cy.get('[data-cy="workflowRows"] tr[data-testid^="workflowRow-"]').contains(description).closest('tr');
+
+  const workflowDetailFor = (description: string) => workflowRowFor(description).next('tr.candidate-review-expanded-row');
+
+  const expandWorkflowRow = (description: string) => {
+    workflowRowFor(description).within(() => {
+      cy.get('[data-testid^="workflowRowToggleDetails-"]').then($toggle => {
+        if ($toggle.attr('aria-expanded') !== 'true') {
+          cy.wrap($toggle).click();
+        }
+      });
+    });
+    workflowDetailFor(description).should('be.visible');
+  };
+
   beforeEach(() => {
     cy.login(username, password);
     scenarioToken = uniqueName('csv-e2e-rideflow');
@@ -419,9 +435,21 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('[data-cy="workflowClassificationControls"]').should('exist');
     cy.get('[data-cy="workflowContinueClassification"]').should('not.exist');
     cy.get('[data-cy="workflowClassificationReview"]').should('not.exist');
+    cy.get('[data-cy="workflowRows"] thead th')
+      .should('have.length', 6)
+      .then(headers => {
+        expect(headers[0].textContent).to.match(/Date|Fecha/);
+        expect(headers[1].textContent).to.match(/Movement|Movimiento/);
+        expect(headers[2].textContent).to.match(/Amount|Monto/);
+        expect(headers[3].textContent).to.match(/Category|Categoría/);
+        expect(headers[4].textContent).to.match(/Tags|Etiquetas/);
+        expect(headers[5].textContent).to.match(/Details|Detalles/);
+      });
     cy.contains('[data-cy="workflowRows"] tr', outDescription).as('outClassificationRow');
     cy.contains('[data-cy="workflowRows"] tr', secondOutDescription).as('secondOutClassificationRow');
     cy.contains('[data-cy="workflowRows"] tr', inDescription).as('inClassificationRow');
+    cy.get('[data-cy="workflowCandidateReviewQueue"]').scrollIntoView();
+    cy.screenshot('ingestion-polish-2-desktop-queue', { capture: 'viewport' });
 
     cy.get('[data-cy="workflowReevaluateDescriptions"]').should('be.visible').click();
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
@@ -429,11 +457,20 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body).to.deep.equal({ apply: false, protectManualChanges: true });
     });
 
+    cy.get('[data-testid="candidateReviewFilter-SUGGESTIONS"]').click();
+    cy.get('[data-testid="candidateReviewVisibleCount"]').should('contain', '2').and('contain', '3');
+    cy.get('[data-cy="workflowRows"] tbody tr[data-testid^="workflowRow-"]').should('have.length', 2);
+    cy.screenshot('ingestion-polish-2-desktop-suggestions-filter', { capture: 'viewport' });
     cy.get('[data-cy="workflowReevaluateCategories"]').should('be.visible').click();
     cy.wait('@candidateRulePreviewRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.deep.equal({ scope: 'CATEGORY' });
     });
+    cy.get('[data-testid="candidateReviewFilter-ALL"]').click();
+    cy.get('[data-cy="workflowRows"] tbody tr[data-testid^="workflowRow-"]').should('have.length', 3);
+    cy.contains('[data-cy="workflowRows"] tr', outDescription).as('outClassificationRow');
+    cy.contains('[data-cy="workflowRows"] tr', secondOutDescription).as('secondOutClassificationRow');
+    cy.contains('[data-cy="workflowRows"] tr', inDescription).as('inClassificationRow');
 
     cy.get('[data-cy="workflowReevaluateTags"]').should('be.visible').click();
     cy.wait('@candidateRulePreviewRequest').then(({ request, response }) => {
@@ -451,7 +488,10 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body === null || request.body === undefined || request.body === '' || request.body === 'null').to.equal(true);
     });
 
-    cy.get('@outClassificationRow').within(() => {
+    expandWorkflowRow(outDescription);
+    workflowDetailFor(outDescription).scrollIntoView();
+    cy.screenshot('ingestion-polish-2-desktop-expanded-detail', { capture: 'viewport' });
+    workflowDetailFor(outDescription).within(() => {
       cy.contains('button', /Reevaluate this row|Reevaluar esta fila/i).click();
     });
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
@@ -542,6 +582,45 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.get('@outClassificationRow').within(() => {
       cy.get('[data-testid^="classificationApplySuggestedTags-"]').should('not.exist');
     });
+
+    cy.viewport(375, 667);
+    cy.get('[data-cy="workflowRows"]').should('not.exist');
+    cy.get('[data-testid="candidateReviewMobileCards"] [data-testid^="workflowMobileCard-"]').should('have.length', 3);
+    cy.contains('[data-testid^="workflowMobileCard-"]', outDescription).within(() => {
+      cy.get('[data-testid^="workflowMobileToggleDetails-"]').then($toggle => {
+        if ($toggle.attr('aria-expanded') === 'true') {
+          cy.wrap($toggle).click();
+        }
+      });
+    });
+    cy.get('[data-testid="candidateReviewMobileCards"]').scrollIntoView();
+    cy.screenshot('ingestion-polish-2-mobile-collapsed-card', { capture: 'viewport' });
+    cy.contains('[data-testid^="workflowMobileCard-"]', outDescription).within(() => {
+      cy.get('[data-testid^="workflowMobileToggleDetails-"]').then($toggle => {
+        if ($toggle.attr('aria-expanded') !== 'true') {
+          cy.wrap($toggle).click();
+        }
+      });
+    });
+    cy.then(() => {
+      cy.get('[data-testid^="mobileclassificationCategory-"]').should('have.value', String(suggestedOutCategoryId));
+    });
+    cy.get('[data-testid^="mobileclassificationTags-"][data-testid$="Chip"]').should('contain', tag?.name);
+    cy.get('[data-testid^="workflowMobileCard-"] [data-testid^="mobileclassificationCategory-"]').scrollIntoView();
+    cy.screenshot('ingestion-polish-2-mobile-expanded-category-tags', { capture: 'viewport' });
+    cy.get('[data-testid^="mobileclassificationCategory-"]').select(manualExpenseCategory?.name);
+    cy.wait('@manualClassificationRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-testid^="mobileclassificationCategory-"]').select(expenseCategory?.name);
+    cy.wait('@manualClassificationRequest').its('response.statusCode').should('eq', 200);
+    cy.contains('[data-testid^="mobileclassificationTags-"][data-testid$="Chip"]', tag?.name).find('[data-testid$="Remove"]').click();
+    cy.wait('@manualClassificationRequest').its('response.statusCode').should('eq', 200);
+    cy.get('[data-testid^="mobileclassificationTags-"][data-testid$="Add"]').click();
+    cy.get('[data-testid^="mobileclassificationTags-"][data-testid$="Picker"]').within(() => {
+      cy.contains('button', tag?.name).click();
+    });
+    cy.wait('@manualClassificationRequest').its('response.statusCode').should('eq', 200);
+    cy.viewport(1280, 720);
+    cy.get('[data-cy="workflowRows"]').should('exist');
 
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewAfterReloadRequest');
     cy.reload();
@@ -652,6 +731,121 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
         );
       });
     });
+  });
+
+  it('preserves and makes an unsaved general row edit recoverable across local filters, expansion, and responsive layouts', () => {
+    const draftDescription = `${scenarioToken}-draft-income`;
+    const suggestedDescription = `${scenarioToken}-suggested-expense`;
+    const unsavedDescription = `${scenarioToken}-unsaved-income-edit`;
+    const csv = [
+      header,
+      `2026-01-16,,${draftDescription},100.00,MXN,${scenarioToken}-draft,unsaved draft row`,
+      `2026-01-17,,${suggestedDescription},-50.00,MXN,${scenarioToken}-suggested,suggested row`,
+    ].join('\n');
+    let persistedUpdateRequests = 0;
+
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
+    cy.intercept('PATCH', '/api/transaction-ingestions/*/records/*', req => {
+      persistedUpdateRequests += 1;
+      req.continue();
+    }).as('recordUpdateRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
+
+    uploadCsvFromCreatePage(csv, 'unsaved-general-edit-recovery.csv');
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
+
+    cy.viewport(1280, 720);
+    expandWorkflowRow(draftDescription);
+    workflowDetailFor(draftDescription).within(() => {
+      cy.get('[data-testid^="workflowRowEdit-"]').click();
+    });
+    cy.get('[id^="workflow-row-description-desktop-"]').clear();
+    cy.get('[id^="workflow-row-description-desktop-"]').type(unsavedDescription);
+    workflowRowFor(draftDescription).within(() => {
+      cy.get('[data-testid^="workflowRowToggleDetails-"]').should('be.disabled');
+    });
+    cy.get('[data-cy="workflowReevaluateAll"]').should('be.disabled');
+
+    cy.get('[data-testid="candidateReviewFilter-SUGGESTIONS"]').click();
+    cy.get('[data-testid="candidateReviewHiddenEditNotice"]').should('be.visible');
+    cy.get('[data-cy="workflowRows"] tbody tr[data-testid^="workflowRow-"]').should('not.contain', draftDescription);
+    workflowRowFor(suggestedDescription).within(() => {
+      cy.get('[data-testid^="classificationCategory-"]').should('be.disabled');
+    });
+
+    cy.get('[data-testid="candidateReviewFilter-ALL"]').click();
+    cy.get('[id^="workflow-row-description-desktop-"]').should('have.value', unsavedDescription);
+    expandWorkflowRow(suggestedDescription);
+    workflowDetailFor(suggestedDescription).should('be.visible');
+    cy.get('[id^="workflow-row-description-desktop-"]').should('have.value', unsavedDescription);
+
+    cy.viewport(375, 667);
+    cy.get('[data-cy="workflowRows"]').should('not.exist');
+    cy.get('[data-testid="candidateReviewMobileCards"]').should('be.visible');
+    cy.get('[id^="workflow-row-description-mobile-"]').should('have.value', unsavedDescription);
+    cy.get('[id^="workflow-row-description-mobile-"]').focus();
+    cy.focused()
+      .should('have.attr', 'id')
+      .and('match', /workflow-row-description-mobile-/);
+
+    cy.viewport(1280, 720);
+    cy.get('[data-cy="workflowRows"]').should('exist');
+    cy.get('[id^="workflow-row-description-desktop-"]').should('have.value', unsavedDescription);
+    cy.get('[data-testid^="workflowRowCancel-"]').click();
+    cy.get('[data-testid^="workflowRowEditForm-"]').should('not.exist');
+    workflowRowFor(draftDescription).should('contain', draftDescription).and('not.contain', unsavedDescription);
+    cy.get('[data-cy="workflowReevaluateAll"]').should('be.enabled');
+    cy.then(() => expect(persistedUpdateRequests).to.equal(0));
+  });
+
+  it('renders and locally filters a representative 40-row candidate review queue without catalog fetches per candidate', () => {
+    const rowDescriptions = Array.from({ length: 40 }, (_, index) => {
+      const isSuggestedExpense = index % 2 === 0;
+      return {
+        description: `${scenarioToken}-${isSuggestedExpense ? 'expense' : 'income'}-${index + 1}`,
+        signedAmount: isSuggestedExpense ? '-10.00' : '10.00',
+      };
+    });
+    const csv = [
+      header,
+      ...rowDescriptions.map(
+        ({ description, signedAmount }, index) =>
+          `2026-01-${String((index % 28) + 1).padStart(2, '0')},,${description},${signedAmount},MXN,${scenarioToken}-${index + 1},bulk row ${index + 1}`,
+      ),
+    ].join('\n');
+
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
+    cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
+    cy.intercept('GET', '/api/categories/selectable*').as('categoriesRequest');
+    cy.intercept('GET', '/api/tags/selectable*').as('tagsRequest');
+
+    uploadCsvFromCreatePage(csv, 'representative-40-row-candidate-queue.csv');
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@prepareCandidatesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
+    cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
+
+    cy.viewport(1280, 720);
+    cy.get('[data-cy="workflowRows"] tbody tr[data-testid^="workflowRow-"]').should('have.length', 40);
+    cy.get('[data-testid="candidateReviewFilter-SUGGESTIONS"]').click();
+    cy.get('[data-cy="workflowRows"] tbody tr[data-testid^="workflowRow-"]').should('have.length', 20);
+    // The initial workflow-to-candidate preparation transition reloads each catalog once;
+    // the count must remain bounded rather than grow with the 40 candidate rows.
+    cy.get('@categoriesRequest.all').should('have.length', 2);
+    cy.get('@tagsRequest.all').should('have.length', 2);
+    cy.get('[data-testid="candidateReviewFilter-ALL"]').click();
+    workflowRowFor(rowDescriptions[39].description).scrollIntoView().should('be.visible');
+    expandWorkflowRow(rowDescriptions[0].description);
+    workflowDetailFor(rowDescriptions[0].description).should('be.visible');
   });
 
   it('excludes an inactive account from a new FILE ingestion', () => {
@@ -787,18 +981,14 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
   it('applies previewed description suggestions explicitly without applying classification or confirming import', () => {
     const firstDescription = `${scenarioToken} explicit description one`;
     const secondDescription = `${scenarioToken} explicit description two`;
-    const firstExternalReference = `${scenarioToken}-description-one`;
-    const secondExternalReference = `${scenarioToken}-description-two`;
     const normalizedDescription = `Normalized ${scenarioToken}`;
     const csv = [
       header,
-      `2026-01-16,,${firstDescription},-100.00,MXN,${firstExternalReference},first description row`,
-      `2026-01-17,,${secondDescription},-50.00,MXN,${secondExternalReference},second description row`,
+      `2026-01-16,,${firstDescription},-100.00,MXN,${scenarioToken}-description-one,first description row`,
+      `2026-01-17,,${secondDescription},-50.00,MXN,${scenarioToken}-description-two,second description row`,
     ].join('\n');
     let classificationApplyCalled = false;
     let confirmCalled = false;
-    const workflowRowFor = (externalReference: string) => cy.contains('[data-testid^="workflowRow-"]', externalReference);
-
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/prepare').as('prepareCandidatesRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/rule-preview').as('candidateRulePreviewRequest');
     cy.intercept('POST', '/api/transaction-ingestions/*/candidates/apply-rules', req => {
@@ -841,15 +1031,18 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.deep.equal({ apply: false, protectManualChanges: true });
     });
-    workflowRowFor(firstExternalReference).within(() => {
+    expandWorkflowRow(firstDescription);
+    workflowDetailFor(firstDescription).within(() => {
       cy.get('[data-testid^="descriptionReview-current-"]').should('contain', firstDescription).and('not.contain', normalizedDescription);
       cy.get('[data-testid^="descriptionReview-badge-"]').should('not.exist');
       cy.get('[data-testid^="descriptionReview-reevaluationSuggestion-"]').should('contain', normalizedDescription);
       cy.get('[data-testid^="workflowApplyDescriptionSuggestion-"]').should('be.visible');
+    });
+    workflowRowFor(firstDescription).within(() => {
       cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
       cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
     });
-    workflowRowFor(firstExternalReference).within(() => {
+    workflowDetailFor(firstDescription).within(() => {
       cy.get('[data-testid^="workflowApplyDescriptionSuggestion-"]').click();
     });
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
@@ -858,16 +1051,19 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body.recordIds).to.have.length(1);
       expect(request.body.recordIds[0]).to.be.a('number');
     });
-    workflowRowFor(firstExternalReference)
+    workflowRowFor(normalizedDescription)
       .should('contain', normalizedDescription)
       .within(() => {
-        cy.get('[data-testid^="descriptionReview-badge-"]')
-          .invoke('text')
-          .should('match', /Auto-normalized|Normalizada automáticamente/);
         cy.get('[data-testid^="classificationCategory-"]').should('have.value', '');
         cy.get('[data-testid^="classificationTags-"][data-testid$="Chip"]').should('not.exist');
       });
+    cy.get('[data-testid^="descriptionReview-badge-"]')
+      .should('have.length', 1)
+      .each(badge => {
+        expect(badge.text()).to.match(/Auto-normalized|Normalizada automáticamente/);
+      });
 
+    expandWorkflowRow(secondDescription);
     cy.get('[data-cy="workflowApplyAllDescriptionSuggestions"]').should('be.enabled').click();
     cy.wait('@reevaluateDescriptionsRequest').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
@@ -875,7 +1071,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(request.body.recordIds).to.have.length(1);
       expect(request.body.recordIds[0]).to.be.a('number');
     });
-    workflowRowFor(secondExternalReference)
+    workflowDetailFor(normalizedDescription)
       .should('contain', normalizedDescription)
       .within(() => {
         cy.get('[data-testid^="descriptionReview-badge-"]')
@@ -916,7 +1112,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@workflowRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
 
-    cy.contains('[data-cy="workflowRows"] tr', description).within(() => {
+    expandWorkflowRow(description);
+    workflowDetailFor(description).within(() => {
       cy.get('[data-testid^="descriptionReview-current-"]').should('contain', description);
     });
     cy.get('[data-cy="workflowReevaluateDescriptions"]').click();
@@ -924,7 +1121,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.deep.equal({ apply: false, protectManualChanges: true });
     });
-    cy.contains('[data-cy="workflowRows"] tr', description).within(() => {
+    workflowDetailFor(description).within(() => {
       cy.get('[data-testid^="descriptionReview-reevaluationSuggestion-"]').should('not.exist');
       cy.get('[data-testid^="workflowApplyDescriptionSuggestion-"]').should('not.exist');
     });
@@ -1081,9 +1278,12 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       candidatePreviewCalls = 0;
       descriptionReevaluationCalls = 0;
     });
-    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView();
-    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().click();
-    cy.get('[data-testid^="workflowRowCreateNormalization-"]').click();
+    expandWorkflowRow(outDescription);
+    workflowDetailFor(outDescription).within(() => {
+      cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').scrollIntoView();
+      cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').click();
+      cy.get('[data-testid^="workflowRowCreateNormalization-"]').click();
+    });
     cy.get('[data-testid="contextualRuleSelectedRow"]').should('contain', '1');
     cy.get('#contextual-description-rule-result').should('have.value', outDescription);
     cy.get('[data-testid="contextualDescriptionRuleConditionValue-0"]').should('have.value', outDescription);
@@ -1117,9 +1317,12 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     });
     cy.then(() => expect(candidatePreviewCalls).to.equal(0));
 
-    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().scrollIntoView();
-    cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').first().click();
-    cy.get('[data-testid^="workflowRowCreateTransaction-"]').click();
+    expandWorkflowRow(outDescription);
+    workflowDetailFor(outDescription).within(() => {
+      cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').scrollIntoView();
+      cy.get('[data-cy^="workflowRowCreateRuleToggle-"]').click();
+      cy.get('[data-testid^="workflowRowCreateTransaction-"]').click();
+    });
     cy.get('[data-cy="transactionRuleCategoryIdentity"]').should('exist');
     cy.get('[data-cy="transactionRuleResultTagsChip"]').should('contain', tag?.name);
     cy.get('[data-cy="transactionRuleConfiguredConditionsEditor"] [data-condition-field="DESCRIPTION"]').should(
@@ -1188,7 +1391,8 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
     cy.wait('@candidateRulePreviewRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@categoriesRequest').its('response.statusCode').should('eq', 200);
     cy.wait('@tagsRequest').its('response.statusCode').should('eq', 200);
-    cy.contains('[data-cy="workflowRows"] tr', disabledDescription).within(() => {
+    expandWorkflowRow(disabledDescription);
+    workflowDetailFor(disabledDescription).within(() => {
       cy.then(() => {
         expect(disabledRecordId).to.be.a('number');
         cy.contains(disabledDescription).should('be.visible');
@@ -1196,7 +1400,7 @@ describe('TransactionIngestion CSV workflow e2e test', () => {
       });
     });
     cy.wait('@disableRecordRequest').its('response.statusCode').should('eq', 200);
-    cy.contains('[data-cy="workflowRows"] tr', disabledDescription).within(() => {
+    workflowDetailFor(disabledDescription).within(() => {
       cy.contains(/Disabled|Deshabilitada/i).should('exist');
       cy.contains(/Enable|Habilitar/i).should('exist');
     });

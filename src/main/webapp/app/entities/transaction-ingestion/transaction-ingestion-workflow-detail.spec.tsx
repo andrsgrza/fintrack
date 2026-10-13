@@ -158,6 +158,15 @@ const renderList = () => {
 
 const rowForRecord = (recordId: number) => screen.getByTestId(`workflowRowStatus-${recordId}`).closest('tr') as HTMLElement;
 
+const expandRowForRecord = async (recordId: number) => {
+  const existingDetail = screen.queryByTestId(`workflowRowDetail-${recordId}`);
+  if (existingDetail) {
+    return existingDetail;
+  }
+  fireEvent.click(await screen.findByTestId(`workflowRowToggleDetails-${recordId}`));
+  return screen.findByTestId(`workflowRowDetail-${recordId}`);
+};
+
 const expectRowStatus = (recordId: number, status: string) => {
   expect(screen.getByTestId(`workflowRowStatus-${recordId}`).textContent).toBe(status);
 };
@@ -410,30 +419,15 @@ describe('TransactionIngestion file workflow', () => {
     expect(within(counts).getByText('3')).toBeTruthy();
     expect(within(counts).getAllByText('1')).toHaveLength(3);
 
-    expect(screen.getByText('Valid')).toBeTruthy();
-    expect(screen.getByText('Rejected')).toBeTruthy();
-    expect(screen.getByText('Disabled')).toBeTruthy();
-    expect(screen.getByText('Imported')).toBeTruthy();
-    expect(screen.getByText('Income')).toBeTruthy();
-    expect(screen.getByText('signedAmount must be nonzero')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /disable/i })).toHaveLength(2);
-    expect(screen.getByRole('button', { name: /enable/i })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Date' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Movement' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Amount' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Category' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Tags' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Details' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
+    expect(screen.getByTestId('workflowRowToggleDetails-300').getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText(/translation-not-found/i)).toBeNull();
-    expect(within(rowForRecord(300)).getByRole('button', { name: /edit/i })).toBeTruthy();
-    expect(within(rowForRecord(300)).getByRole('button', { name: /disable/i })).toBeTruthy();
-    expect(within(rowForRecord(300)).queryByRole('button', { name: /enable/i })).toBeNull();
-    expect(within(rowForRecord(301)).getByRole('button', { name: /edit/i })).toBeTruthy();
-    expect(within(rowForRecord(301)).getByRole('button', { name: /disable/i })).toBeTruthy();
-    expect(within(rowForRecord(301)).queryByRole('button', { name: /enable/i })).toBeNull();
-    expectRowStatus(302, 'Disabled');
-    expect(within(rowForRecord(302)).queryByText('signedAmount must be nonzero')).toBeNull();
-    expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
-    expect(within(rowForRecord(302)).queryByRole('button', { name: /disable/i })).toBeNull();
-    expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
-    expect(within(rowForRecord(301)).queryByTestId(/classificationCategory-/)).toBeNull();
-    expect(within(rowForRecord(302)).queryByTestId(/classificationTags-/)).toBeNull();
   });
 
   it('does not render TransactionIngestion workflow detail Edit action', async () => {
@@ -563,8 +557,8 @@ describe('TransactionIngestion file workflow', () => {
 
     expect(await screen.findByText('Transaction deleted after import')).toBeTruthy();
     expect(screen.getByText('Import completed')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
+    expect(screen.queryByTestId('workflowRowEdit-303')).toBeNull();
+    expect(screen.queryByTestId('workflowRowDisable-303')).toBeNull();
   });
 
   it('disable action updates row status and counts from response', async () => {
@@ -580,15 +574,16 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByText('Salary');
-    fireEvent.click(screen.getAllByRole('button', { name: /disable/i })[0]);
+    await expandRowForRecord(300);
+    fireEvent.click(screen.getByTestId('workflowRowDisable-300'));
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/300/disable'));
     await waitFor(() => expect(within(screen.getByTestId('workflowCounts')).getByText('2')).toBeTruthy());
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expectRowStatus(300, 'Disabled');
-    expect(within(rowForRecord(300)).getByRole('button', { name: /enable/i })).toBeTruthy();
-    expect(within(rowForRecord(300)).queryByRole('button', { name: /disable/i })).toBeNull();
-    expect(within(rowForRecord(300)).queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(within(await expandRowForRecord(300)).getByRole('button', { name: /enable/i })).toBeTruthy();
+    expect(within(await expandRowForRecord(300)).queryByRole('button', { name: /disable/i })).toBeNull();
+    expect(within(await expandRowForRecord(300)).queryByRole('button', { name: /edit/i })).toBeNull();
   });
 
   it('disable last valid row updates displayed batch status to needs review', async () => {
@@ -611,7 +606,8 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /disable/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(screen.getByTestId('workflowRowDisable-300'));
 
     await waitFor(() => expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Disabled');
@@ -630,14 +626,15 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByText('Disabled row');
-    fireEvent.click(screen.getByRole('button', { name: /enable/i }));
+    await expandRowForRecord(302);
+    fireEvent.click(screen.getByTestId('workflowRowEnable-302'));
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
     await waitFor(() => expect(within(screen.getByTestId('workflowCounts')).getByText('2')).toBeTruthy());
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expectRowStatus(302, 'Valid');
-    expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
-    expect(within(rowForRecord(302)).queryByRole('button', { name: /enable/i })).toBeNull();
+    expect(within(await expandRowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
+    expect(within(await expandRowForRecord(302)).queryByRole('button', { name: /enable/i })).toBeNull();
   });
 
   it('enable valid disabled row updates displayed batch status to ready', async () => {
@@ -672,7 +669,8 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /enable/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(screen.getByTestId('workflowRowEnable-300'));
 
     await waitFor(() => expect(screen.getAllByText('Ready to import').length).toBeGreaterThan(0));
     expectRowStatus(300, 'Valid');
@@ -696,13 +694,14 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByText('Disabled row');
-    fireEvent.click(screen.getByRole('button', { name: /enable/i }));
+    await expandRowForRecord(302);
+    fireEvent.click(screen.getByTestId('workflowRowEnable-302'));
 
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/records/302/enable'));
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expectRowStatus(302, 'Rejected');
     expect(within(rowForRecord(302)).getByText('description is required')).toBeTruthy();
-    expect(within(rowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
+    expect(within(await expandRowForRecord(302)).getByRole('button', { name: /disable/i })).toBeTruthy();
   });
 
   it('edits a rejected row with valid values and renders it as valid', async () => {
@@ -735,7 +734,8 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByText('signedAmount must be nonzero');
-    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[1]);
+    await expandRowForRecord(301);
+    fireEvent.click(screen.getByTestId('workflowRowEdit-301'));
     fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '2026-07-14' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Corrected row' } });
     fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '50.00' } });
@@ -755,9 +755,9 @@ describe('TransactionIngestion file workflow', () => {
     await waitFor(() => expect(screen.getByTestId('descriptionReview-badge-301')).toBeTruthy());
     expect(screen.getAllByText('Ready to import').length).toBeGreaterThan(0);
     expectRowStatus(301, 'Valid');
-    expect(screen.getAllByText('50.00')).toHaveLength(2);
+    expect(within(await expandRowForRecord(301)).getByText('50.00')).toBeTruthy();
     expect(screen.queryByText('signedAmount must be nonzero')).toBeNull();
-    expect(within(rowForRecord(301)).getByText('Edited manually')).toBeTruthy();
+    expect(within(await expandRowForRecord(301)).getByText('Edited manually')).toBeTruthy();
     expect(screen.getByTestId('descriptionReview-manualNote-301').textContent).toContain(
       'Originally auto-normalized by Normalize Old Value, then edited manually',
     );
@@ -783,9 +783,8 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByText('Salary');
-    expect(within(rowForRecord(300)).getByText('Income')).toBeTruthy();
 
-    fireEvent.click(within(rowForRecord(300)).getByRole('button', { name: /edit/i }));
+    fireEvent.click(within(await expandRowForRecord(300)).getByRole('button', { name: /edit/i }));
     fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '-100.00' } });
     fireEvent.click(screen.getByRole('button', { name: /save row/i }));
 
@@ -795,10 +794,10 @@ describe('TransactionIngestion file workflow', () => {
         expect.objectContaining({ signedAmount: '-100.00' }),
       ),
     );
-    expect(within(rowForRecord(300)).getByText('-100.00')).toBeTruthy();
-    expect(within(rowForRecord(300)).getByText('100.00')).toBeTruthy();
-    expect(within(rowForRecord(300)).getByText('Expense')).toBeTruthy();
-    expect(within(rowForRecord(300)).queryByText('Income')).toBeNull();
+    expect(rowForRecord(300).textContent).toContain('-100.00');
+    expect(within(await expandRowForRecord(300)).getByText('100.00')).toBeTruthy();
+    expect(within(await expandRowForRecord(300)).getByText('Expense')).toBeTruthy();
+    expect(within(await expandRowForRecord(300)).queryByText('Income')).toBeNull();
   });
 
   it('does not preserve stale derived fields when response row omits them', async () => {
@@ -824,11 +823,11 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByText('Salary');
-    fireEvent.click(within(rowForRecord(300)).getByRole('button', { name: /edit/i }));
+    fireEvent.click(within(await expandRowForRecord(300)).getByRole('button', { name: /edit/i }));
     fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '-100.00' } });
     fireEvent.click(screen.getByRole('button', { name: /save row/i }));
 
-    await waitFor(() => expect(within(rowForRecord(300)).getByText('-100.00')).toBeTruthy());
+    await waitFor(() => expect(rowForRecord(300).textContent).toContain('-100.00'));
     expect(within(rowForRecord(300)).queryByText('Income')).toBeNull();
   });
 
@@ -853,14 +852,15 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByText('Salary');
-    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[0]);
+    await expandRowForRecord(300);
+    fireEvent.click(screen.getByTestId('workflowRowEdit-300'));
     fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: /save row/i }));
 
     await waitFor(() => expect(mockAxiosPatch).toHaveBeenCalledWith(expect.stringContaining('/records/300'), expect.any(Object)));
     await waitFor(() => expectRowStatus(300, 'Rejected'));
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('signedAmount must be nonzero')).toHaveLength(2);
+    expect(screen.getAllByText('signedAmount must be nonzero').length).toBeGreaterThan(0);
   });
 
   it('edit valid row to invalid updates displayed batch status to needs review', async () => {
@@ -891,7 +891,8 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(screen.getByTestId('workflowRowEdit-300'));
     fireEvent.change(screen.getByLabelText('Signed amount'), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: /save row/i }));
 
@@ -905,8 +906,9 @@ describe('TransactionIngestion file workflow', () => {
 
     await screen.findByText('Disabled row');
 
-    expect(within(rowForRecord(302)).queryByRole('button', { name: /edit/i })).toBeNull();
-    expect(within(rowForRecord(302)).getByRole('button', { name: /enable/i })).toBeTruthy();
+    const disabledDetail = await expandRowForRecord(302);
+    expect(within(disabledDetail).queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(within(disabledDetail).getByRole('button', { name: /enable/i })).toBeTruthy();
   });
 
   it('renders description rule metadata compactly', async () => {
@@ -929,8 +931,9 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
+    await expandRowForRecord(300);
     await waitFor(() => expect(screen.getByTestId('descriptionReview-badge-300')).toBeTruthy());
-    expect(within(rowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
+    expect(within(await expandRowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
     expect(screen.getByTestId('descriptionReview-ruleName-300').textContent).toContain('Normalize Uber');
     expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Original description');
     expect(screen.getByTestId('descriptionReview-details-300').textContent).toContain('Uber, Trip');
@@ -959,8 +962,9 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
+    await expandRowForRecord(300);
     await waitFor(() => expect(screen.getByTestId('descriptionReview-badge-300')).toBeTruthy());
-    expect(within(rowForRecord(300)).getByText('Edited manually')).toBeTruthy();
+    expect(within(await expandRowForRecord(300)).getByText('Edited manually')).toBeTruthy();
     expect(screen.getByTestId('descriptionReview-manualNote-300').textContent).toContain(
       'Originally auto-normalized by Normalize Uber, then edited manually',
     );
@@ -1007,13 +1011,13 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect((await screen.findAllByText('Ready to import')).length).toBeGreaterThan(0);
-    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
     expect(screen.queryByText(/translation-not-found/i)).toBeNull();
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/prepare'));
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', undefined));
     expect(screen.getByRole('columnheader', { name: 'Category' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'Tags' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'Rule details' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Rule details' })).toBeNull();
     expect(screen.queryByRole('button', { name: /continue to category\/tags/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /back to row review/i })).toBeNull();
     expect(mockAxiosPost.mock.calls.filter(([url]) => url === 'api/transaction-ingestions/100/candidates/prepare')).toHaveLength(1);
@@ -1092,8 +1096,123 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.getByRole('button', { name: /apply all suggested categories/i }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: /apply all suggested tags/i }).disabled).toBe(false);
     expect(screen.queryByRole('button', { name: /^apply all classification suggestions$/i })).toBeNull();
+    expect(await expandRowForRecord(300)).toBeTruthy();
     expect(screen.getByTestId('workflowRowReevaluate-300')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /refresh suggestions/i })).toBeNull();
+  });
+
+  it('filters the candidate review queue locally without narrowing global reevaluation scope', async () => {
+    const reviewResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 1, validRows: 1, invalidRows: 1 },
+      },
+    };
+    const candidateResponse = withCandidates(reviewResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await screen.findByTestId('classificationSuggestedCategory-400');
+    expect(screen.getByTestId('candidateReviewVisibleCount').textContent).toContain('4 of 4');
+
+    fireEvent.click(screen.getByTestId('candidateReviewFilter-SUGGESTIONS'));
+    expect(screen.getByTestId('candidateReviewVisibleCount').textContent).toContain('1 of 4');
+    expect(screen.getByTestId('workflowRow-300')).toBeTruthy();
+    expect(screen.queryByTestId('workflowRow-301')).toBeNull();
+    expect(screen.queryByTestId('workflowRow-302')).toBeNull();
+
+    mockAxiosPost.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /reevaluate categories/i }));
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/rule-preview', { scope: 'CATEGORY' }),
+    );
+
+    fireEvent.click(screen.getByTestId('candidateReviewFilter-ERRORS'));
+    expect(screen.getByTestId('candidateReviewVisibleCount').textContent).toContain('1 of 4');
+    expect(screen.queryByTestId('workflowRow-300')).toBeNull();
+    expect(screen.getByTestId('workflowRow-301')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('candidateReviewFilter-DISABLED'));
+    expect(screen.getByTestId('candidateReviewVisibleCount').textContent).toContain('1 of 4');
+    expect(screen.getByTestId('workflowRow-302')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('candidateReviewFilter-ALL'));
+    expect(screen.getByTestId('candidateReviewVisibleCount').textContent).toContain('4 of 4');
+  });
+
+  it('preserves an unsaved general row edit while a local filter hides it and blocks unrelated review writes', async () => {
+    const reviewResponse = {
+      data: {
+        ...persistedReviewResponse.data,
+        status: 'READY',
+        counts: { recordsReceived: 3, recordsCreated: 0, recordsSkipped: 1, recordsRejected: 1, validRows: 1, invalidRows: 1 },
+      },
+    };
+    const candidateResponse = withCandidates(reviewResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+    mockAxiosGet.mockResolvedValue(candidateResponse);
+    mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+    renderPersistedReview();
+
+    await expandRowForRecord(300);
+    fireEvent.click(screen.getByTestId('workflowRowEdit-300'));
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Unsaved candidate edit' } });
+    expect(screen.getByTestId('workflowRowToggleDetails-300').disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /reevaluate all/i }).disabled).toBe(true);
+
+    fireEvent.click(screen.getByTestId('candidateReviewFilter-DISABLED'));
+    expect(screen.getByTestId('candidateReviewHiddenEditNotice')).toBeTruthy();
+    expect(screen.getByTestId('workflowRow-302')).toBeTruthy();
+    expect(screen.queryByTestId('workflowRow-300')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('candidateReviewFilter-ALL'));
+    expect(screen.getByLabelText('Description').getAttribute('value')).toBe('Unsaved candidate edit');
+    expect(mockAxiosPatch).not.toHaveBeenCalled();
+  });
+
+  it('renders one mobile card presentation and exposes classification only after expansion', async () => {
+    const previousMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: jest.fn().mockImplementation(() => ({
+        matches: true,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      })),
+    });
+
+    try {
+      const readyResponse = {
+        data: {
+          ...persistedReviewResponse.data,
+          status: 'READY',
+          counts: { recordsReceived: 1, recordsCreated: 0, recordsSkipped: 0, recordsRejected: 0, validRows: 1, invalidRows: 0 },
+          rows: [persistedReviewResponse.data.rows[0]],
+        },
+      };
+      const candidateResponse = withCandidates(readyResponse, { 300: { id: 400, classificationReviewStatus: 'SUGGESTED' } });
+      mockAxiosGet.mockResolvedValue(candidateResponse);
+      mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
+      renderPersistedReview();
+
+      await screen.findByTestId('candidateReviewMobileCards');
+      expect(screen.queryByTestId('workflowRow-300')).toBeNull();
+      expect(screen.getByTestId('workflowMobileCard-300').textContent).toContain('Salary');
+      expect(screen.queryByTestId('mobileclassificationCategory-400')).toBeNull();
+
+      mockAxiosPatch.mockClear();
+      mockAxiosPost.mockClear();
+      fireEvent.click(screen.getByTestId('workflowMobileToggleDetails-300'));
+      expect(screen.getByTestId('workflowMobileToggleDetails-300').getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByTestId('mobileclassificationCategory-400')).toBeTruthy();
+      expect(screen.getByTestId('mobileclassificationTags-400')).toBeTruthy();
+      expect(screen.getByTestId('workflowRowEdit-300-mobile')).toBeTruthy();
+      expect(mockAxiosPatch).not.toHaveBeenCalled();
+      expect(mockAxiosPost).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: previousMatchMedia });
+    }
   });
 
   it('renders local automation defaults without automatically applying classification', async () => {
@@ -1760,6 +1879,8 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValue(twoRowPreviewResponse);
     const firstRender = renderPersistedReview();
 
+    await expandRowForRecord(300);
+    await expandRowForRecord(304);
     await screen.findByTestId('workflowRowReevaluate-300');
     await screen.findByTestId('classificationConfirmNoSuggestions-404');
     mockAxiosPost.mockClear();
@@ -1790,6 +1911,7 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosGet.mockResolvedValue(partialWithCandidates);
     const secondRender = renderPersistedReview();
     await screen.findByTestId('workflowRowStatus-300');
+    await expandRowForRecord(300);
     expect(screen.queryByTestId('workflowRowReevaluate-301')).toBeNull();
     expect(screen.queryByTestId('workflowRowReevaluate-302')).toBeNull();
     secondRender.unmount();
@@ -1821,6 +1943,7 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosPost.mockResolvedValue(classificationPreviewResponse);
     renderPersistedReview();
 
+    await expandRowForRecord(300);
     await screen.findByTestId('descriptionReview-badge-300');
     mockAxiosPost.mockClear();
     mockAxiosPost.mockResolvedValue({
@@ -1974,6 +2097,7 @@ describe('TransactionIngestion file workflow', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /reevaluate descriptions/i }));
 
+    await expandRowForRecord(300);
     await screen.findByTestId('workflowApplyDescriptionSuggestion-300');
     mockAxiosPost.mockResolvedValueOnce({
       data: {
@@ -2060,6 +2184,8 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     await screen.findByTestId('workflowRowStatus-300');
+    await expandRowForRecord(300);
+    await expandRowForRecord(304);
     mockAxiosPost.mockClear();
     mockAxiosPost.mockResolvedValueOnce({
       data: {
@@ -2106,7 +2232,7 @@ describe('TransactionIngestion file workflow', () => {
     renderPersistedReview();
 
     expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
-    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
     expect(screen.queryByText(/translation-not-found/i)).toBeNull();
     expect(screen.getByText('Fix or disable rejected rows before importing.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
@@ -2180,6 +2306,7 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.getByText('Categories and tags are saved on candidates before confirming the import.')).toBeTruthy();
     expect(screen.getByTestId('classificationSuggestedCategory-400').textContent).toContain('Salary');
     expect(screen.getByTestId('classificationSuggestedTags-400').textContent).toContain('Business');
+    await expandRowForRecord(300);
     expect(screen.getByTestId('classificationMatchedRules-400').textContent).toContain('Salary rule');
     expect(screen.getByTestId('classificationCategory-400').value).toBe('');
 
@@ -2429,6 +2556,7 @@ describe('TransactionIngestion file workflow', () => {
         candidate: reviewedResponse.data.rows[1].candidate,
       },
     });
+    await expandRowForRecord(311);
     fireEvent.click(screen.getByTestId('classificationConfirmNoSuggestions-411'));
     await waitFor(() => expect(mockAxiosPost).toHaveBeenCalledWith('api/transaction-ingestions/100/candidates/411/confirm-no-suggestions'));
 
@@ -2535,6 +2663,8 @@ describe('TransactionIngestion file workflow', () => {
 
     expect(await screen.findByText('Review every valid row before confirming import.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /confirm import/i }).disabled).toBe(true);
+    await expandRowForRecord(320);
+    await expandRowForRecord(321);
     expect(screen.getByTestId('classificationStatus-420').textContent).toContain('Not evaluated');
     expect(screen.getByTestId('classificationStatus-421').textContent).toContain('Stale');
   });
@@ -2633,9 +2763,9 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Error' })).toBeNull();
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /enable/i })).toBeNull();
+    expect(screen.queryByTestId('workflowRowEdit-300')).toBeNull();
+    expect(screen.queryByTestId('workflowRowDisable-300')).toBeNull();
+    expect(screen.queryByTestId('workflowRowEnable-302')).toBeNull();
     expect(screen.getByTestId('classificationCategoryFinal-9001').textContent).toBe('Salary');
     expect(screen.getByTestId('classificationTagsFinal-9001').textContent).toBe('Business');
   });
@@ -2679,12 +2809,13 @@ describe('TransactionIngestion file workflow', () => {
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Error' })).toBeNull();
     expect(screen.queryByRole('button', { name: /confirm import/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /disable/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /enable/i })).toBeNull();
+    expect(screen.queryByTestId('workflowRowEdit-300')).toBeNull();
+    expect(screen.queryByTestId('workflowRowDisable-300')).toBeNull();
+    expect(screen.queryByTestId('workflowRowEnable-302')).toBeNull();
     expect(rowForRecord(300).querySelector('input, select, textarea')).toBeNull();
     expect(rowForRecord(302).querySelector('input, select, textarea')).toBeNull();
-    expect(within(rowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
+    await expandRowForRecord(300);
+    expect(within(await expandRowForRecord(300)).getByText('Auto-normalized')).toBeTruthy();
     expect(screen.getByTestId('descriptionReview-ruleName-300').textContent).toContain('Normalize Uber');
     expect(screen.getByTestId('classificationCategoryFinal-9001').textContent).toBe('Salary');
     expect(screen.getByTestId('classificationTagsFinal-9001').textContent).toBe('Business');
@@ -2724,12 +2855,13 @@ describe('TransactionIngestion file workflow', () => {
     mockAxiosGet.mockResolvedValue(persistedReviewResponse);
     renderPersistedReview();
 
-    await screen.findByText('Salary');
-    fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[0]);
+    await screen.findByTestId('workflowRowStatus-300');
+    await expandRowForRecord(300);
+    fireEvent.click(screen.getByTestId('workflowRowEdit-300'));
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Unsaved edit' } });
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
-    expect(screen.getByText('Salary')).toBeTruthy();
+    expect(within(rowForRecord(300)).getByText('Salary')).toBeTruthy();
     expect(screen.queryByText('Unsaved edit')).toBeNull();
     expect(mockAxiosPatch).not.toHaveBeenCalled();
   });
@@ -2800,8 +2932,8 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
-    const workflowRow = await screen.findByTestId('workflowRow-300');
-    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(within(screen.getByTestId('workflowRowCreateRule-300')).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateNormalization-300'));
 
     expect(screen.getByTestId('contextualRuleSelectedRow').textContent).toContain('Selected row #1');
@@ -2852,8 +2984,8 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
-    const workflowRow = await screen.findByTestId('workflowRow-300');
-    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(within(screen.getByTestId('workflowRowCreateRule-300')).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
     expect(screen.getByTestId('contextualRuleSelectedRow').textContent).toContain('Selected row #1');
     await waitFor(() => expect(screen.getByTestId('transactionRuleCategoryIdentity').textContent).toContain('Transport'));
@@ -2966,8 +3098,8 @@ describe('TransactionIngestion file workflow', () => {
     );
     renderPersistedReview();
 
-    const workflowRow = await screen.findByTestId('workflowRow-300');
-    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(within(screen.getByTestId('workflowRowCreateRule-300')).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateNormalization-300'));
 
     expect(await screen.findByTestId('contextualRuleSourceUnavailable')).toBeTruthy();
@@ -3000,8 +3132,8 @@ describe('TransactionIngestion file workflow', () => {
     );
     renderPersistedReview();
 
-    const workflowRow = await screen.findByTestId('workflowRow-300');
-    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(within(screen.getByTestId('workflowRowCreateRule-300')).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
 
     const modal = screen.getByTestId('transactionIngestionRuleCreationModal');
@@ -3036,8 +3168,8 @@ describe('TransactionIngestion file workflow', () => {
     });
     renderPersistedReview();
 
-    const workflowRow = await screen.findByTestId('workflowRow-300');
-    fireEvent.click(within(workflowRow).getByRole('button', { name: /create rule/i }));
+    await expandRowForRecord(300);
+    fireEvent.click(within(screen.getByTestId('workflowRowCreateRule-300')).getByRole('button', { name: /create rule/i }));
     fireEvent.click(await screen.findByTestId('workflowRowCreateTransaction-300'));
     await waitFor(() => expect(screen.getByTestId('transactionRuleCategoryIdentity').textContent).toContain('Transport'));
     const reevaluateButton = within(screen.getByTestId('transactionIngestionRuleCreationModal')).getByRole('button', {

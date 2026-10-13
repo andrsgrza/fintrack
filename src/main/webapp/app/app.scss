@@ -119,6 +119,100 @@ a {
   grid-area: same-posting;
 }
 
+.candidate-review-table {
+  table-layout: fixed;
+
+  th:nth-child(1) {
+    width: 10%;
+  }
+
+  th:nth-child(2) {
+    width: 24%;
+  }
+
+  th:nth-child(3) {
+    width: 12%;
+  }
+
+  th:nth-child(4) {
+    width: 20%;
+  }
+
+  th:nth-child(5) {
+    width: 25%;
+  }
+
+  th:nth-child(6) {
+    width: 9%;
+  }
+
+  td {
+    vertical-align: top;
+  }
+}
+
+.candidate-review-movement {
+  min-width: 13rem;
+}
+
+.candidate-review-category-value {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.2rem;
+  max-width: 100%;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.candidate-review-suggestion {
+  color: var(--bs-secondary-color);
+  overflow-wrap: anywhere;
+}
+
+.candidate-review-expanded-row > td {
+  padding: 0;
+  background: rgba(var(--bs-secondary-rgb), 0.035);
+}
+
+.candidate-review-detail {
+  border-inline-start: 0.25rem solid var(--bs-primary);
+  padding: 1rem;
+}
+
+.candidate-review-detail-heading {
+  color: var(--bs-secondary-color);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.candidate-review-data-list dt,
+.candidate-review-data-list dd {
+  margin-bottom: 0.45rem;
+}
+
+.candidate-review-data-list dt {
+  color: var(--bs-secondary-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.candidate-review-mobile {
+  display: none;
+}
+
+.candidate-review-mobile-card {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.875rem;
+}
+
 @media (max-width: 991.98px) {
   .manual-draft-date-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -128,6 +222,20 @@ a {
       'posting-header'
       'posting-input'
       'same-posting';
+  }
+
+  .candidate-review-desktop {
+    display: none;
+  }
+
+  .candidate-review-mobile {
+    display: block;
+  }
+
+  .candidate-review-detail {
+    margin-inline: -0.875rem;
+    margin-bottom: -0.875rem;
+    margin-top: 0.875rem;
   }
 }
 
