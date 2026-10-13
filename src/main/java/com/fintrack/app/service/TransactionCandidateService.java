@@ -501,10 +501,11 @@ public class TransactionCandidateService {
         if (candidate.isEmpty()) {
             return false;
         }
-        rejectGenericDelete(candidate.get());
+        TransactionCandidate accessibleCandidate = candidate.orElseThrow();
+        rejectGenericDelete(accessibleCandidate);
         // This is an entity delete, so orphanRemoval deletes explicit tag associations before the candidate.
         // Native link deletion is reserved for bulk deletion paths, where JPA cascades do not apply.
-        transactionCandidateRepository.delete(candidate.get());
+        transactionCandidateRepository.delete(accessibleCandidate);
         return true;
     }
 

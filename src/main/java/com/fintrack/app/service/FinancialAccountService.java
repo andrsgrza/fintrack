@@ -280,7 +280,7 @@ public class FinancialAccountService {
         if (financialAccount.isEmpty()) {
             return false;
         }
-        FinancialAccount account = financialAccount.get();
+        FinancialAccount account = financialAccount.orElseThrow();
         if (transactionCandidateRepository.existsAccountCandidateOutsideWorkflowCleanup(id)) {
             throw new IllegalArgumentException("Account cannot be deleted because it is used by transaction candidates.");
         }

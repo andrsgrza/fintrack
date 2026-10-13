@@ -30,6 +30,37 @@ Do **not** assert `$.title` — JHipster responds with `title: "Bad Request"`; t
 
 ## How to run tests
 
+### Supported JVM and Mockito instrumentation
+
+Use the Maven wrapper with Java 17. Maven resolves Mockito 5.14.2 and configures its supported startup agent automatically for both Surefire unit tests and Failsafe integration tests. This avoids Mockito's unsupported-on-some-JVMs dynamic self-attach path; do not add an ad-hoc `-javaagent` flag locally.
+
+### Ordinary unit tests
+
+Run the ordinary Java unit suite without starting Testcontainers:
+
+```bash
+./mvnw -ntp --batch-mode -Dskip.installnodenpm -Dskip.npm test
+```
+
+### Integration tests
+
+Integration tests use a disposable PostgreSQL Testcontainers database. Docker Desktop must be running; the test suite creates and removes its own database container.
+
+```bash
+./mvnw -ntp --batch-mode -Dskip.installnodenpm -Dskip.npm \
+  -Dit.test=DescriptionNormalizationRuleResourceIT,DescriptionNormalizationRuleConditionResourceIT verify
+```
+
+### Production package quality gate
+
+Run the normal production packaging command when validating the integrated frontend/backend build:
+
+```bash
+./mvnw -ntp --batch-mode -DskipTests -Pprod package
+```
+
+This command uses Maven-managed Node 22.15.0 and npm 11.3.0, runs the configured `npm install` and production frontend build, then packages the JAR. It intentionally skips Java tests only; it does not skip frontend work or Modernizer. Do not add a Modernizer skip flag to production packaging.
+
 ### Backend — ownership suites
 
 **FinancialAccount (pattern A — direct `user`):**
@@ -649,7 +680,7 @@ The FinancialAccount UI specs cover the product overview (calculated balances/de
 | Type           | File                              | Tests | Notes                                                                                                                                                                                                                                                            |
 | -------------- | --------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Integration IT | `TransactionCandidateResourceIT`  | 57    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked manual-post deletion/rollback/concurrency coverage, no rule-on-post, manual draft recovery query, final delete protection, and autosave classification freshness. |
-| Unit — service | `TransactionCandidateServiceTest` | 81    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM.                                                                                                   |
+| Unit — service | `TransactionCandidateServiceTest` | 72    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. Mockito instrumentation is supplied automatically by the Maven test configuration.                                                                        |
 
 **Run:**
 

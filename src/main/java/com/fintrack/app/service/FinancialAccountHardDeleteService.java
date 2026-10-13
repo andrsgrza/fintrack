@@ -114,7 +114,7 @@ public class FinancialAccountHardDeleteService {
             return false;
         }
 
-        FinancialAccount account = lockedAccount.get();
+        FinancialAccount account = lockedAccount.orElseThrow();
         FinancialAccountDeletionPreviewDTO preflight = buildPreview(account);
         if (!Boolean.TRUE.equals(preflight.getCanHardDelete())) {
             throw new FinancialAccountHardDeleteBlockedException(preflight.getBlockers());

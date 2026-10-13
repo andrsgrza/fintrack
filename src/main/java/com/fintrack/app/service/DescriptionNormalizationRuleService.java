@@ -131,7 +131,7 @@ public class DescriptionNormalizationRuleService {
         if (rule.isEmpty()) {
             return false;
         }
-        Long ownerId = rule.get().getUser().getId();
+        Long ownerId = rule.orElseThrow().getUser().getId();
         conditionRepository.deleteByDescriptionNormalizationRuleId(id);
         ruleRepository.deleteById(id);
         ruleRepository.flush();
