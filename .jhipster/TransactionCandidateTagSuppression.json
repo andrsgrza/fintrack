@@ -1,0 +1,31 @@
+{
+  "annotations": { "changelogDate": "20261015120000" },
+  "applications": ["fintrack"],
+  "documentation": "Internal candidate-owned manual tag suppression. It is temporary and never historical tag data.",
+  "dto": "no",
+  "fields": [],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "TransactionCandidateTagSuppression",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionCandidate",
+      "relationshipName": "transactionCandidate",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "tag",
+      "relationshipName": "tag",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

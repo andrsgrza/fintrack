@@ -36,6 +36,7 @@ import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
+import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
@@ -71,6 +72,9 @@ class FinancialAccountHardDeleteServiceTest {
 
     @Mock
     private TransactionCandidateRepository transactionCandidateRepository;
+
+    @Mock
+    private TransactionBatchRepository transactionBatchRepository;
 
     @Mock
     private TransactionIngestionRepository transactionIngestionRepository;
@@ -168,6 +172,7 @@ class FinancialAccountHardDeleteServiceTest {
         verify(internalTransferRepository, never()).deleteLocalByAccountId(ACCOUNT_ID);
         verify(transactionCandidateRepository, never()).deleteTagLinksByAccountId(ACCOUNT_ID);
         verify(transactionCandidateRepository, never()).deleteByAccountId(ACCOUNT_ID);
+        verify(transactionBatchRepository, never()).deleteByAccountId(ACCOUNT_ID);
         verify(ingestionRecordRepository, never()).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
         verify(financialTransactionRepository, never()).deleteTagLinksByAccountId(ACCOUNT_ID);
         verify(financialTransactionRepository, never()).deleteByAccountId(ACCOUNT_ID);
@@ -189,6 +194,7 @@ class FinancialAccountHardDeleteServiceTest {
             apiIngestionRepository,
             internalTransferRepository,
             transactionCandidateRepository,
+            transactionBatchRepository,
             ingestionRecordRepository,
             financialTransactionRepository,
             transactionIngestionRepository,
@@ -202,6 +208,7 @@ class FinancialAccountHardDeleteServiceTest {
         order.verify(internalTransferRepository).deleteLocalByAccountId(ACCOUNT_ID);
         order.verify(transactionCandidateRepository).deleteTagLinksByAccountId(ACCOUNT_ID);
         order.verify(transactionCandidateRepository).deleteByAccountId(ACCOUNT_ID);
+        order.verify(transactionBatchRepository).deleteByAccountId(ACCOUNT_ID);
         order.verify(ingestionRecordRepository).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
         order.verify(financialTransactionRepository).deleteTagLinksByAccountId(ACCOUNT_ID);
         order.verify(financialTransactionRepository).deleteByAccountId(ACCOUNT_ID);

@@ -97,6 +97,7 @@ public interface TransactionCandidateRepository
         from TransactionCandidate transactionCandidate
         where transactionCandidate.user.login = :login
           and transactionCandidate.source = :source
+          and transactionCandidate.transactionBatch is null
           and transactionCandidate.status in :statuses
         """,
         countQuery = """
@@ -104,6 +105,7 @@ public interface TransactionCandidateRepository
         from TransactionCandidate transactionCandidate
         where transactionCandidate.user.login = :login
           and transactionCandidate.source = :source
+          and transactionCandidate.transactionBatch is null
           and transactionCandidate.status in :statuses
         """
     )
@@ -113,6 +115,73 @@ public interface TransactionCandidateRepository
         @Param("statuses") Collection<TransactionCandidateStatus> statuses,
         Pageable pageable
     );
+
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionBatch",
+            "transactionBatch.account",
+            "transactionBatch.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+            "tagSuppressions",
+            "tagSuppressions.tag",
+            "tagSuppressions.tag.user",
+            "inputIssues",
+        }
+    )
+    @Query(
+        "select distinct candidate from TransactionCandidate candidate where candidate.id = :candidateId and candidate.transactionBatch.id = :batchId and candidate.user.login = :login"
+    )
+    Optional<TransactionCandidate> findOneBatchCandidateWithRelationships(
+        @Param("batchId") Long batchId,
+        @Param("candidateId") Long candidateId,
+        @Param("login") String login
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "transactionBatch",
+            "transactionBatch.account",
+            "transactionBatch.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+            "tagSuppressions",
+            "tagSuppressions.tag",
+            "tagSuppressions.tag.user",
+            "inputIssues",
+        }
+    )
+    @Query(
+        "select distinct candidate from TransactionCandidate candidate where candidate.id = :candidateId and candidate.transactionBatch.id = :batchId and candidate.user.login = :login"
+    )
+    Optional<TransactionCandidate> findOneBatchCandidateForMutation(
+        @Param("batchId") Long batchId,
+        @Param("candidateId") Long candidateId,
+        @Param("login") String login
+    );
+
+    @EntityGraph(
+        attributePaths = {
+            "account", "category", "tagAssociations", "tagAssociations.tag", "tagSuppressions", "tagSuppressions.tag", "inputIssues",
+        }
+    )
+    @Query(
+        "select distinct candidate from TransactionCandidate candidate where candidate.transactionBatch.id = :batchId and candidate.user.login = :login order by candidate.rowPosition asc, candidate.id asc"
+    )
+    List<TransactionCandidate> findAllBatchCandidatesWithRelationships(@Param("batchId") Long batchId, @Param("login") String login);
 
     @EntityGraph(
         attributePaths = {
@@ -218,6 +287,11 @@ public interface TransactionCandidateRepository
     boolean existsByTagId(@Param("tagId") Long tagId);
 
     @Query(
+        "select case when count(suppression) > 0 then true else false end from TransactionCandidateTagSuppression suppression where suppression.tag.id = :tagId"
+    )
+    boolean existsTagSuppressionByTagId(@Param("tagId") Long tagId);
+
+    @Query(
         "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
         "where transactionCandidate.account.id = :accountId and (transactionCandidate.source <> com.fintrack.app.domain.enumeration.TransactionCandidateSource.FILE_IMPORT or transactionCandidate.transactionIngestion is null)"
     )
@@ -232,6 +306,8 @@ public interface TransactionCandidateRepository
     @EntityGraph(
         attributePaths = {
             "account",
+            "transactionBatch",
+            "transactionBatch.account",
             "transactionIngestion",
             "transactionIngestion.account",
             "ingestionRecord",
@@ -252,6 +328,17 @@ public interface TransactionCandidateRepository
         nativeQuery = true
     )
     void deleteTagLinksByAccountId(@Param("accountId") Long accountId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select id from transaction_candidate where transaction_batch_id = :batchId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByTransactionBatchId(@Param("batchId") Long batchId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from TransactionCandidate candidate where candidate.transactionBatch.id = :batchId")
+    void deleteByTransactionBatchId(@Param("batchId") Long batchId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from TransactionCandidate transactionCandidate where transactionCandidate.account.id = :accountId")

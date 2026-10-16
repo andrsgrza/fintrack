@@ -9,6 +9,7 @@ import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialAccountSelectableDTO;
@@ -61,6 +62,8 @@ public class FinancialAccountService {
 
     private final TransactionCandidateRepository transactionCandidateRepository;
 
+    private final TransactionBatchRepository transactionBatchRepository;
+
     public FinancialAccountService(
         FinancialAccountRepository financialAccountRepository,
         FinancialAccountMapper financialAccountMapper,
@@ -71,7 +74,8 @@ public class FinancialAccountService {
         FinancialSubscriptionRepository financialSubscriptionRepository,
         CreditAccountDetailsRepository creditAccountDetailsRepository,
         FinancialTransactionRepository financialTransactionRepository,
-        TransactionCandidateRepository transactionCandidateRepository
+        TransactionCandidateRepository transactionCandidateRepository,
+        TransactionBatchRepository transactionBatchRepository
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.financialAccountMapper = financialAccountMapper;
@@ -83,6 +87,7 @@ public class FinancialAccountService {
         this.creditAccountDetailsRepository = creditAccountDetailsRepository;
         this.financialTransactionRepository = financialTransactionRepository;
         this.transactionCandidateRepository = transactionCandidateRepository;
+        this.transactionBatchRepository = transactionBatchRepository;
     }
 
     /**
@@ -281,6 +286,9 @@ public class FinancialAccountService {
             return false;
         }
         FinancialAccount account = financialAccount.orElseThrow();
+        if (transactionBatchRepository.existsByAccountId(id)) {
+            throw new IllegalArgumentException("Account cannot be deleted because it is used by transaction batches.");
+        }
         if (transactionCandidateRepository.existsAccountCandidateOutsideWorkflowCleanup(id)) {
             throw new IllegalArgumentException("Account cannot be deleted because it is used by transaction candidates.");
         }

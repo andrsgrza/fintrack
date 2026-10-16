@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Temporary owned workspace. PUBLISHED receipt fields are intentionally bounded and contain no candidate/final history. -->
+    <changeSet id="20261015120000-1" author="codex">
+        <createTable tableName="transaction_batch" remarks="Temporary common transaction-candidate workspace and bounded future publish receipt.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="status" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="next_row_position" type="bigint"/>
+            <column name="auto_apply_descriptions" type="boolean"/>
+            <column name="auto_apply_categories" type="boolean"/>
+            <column name="auto_apply_tags" type="boolean"/>
+            <column name="protect_manual_changes" type="boolean"/>
+            <column name="created_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="updated_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="published_at" type="${datetimeType}"/>
+            <column name="publication_operation_key" type="varchar(100)"/>
+            <column name="publication_request_digest" type="varchar(128)"/>
+            <column name="published_transaction_count" type="integer"/>
+            <column name="receipt_expires_at" type="${datetimeType}"/>
+            <column name="user_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="account_id" type="bigint"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="transaction_batch" baseColumnNames="user_id"
+                                 constraintName="fk_transaction_batch__user_id" referencedTableName="jhi_user" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="transaction_batch" baseColumnNames="account_id"
+                                 constraintName="fk_transaction_batch__account_id" referencedTableName="financial_account" referencedColumnNames="id"/>
+        <createIndex tableName="transaction_batch" indexName="ix_transaction_batch_owner_state_updated">
+            <column name="user_id"/><column name="status"/><column name="updated_at"/>
+        </createIndex>
+        <sql>
+            alter table transaction_batch add constraint ck_transaction_batch_state check (
+                (
+                    status = 'OPEN'
+                    and account_id is not null
+                    and next_row_position is not null and next_row_position &gt;= 1
+                    and auto_apply_descriptions is not null
+                    and auto_apply_categories is not null
+                    and auto_apply_tags is not null
+                    and protect_manual_changes is not null
+                    and published_at is null
+                    and publication_operation_key is null
+                    and publication_request_digest is null
+                    and published_transaction_count is null
+                    and receipt_expires_at is null
+                )
+                or
+                (
+                    status = 'PUBLISHED'
+                    and account_id is null
+                    and next_row_position is null
+                    and auto_apply_descriptions is null
+                    and auto_apply_categories is null
+                    and auto_apply_tags is null
+                    and protect_manual_changes is null
+                    and published_at is not null
+                    and publication_operation_key is not null
+                    and publication_request_digest is not null
+                    and published_transaction_count is not null and published_transaction_count &gt;= 0
+                    and receipt_expires_at is not null and receipt_expires_at &gt; published_at
+                )
+            )
+        </sql>
+    </changeSet>
+
+    <!-- Candidate fields only retain current draft state and the batch membership/order needed by an OPEN workspace. -->
+    <changeSet id="20261015120000-2" author="codex">
+        <addColumn tableName="transaction_candidate">
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="category_manual_clear" type="boolean" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="description_source" type="varchar(255)"/>
+            <column name="source_description" type="varchar(500)"/>
+            <column name="transaction_batch_id" type="bigint"/>
+            <column name="row_position" type="bigint"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="transaction_candidate" baseColumnNames="transaction_batch_id"
+                                 constraintName="fk_transaction_candidate__transaction_batch_id"
+                                 referencedTableName="transaction_batch" referencedColumnNames="id" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="transaction_candidate" columnNames="transaction_batch_id,row_position"
+                             constraintName="ux_transaction_candidate_batch_row_position"/>
+        <sql>alter table transaction_candidate add constraint ck_transaction_candidate_batch_membership check ((transaction_batch_id is null and row_position is null) or (transaction_batch_id is not null and row_position is not null))</sql>
+    </changeSet>
+
+    <!-- Negative tag intent and bounded repair evidence are candidate-owned and have no catalog cascade. -->
+    <changeSet id="20261015120000-3" author="codex">
+        <createTable tableName="transaction_candidate_tag_suppression" remarks="Temporary candidate tag suppression; deleted with its candidate.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="transaction_candidate_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="tag_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="transaction_candidate_tag_suppression" columnNames="transaction_candidate_id,tag_id"
+                             constraintName="ux_candidate_tag_suppression"/>
+        <addForeignKeyConstraint baseTableName="transaction_candidate_tag_suppression" baseColumnNames="transaction_candidate_id"
+                                 constraintName="fk_candidate_tag_suppression__candidate" referencedTableName="transaction_candidate"
+                                 referencedColumnNames="id" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="transaction_candidate_tag_suppression" baseColumnNames="tag_id"
+                                 constraintName="fk_candidate_tag_suppression__tag" referencedTableName="tag" referencedColumnNames="id"/>
+
+        <createTable tableName="transaction_candidate_input_issue" remarks="Bounded repair evidence for an unrepresentable candidate input.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="field" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="reason_code" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="submitted_value" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="transaction_candidate_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="transaction_candidate_input_issue" columnNames="transaction_candidate_id,field"
+                             constraintName="ux_candidate_input_issue_field"/>
+        <addForeignKeyConstraint baseTableName="transaction_candidate_input_issue" baseColumnNames="transaction_candidate_id"
+                                 constraintName="fk_candidate_input_issue__candidate" referencedTableName="transaction_candidate"
+                                 referencedColumnNames="id" onDelete="CASCADE"/>
+    </changeSet>
+
+    <!-- Foundation only: idempotency data for a later CSV append command, never a file archive. -->
+    <changeSet id="20261015120000-4" author="codex">
+        <createTable tableName="transaction_batch_append_operation" remarks="Bounded future append idempotency receipt without file or raw-row retention.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="operation_key" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="request_digest" type="varchar(128)"><constraints nullable="false"/></column>
+            <column name="accepted_candidate_count" type="integer"><constraints nullable="false"/></column>
+            <column name="display_filename" type="varchar(255)"/>
+            <column name="accepted_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="transaction_batch_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="transaction_batch_append_operation" columnNames="transaction_batch_id,operation_key"
+                             constraintName="ux_batch_append_operation_key"/>
+        <addForeignKeyConstraint baseTableName="transaction_batch_append_operation" baseColumnNames="transaction_batch_id"
+                                 constraintName="fk_batch_append_operation__batch" referencedTableName="transaction_batch"
+                                 referencedColumnNames="id" onDelete="CASCADE"/>
+    </changeSet>
+</databaseChangeLog>

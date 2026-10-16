@@ -38,7 +38,14 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "ingestionRecord", ignore = true)
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "categorySource", ignore = true)
+    @Mapping(target = "categoryManualClear", ignore = true)
+    @Mapping(target = "descriptionSource", ignore = true)
+    @Mapping(target = "sourceDescription", ignore = true)
+    @Mapping(target = "transactionBatch", ignore = true)
+    @Mapping(target = "rowPosition", ignore = true)
     @Mapping(target = "tagAssociations", ignore = true)
+    @Mapping(target = "tagSuppressions", ignore = true)
+    @Mapping(target = "inputIssues", ignore = true)
     @Mapping(target = "removeTags", ignore = true)
     TransactionCandidate toEntity(TransactionCandidateDTO transactionCandidateDTO);
 
@@ -51,7 +58,14 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "ingestionRecord", ignore = true)
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "categorySource", ignore = true)
+    @Mapping(target = "categoryManualClear", ignore = true)
+    @Mapping(target = "descriptionSource", ignore = true)
+    @Mapping(target = "sourceDescription", ignore = true)
+    @Mapping(target = "transactionBatch", ignore = true)
+    @Mapping(target = "rowPosition", ignore = true)
     @Mapping(target = "tagAssociations", ignore = true)
+    @Mapping(target = "tagSuppressions", ignore = true)
+    @Mapping(target = "inputIssues", ignore = true)
     @Mapping(target = "removeTags", ignore = true)
     void partialUpdate(@MappingTarget TransactionCandidate entity, TransactionCandidateDTO dto);
 

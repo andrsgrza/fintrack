@@ -31,52 +31,57 @@ class TransactionCandidateClassificationProvenanceMigrationIT {
     @Test
     void migrationConservativelyBackfillsProvenanceAndPreservesRelationIntegrity() throws Exception {
         String schema = "tc_provenance_" + UUID.randomUUID().toString().replace("-", "");
-        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+        try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(true);
-            statement.execute("create schema " + schema);
-            statement.execute("set search_path to " + schema);
-            createPreProvenanceSchema(statement);
-            insertHistoricalData(statement);
+            try (
+                MigrationTestSchemaScope schemaScope = MigrationTestSchemaScope.open(connection, schema);
+                Statement statement = connection.createStatement()
+            ) {
+                createPreProvenanceSchema(statement);
+                insertHistoricalData(statement);
 
-            Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection));
-            database.setDefaultSchemaName(schema);
-            new Liquibase(
-                "config/liquibase/changelog/20260915160000_transaction_candidate_classification_provenance.xml",
-                new ClassLoaderResourceAccessor(),
-                database
-            ).update(new Contexts(), new LabelExpression());
-            connection.commit();
-            connection.setAutoCommit(true);
+                Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection));
+                database.setDefaultSchemaName(schemaScope.schema());
+                new Liquibase(
+                    "config/liquibase/changelog/20260915160000_transaction_candidate_classification_provenance.xml",
+                    new ClassLoaderResourceAccessor(),
+                    database
+                ).update(new Contexts(), new LabelExpression());
+                connection.commit();
+                connection.setAutoCommit(true);
 
-            assertThat(column(statement, "select category_source from transaction_candidate where id = 1")).isEqualTo("MANUAL");
-            assertThat(column(statement, "select category_source from transaction_candidate where id = 2")).isEqualTo("AUTOMATIC");
-            assertThat(column(statement, "select category_source from transaction_candidate where id = 3")).isNull();
-            assertThat(
-                column(statement, "select source from rel_transaction_candidate__tags where transaction_candidate_id = 1 and tags_id = 11")
-            ).isEqualTo("MANUAL");
-            assertThat(
-                column(statement, "select source from rel_transaction_candidate__tags where transaction_candidate_id = 2 and tags_id = 12")
-            ).isEqualTo("AUTOMATIC");
-            assertThat(column(statement, "select count(*) from rel_transaction_candidate__tags where id is null")).isEqualTo("0");
+                assertThat(column(statement, "select category_source from transaction_candidate where id = 1")).isEqualTo("MANUAL");
+                assertThat(column(statement, "select category_source from transaction_candidate where id = 2")).isEqualTo("AUTOMATIC");
+                assertThat(column(statement, "select category_source from transaction_candidate where id = 3")).isNull();
+                assertThat(
+                    column(
+                        statement,
+                        "select source from rel_transaction_candidate__tags where transaction_candidate_id = 1 and tags_id = 11"
+                    )
+                ).isEqualTo("MANUAL");
+                assertThat(
+                    column(
+                        statement,
+                        "select source from rel_transaction_candidate__tags where transaction_candidate_id = 2 and tags_id = 12"
+                    )
+                ).isEqualTo("AUTOMATIC");
+                assertThat(column(statement, "select count(*) from rel_transaction_candidate__tags where id is null")).isEqualTo("0");
 
-            assertConstraintRejects(
-                statement,
-                "insert into rel_transaction_candidate__tags (id, transaction_candidate_id, tags_id, source) values (9001, 1, 11, 'MANUAL')",
-                "23505"
-            );
-            assertConstraintRejects(
-                statement,
-                "insert into rel_transaction_candidate__tags (id, transaction_candidate_id, tags_id, source) values (9002, 1, 12, null)",
-                "23502"
-            );
-            assertConstraintRejects(
-                statement,
-                "insert into rel_transaction_candidate__tags (id, transaction_candidate_id, tags_id, source) values (9003, 9999, 11, 'AUTOMATIC')",
-                "23503"
-            );
-        } finally {
-            try (Connection cleanupConnection = dataSource.getConnection(); Statement cleanup = cleanupConnection.createStatement()) {
-                cleanup.execute("drop schema if exists " + schema + " cascade");
+                assertConstraintRejects(
+                    statement,
+                    "insert into rel_transaction_candidate__tags (id, transaction_candidate_id, tags_id, source) values (9001, 1, 11, 'MANUAL')",
+                    "23505"
+                );
+                assertConstraintRejects(
+                    statement,
+                    "insert into rel_transaction_candidate__tags (id, transaction_candidate_id, tags_id, source) values (9002, 1, 12, null)",
+                    "23502"
+                );
+                assertConstraintRejects(
+                    statement,
+                    "insert into rel_transaction_candidate__tags (id, transaction_candidate_id, tags_id, source) values (9003, 9999, 11, 'AUTOMATIC')",
+                    "23503"
+                );
             }
         }
     }

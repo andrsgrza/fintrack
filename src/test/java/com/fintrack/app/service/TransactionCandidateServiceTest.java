@@ -15,6 +15,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionBatch;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
@@ -1034,6 +1035,23 @@ class TransactionCandidateServiceTest {
         assertThatThrownBy(() -> transactionCandidateService.update(dto))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Workflow-linked candidates are managed by workflow commands");
+    }
+
+    @Test
+    void genericUpdateRejectsBatchCandidate() {
+        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
+        existing.setTransactionBatch(new TransactionBatch());
+        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
+        dto.setId(1L);
+        dto.setDescription("Patched");
+
+        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() ->
+            transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"description\":\"Patched\"}"))
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Batch candidates are managed by batch commands");
     }
 
     @Test

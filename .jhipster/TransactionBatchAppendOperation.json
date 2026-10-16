@@ -1,0 +1,39 @@
+{
+  "annotations": { "changelogDate": "20261015120000" },
+  "applications": ["fintrack"],
+  "documentation": "Internal future append idempotency receipt. It contains no CSV bytes nor raw candidate data.",
+  "dto": "no",
+  "fields": [
+    {
+      "fieldName": "operationKey",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "requestDigest",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "128"
+    },
+    { "fieldName": "acceptedCandidateCount", "fieldType": "Integer", "fieldValidateRules": ["required"] },
+    { "fieldName": "displayFilename", "fieldType": "String", "fieldValidateRules": ["maxlength"], "fieldValidateRulesMaxlength": "255" },
+    { "fieldName": "acceptedAt", "fieldType": "Instant", "fieldValidateRules": ["required"] }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "TransactionBatchAppendOperation",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionBatch",
+      "relationshipName": "transactionBatch",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

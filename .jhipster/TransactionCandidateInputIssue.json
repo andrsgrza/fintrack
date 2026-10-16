@@ -1,0 +1,42 @@
+{
+  "annotations": { "changelogDate": "20261015120000" },
+  "applications": ["fintrack"],
+  "documentation": "Internal bounded repair evidence for a candidate field; not a raw row or file error archive.",
+  "dto": "no",
+  "fields": [
+    {
+      "fieldName": "field",
+      "fieldType": "TransactionCandidateInputIssueField",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "TRANSACTION_DATE,POSTING_DATE,AMOUNT,CURRENCY"
+    },
+    {
+      "fieldName": "reasonCode",
+      "fieldType": "TransactionCandidateInputIssueReason",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "MALFORMED_VALUE,UNSUPPORTED_CURRENCY,CURRENCY_MISMATCH"
+    },
+    {
+      "fieldName": "submittedValue",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "TransactionCandidateInputIssue",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionCandidate",
+      "relationshipName": "transactionCandidate",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

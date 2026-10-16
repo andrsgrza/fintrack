@@ -42,6 +42,22 @@
       "fieldValues": "AUTOMATIC,MANUAL"
     },
     {
+      "fieldName": "categoryManualClear",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "descriptionSource",
+      "fieldType": "TransactionCandidateDescriptionSource",
+      "fieldValues": "SOURCE,AUTOMATIC,MANUAL"
+    },
+    {
+      "fieldName": "sourceDescription",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
       "fieldName": "transactionDate",
       "fieldType": "LocalDate"
     },
@@ -108,6 +124,15 @@
     {
       "fieldName": "failedAt",
       "fieldType": "Instant"
+    },
+    {
+      "fieldName": "version",
+      "fieldType": "Long",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "rowPosition",
+      "fieldType": "Long"
     }
   ],
   "incrementalChangelog": false,
@@ -151,6 +176,13 @@
       "relationshipName": "ingestionRecord",
       "relationshipSide": "left",
       "relationshipType": "one-to-one"
+    },
+    {
+      "otherEntityField": "id",
+      "otherEntityName": "transactionBatch",
+      "relationshipName": "transactionBatch",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
     }
   ],
   "searchEngine": "no",

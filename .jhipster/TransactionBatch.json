@@ -1,0 +1,56 @@
+{
+  "annotations": { "changelogDate": "20261015120000" },
+  "applications": ["fintrack"],
+  "documentation": "Internal temporary workspace for common transaction candidates. It retains bounded future publish receipt fields only; no CSV or ledger history.",
+  "dto": "no",
+  "fields": [
+    { "fieldName": "status", "fieldType": "TransactionBatchStatus", "fieldValidateRules": ["required"], "fieldValues": "OPEN,PUBLISHED" },
+    { "fieldName": "version", "fieldType": "Long", "fieldValidateRules": ["required"] },
+    { "fieldName": "nextRowPosition", "fieldType": "Long" },
+    { "fieldName": "autoApplyDescriptions", "fieldType": "Boolean" },
+    { "fieldName": "autoApplyCategories", "fieldType": "Boolean" },
+    { "fieldName": "autoApplyTags", "fieldType": "Boolean" },
+    { "fieldName": "protectManualChanges", "fieldType": "Boolean" },
+    { "fieldName": "createdAt", "fieldType": "Instant", "fieldValidateRules": ["required"] },
+    { "fieldName": "updatedAt", "fieldType": "Instant", "fieldValidateRules": ["required"] },
+    { "fieldName": "publishedAt", "fieldType": "Instant" },
+    {
+      "fieldName": "publicationOperationKey",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "publicationRequestDigest",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "128"
+    },
+    { "fieldName": "publishedTransactionCount", "fieldType": "Integer" },
+    { "fieldName": "receiptExpiresAt", "fieldType": "Instant" }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "TransactionBatch",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityIsBuiltIn": true,
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "relationshipName": "account",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

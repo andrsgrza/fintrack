@@ -19,6 +19,7 @@ import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.mapper.FinancialAccountMapper;
@@ -75,6 +76,9 @@ class FinancialAccountServiceTest {
 
     @Mock
     private TransactionCandidateRepository transactionCandidateRepository;
+
+    @Mock
+    private TransactionBatchRepository transactionBatchRepository;
 
     @InjectMocks
     private FinancialAccountService financialAccountService;
@@ -275,6 +279,22 @@ class FinancialAccountServiceTest {
         verify(financialSubscriptionRepository).clearAccountByAccountId(10L);
         verify(creditAccountDetailsRepository).deleteByAccountId(10L);
         verify(financialAccountRepository).deleteById(10L);
+    }
+
+    @Test
+    void deleteShouldRejectWhenAccountIsUsedByTransactionBatch() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(
+            Optional.of(financialAccount)
+        );
+        when(transactionBatchRepository.existsByAccountId(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> financialAccountService.delete(10L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Account cannot be deleted because it is used by transaction batches.");
+        verify(transactionIngestionService, never()).deleteAllForAccount(any());
+        verify(financialAccountRepository, never()).deleteById(any());
     }
 
     @Test

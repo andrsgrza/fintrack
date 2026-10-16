@@ -5,6 +5,7 @@ import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -37,6 +38,11 @@ public class TransactionCandidate implements Serializable {
     @Column(name = "id")
     private Long id;
 
+    /** Optimistic concurrency token for one candidate and its mutable child aggregate. */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "source", nullable = false)
@@ -66,6 +72,20 @@ public class TransactionCandidate implements Serializable {
     @Enumerated(EnumType.STRING)
     @Column(name = "category_source")
     private TransactionCandidateClassificationSource categorySource;
+
+    /** Explicit manual clear prevents later automatic category filling while protection is enabled. */
+    @NotNull
+    @Column(name = "category_manual_clear", nullable = false)
+    private Boolean categoryManualClear = false;
+
+    /** Current-description provenance. sourceDescription is reserved for future CSV rows only. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "description_source")
+    private TransactionCandidateDescriptionSource descriptionSource;
+
+    @Size(max = 500)
+    @Column(name = "source_description", length = 500)
+    private String sourceDescription;
 
     @Column(name = "transaction_date")
     private LocalDate transactionDate;
@@ -143,8 +163,22 @@ public class TransactionCandidate implements Serializable {
     @JsonIgnoreProperties(value = { "financialTransaction", "transactionIngestion" }, allowSetters = true)
     private IngestionRecord ingestionRecord;
 
+    /** Optional membership in the new batch workspace. A standalone candidate has no batch and no row position. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "transaction_batch_id")
+    private TransactionBatch transactionBatch;
+
+    @Column(name = "row_position")
+    private Long rowPosition;
+
     @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<TransactionCandidateTag> tagAssociations = new HashSet<>();
+
+    @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TransactionCandidateTagSuppression> tagSuppressions = new HashSet<>();
+
+    @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TransactionCandidateInputIssue> inputIssues = new HashSet<>();
 
     public Long getId() {
         return this.id;
@@ -157,6 +191,10 @@ public class TransactionCandidate implements Serializable {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public TransactionCandidateSource getSource() {
@@ -230,6 +268,30 @@ public class TransactionCandidate implements Serializable {
 
     public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
         this.categorySource = categorySource;
+    }
+
+    public Boolean getCategoryManualClear() {
+        return categoryManualClear;
+    }
+
+    public void setCategoryManualClear(Boolean categoryManualClear) {
+        this.categoryManualClear = Boolean.TRUE.equals(categoryManualClear);
+    }
+
+    public TransactionCandidateDescriptionSource getDescriptionSource() {
+        return descriptionSource;
+    }
+
+    public void setDescriptionSource(TransactionCandidateDescriptionSource descriptionSource) {
+        this.descriptionSource = descriptionSource;
+    }
+
+    public String getSourceDescription() {
+        return sourceDescription;
+    }
+
+    public void setSourceDescription(String sourceDescription) {
+        this.sourceDescription = sourceDescription;
     }
 
     public LocalDate getTransactionDate() {
@@ -482,6 +544,25 @@ public class TransactionCandidate implements Serializable {
         this.ingestionRecord = ingestionRecord;
     }
 
+    public TransactionBatch getTransactionBatch() {
+        return transactionBatch;
+    }
+
+    public void setTransactionBatch(TransactionBatch transactionBatch) {
+        this.transactionBatch = transactionBatch;
+        if (transactionBatch == null) {
+            this.rowPosition = null;
+        }
+    }
+
+    public Long getRowPosition() {
+        return rowPosition;
+    }
+
+    public void setRowPosition(Long rowPosition) {
+        this.rowPosition = rowPosition;
+    }
+
     /**
      * Derived compatibility view of the explicit candidate-tag associations.
      *
@@ -566,10 +647,46 @@ public class TransactionCandidate implements Serializable {
             .orElse(null);
     }
 
+    public Set<TransactionCandidateTagSuppression> getTagSuppressions() {
+        return tagSuppressions;
+    }
+
+    public boolean isTagSuppressed(Tag tag) {
+        return tagSuppressions.stream().anyMatch(suppression -> tag != null && tag.equals(suppression.getTag()));
+    }
+
+    public void suppressTag(Tag tag) {
+        if (tag == null || isTagSuppressed(tag)) return;
+        TransactionCandidateTagSuppression suppression = new TransactionCandidateTagSuppression();
+        suppression.setTransactionCandidate(this);
+        suppression.setTag(tag);
+        tagSuppressions.add(suppression);
+    }
+
+    public void removeTagSuppression(Tag tag) {
+        tagSuppressions.removeIf(suppression -> tag != null && tag.equals(suppression.getTag()));
+    }
+
+    public Set<TransactionCandidateInputIssue> getInputIssues() {
+        return inputIssues;
+    }
+
+    public void addOrReplaceInputIssue(TransactionCandidateInputIssue issue) {
+        inputIssues.removeIf(existing -> existing.getField() == issue.getField());
+        issue.setTransactionCandidate(this);
+        inputIssues.add(issue);
+    }
+
+    public void removeInputIssue(com.fintrack.app.domain.enumeration.TransactionCandidateInputIssueField field) {
+        inputIssues.removeIf(issue -> issue.getField() == field);
+    }
+
     public boolean hasManualClassification() {
         return (
+            Boolean.TRUE.equals(categoryManualClear) ||
             categorySource == TransactionCandidateClassificationSource.MANUAL ||
-            tagAssociations.stream().anyMatch(association -> association.getSource() == TransactionCandidateClassificationSource.MANUAL)
+            tagAssociations.stream().anyMatch(association -> association.getSource() == TransactionCandidateClassificationSource.MANUAL) ||
+            !tagSuppressions.isEmpty()
         );
     }
 

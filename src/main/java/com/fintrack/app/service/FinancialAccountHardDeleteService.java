@@ -23,6 +23,7 @@ import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
+import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
@@ -56,6 +57,7 @@ public class FinancialAccountHardDeleteService {
     private final ApiIngestionRepository apiIngestionRepository;
     private final FinancialTransactionRepository financialTransactionRepository;
     private final TransactionCandidateRepository transactionCandidateRepository;
+    private final TransactionBatchRepository transactionBatchRepository;
     private final TransactionIngestionRepository transactionIngestionRepository;
     private final IngestionRecordRepository ingestionRecordRepository;
     private final InternalTransferRepository internalTransferRepository;
@@ -71,6 +73,7 @@ public class FinancialAccountHardDeleteService {
         ApiIngestionRepository apiIngestionRepository,
         FinancialTransactionRepository financialTransactionRepository,
         TransactionCandidateRepository transactionCandidateRepository,
+        TransactionBatchRepository transactionBatchRepository,
         TransactionIngestionRepository transactionIngestionRepository,
         IngestionRecordRepository ingestionRecordRepository,
         InternalTransferRepository internalTransferRepository,
@@ -85,6 +88,7 @@ public class FinancialAccountHardDeleteService {
         this.apiIngestionRepository = apiIngestionRepository;
         this.financialTransactionRepository = financialTransactionRepository;
         this.transactionCandidateRepository = transactionCandidateRepository;
+        this.transactionBatchRepository = transactionBatchRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.ingestionRecordRepository = ingestionRecordRepository;
         this.internalTransferRepository = internalTransferRepository;
@@ -204,7 +208,9 @@ public class FinancialAccountHardDeleteService {
         Map<FinancialAccountDeletionBlockerCode, Set<Long>> blockers
     ) {
         for (TransactionCandidate candidate : candidates) {
-            if (candidate.getSource() == TransactionCandidateSource.API_IMPORT) {
+            if (candidate.getTransactionBatch() != null) {
+                validateBatchCandidate(account, candidate, blockers);
+            } else if (candidate.getSource() == TransactionCandidateSource.API_IMPORT) {
                 addBlocker(blockers, FinancialAccountDeletionBlockerCode.UNSUPPORTED_API_IMPORT_CANDIDATE, candidate.getId());
             } else if (candidate.getSource() == TransactionCandidateSource.MANUAL) {
                 validateManualCandidate(account, candidate, blockers);
@@ -213,6 +219,27 @@ public class FinancialAccountHardDeleteService {
             } else {
                 addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE, candidate.getId());
             }
+        }
+    }
+
+    private void validateBatchCandidate(
+        FinancialAccount account,
+        TransactionCandidate candidate,
+        Map<FinancialAccountDeletionBlockerCode, Set<Long>> blockers
+    ) {
+        boolean validPrePost =
+            candidate.getStatus() == TransactionCandidateStatus.DRAFT ||
+            candidate.getStatus() == TransactionCandidateStatus.READY_TO_POST ||
+            candidate.getStatus() == TransactionCandidateStatus.FAILED;
+        if (
+            candidate.getTransactionIngestion() != null ||
+            candidate.getIngestionRecord() != null ||
+            candidate.getTransactionBatch().getAccount() == null ||
+            !belongsToAccount(candidate.getAccount(), account) ||
+            !belongsToAccount(candidate.getTransactionBatch().getAccount(), account) ||
+            !validPrePost
+        ) {
+            addBlocker(blockers, FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE, candidate.getId());
         }
     }
 
@@ -371,6 +398,7 @@ public class FinancialAccountHardDeleteService {
         // Candidates own FKs to their pre-post workflow records and tag associations.
         transactionCandidateRepository.deleteTagLinksByAccountId(accountId);
         transactionCandidateRepository.deleteByAccountId(accountId);
+        transactionBatchRepository.deleteByAccountId(accountId);
         ingestionRecordRepository.deleteByTransactionIngestionAccountId(accountId);
 
         financialTransactionRepository.deleteTagLinksByAccountId(accountId);

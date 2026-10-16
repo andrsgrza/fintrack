@@ -3020,37 +3020,79 @@ class FinancialAccountResourceIT {
                 record.getId(),
                 budget.getId(),
                 subscription.getId(),
+                tag.getId(),
             };
         });
         Long accountId = aggregateIds[0];
-
-        doThrow(new IllegalStateException("forced late hard-delete cleanup failure"))
-            .when(creditAccountDetailsRepository)
-            .deleteByAccountId(accountId);
+        Throwable testFailure = null;
 
         try {
-            assertThatThrownBy(() -> financialAccountHardDeleteService.hardDelete(accountId))
-                .isInstanceOf(org.springframework.dao.InvalidDataAccessApiUsageException.class)
-                .hasRootCauseMessage("forced late hard-delete cleanup failure");
+            doThrow(new IllegalStateException("forced late hard-delete cleanup failure"))
+                .when(creditAccountDetailsRepository)
+                .deleteByAccountId(accountId);
+
+            try {
+                assertThatThrownBy(() -> financialAccountHardDeleteService.hardDelete(accountId))
+                    .isInstanceOf(org.springframework.dao.InvalidDataAccessApiUsageException.class)
+                    .hasRootCauseMessage("forced late hard-delete cleanup failure");
+            } finally {
+                reset(creditAccountDetailsRepository);
+            }
+
+            transactionTemplate.executeWithoutResult(status -> {
+                em.clear();
+                assertThat(financialAccountRepository.existsById(accountId)).isTrue();
+                assertThat(em.find(FinancialTransaction.class, aggregateIds[2])).isNotNull();
+                assertThat(transactionCandidateRepository.findById(aggregateIds[3])).isPresent();
+                assertThat(em.find(TransactionIngestion.class, aggregateIds[4])).isNotNull();
+                assertThat(em.find(IngestionRecord.class, aggregateIds[5])).isNotNull();
+                assertThat(em.find(Budget.class, aggregateIds[6]).getAccounts()).extracting(FinancialAccount::getId).contains(accountId);
+                assertThat(em.find(FinancialSubscription.class, aggregateIds[7]).getAccount().getId()).isEqualTo(accountId);
+            });
+        } catch (RuntimeException | Error failure) {
+            testFailure = failure;
+            throw failure;
         } finally {
             reset(creditAccountDetailsRepository);
+            try {
+                cleanupHardDeleteRollbackFixture(transactionTemplate, aggregateIds);
+                assertHardDeleteRollbackFixtureIsGone(transactionTemplate, aggregateIds);
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (testFailure != null) {
+                    testFailure.addSuppressed(cleanupFailure);
+                } else {
+                    throw cleanupFailure;
+                }
+            }
         }
+    }
 
+    private void cleanupHardDeleteRollbackFixture(TransactionTemplate transactionTemplate, Long[] aggregateIds) {
         transactionTemplate.executeWithoutResult(status -> {
-            em.clear();
-            assertThat(financialAccountRepository.existsById(accountId)).isTrue();
-            assertThat(em.find(FinancialTransaction.class, aggregateIds[2])).isNotNull();
-            assertThat(transactionCandidateRepository.findById(aggregateIds[3])).isPresent();
-            assertThat(em.find(TransactionIngestion.class, aggregateIds[4])).isNotNull();
-            assertThat(em.find(IngestionRecord.class, aggregateIds[5])).isNotNull();
-            assertThat(em.find(Budget.class, aggregateIds[6]).getAccounts()).extracting(FinancialAccount::getId).contains(accountId);
-            assertThat(em.find(FinancialSubscription.class, aggregateIds[7]).getAccount().getId()).isEqualTo(accountId);
-        });
-
-        transactionTemplate.executeWithoutResult(status -> {
-            assertThat(financialAccountHardDeleteService.hardDelete(accountId)).isTrue();
+            assertThat(financialAccountHardDeleteService.hardDelete(aggregateIds[0])).isTrue();
             budgetRepository.deleteAccountLinksByAccountId(aggregateIds[1]);
             financialAccountRepository.deleteById(aggregateIds[1]);
+            em.flush();
+            em.clear();
+
+            Tag tag = em.find(Tag.class, aggregateIds[8]);
+            if (tag != null) {
+                em.remove(tag);
+            }
+            FinancialSubscription subscription = em.find(FinancialSubscription.class, aggregateIds[7]);
+            if (subscription != null) {
+                em.remove(subscription);
+            }
+        });
+    }
+
+    private void assertHardDeleteRollbackFixtureIsGone(TransactionTemplate transactionTemplate, Long[] aggregateIds) {
+        transactionTemplate.executeWithoutResult(status -> {
+            em.clear();
+            assertThat(em.find(Tag.class, aggregateIds[8])).isNull();
+            assertThat(em.find(FinancialSubscription.class, aggregateIds[7])).isNull();
+            assertThat(financialAccountRepository.existsById(aggregateIds[0])).isFalse();
+            assertThat(financialAccountRepository.existsById(aggregateIds[1])).isFalse();
         });
     }
 

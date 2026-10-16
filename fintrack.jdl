@@ -109,6 +109,30 @@ enum TransactionCandidateClassificationSource {
   MANUAL
 }
 
+enum TransactionCandidateDescriptionSource {
+  SOURCE,
+  AUTOMATIC,
+  MANUAL
+}
+
+enum TransactionCandidateInputIssueField {
+  TRANSACTION_DATE,
+  POSTING_DATE,
+  AMOUNT,
+  CURRENCY
+}
+
+enum TransactionCandidateInputIssueReason {
+  MALFORMED_VALUE,
+  UNSUPPORTED_CURRENCY,
+  CURRENCY_MISMATCH
+}
+
+enum TransactionBatchStatus {
+  OPEN,
+  PUBLISHED
+}
+
 enum CategoryType {
   EXPENSE,
   INCOME,
@@ -304,6 +328,9 @@ entity TransactionCandidate {
   descriptionReviewStatus TransactionCandidateDescriptionReviewStatus required
   classificationReviewStatus TransactionCandidateClassificationReviewStatus required
   categorySource TransactionCandidateClassificationSource
+  categoryManualClear Boolean required
+  descriptionSource TransactionCandidateDescriptionSource
+  sourceDescription String maxlength(500)
   transactionDate LocalDate
   postingDate LocalDate
   description String maxlength(500)
@@ -318,10 +345,50 @@ entity TransactionCandidate {
   updatedAt Instant required
   cancelledAt Instant
   failedAt Instant
+  version Long required
+  rowPosition Long
 }
 
 entity TransactionCandidateTag {
   source TransactionCandidateClassificationSource required
+}
+
+/** A temporary owned workspace. Receipt fields retain only an expiring technical publish acknowledgement. */
+entity TransactionBatch {
+  status TransactionBatchStatus required
+  version Long required
+  nextRowPosition Long
+  autoApplyDescriptions Boolean
+  autoApplyCategories Boolean
+  autoApplyTags Boolean
+  protectManualChanges Boolean
+  createdAt Instant required
+  updatedAt Instant required
+  publishedAt Instant
+  publicationOperationKey String maxlength(100)
+  publicationRequestDigest String maxlength(128)
+  publishedTransactionCount Integer
+  receiptExpiresAt Instant
+}
+
+/** A negative manual tag choice. Deleted with its candidate or when the tag is re-added. */
+entity TransactionCandidateTagSuppression {
+}
+
+/** Bounded repair evidence; it is not an archive of a source row. */
+entity TransactionCandidateInputIssue {
+  field TransactionCandidateInputIssueField required
+  reasonCode TransactionCandidateInputIssueReason required
+  submittedValue String required maxlength(100)
+}
+
+/** Future append idempotency receipt. It stores no file nor row payload. */
+entity TransactionBatchAppendOperation {
+  operationKey String required maxlength(100)
+  requestDigest String required maxlength(128)
+  acceptedCandidateCount Integer required
+  displayFilename String maxlength(255)
+  acceptedAt Instant required
 }
 
 /**
@@ -645,6 +712,13 @@ relationship OneToOne {
 
 relationship ManyToOne {
   IngestionRecord{transactionIngestion(id) required} to TransactionIngestion{records}
+  TransactionBatch{user(login) required} to User with builtInEntity
+  TransactionBatch{account(name)} to FinancialAccount
+  TransactionCandidate{transactionBatch(id)} to TransactionBatch
+  TransactionCandidateTagSuppression{transactionCandidate required} to TransactionCandidate
+  TransactionCandidateTagSuppression{tag required} to Tag
+  TransactionCandidateInputIssue{transactionCandidate required} to TransactionCandidate
+  TransactionBatchAppendOperation{transactionBatch required} to TransactionBatch
 }
 
 /**

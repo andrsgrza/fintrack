@@ -1061,12 +1061,18 @@ public class TransactionCandidateService {
         if (existing.getSource() != TransactionCandidateSource.MANUAL) {
             throw new IllegalArgumentException("Manual draft command only supports manual transaction candidates");
         }
+        if (existing.getTransactionBatch() != null) {
+            throw new IllegalArgumentException("Batch candidates must be changed through batch commands");
+        }
         rejectFinalMutation(existing);
     }
 
     private void rejectManualRuleReviewCommand(TransactionCandidate existing) {
         if (existing.getSource() != TransactionCandidateSource.MANUAL) {
             throw new IllegalArgumentException("Rule preview only supports manual transaction candidates");
+        }
+        if (existing.getTransactionBatch() != null) {
+            throw new IllegalArgumentException("Batch candidates must be reviewed through batch commands");
         }
         if (existing.getStatus() == TransactionCandidateStatus.CANCELLED || existing.getStatus() == TransactionCandidateStatus.FAILED) {
             throw new IllegalArgumentException("Final transaction candidates cannot use rule preview");
@@ -1076,6 +1082,9 @@ public class TransactionCandidateService {
     private void rejectManualPostMutation(TransactionCandidate existing) {
         if (existing.getSource() != TransactionCandidateSource.MANUAL) {
             throw new IllegalArgumentException("Manual post command only supports manual transaction candidates");
+        }
+        if (existing.getTransactionBatch() != null) {
+            throw new IllegalArgumentException("Batch candidates cannot be posted through the standalone command");
         }
         if (existing.getTransactionIngestion() != null || existing.getIngestionRecord() != null) {
             throw new IllegalArgumentException("Manual candidates cannot be linked to ingestion records");
@@ -1204,6 +1213,9 @@ public class TransactionCandidateService {
     }
 
     private void rejectGenericCrudMutableCandidate(TransactionCandidate existing) {
+        if (existing.getTransactionBatch() != null) {
+            throw new IllegalArgumentException("Batch candidates are managed by batch commands");
+        }
         if (existing.getSource() == TransactionCandidateSource.FILE_IMPORT) {
             throw new IllegalArgumentException("File import candidates are managed by ingestion workflow commands");
         }
@@ -1231,6 +1243,9 @@ public class TransactionCandidateService {
     }
 
     private void rejectGenericDelete(TransactionCandidate candidate) {
+        if (candidate.getTransactionBatch() != null) {
+            throw new IllegalArgumentException("Batch candidates must be deleted through batch commands");
+        }
         if (candidate.getStatus() == TransactionCandidateStatus.CANCELLED) {
             throw new IllegalArgumentException("Cancelled transaction candidates cannot be deleted");
         }
