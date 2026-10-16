@@ -43,7 +43,11 @@ public class SqlTestContainersSpringContextCustomizerFactory implements ContextC
                             throw new RuntimeException(e);
                         }
                     }
-                    testValues = testValues.and("spring.datasource.url=" + prodTestContainer.getTestContainer().getJdbcUrl() + "");
+                    String jdbcUrl = prodTestContainer.getTestContainer().getJdbcUrl();
+                    // The disposable Testcontainers PostgreSQL instance has no TLS configured. Explicitly disabling
+                    // the driver default avoids a macOS/JDK SSL handshake attempt before Liquibase can migrate it.
+                    String separator = jdbcUrl.contains("?") ? "&" : "?";
+                    testValues = testValues.and("spring.datasource.url=" + jdbcUrl + separator + "sslmode=disable");
                     testValues = testValues.and("spring.datasource.username=" + prodTestContainer.getTestContainer().getUsername());
                     testValues = testValues.and("spring.datasource.password=" + prodTestContainer.getTestContainer().getPassword());
                 }

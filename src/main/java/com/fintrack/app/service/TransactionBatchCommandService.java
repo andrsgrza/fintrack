@@ -16,8 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Internal command boundary for an OPEN TransactionBatch workspace.
  *
  * No public resource calls this service in this slice. It owns batch membership, stable row allocation, manual
- * classification intent, and candidate-level optimistic concurrency; it deliberately does not evaluate rules,
- * append CSV, or publish transactions.
+ * classification intent, and candidate-level optimistic concurrency. CSV append and rule evaluation have their
+ * own internal services; publication remains outside this slice.
  */
 @Service
 @Transactional
@@ -84,7 +84,7 @@ public class TransactionBatchCommandService {
         candidate.setRowPosition(reserveRowPosition(batch));
         candidate.setUser(batch.getUser());
         candidate.setAccount(batch.getAccount());
-        candidate.setSource(TransactionCandidateSource.FILE_IMPORT);
+        candidate.setSource(TransactionCandidateSource.MANUAL);
         candidate.setStatus(TransactionCandidateStatus.DRAFT);
         candidate.setValidationStatus(TransactionCandidateValidationStatus.UNKNOWN);
         candidate.setDescriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.NOT_EVALUATED);
@@ -108,6 +108,12 @@ public class TransactionBatchCommandService {
         TransactionCandidate candidate = lockBatchCandidate(batch, candidateId, command.getExpectedCandidateVersion());
         boolean changed = applyPatch(candidate, command);
         if (changed) {
+            // A repaired monetary value is always expressed in the batch account's canonical currency.  CSV rows
+            // with an explicit foreign/invalid currency deliberately start without a currency snapshot; accepting a
+            // user-entered replacement amount must repair that absence rather than leave the row permanently invalid.
+            if (command.getSignedAmount() != null) {
+                candidate.setCurrencySnapshot(batch.getAccount().getCurrency());
+            }
             normalizeAndDerive(candidate);
             resolveIssuesForAppliedPatch(candidate, command);
             recalculateValidation(candidate);
@@ -519,10 +525,11 @@ public class TransactionBatchCommandService {
             batch.getUser() == null ||
             !Objects.equals(candidate.getUser().getId(), batch.getUser().getId())
         ) throw new IllegalArgumentException("Transaction candidate must remain in its batch account and owner scope");
-        if (candidate.getSourceDescription() != null) throw new IllegalArgumentException(
-            "Manual batch rows cannot retain a source description"
-        );
-        if (candidate.getCurrencySnapshot() != batch.getAccount().getCurrency()) {
+        boolean hasCurrencyIssue = candidate
+            .getInputIssues()
+            .stream()
+            .anyMatch(issue -> issue.getField() == TransactionCandidateInputIssueField.CURRENCY);
+        if (!hasCurrencyIssue && candidate.getCurrencySnapshot() != batch.getAccount().getCurrency()) {
             throw new IllegalArgumentException("Candidate currency must match the batch account currency");
         }
         if (candidate.getCategory() != null) {

@@ -183,6 +183,32 @@ public interface TransactionCandidateRepository
     )
     List<TransactionCandidate> findAllBatchCandidatesWithRelationships(@Param("batchId") Long batchId, @Param("login") String login);
 
+    /** Stable locked aggregate read used only by internal batch publication. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagAssociations.tag.user",
+            "tagSuppressions",
+            "tagSuppressions.tag",
+            "inputIssues",
+        }
+    )
+    @Query(
+        "select distinct candidate from TransactionCandidate candidate " +
+        "where candidate.transactionBatch.id = :batchId and candidate.user.login = :login " +
+        "order by candidate.rowPosition asc, candidate.id asc"
+    )
+    List<TransactionCandidate> findAllBatchCandidatesForPublication(@Param("batchId") Long batchId, @Param("login") String login);
+
+    boolean existsByTransactionBatchId(Long transactionBatchId);
+
     @EntityGraph(
         attributePaths = {
             "user",

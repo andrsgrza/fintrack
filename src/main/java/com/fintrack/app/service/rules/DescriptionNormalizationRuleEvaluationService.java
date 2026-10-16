@@ -45,11 +45,29 @@ public class DescriptionNormalizationRuleEvaluationService {
         if (userLogin == null || userLogin.isBlank()) {
             throw new IllegalArgumentException("User login is required");
         }
-        List<DescriptionNormalizationRule> rules = activeRuleLoader
+        return evaluate(originalDescription, loadActiveRules(userLogin));
+    }
+
+    /**
+     * Loads one stable ordered rule set so an internal batch pass does not re-query all description rules for every
+     * candidate. The returned entities never form a public contract; callers must turn results into DTOs.
+     */
+    public List<DescriptionNormalizationRule> loadActiveRules(String userLogin) {
+        if (userLogin == null || userLogin.isBlank()) {
+            throw new IllegalArgumentException("User login is required");
+        }
+        return activeRuleLoader
             .apply(userLogin)
             .stream()
             .sorted(Comparator.comparing(DescriptionNormalizationRule::getPriority).thenComparing(DescriptionNormalizationRule::getId))
             .toList();
+    }
+
+    public DescriptionNormalizationRuleEvaluationResult evaluate(
+        String originalDescription,
+        List<DescriptionNormalizationRule> orderedActiveRules
+    ) {
+        List<DescriptionNormalizationRule> rules = orderedActiveRules == null ? List.of() : orderedActiveRules;
         for (DescriptionNormalizationRule rule : rules) {
             List<DescriptionNormalizationRuleCondition> conditions = rule
                 .getConditions()

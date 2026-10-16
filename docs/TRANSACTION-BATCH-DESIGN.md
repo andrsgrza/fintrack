@@ -1,10 +1,19 @@
 # Transaction Batch — approved V1 design
 
-**Status:** approved implementation contract  
+**Status:** approved contract; internal Batch-3 publish, receipt, and cleanup foundation implemented
 **Working base:** `96d12027d815e1569df17ab7daf2f5f57269950f`  
 **Scope:** replaces the product FILE-import workflow. It does not migrate or preserve old FILE-ingestion history.
 
-This closes the technical contracts for the approved Transaction Batch product. It is not another architecture comparison and does not authorize entity, service, endpoint, or UI implementation in this preparation slice.
+This closes the technical contracts for the approved Transaction Batch product. The current internal slice implements canonical CSV append, durable idempotency receipts, repairable candidate preparation, persisted batch settings, shared rule preview/application, and atomic internal publication with temporary receipt cleanup. It intentionally exposes no HTTP resource or product UI and does not change or migrate the legacy FILE-ingestion workflow.
+
+## Implemented internal boundary
+
+- `TransactionBatchCsvAppendService` authorizes an owned batch, recognizes an accepted operation-key replay before parsing/version checks, parses with the existing canonical parser, and delegates candidate/receipt persistence to a separate transactional service. The accepted append remains durable if its follow-up evaluation is unavailable; the response reports `EVALUATION_PENDING` rather than pretending it evaluated.
+- Every CSV row becomes a `FILE_IMPORT` batch candidate. Parser errors map to typed, bounded repair issues. In particular, a foreign or invalid submitted currency never receives a substituted account-currency amount.
+- `TransactionBatchRuleEvaluationService` offers a pure preview plus fresh server-validated explicit acceptance and conservative automatic application. Description normalization reads the CSV-only source description; classification reads current effective candidate fields. Automatic application cannot replace a category or remove a tag.
+- `TransactionBatchPublishService` locks account → root → candidates, validates the entire current workspace, maps those persisted decisions directly to final transactions without invoking either rule evaluator, then removes all draft/append state and converts the root to a minimum `PUBLISHED` receipt in the same transaction.
+- `TransactionBatchReceiptCleanupService` deletes only bounded, expired, structurally minimal published receipts. Expiry is always logical first (`now >= receiptExpiresAt`); scheduled cleanup is hygiene, not replay semantics.
+- This internal boundary retains neither submitted CSV bytes nor raw-row/parser/rule snapshots. It is deliberately separate from the legacy `TransactionIngestion`/`FileIngestion`/`IngestionRecord` aggregates.
 
 ## 1. Approved product behavior
 
@@ -250,7 +259,7 @@ Remaining legitimate consumers are standalone MANUAL drafts, direct final Financ
 1. Add batch, candidate-version, issue, suppression, append-operation persistence and focused migrations/constraints.
 2. Add batch creation/reads, append idempotency, repairable CSV preparation, and command guards.
 3. Add settings/evaluation/manual apply with this concurrency/protection policy.
-4. Add atomic publish, receipt replay/expiry, discard/account cleanup, and remove FILE product path.
+4. Add atomic publish, receipt replay/expiry, and bounded receipt cleanup.
 5. Add UI and browser acceptance after service/contracts are covered.
 
 No stage may introduce a legacy FILE compatibility posting bypass.

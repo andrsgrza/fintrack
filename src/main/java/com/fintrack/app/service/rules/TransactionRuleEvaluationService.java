@@ -38,10 +38,20 @@ public class TransactionRuleEvaluationService {
 
     public TransactionRuleEvaluationResult evaluate(TransactionRuleEvaluationInput input) {
         Objects.requireNonNull(input, "input must not be null");
+        return evaluate(input, loadActiveRules(input.userLogin()));
+    }
 
-        List<TransactionRule> rules = transactionRuleRepository.findActiveRulesForEvaluationByUserLoginOrderByPriorityAscIdAsc(
-            input.userLogin()
-        );
+    /** Internal bulk-evaluation hook; callers retain the same matching semantics while avoiding a rule query per row. */
+    public List<TransactionRule> loadActiveRules(String userLogin) {
+        if (userLogin == null || userLogin.isBlank()) {
+            throw new IllegalArgumentException("User login is required");
+        }
+        return transactionRuleRepository.findActiveRulesForEvaluationByUserLoginOrderByPriorityAscIdAsc(userLogin);
+    }
+
+    public TransactionRuleEvaluationResult evaluate(TransactionRuleEvaluationInput input, List<TransactionRule> activeRules) {
+        Objects.requireNonNull(input, "input must not be null");
+        List<TransactionRule> rules = activeRules == null ? List.of() : activeRules;
 
         List<RuleMatchResult> matchedRules = new ArrayList<>();
         List<TagSuggestion> suggestedTags = new ArrayList<>();
