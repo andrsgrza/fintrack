@@ -1,8 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, FormGroup, Input, Label, Modal, ModalBody, ModalFooter, ModalHeader, Spinner } from 'reactstrap';
+import {
+  Button,
+  DropdownItem,
+  DropdownMenu,
+  DropdownToggle,
+  FormGroup,
+  Input,
+  Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  Spinner,
+  UncontrolledDropdown,
+} from 'reactstrap';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import { ProductActionsMenu, ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 import { ProductTagSelector } from 'app/shared/ui/product-tag-selector';
+import { AppliedRuleIndicator } from 'app/shared/ui/applied-rule-indicator';
+import { FinancialAmount } from 'app/shared/ui/financial-amount';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
 import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
@@ -37,25 +53,25 @@ import TransactionBatchRuleCreationModal, {
 } from './transaction-batch-rule-creation-modal';
 import { ContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
 import TransactionBatchEditorModal, { BatchEditorValues, BatchSuggestionDomain } from './transaction-batch-editor-modal';
-import { formatBatchAmount, signedAmountForFlow } from './transaction-batch-presentation';
+import { signedAmountForFlow } from './transaction-batch-presentation';
 
 const operationKey = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `batch-${Date.now()}-${Math.random()}`);
 
 const categoryStyle = (color?: string | null): React.CSSProperties | undefined =>
   color ? { borderInlineStart: `0.3rem solid ${color}`, backgroundColor: `${color}12` } : undefined;
 
-const AppliedBy = ({ attribution, href }: { attribution?: { id?: number | null; name?: string | null } | null; href: string }) => {
-  if (!attribution?.name) return null;
+const rowMetadata = (row: BatchCandidate) => {
+  const origin = row.source === 'MANUAL' ? 'Manual' : 'CSV';
+  const review = row.validationStatus === 'VALID' ? 'Lista' : 'Por corregir';
+  return { origin, review, reviewTone: row.validationStatus === 'VALID' ? 'ready' : 'attention' };
+};
+
+const RowMetadata = ({ row }: { row: BatchCandidate }) => {
+  const metadata = rowMetadata(row);
   return (
-    <div className="small text-muted mt-1" data-testid="transactionBatchAppliedRuleAttribution">
-      Aplicada por{' '}
-      {attribution.id ? (
-        <Link className="transaction-batch-rule-link" to={`${href}/${attribution.id}/view`}>
-          {attribution.name}
-        </Link>
-      ) : (
-        attribution.name
-      )}
+    <div className="d-flex flex-wrap gap-1 mt-2" data-cy={`transactionBatchRowMetadata-${row.id}`}>
+      <span className="transaction-batch-origin-chip">{metadata.origin}</span>
+      <span className={`transaction-batch-review-chip transaction-batch-review-chip--${metadata.reviewTone}`}>{metadata.review}</span>
     </div>
   );
 };
@@ -176,41 +192,33 @@ const RowActions = ({
   onRemove: () => void;
 }) => (
   <div className="transaction-batch-row-detail d-flex flex-wrap align-items-start gap-2">
-    <Button size="sm" color="primary" outline onClick={onEdit} disabled={pending}>
+    <Button size="sm" color="primary" outline onClick={onEdit} disabled={pending} data-cy={`transactionBatchEdit-${row.id}`}>
       Editar
     </Button>
-    <details className="transaction-batch-row-actions">
-      <summary className="btn btn-sm btn-outline-secondary">Más acciones</summary>
-      <div className="d-flex flex-column align-items-start gap-2 mt-2">
-        <Button
-          size="sm"
-          color="secondary"
-          outline
-          onClick={() => onCreateRule('TRANSACTION', row)}
+    <ProductActionsMenu label="Más acciones de la fila" dataCy={`transactionBatchRowActions-${row.id}`}>
+      <DropdownItem
+        onClick={() => onCreateRule('TRANSACTION', row)}
+        disabled={pending}
+        data-cy={`transactionBatchCreateTransactionRule-${row.id}`}
+        data-testid={`transactionBatchCreateTransactionRule-${row.id}`}
+      >
+        Crear regla de clasificación
+      </DropdownItem>
+      {row.source === 'FILE_IMPORT' && row.sourceDescription?.trim() ? (
+        <DropdownItem
+          onClick={() => onCreateRule('NORMALIZATION', row)}
           disabled={pending}
-          data-cy={`transactionBatchCreateTransactionRule-${row.id}`}
-          data-testid={`transactionBatchCreateTransactionRule-${row.id}`}
+          data-cy={`transactionBatchCreateNormalizationRule-${row.id}`}
+          data-testid={`transactionBatchCreateNormalizationRule-${row.id}`}
         >
-          Crear regla de clasificación
-        </Button>
-        {row.source === 'FILE_IMPORT' && row.sourceDescription?.trim() ? (
-          <Button
-            size="sm"
-            color="secondary"
-            outline
-            onClick={() => onCreateRule('NORMALIZATION', row)}
-            disabled={pending}
-            data-cy={`transactionBatchCreateNormalizationRule-${row.id}`}
-            data-testid={`transactionBatchCreateNormalizationRule-${row.id}`}
-          >
-            Crear regla de descripción
-          </Button>
-        ) : null}
-        <Button size="sm" color="danger" outline onClick={onRemove} disabled={pending}>
-          Eliminar
-        </Button>
-      </div>
-    </details>
+          Crear regla de descripción
+        </DropdownItem>
+      ) : null}
+      <DropdownItem divider />
+      <DropdownItem className="text-danger" onClick={onRemove} disabled={pending} data-cy={`transactionBatchRemove-${row.id}`}>
+        Eliminar
+      </DropdownItem>
+    </ProductActionsMenu>
   </div>
 );
 
@@ -693,39 +701,50 @@ const TransactionBatchDetail = () => {
         subtitle={`${batch.accountName} · ${queuedCandidates.length} borrador${queuedCandidates.length === 1 ? '' : 'es'}`}
         actions={
           <>
-            <Button color="primary" onClick={openNewEditor} data-cy="transactionBatchAddManual">
-              + Añadir movimiento
-            </Button>
-            <Button color="secondary" outline onClick={() => filePickerRef.current?.click()} data-cy="transactionBatchImportCsv">
-              Importar CSV
-            </Button>
-            <Button color="secondary" outline onClick={reload}>
-              Actualizar
-            </Button>
-            <Button color="secondary" outline onClick={() => setSettingsOpen(true)} data-cy="transactionBatchSettings">
-              Reglas
-            </Button>
-            <Button
-              color="secondary"
-              outline
-              onClick={() => openRuleCreation('NORMALIZATION')}
-              data-cy="transactionBatchCreateNormalizationRule"
-              data-testid="transactionBatchCreateNormalizationRule"
-            >
-              Crear regla de descripción
-            </Button>
-            <Button
-              color="secondary"
-              outline
-              onClick={() => openRuleCreation('TRANSACTION')}
-              data-cy="transactionBatchCreateTransactionRule"
-              data-testid="transactionBatchCreateTransactionRule"
-            >
-              Crear regla de clasificación
-            </Button>
-            <Button color="secondary" outline onClick={refreshSuggestions} data-cy="transactionBatchReevaluate">
-              Reevaluar reglas
-            </Button>
+            <div className="transaction-batch-toolbar-group" aria-label="Añadir movimientos">
+              <Button color="primary" onClick={openNewEditor} data-cy="transactionBatchAddManual">
+                + Añadir movimiento
+              </Button>
+              <Button color="secondary" outline onClick={() => filePickerRef.current?.click()} data-cy="transactionBatchImportCsv">
+                Importar CSV
+              </Button>
+            </div>
+            <div className="transaction-batch-toolbar-group" aria-label="Revisión del lote">
+              <Button color="secondary" outline onClick={reload}>
+                Actualizar
+              </Button>
+              <Button color="secondary" outline onClick={refreshSuggestions} data-cy="transactionBatchReevaluate">
+                Reevaluar reglas
+              </Button>
+            </div>
+            <UncontrolledDropdown className="transaction-batch-toolbar-menu">
+              <DropdownToggle color="secondary" outline caret data-cy="transactionBatchRulesMenu">
+                Reglas
+              </DropdownToggle>
+              <DropdownMenu end>
+                <DropdownItem tag={Link} to="/rules" data-cy="transactionBatchRulesLanding">
+                  Ir a reglas
+                </DropdownItem>
+                <DropdownItem onClick={() => setSettingsOpen(true)} data-cy="transactionBatchSettings">
+                  Preferencias de reglas
+                </DropdownItem>
+                <DropdownItem divider />
+                <DropdownItem
+                  onClick={() => openRuleCreation('NORMALIZATION')}
+                  data-cy="transactionBatchCreateNormalizationRule"
+                  data-testid="transactionBatchCreateNormalizationRule"
+                >
+                  Crear regla de descripción
+                </DropdownItem>
+                <DropdownItem
+                  onClick={() => openRuleCreation('TRANSACTION')}
+                  data-cy="transactionBatchCreateTransactionRule"
+                  data-testid="transactionBatchCreateTransactionRule"
+                >
+                  Crear regla de clasificación
+                </DropdownItem>
+              </DropdownMenu>
+            </UncontrolledDropdown>
             <Button color="danger" outline onClick={discard}>
               Descartar lote
             </Button>
@@ -855,11 +874,15 @@ const TransactionBatchDetail = () => {
                   </div>
                   <div>
                     <span className="d-md-none small text-muted d-block">Movimiento</span>
-                    <strong>{row.description || 'Sin descripción'}</strong>
-                    <AppliedBy attribution={row.descriptionAppliedByRule} href="/description-normalization-rule" />
-                    <div className="small text-muted">
-                      {row.source === 'MANUAL' ? 'Manual' : 'CSV'} · {row.validationStatus}
+                    <div className="d-flex flex-wrap align-items-center gap-1">
+                      <strong>{row.description || 'Sin descripción'}</strong>
+                      <AppliedRuleIndicator
+                        attribution={row.descriptionAppliedByRule}
+                        href="/description-normalization-rule"
+                        dataCy="transactionBatchAppliedRuleAttribution"
+                      />
                     </div>
+                    <RowMetadata row={row} />
                     <div className="transaction-batch-row-detail">
                       <DomainSuggestion
                         title="Descripción sugerida"
@@ -875,7 +898,13 @@ const TransactionBatchDetail = () => {
                   </div>
                   <div>
                     <span className="d-md-none small text-muted d-block">Importe</span>
-                    <strong>{formatBatchAmount(row.signedAmount, batch.accountCurrency ?? row.currencySnapshot ?? 'MXN')}</strong>
+                    <FinancialAmount
+                      amount={row.signedAmount === undefined || row.signedAmount === null ? row.signedAmount : Math.abs(row.signedAmount)}
+                      currency={batch.accountCurrency ?? row.currencySnapshot ?? 'MXN'}
+                      flow={row.flow}
+                      compact
+                      dataCy={`transactionBatchAmount-${row.id}`}
+                    />
                   </div>
                   <div className="transaction-batch-row-detail">
                     <span className="d-md-none small text-muted d-block">Categoría</span>
@@ -895,7 +924,11 @@ const TransactionBatchDetail = () => {
                         </option>
                       ))}
                     </Input>
-                    <AppliedBy attribution={row.categoryAppliedByRule} href="/transaction-rule" />
+                    <AppliedRuleIndicator
+                      attribution={row.categoryAppliedByRule}
+                      href="/transaction-rule"
+                      dataCy="transactionBatchAppliedRuleAttribution"
+                    />
                     <DomainSuggestion
                       title="Categoría sugerida"
                       value={categorySuggestion ? categoryName(preview?.suggestedCategoryId) : undefined}
@@ -915,10 +948,14 @@ const TransactionBatchDetail = () => {
                       onChange={selected => updateTags(row, selected)}
                       dataCy={`transactionBatchTags-${row.id}`}
                       disabled={rowMutationPending}
+                      tagAdornment={tag => (
+                        <AppliedRuleIndicator
+                          attribution={row.tags.find(current => current.id === tag.id)?.appliedByRule}
+                          href="/transaction-rule"
+                          dataCy="transactionBatchAppliedRuleAttribution"
+                        />
+                      )}
                     />
-                    {row.tags.map(tag => (
-                      <AppliedBy key={tag.id ?? tag.name} attribution={tag.appliedByRule} href="/transaction-rule" />
-                    ))}
                     <DomainSuggestion
                       title="Etiquetas sugeridas"
                       value={tagSuggestions.length ? tagSuggestions.map(tagName).join(', ') : undefined}

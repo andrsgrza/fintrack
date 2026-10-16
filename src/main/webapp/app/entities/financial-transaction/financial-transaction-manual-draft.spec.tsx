@@ -314,6 +314,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(screen.getByTestId('manualDraftActionsSection')).toBeTruthy();
     expect(screen.getByTestId('manualDraftAccountContext').textContent).toContain('Checking · Debit account · MXN · ••••1234');
     expect(screen.getByTestId('flow-OUT').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('flow').className).toContain('financial-flow-selector');
+    expect(screen.getByTestId('flow-OUT').className).toContain('financial-flow-selector-option--expense');
     expect(screen.getByTestId('manualDraftCurrency').textContent).toBe('MXN');
 
     expect(await screen.findByText('Transport › Ride apps')).toBeTruthy();

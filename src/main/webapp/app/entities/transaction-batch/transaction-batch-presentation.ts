@@ -3,15 +3,9 @@
  * to use a signed amount; product input is a positive magnitude plus a flow.
  */
 export const formatBatchAmount = (signedAmount?: number | null, currency = 'MXN'): string => {
-  if (signedAmount === null || signedAmount === undefined || Number.isNaN(signedAmount)) return 'Pendiente';
-
-  const formatted = new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Math.abs(signedAmount));
-  return signedAmount < 0 ? `-${formatted}` : formatted;
+  const formatted = formatFinancialAmount(signedAmount, currency);
+  if (!formatted) return 'Pendiente';
+  return signedAmount < 0 ? `−${formatted}` : `+${formatted}`;
 };
 
 export const amountMagnitude = (signedAmount?: number | null): string =>
@@ -22,3 +16,4 @@ export const signedAmountForFlow = (magnitude: string, flow: 'IN' | 'OUT'): numb
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
   return flow === 'OUT' ? -numeric : numeric;
 };
+import { formatFinancialAmount } from 'app/shared/ui/financial-amount';

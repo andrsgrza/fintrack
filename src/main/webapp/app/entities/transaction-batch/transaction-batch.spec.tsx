@@ -152,11 +152,26 @@ describe('TransactionBatch product workspace', () => {
 
     const attributions = await screen.findAllByTestId('transactionBatchAppliedRuleAttribution');
     expect(attributions).toHaveLength(3);
-    expect(attributions.map(attribution => attribution.textContent)).toEqual(
-      expect.arrayContaining(['Aplicada por Normalize taxi', 'Aplicada por Deleted transport rule', 'Aplicada por Work travel rule']),
+    const attributionButtons = attributions.map(attribution => attribution.querySelector('button'));
+    expect(attributionButtons.map(button => button?.getAttribute('aria-label'))).toEqual(
+      expect.arrayContaining(['Aplicada por: Normalize taxi', 'Aplicada por: Deleted transport rule', 'Aplicada por: Work travel rule']),
     );
-    expect(screen.getByRole('link', { name: 'Normalize taxi' }).getAttribute('href')).toBe('/description-normalization-rule/41/view');
-    expect(screen.getByRole('link', { name: 'Work travel rule' }).getAttribute('href')).toBe('/transaction-rule/43/view');
+    expect(attributionButtons.every(button => !button?.classList.contains('btn-link'))).toBe(true);
+    expect(attributionButtons[0]?.getAttribute('title')).toBe('Aplicada por: Normalize taxi');
+    fireEvent.click(attributionButtons[0]);
+    expect(await screen.findByRole('link', { name: 'Normalize taxi' })).toBeTruthy();
+    expect(
+      attributions
+        .find(attribution => attribution.textContent?.includes('Normalize taxi'))
+        ?.querySelector('a')
+        ?.getAttribute('href'),
+    ).toBe('/description-normalization-rule/41/view');
+    expect(
+      attributions
+        .find(attribution => attribution.textContent?.includes('Work travel rule'))
+        ?.querySelector('a')
+        ?.getAttribute('href'),
+    ).toBe('/transaction-rule/43/view');
     expect(attributions.find(attribution => attribution.textContent?.includes('Deleted transport rule'))?.querySelector('a')).toBeNull();
     expect(screen.getByText('Sugerido por', { exact: false }).textContent).toContain('Pending normalizer');
   });
@@ -226,6 +241,22 @@ describe('TransactionBatch product workspace', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(toggle.textContent).toBe('Ocultar detalles');
     expect(category.closest('article')?.className).toContain('mobile-expanded');
+  });
+
+  it('uses compact product metadata, styled amounts, grouped toolbar actions, and a non-expanding row menu', async () => {
+    renderDetail();
+
+    await screen.findByText('Taxi airport');
+    expect(screen.queryByText('VALID')).toBeNull();
+    expect(document.querySelector('[data-cy="transactionBatchRowMetadata-81"]')?.textContent).toContain('Manual');
+    expect(document.querySelector('[data-cy="transactionBatchRowMetadata-81"]')?.textContent).toContain('Lista');
+    expect(document.querySelector('[data-cy="transactionBatchAmount-81"]')?.className).toContain('financial-amount--expense');
+    expect(document.querySelectorAll('.transaction-batch-toolbar-group')).toHaveLength(2);
+    expect(document.querySelector('details.transaction-batch-row-actions')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Más acciones de la fila' }));
+    expect(screen.getByRole('menuitem', { name: 'Crear regla de clasificación' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Eliminar' })).toBeTruthy();
   });
 
   it('opens the manual editor before creating a candidate and leaves no empty row when cancelled', async () => {
@@ -647,13 +678,19 @@ describe('TransactionBatch product workspace', () => {
 
     await screen.findByText('Taxi airport');
     fireEvent.click(screen.getByRole('button', { name: 'Reglas' }));
-    fireEvent.click(screen.getByLabelText('Aplicar automáticamente descripciones normalizadas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Preferencias de reglas' }));
+    fireEvent.click(await screen.findByLabelText('Aplicar automáticamente descripciones normalizadas'));
     fireEvent.click(screen.getByLabelText('Aplicar automáticamente categorías sugeridas'));
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y reevaluar' }));
 
     await screen.findByText(
       'Las preferencias se guardaron, pero no se pudieron reevaluar las reglas. No se aplicaron cambios automáticos.',
     );
-    expect(screen.getByText('Preferencias de reglas').closest('.modal')?.className).not.toContain('show');
+    expect(
+      screen
+        .getAllByText('Preferencias de reglas')
+        .find(element => element.closest('.modal'))
+        ?.closest('.modal')?.className,
+    ).not.toContain('show');
   });
 });

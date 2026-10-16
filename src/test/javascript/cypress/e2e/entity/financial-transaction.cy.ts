@@ -654,6 +654,12 @@ describe('FinancialTransaction e2e test', () => {
       cy.get('[data-cy="amount"]').type('100.5');
       cy.get('[data-cy="flow-OUT"]').click();
       cy.get('[data-cy="flow-OUT"]').should('have.attr', 'aria-pressed', 'true');
+      cy.screenshot('financial-transaction/01-expense-flow-selector');
+      cy.get('[data-cy="flow-IN"]').click();
+      cy.get('[data-cy="flow-IN"]').should('have.attr', 'aria-pressed', 'true');
+      cy.screenshot('financial-transaction/02-income-flow-selector');
+      cy.get('[data-cy="flow-OUT"]').click();
+      cy.get('[data-cy="flow-OUT"]').should('have.attr', 'aria-pressed', 'true');
       waitForSavedManualCandidateDraft(manualCandidateDescription);
       cy.get('[data-cy="manualDraftPostButton"]').should('be.disabled');
 

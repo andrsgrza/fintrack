@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Button,
-  ButtonGroup,
   Col,
   Form,
   FormFeedback,
@@ -21,7 +20,9 @@ import {
 import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
-import { AppliedRuleAttribution, BatchCandidate, BatchRulePreview } from './transaction-batch-api';
+import { AppliedRuleIndicator } from 'app/shared/ui/applied-rule-indicator';
+import { FinancialFlowSelector } from 'app/shared/ui/financial-flow-selector';
+import { BatchCandidate, BatchRulePreview } from './transaction-batch-api';
 import { amountMagnitude } from './transaction-batch-presentation';
 
 export type BatchEditorValues = {
@@ -98,22 +99,6 @@ const materialDraftFingerprint = (values: BatchEditorValues) =>
 
 const categoryStyle = (color?: string | null): React.CSSProperties | undefined =>
   color ? { borderInlineStart: `0.3rem solid ${color}`, backgroundColor: `${color}12` } : undefined;
-
-const AppliedBy = ({ attribution, href }: { attribution?: AppliedRuleAttribution | null; href: string }) => {
-  if (!attribution?.name) return null;
-  return (
-    <div className="small text-muted mt-1" data-testid="batchAppliedRuleAttribution">
-      Aplicada por{' '}
-      {attribution.id ? (
-        <a href={`${href}/${attribution.id}/view`} className="transaction-batch-rule-link">
-          {attribution.name}
-        </a>
-      ) : (
-        attribution.name
-      )}
-    </div>
-  );
-};
 
 const Suggestion = ({
   title,
@@ -239,7 +224,13 @@ const TransactionFieldsSection = ({
           onChange={event => update('description', event.target.value)}
           disabled={saving}
         />
-        <AppliedBy attribution={candidate?.descriptionAppliedByRule} href="/description-normalization-rule" />
+        <div className="mt-1">
+          <AppliedRuleIndicator
+            attribution={candidate?.descriptionAppliedByRule}
+            href="/description-normalization-rule"
+            dataCy="batchAppliedRuleAttribution"
+          />
+        </div>
         {descriptionSuggestion ? (
           <Suggestion
             title="descripción sugerida"
@@ -255,28 +246,15 @@ const TransactionFieldsSection = ({
         <Col md="6">
           <FormGroup>
             <Label id="batch-editor-flow-label">Tipo</Label>
-            <ButtonGroup className="d-flex" aria-labelledby="batch-editor-flow-label">
-              <Button
-                type="button"
-                color={values.flow === 'IN' ? 'success' : 'light'}
-                outline={values.flow !== 'IN'}
-                onClick={() => update('flow', 'IN')}
-                disabled={saving}
-                data-cy="batchEditorFlow-IN"
-              >
-                INGRESO
-              </Button>
-              <Button
-                type="button"
-                color={values.flow === 'OUT' ? 'secondary' : 'light'}
-                outline={values.flow !== 'OUT'}
-                onClick={() => update('flow', 'OUT')}
-                disabled={saving}
-                data-cy="batchEditorFlow-OUT"
-              >
-                GASTO
-              </Button>
-            </ButtonGroup>
+            <FinancialFlowSelector
+              flow={values.flow}
+              onChange={flow => update('flow', flow)}
+              incomeLabel="INGRESO"
+              expenseLabel="GASTO"
+              disabled={saving}
+              ariaLabelledBy="batch-editor-flow-label"
+              dataCy="batchEditorFlow"
+            />
           </FormGroup>
         </Col>
         <Col md="6">
@@ -357,7 +335,13 @@ const ClassificationSection = ({
                   </option>
                 ))}
             </Input>
-            <AppliedBy attribution={candidate?.categoryAppliedByRule} href="/transaction-rule" />
+            <div className="mt-1">
+              <AppliedRuleIndicator
+                attribution={candidate?.categoryAppliedByRule}
+                href="/transaction-rule"
+                dataCy="batchAppliedRuleAttribution"
+              />
+            </div>
             {fieldError === 'category' ? (
               <FormFeedback>
                 La categoría elegida sólo es válida para el otro tipo de movimiento. Elige otra categoría o cambia el tipo.
@@ -385,11 +369,14 @@ const ClassificationSection = ({
               availableTags={tags}
               onChange={selected => update('tags', selected)}
               disabled={saving}
+              tagAdornment={tag => (
+                <AppliedRuleIndicator
+                  attribution={candidate?.tags.find(current => current.id === tag.id)?.appliedByRule}
+                  href="/transaction-rule"
+                  dataCy="batchAppliedRuleAttribution"
+                />
+              )}
             />
-            {values.tags.map(tag => {
-              const appliedByRule = candidate?.tags.find(current => current.id === tag.id)?.appliedByRule;
-              return <AppliedBy key={tag.id ?? tag.name} attribution={appliedByRule} href="/transaction-rule" />;
-            })}
             {suggestedTags.length ? (
               <Suggestion
                 title="etiquetas sugeridas"

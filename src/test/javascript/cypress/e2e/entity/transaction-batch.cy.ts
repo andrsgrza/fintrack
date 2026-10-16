@@ -118,11 +118,7 @@ describe('Transaction Batch product workflow', () => {
 
   const openRowActions = (rowSelector: string) => {
     cy.get(rowSelector).within(() => {
-      cy.get('details.transaction-batch-row-actions').then($actions => {
-        if (!$actions.is('[open]')) {
-          cy.wrap($actions).find('summary').click();
-        }
-      });
+      cy.get('[data-cy^="transactionBatchRowActions-"][data-cy$="Toggle"]').click();
     });
   };
 
@@ -323,9 +319,17 @@ describe('Transaction Batch product workflow', () => {
 
     cy.get('[data-cy="transactionBatchAddManual"]').click();
     cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
+    cy.get('[data-cy="batchEditorFlow-IN"]').click();
+    cy.get('[data-cy="batchEditorFlow-IN"]').should('have.attr', 'aria-pressed', 'true');
+    cy.screenshot('transaction-batch/14-income-flow-selector');
     cy.get('#batch-editor-transaction-date').type('2026-10-16');
     cy.get('#batch-editor-description').type('Movimiento de lote E2E');
     cy.get('#batch-editor-amount').type('125.50');
+    cy.get('[data-cy="batchEditorFlow-OUT"]').click();
+    cy.get('[data-cy="batchEditorFlow-OUT"]').should('have.attr', 'aria-pressed', 'true');
+    cy.screenshot('transaction-batch/15-expense-flow-selector');
+    cy.get('[data-cy="batchEditorFlow-IN"]').click();
+    cy.get('[data-cy="batchEditorFlow-IN"]').should('have.attr', 'aria-pressed', 'true');
     cy.get('[data-cy="transactionBatchEditorSave"]').click();
 
     cy.get('[aria-label="Categoría para Movimiento de lote E2E"]').select(String(categoryId));
@@ -403,8 +407,8 @@ describe('Transaction Batch product workflow', () => {
       return true;
     });
     cy.contains('[data-cy^="transactionBatchRow-"]', csvDescription).within(() => {
-      cy.contains('summary', 'Más acciones').click();
-      cy.contains('button', 'Eliminar').click();
+      cy.get('[data-cy^="transactionBatchRowActions-"][data-cy$="Toggle"]').click();
+      cy.get('[data-cy^="transactionBatchRemove-"]').click();
     });
     cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', 1).and('contain', manualDescription);
   });
@@ -449,6 +453,7 @@ describe('Transaction Batch product workflow', () => {
     createAutoApplyRules(token, normalizedDescription).then(({ descriptionRule, classificationRule }) => {
       createOpenBatch();
 
+      cy.get('[data-cy="transactionBatchRulesMenu"]').click();
       cy.get('[data-cy="transactionBatchSettings"]').click();
       cy.get('#batch-setting-autoApplyDescriptions').check();
       cy.get('#batch-setting-autoApplyCategories').check();
@@ -475,6 +480,13 @@ describe('Transaction Batch product workflow', () => {
           .should('have.length', 3)
           .and('contain', descriptionRule.name)
           .and('contain', classificationRule.name);
+        cy.get('[data-testid="transactionBatchAppliedRuleAttribution"]').first().find('[data-cy$="Toggle"]').click();
+        cy.get('[data-testid="transactionBatchAppliedRuleAttribution"]')
+          .first()
+          .find('[data-cy$="Menu"]')
+          .should('contain', descriptionRule.name)
+          .find('a')
+          .should('have.attr', 'href', `/description-normalization-rule/${descriptionRule.id}/view`);
         cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', descriptionRule.name)
           .find('a')
           .should('have.attr', 'href', `/description-normalization-rule/${descriptionRule.id}/view`);
@@ -483,6 +495,13 @@ describe('Transaction Batch product workflow', () => {
           .find('a')
           .should('have.attr', 'href', `/transaction-rule/${classificationRule.id}/view`);
       });
+      cy.screenshot('transaction-batch/13-compact-attribution-actions');
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription)
+        .invoke('attr', 'data-cy')
+        .then(rowDataCy => {
+          openRowActions(`[data-cy="${rowDataCy}"]`);
+          cy.screenshot('transaction-batch/16-kebab-menu');
+        });
 
       cy.reload();
       cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).within(() => {

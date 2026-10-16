@@ -1,21 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  Alert,
-  Badge,
-  Button,
-  ButtonGroup,
-  Col,
-  Form,
-  FormGroup,
-  FormText,
-  Input,
-  InputGroup,
-  InputGroupText,
-  Label,
-  Row,
-  Spinner,
-} from 'reactstrap';
+import { Alert, Badge, Button, Col, Form, FormGroup, FormText, Input, InputGroup, InputGroupText, Label, Row, Spinner } from 'reactstrap';
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { IconProp } from '@fortawesome/fontawesome-svg-core';
@@ -34,6 +19,7 @@ import { ICategory } from 'app/shared/model/category.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
+import { FinancialFlowSelector } from 'app/shared/ui/financial-flow-selector';
 import {
   applyManualDraftRules,
   cancelManualDraft,
@@ -752,23 +738,15 @@ const ManualTransactionMovementSection = ({
           <Label id="financial-transaction-flow-label">
             <Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>
           </Label>
-          <ButtonGroup className="d-flex" role="group" aria-labelledby="financial-transaction-flow-label" data-cy="flow">
-            {Object.keys(TransactionFlow).map(transactionFlow => (
-              <Button
-                key={transactionFlow}
-                type="button"
-                color={draft.flow === transactionFlow ? (transactionFlow === 'OUT' ? 'secondary' : 'success') : 'light'}
-                outline={draft.flow !== transactionFlow}
-                aria-pressed={draft.flow === transactionFlow}
-                data-cy={`flow-${transactionFlow}`}
-                data-testid={`flow-${transactionFlow}`}
-                onClick={() => onFlowChange(transactionFlow as keyof typeof TransactionFlow)}
-                disabled={readOnly}
-              >
-                {translate(`fintrackApp.TransactionFlow.${transactionFlow}`)}
-              </Button>
-            ))}
-          </ButtonGroup>
+          <FinancialFlowSelector
+            flow={draft.flow}
+            onChange={onFlowChange}
+            incomeLabel={translate('fintrackApp.TransactionFlow.IN')}
+            expenseLabel={translate('fintrackApp.TransactionFlow.OUT')}
+            disabled={readOnly}
+            ariaLabelledBy="financial-transaction-flow-label"
+            dataCy="flow"
+          />
         </FormGroup>
       </Col>
       <Col md="6">
