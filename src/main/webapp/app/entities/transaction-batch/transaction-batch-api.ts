@@ -16,6 +16,7 @@ export type BatchCandidate = {
   notes?: string | null;
   signedAmount?: number | null;
   flow?: string | null;
+  currencySnapshot?: string | null;
   categoryId?: number | null;
   categoryName?: string | null;
   categoryColor?: string | null;
@@ -29,11 +30,16 @@ export type BatchRulePreview = {
   candidateVersion: number;
   descriptionEvaluable: boolean;
   descriptionMatched: boolean;
+  descriptionRuleId?: number | null;
+  descriptionRuleName?: string | null;
   suggestedDescription?: string | null;
   classificationEvaluable: boolean;
   suggestedCategoryId?: number | null;
+  suggestedCategoryRuleId?: number | null;
+  suggestedCategoryRuleName?: string | null;
   suggestedTagIds: number[];
   eligibleTagIds: number[];
+  eligibleTagSuggestions?: Array<{ tagId: number; tagName?: string | null; ruleId?: number | null; ruleName?: string | null }>;
 };
 
 export type BatchRuleSettings = Pick<
@@ -47,6 +53,7 @@ export type TransactionBatchWorkspace = {
   status: 'OPEN' | 'PUBLISHED';
   accountId: number;
   accountName: string;
+  accountCurrency?: string | null;
   autoApplyDescriptions: boolean;
   autoApplyCategories: boolean;
   autoApplyTags: boolean;
@@ -62,6 +69,16 @@ export type BatchReceipt = {
   publishedAt: string;
   publishedTransactionCount: number;
   receiptExpiresAt: string;
+  replayed: boolean;
+};
+
+export type BatchAppendResult = {
+  batchId: number;
+  batchVersion: number;
+  operationKey: string;
+  acceptedCandidateCount?: number | null;
+  appendedCandidateIds?: number[];
+  evaluationStatus?: string | null;
   replayed: boolean;
 };
 
@@ -94,7 +111,7 @@ export const appendCsv = (batchId: number, expectedBatchVersion: number, operati
   body.append('expectedBatchVersion', String(expectedBatchVersion));
   body.append('operationKey', operationKey);
   body.append('file', file);
-  return axios.post(`${apiUrl}/${batchId}/append-csv`, body).then(response => response.data);
+  return axios.post<BatchAppendResult>(`${apiUrl}/${batchId}/append-csv`, body).then(response => response.data);
 };
 export const saveSettings = (batchId: number, settings: object) =>
   axios.put(`${apiUrl}/${batchId}/settings`, settings).then(response => response.data);

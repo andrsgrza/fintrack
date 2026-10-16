@@ -98,20 +98,32 @@ describe('Transaction Batch product workflow', () => {
     cy.visit('/transaction-batches/new');
     cy.get('[data-cy="transactionBatchAccount"]').select(String(accountId));
     cy.get('[data-cy="transactionBatchCreateSubmit"]').click();
-    cy.location('pathname').then(pathname => {
-      batchId = Number(pathname.split('/').pop());
-    });
+    cy.location('pathname')
+      .should('match', /\/transaction-batches\/\d+$/)
+      .then(pathname => {
+        const createdBatchId = Number(pathname.split('/').pop());
+        expect(Number.isSafeInteger(createdBatchId)).to.equal(true);
+        batchId = createdBatchId;
+      });
   };
 
-  const addCompleteManualRow = (description: string, amount = '-125.50') => {
+  const addCompleteManualRow = (description: string, amount = '125.50') => {
     cy.get('[data-cy="transactionBatchAddManual"]').click();
-    cy.get('[data-cy^="transactionBatchRow-"]').within(() => {
-      cy.contains('button', 'Editar').click();
+    cy.get('.modal').should('contain', 'Añadir movimiento');
+    cy.get('#batch-editor-transaction-date').type('2026-10-16');
+    cy.get('#batch-editor-description').type(description);
+    cy.get('#batch-editor-amount').type(amount);
+    cy.get('[data-cy="transactionBatchEditorSave"]').click();
+  };
+
+  const openRowActions = (rowSelector: string) => {
+    cy.get(rowSelector).within(() => {
+      cy.get('details.transaction-batch-row-actions').then($actions => {
+        if (!$actions.is('[open]')) {
+          cy.wrap($actions).find('summary').click();
+        }
+      });
     });
-    cy.get('#batch-row-date').type('2026-10-16');
-    cy.get('#batch-row-description').type(description);
-    cy.get('#batch-row-amount').type(amount);
-    cy.contains('.modal button', 'Guardar').click();
   };
 
   const createAutoApplyRules = (token: string, normalizedDescription: string) => {
@@ -140,6 +152,27 @@ describe('Transaction Batch product workflow', () => {
         resultingTags: [{ id: tagId }],
         conditions: [
           { field: 'DESCRIPTION', operator: 'CONTAINS', value: normalizedDescription, secondValue: null, caseSensitive: false },
+          { field: 'FLOW', operator: 'EQUALS', value: 'OUT', secondValue: null, caseSensitive: false },
+        ],
+      },
+    }).then(({ body }) => {
+      createdTransactionRuleIds.push(body.id);
+    });
+  };
+
+  const createManualClassificationRule = (token: string) => {
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/transaction-rules/configured',
+      body: {
+        name: uniqueName('batch-manual-classification-rule'),
+        description: 'Manual batch preview fixture',
+        active: true,
+        conditionLogic: 'ALL',
+        resultingCategory: { id: categoryId },
+        resultingTags: [{ id: tagId }],
+        conditions: [
+          { field: 'DESCRIPTION', operator: 'CONTAINS', value: token, secondValue: null, caseSensitive: false },
           { field: 'FLOW', operator: 'EQUALS', value: 'OUT', secondValue: null, caseSensitive: false },
         ],
       },
@@ -178,12 +211,15 @@ describe('Transaction Batch product workflow', () => {
       (_, index) => `2026-10-17,,${token}-${index},-75.00,MXN,metric-${rowCount}-${index},CSV metric row ${index}`,
     );
     cy.intercept('POST', '/api/transaction-batches/*/append-csv').as(appendAlias);
-    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile({
-      contents: Cypress.Buffer.from([csvHeader, ...csvRows].join('\n')),
-      fileName: `batch-metric-${rowCount}.csv`,
-      mimeType: 'text/csv',
-      lastModified: Date.now(),
-    });
+    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
+      {
+        contents: Cypress.Buffer.from([csvHeader, ...csvRows].join('\n')),
+        fileName: `batch-metric-${rowCount}.csv`,
+        mimeType: 'text/csv',
+        lastModified: Date.now(),
+      },
+      { force: true },
+    );
     cy.get('[data-cy="transactionBatchAppendCsv"]').click();
     cy.wait(`@${appendAlias}`).its('response.statusCode').should('eq', 200);
     cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', rowCount);
@@ -275,15 +311,11 @@ describe('Transaction Batch product workflow', () => {
     });
 
     cy.get('[data-cy="transactionBatchAddManual"]').click();
-    cy.get('[data-cy^="transactionBatchRow-"]')
-      .should('have.length', 1)
-      .within(() => {
-        cy.contains('button', 'Editar').click();
-      });
-    cy.get('#batch-row-date').type('2026-10-16');
-    cy.get('#batch-row-description').type('Movimiento de lote E2E');
-    cy.get('#batch-row-amount').type('-125.50');
-    cy.contains('.modal button', 'Guardar').click();
+    cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
+    cy.get('#batch-editor-transaction-date').type('2026-10-16');
+    cy.get('#batch-editor-description').type('Movimiento de lote E2E');
+    cy.get('#batch-editor-amount').type('125.50');
+    cy.get('[data-cy="transactionBatchEditorSave"]').click();
 
     cy.get('[aria-label="Categoría para Movimiento de lote E2E"]').select(String(categoryId));
     cy.get('[data-cy^="transactionBatchTags-"] [data-cy$="Add"]').click();
@@ -311,30 +343,29 @@ describe('Transaction Batch product workflow', () => {
     cy.visit('/transaction-batches/new');
     cy.get('[data-cy="transactionBatchAccount"]').select(String(accountId));
     cy.get('[data-cy="transactionBatchCreateSubmit"]').click();
+    cy.location('pathname').should('match', /\/transaction-batches\/\d+$/);
     cy.location('pathname').then(pathname => {
       batchId = Number(pathname.split('/').pop());
     });
 
     cy.get('[data-cy="transactionBatchAddManual"]').click();
-    cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', 1).and('contain', 'Pendiente');
-    cy.screenshot('transaction-batch/03-repairable-row');
-    cy.get('[data-cy^="transactionBatchRow-"]')
-      .should('have.length', 1)
-      .within(() => {
-        cy.contains('button', 'Editar').click();
-      });
-    cy.get('#batch-row-date').type('2026-10-16');
-    cy.get('#batch-row-description').type(manualDescription);
-    cy.get('#batch-row-amount').type('-25.50');
-    cy.contains('.modal button', 'Guardar').click();
+    cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
+    cy.screenshot('transaction-batch/03-manual-modal-before-save');
+    cy.get('#batch-editor-transaction-date').type('2026-10-16');
+    cy.get('#batch-editor-description').type(manualDescription);
+    cy.get('#batch-editor-amount').type('25.50');
+    cy.get('[data-cy="transactionBatchEditorSave"]').click();
 
     const csv = [csvHeader, `2026-10-17,,${csvDescription},-75.00,MXN,batch-csv-ref,CSV row`].join('\n');
-    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile({
-      contents: Cypress.Buffer.from(csv),
-      fileName: 'batch-append.csv',
-      mimeType: 'text/csv',
-      lastModified: Date.now(),
-    });
+    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
+      {
+        contents: Cypress.Buffer.from(csv),
+        fileName: 'batch-append.csv',
+        mimeType: 'text/csv',
+        lastModified: Date.now(),
+      },
+      { force: true },
+    );
     cy.get('[data-cy="transactionBatchAppendCsv"]').click();
     cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', 2);
     cy.contains('[data-cy^="transactionBatchRow-"]', manualDescription).should('contain', 'Manual');
@@ -361,6 +392,7 @@ describe('Transaction Batch product workflow', () => {
       return true;
     });
     cy.contains('[data-cy^="transactionBatchRow-"]', csvDescription).within(() => {
+      cy.contains('summary', 'Más acciones').click();
       cy.contains('button', 'Eliminar').click();
     });
     cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', 1).and('contain', manualDescription);
@@ -372,17 +404,11 @@ describe('Transaction Batch product workflow', () => {
     cy.visit('/transaction-batches/new');
     cy.get('[data-cy="transactionBatchAccount"]').select(String(accountId));
     cy.get('[data-cy="transactionBatchCreateSubmit"]').click();
+    cy.location('pathname').should('match', /\/transaction-batches\/\d+$/);
     cy.location('pathname').then(pathname => {
       batchId = Number(pathname.split('/').pop());
     });
-    cy.get('[data-cy="transactionBatchAddManual"]').click();
-    cy.get('[data-cy^="transactionBatchRow-"]').within(() => {
-      cy.contains('button', 'Editar').click();
-    });
-    cy.get('#batch-row-date').type('2026-10-16');
-    cy.get('#batch-row-description').type(description);
-    cy.get('#batch-row-amount').type('-125.50');
-    cy.contains('.modal button', 'Guardar').click();
+    addCompleteManualRow(description);
 
     cy.get(`[aria-label="Categoría para ${description}"]`).select(String(categoryId));
     cy.get('[data-cy^="transactionBatchTags-"] [data-cy$="Add"]').click();
@@ -417,14 +443,18 @@ describe('Transaction Batch product workflow', () => {
     cy.get('#batch-setting-autoApplyCategories').check();
     cy.get('#batch-setting-autoApplyTags').check();
     cy.contains('.modal button', 'Guardar y reevaluar').click();
+    cy.get('.modal').should('not.exist');
 
     const csv = [csvHeader, `2026-10-17,,${token},-75.00,MXN,batch-auto-apply,CSV row`].join('\n');
-    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile({
-      contents: Cypress.Buffer.from(csv),
-      fileName: 'batch-auto-apply.csv',
-      mimeType: 'text/csv',
-      lastModified: Date.now(),
-    });
+    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
+      {
+        contents: Cypress.Buffer.from(csv),
+        fileName: 'batch-auto-apply.csv',
+        mimeType: 'text/csv',
+        lastModified: Date.now(),
+      },
+      { force: true },
+    );
     cy.get('[data-cy="transactionBatchAppendCsv"]').click();
     cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).should('contain', 'CSV');
     cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', String(categoryId));
@@ -445,7 +475,7 @@ describe('Transaction Batch product workflow', () => {
     const description = `External conflict ${Date.now()}`;
     let externalCandidate: { id: number; version: number };
     createOpenBatch();
-    cy.intercept('PATCH', '/api/transaction-batches/*/candidates/*').as('initialManualSave');
+    cy.intercept('POST', '/api/transaction-batches/*/candidates').as('initialManualSave');
     addCompleteManualRow(description);
     cy.wait('@initialManualSave').its('response.statusCode').should('eq', 200);
 
@@ -471,11 +501,12 @@ describe('Transaction Batch product workflow', () => {
     cy.contains('[data-cy^="transactionBatchRow-"]', description).within(() => {
       cy.contains('button', 'Editar').click();
     });
-    cy.get('#batch-row-notes').clear();
-    cy.get('#batch-row-notes').type('Mi nota local no se pierde');
-    cy.contains('.modal button', 'Guardar').click();
-    cy.get('[role="alert"]').should('contain', 'No se pudo guardar la fila. No se reemplazó tu edición local.');
-    cy.get('#batch-row-notes').should('have.value', 'Mi nota local no se pierde');
+    cy.get('summary').contains('Más detalles').click();
+    cy.get('#batch-editor-notes').clear();
+    cy.get('#batch-editor-notes').type('Mi nota local no se pierde');
+    cy.get('[data-cy="transactionBatchEditorSave"]').click();
+    cy.get('[role="alert"]').should('contain', 'Esta fila cambió en otra sesión. Conservamos tu edición local');
+    cy.get('#batch-editor-notes').should('have.value', 'Mi nota local no se pierde');
     cy.screenshot('transaction-batch/08-version-conflict');
   });
 
@@ -495,12 +526,15 @@ describe('Transaction Batch product workflow', () => {
     cy.wait('@batchAfterManualContextCategory');
 
     const csv = [csvHeader, `2026-10-17,,${csvSourceDescription},-75.00,MXN,contextual-csv,CSV contextual row`].join('\n');
-    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile({
-      contents: Cypress.Buffer.from(csv),
-      fileName: 'contextual-rules.csv',
-      mimeType: 'text/csv',
-      lastModified: Date.now(),
-    });
+    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
+      {
+        contents: Cypress.Buffer.from(csv),
+        fileName: 'contextual-rules.csv',
+        mimeType: 'text/csv',
+        lastModified: Date.now(),
+      },
+      { force: true },
+    );
     cy.get('[data-cy="transactionBatchAppendCsv"]').click();
     cy.contains('[data-cy^="transactionBatchRow-"]', csvSourceDescription).should('be.visible');
 
@@ -518,7 +552,10 @@ describe('Transaction Batch product workflow', () => {
       const manualCandidateId = manualCandidate.id;
 
       cy.intercept('POST', '/api/description-normalization-rules/configured').as('contextualCsvDnrCreate');
-      cy.get(`[data-cy="transactionBatchCreateNormalizationRule-${csvCandidateId}"]`).click();
+      openRowActions(`[data-cy="transactionBatchRow-${csvCandidateId}"]`);
+      cy.get(`[data-cy="transactionBatchRow-${csvCandidateId}"]`).within(() => {
+        cy.get(`[data-cy="transactionBatchCreateNormalizationRule-${csvCandidateId}"]`).click();
+      });
       cy.get('#contextual-description-rule-name').clear();
       cy.get('#contextual-description-rule-name').type(csvRuleName);
       cy.get('#contextual-description-rule-condition-value-0').should('have.value', csvSourceDescription);
@@ -538,7 +575,10 @@ describe('Transaction Batch product workflow', () => {
       cy.intercept('POST', '/api/transaction-rules/configured').as('contextualTransactionRuleCreate');
       cy.intercept('POST', '/api/transaction-batches/*/candidates/*/reevaluate').as('contextualRowReevaluation');
       cy.contains('[data-cy^="transactionBatchRow-"]', manualDescription).as('manualContextRow');
-      cy.get('@manualContextRow').find('[data-cy^="transactionBatchCreateTransactionRule-"]').click();
+      openRowActions(`[data-cy="transactionBatchRow-${manualCandidateId}"]`);
+      cy.get('@manualContextRow').within(() => {
+        cy.get('[data-cy^="transactionBatchCreateTransactionRule-"]').click();
+      });
       cy.get('#contextual-transaction-rule-name').should('have.value', `Regla para ${manualDescription}`);
       cy.get('[data-cy="conditionRow"]').should('have.length', 2);
       cy.get('[data-cy="conditionRow"]').eq(0).should('have.attr', 'data-condition-field', 'DESCRIPTION');
@@ -564,7 +604,10 @@ describe('Transaction Batch product workflow', () => {
       cy.viewport(375, 667);
       cy.get(`[data-cy="transactionBatchMobileDetails-${csvCandidateId}"]`).scrollIntoView();
       cy.get(`[data-cy="transactionBatchMobileDetails-${csvCandidateId}"]`).click();
-      cy.get(`[data-cy="transactionBatchCreateTransactionRule-${csvCandidateId}"]`).click();
+      openRowActions(`[data-cy="transactionBatchRow-${csvCandidateId}"]`);
+      cy.get(`[data-cy="transactionBatchRow-${csvCandidateId}"]`).within(() => {
+        cy.get(`[data-cy="transactionBatchCreateTransactionRule-${csvCandidateId}"]`).click();
+      });
       cy.get('[data-cy="transactionBatchRuleCreationModal"]').should('be.visible');
       cy.screenshot('transaction-batch/11-contextual-rule-mobile');
       cy.get('.modal').contains('button', 'Cancelar').click();
@@ -578,7 +621,10 @@ describe('Transaction Batch product workflow', () => {
           request.reply({ statusCode: 503, body: { detail: 'Controlled reevaluation outage' } });
         }
       }).as('controlledBatchReevaluation');
-      cy.get(`[data-cy="transactionBatchCreateNormalizationRule-${csvCandidateId}"]`).click();
+      openRowActions(`[data-cy="transactionBatchRow-${csvCandidateId}"]`);
+      cy.get(`[data-cy="transactionBatchRow-${csvCandidateId}"]`).within(() => {
+        cy.get(`[data-cy="transactionBatchCreateNormalizationRule-${csvCandidateId}"]`).click();
+      });
       cy.get('#contextual-description-rule-name').clear();
       cy.get('#contextual-description-rule-name').type(partialRuleName);
       cy.get('#contextual-description-rule-result').clear();
@@ -599,6 +645,85 @@ describe('Transaction Batch product workflow', () => {
       cy.wait('@controlledBatchReevaluation').its('response.statusCode').should('eq', 200);
       cy.get('@partialRuleCreate.all').should('have.length', 1);
     });
+  });
+
+  it('previews and applies classification for a materialized manual creation before final Save', () => {
+    const description = uniqueName('manual-preview');
+    createManualClassificationRule(description);
+    createOpenBatch();
+
+    cy.intercept('POST', '/api/transaction-batches/*/candidates').as('materializeManualCandidate');
+    cy.get('[data-cy="transactionBatchAddManual"]').click();
+    cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
+    cy.get('#batch-editor-transaction-date').type('2026-10-16');
+    cy.get('#batch-editor-description').type(description);
+    cy.get('#batch-editor-amount').type('55.00');
+    cy.wait('@materializeManualCandidate').its('response.statusCode').should('eq', 200);
+
+    cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
+    cy.get('.modal')
+      .contains(/categoría sugerida/i)
+      .should('be.visible');
+    cy.get('.modal').should('not.contain', 'descripción sugerida');
+    cy.intercept('POST', '/api/transaction-batches/*/candidates/*/apply-rules').as('applyManualSuggestion');
+    cy.contains('.modal button', /aplicar categoría sugerida/i).click();
+    cy.wait('@applyManualSuggestion').its('response.statusCode').should('eq', 200);
+    cy.get('.modal').should('not.contain', /categoría sugerida/i);
+    cy.contains('.modal button', /aplicar etiquetas sugeridas/i).click();
+    cy.wait('@applyManualSuggestion').its('response.statusCode').should('eq', 200);
+    cy.get('.modal').should('not.contain', /etiquetas sugeridas/i);
+    cy.get('[data-cy="transactionBatchEditorSave"]').click();
+
+    cy.contains('[data-cy^="transactionBatchRow-"]', description)
+      .should('be.visible')
+      .within(() => {
+        cy.get('[aria-label^="Categoría para"]').should('have.value', String(categoryId));
+        cy.get('[data-cy$="Chip"]').should('contain', tagName);
+      });
+    cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', 1);
+  });
+
+  it('removes a provisional manual candidate on Cancel and leaves an existing-row cancel untouched', () => {
+    const provisionalDescription = uniqueName('manual-cancel');
+    const existingDescription = uniqueName('manual-existing');
+    createOpenBatch();
+
+    cy.intercept('POST', '/api/transaction-batches/*/candidates').as('materializeForCancel');
+    cy.get('[data-cy="transactionBatchAddManual"]').click();
+    cy.get('#batch-editor-description').type(provisionalDescription);
+    cy.get('#batch-editor-amount').type('19.00');
+    cy.wait('@materializeForCancel').its('response.statusCode').should('eq', 200);
+    cy.then(() =>
+      cy.authenticatedRequest<{ candidates: Array<{ description?: string | null }> }>({
+        method: 'GET',
+        url: `/api/transaction-batches/${batchId}`,
+      }),
+    ).then(({ body }) => {
+      expect(body.candidates.filter(candidate => candidate.description === provisionalDescription)).to.have.length(1);
+    });
+    cy.get('.modal').contains('button', 'Cancelar').click();
+    cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
+    cy.reload();
+    cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
+    cy.then(() =>
+      cy.authenticatedRequest<{ candidates: Array<{ description?: string | null }> }>({
+        method: 'GET',
+        url: `/api/transaction-batches/${batchId}`,
+      }),
+    ).then(({ body }) => {
+      expect(body.candidates.filter(candidate => candidate.description === provisionalDescription)).to.have.length(0);
+    });
+
+    addCompleteManualRow(existingDescription, '29.00');
+    cy.contains('[data-cy^="transactionBatchRow-"]', existingDescription).as('existingRow');
+    cy.get('@existingRow').within(() => {
+      cy.contains('button', 'Editar').click();
+    });
+    cy.get('#batch-editor-description').clear();
+    cy.get('#batch-editor-description').type(`${existingDescription} local`);
+    cy.get('.modal').contains('button', 'Cancelar').click();
+    cy.contains('[data-cy^="transactionBatchRow-"]', existingDescription).should('be.visible');
+    cy.contains('[data-cy^="transactionBatchRow-"]', `${existingDescription} local`).should('not.exist');
   });
 
   it('observes bounded product loading for comparable 40 and 500 row CSV workspaces', () => {

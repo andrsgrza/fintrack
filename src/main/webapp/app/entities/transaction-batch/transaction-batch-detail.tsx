@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Form, FormGroup, Input, Label, Modal, ModalBody, ModalFooter, ModalHeader, Spinner } from 'reactstrap';
+import { Button, FormGroup, Input, Label, Modal, ModalBody, ModalFooter, ModalHeader, Spinner } from 'reactstrap';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 import { ProductTagSelector } from 'app/shared/ui/product-tag-selector';
@@ -36,11 +36,167 @@ import TransactionBatchRuleCreationModal, {
   TransactionBatchRuleCreationKind,
 } from './transaction-batch-rule-creation-modal';
 import { ContextualRuleSaveAction } from 'app/shared/model/contextual-rule-save-action.model';
+import TransactionBatchEditorModal, { BatchEditorValues, BatchSuggestionDomain } from './transaction-batch-editor-modal';
+import { formatBatchAmount, signedAmountForFlow } from './transaction-batch-presentation';
 
 const operationKey = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `batch-${Date.now()}-${Math.random()}`);
 
 const categoryStyle = (color?: string | null): React.CSSProperties | undefined =>
   color ? { borderInlineStart: `0.3rem solid ${color}`, backgroundColor: `${color}12` } : undefined;
+
+type BatchEditorSession = { candidate?: BatchCandidate; key: string; createMode: boolean };
+type BatchSortKey = 'ROW_POSITION' | 'DATE' | 'AMOUNT' | 'DESCRIPTION' | 'CATEGORY';
+type BatchSortDirection = 'ASC' | 'DESC';
+
+const editorErrorFor = (failure: unknown): { message: string; field?: 'category' | 'amount' | 'transactionDate' | 'postingDate' } => {
+  const detail = String(
+    (failure as { response?: { data?: { detail?: string; message?: string } }; message?: string })?.response?.data?.detail ??
+      (failure as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ??
+      (failure as { message?: string })?.message ??
+      '',
+  );
+  if (detail.toLocaleLowerCase().includes('category is incompatible with the transaction flow')) {
+    return {
+      field: 'category',
+      message: 'La categoría elegida sólo es válida para el otro tipo de movimiento. Elige otra categoría o cambia el tipo.',
+    };
+  }
+  if (detail.toLocaleLowerCase().includes('signed amount')) {
+    return { field: 'amount', message: 'El monto debe ser positivo y tener como máximo dos decimales.' };
+  }
+  if (detail.toLocaleLowerCase().includes('stale')) {
+    return { message: 'Esta fila cambió en otra sesión. Conservamos tu edición local para que la revises antes de reintentar.' };
+  }
+  if (detail.toLocaleLowerCase().includes('date')) {
+    return { field: 'transactionDate', message: 'Revisa las fechas antes de guardar el movimiento.' };
+  }
+  return { message: 'No se pudo guardar el movimiento. Tu edición sigue abierta para que puedas corregirla o reintentar.' };
+};
+
+const editorPayload = (values: BatchEditorValues) => {
+  const signedAmount = signedAmountForFlow(values.amount, values.flow);
+  return {
+    transactionDate: values.transactionDate || undefined,
+    postingDate: values.postingDate || undefined,
+    description: values.description.trim() || undefined,
+    signedAmount: signedAmount ?? undefined,
+    externalReference: values.externalReference.trim() || undefined,
+    notes: values.notes.trim() || undefined,
+    categoryId: values.categoryId,
+    tagIds: values.tags.flatMap(tag => (tag.id ? [tag.id] : [])),
+    clearFields: [
+      !values.transactionDate ? 'TRANSACTION_DATE' : undefined,
+      !values.postingDate ? 'POSTING_DATE' : undefined,
+      !values.description.trim() ? 'DESCRIPTION' : undefined,
+      signedAmount === null ? 'SIGNED_AMOUNT' : undefined,
+      !values.externalReference.trim() ? 'EXTERNAL_REFERENCE' : undefined,
+      !values.notes.trim() ? 'NOTES' : undefined,
+    ].filter(Boolean),
+  };
+};
+
+const classificationChanged = (candidate: BatchCandidate, values: BatchEditorValues) => ({
+  categoryChanged: values.categoryId !== (candidate.categoryId ?? undefined),
+  tagsChanged:
+    values.tags.length !== candidate.tags.length || values.tags.some(tag => !candidate.tags.some(current => current.id === tag.id)),
+});
+
+const DomainSuggestion = ({
+  title,
+  value,
+  ruleName,
+  ruleHref,
+  applyLabel,
+  showApply,
+  pending,
+  onApply,
+}: {
+  title: string;
+  value?: React.ReactNode;
+  ruleName?: string | null;
+  ruleHref?: string;
+  applyLabel: string;
+  showApply: boolean;
+  pending: boolean;
+  onApply: () => void;
+}) => {
+  if (!value) return null;
+  return (
+    <div className="transaction-batch-domain-suggestion mt-2">
+      <div className="small text-muted">{title}</div>
+      <div className="fw-semibold">{value}</div>
+      {ruleName ? (
+        <div className="small text-muted">
+          Sugerido por{' '}
+          {ruleHref ? (
+            <Link className="transaction-batch-rule-link" to={ruleHref}>
+              {ruleName}
+            </Link>
+          ) : (
+            ruleName
+          )}
+        </div>
+      ) : null}
+      {showApply ? (
+        <Button size="sm" color="primary" outline className="mt-2" onClick={onApply} disabled={pending}>
+          {applyLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+};
+
+const RowActions = ({
+  row,
+  pending,
+  onEdit,
+  onCreateRule,
+  onRemove,
+}: {
+  row: BatchCandidate;
+  pending: boolean;
+  onEdit: () => void;
+  onCreateRule: (kind: TransactionBatchRuleCreationKind, row: BatchCandidate) => void;
+  onRemove: () => void;
+}) => (
+  <div className="transaction-batch-row-detail d-flex flex-wrap align-items-start gap-2">
+    <Button size="sm" color="primary" outline onClick={onEdit} disabled={pending}>
+      Editar
+    </Button>
+    <details className="transaction-batch-row-actions">
+      <summary className="btn btn-sm btn-outline-secondary">Más acciones</summary>
+      <div className="d-flex flex-column align-items-start gap-2 mt-2">
+        <Button
+          size="sm"
+          color="secondary"
+          outline
+          onClick={() => onCreateRule('TRANSACTION', row)}
+          disabled={pending}
+          data-cy={`transactionBatchCreateTransactionRule-${row.id}`}
+          data-testid={`transactionBatchCreateTransactionRule-${row.id}`}
+        >
+          Crear regla de clasificación
+        </Button>
+        {row.source === 'FILE_IMPORT' && row.sourceDescription?.trim() ? (
+          <Button
+            size="sm"
+            color="secondary"
+            outline
+            onClick={() => onCreateRule('NORMALIZATION', row)}
+            disabled={pending}
+            data-cy={`transactionBatchCreateNormalizationRule-${row.id}`}
+            data-testid={`transactionBatchCreateNormalizationRule-${row.id}`}
+          >
+            Crear regla de descripción
+          </Button>
+        ) : null}
+        <Button size="sm" color="danger" outline onClick={onRemove} disabled={pending}>
+          Eliminar
+        </Button>
+      </div>
+    </details>
+  </div>
+);
 
 const TransactionBatchDetail = () => {
   const { id } = useParams<'id'>();
@@ -53,9 +209,15 @@ const TransactionBatchDetail = () => {
   const [previews, setPreviews] = useState<BatchRulePreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [editing, setEditing] = useState<BatchCandidate>();
+  const [editor, setEditor] = useState<BatchEditorSession>();
+  const [editorSaving, setEditorSaving] = useState(false);
+  const [editorError, setEditorError] = useState('');
+  const [editorFieldError, setEditorFieldError] = useState<'category' | 'amount' | 'transactionDate' | 'postingDate' | null>(null);
   const [file, setFile] = useState<File>();
   const [appendKey, setAppendKey] = useState<string>();
+  const [csvConfirmOpen, setCsvConfirmOpen] = useState(false);
+  const [appendUploading, setAppendUploading] = useState(false);
+  const [appendFeedback, setAppendFeedback] = useState('');
   const [publishOpen, setPublishOpen] = useState(false);
   const [receipt, setReceipt] = useState<BatchReceipt>();
   const [publishing, setPublishing] = useState(false);
@@ -64,8 +226,11 @@ const TransactionBatchDetail = () => {
   const [filter, setFilter] = useState<'ALL' | 'NEEDS_ATTENTION' | 'MANUAL' | 'CSV'>('ALL');
   const [pendingRowIds, setPendingRowIds] = useState<number[]>([]);
   const [expandedMobileRowIds, setExpandedMobileRowIds] = useState<number[]>([]);
+  const [sortKey, setSortKey] = useState<BatchSortKey>('ROW_POSITION');
+  const [sortDirection, setSortDirection] = useState<BatchSortDirection>('ASC');
   const [ruleCreationContext, setRuleCreationContext] = useState<ITransactionBatchRuleCreationContext | null>(null);
   const [ruleCreationFeedback, setRuleCreationFeedback] = useState<{ color: 'success'; message: string } | null>(null);
+  const filePickerRef = useRef<HTMLInputElement>(null);
 
   const replaceWorkspace = useCallback((workspace?: TransactionBatchWorkspace) => {
     batchRef.current = workspace;
@@ -79,7 +244,9 @@ const TransactionBatchDetail = () => {
       replaceWorkspace({
         ...current,
         version: mutation.batchVersion,
-        candidates: current.candidates.map(candidate => (candidate.id === mutation.candidate.id ? mutation.candidate : candidate)),
+        candidates: current.candidates.some(candidate => candidate.id === mutation.candidate.id)
+          ? current.candidates.map(candidate => (candidate.id === mutation.candidate.id ? mutation.candidate : candidate))
+          : [...current.candidates, mutation.candidate],
       });
     },
     [replaceWorkspace],
@@ -118,6 +285,7 @@ const TransactionBatchDetail = () => {
         protectManualChanges: workspace.protectManualChanges,
       });
       setError('');
+      return workspace;
     } catch {
       try {
         if (id) {
@@ -137,68 +305,141 @@ const TransactionBatchDetail = () => {
   }, [reload]);
 
   const categoryOptions = useMemo(() => categories.filter(category => category.active !== false), [categories]);
-  const invalidCount = batch?.candidates.filter(row => row.validationStatus !== 'VALID').length ?? 0;
+  const provisionalCandidateId = editor?.createMode ? editor.candidate?.id : undefined;
+  const queuedCandidates = batch?.candidates.filter(row => row.id !== provisionalCandidateId) ?? [];
+  const invalidCount = queuedCandidates.filter(row => row.validationStatus !== 'VALID').length;
   const visibleRows = useMemo(() => {
     if (!batch) return [];
-    return batch.candidates.filter(row => {
+    const rows = batch.candidates.filter(row => {
+      if (row.id === provisionalCandidateId) return false;
       if (filter === 'NEEDS_ATTENTION') return row.validationStatus !== 'VALID' || row.inputIssues.length > 0;
       if (filter === 'MANUAL') return row.source === 'MANUAL';
       if (filter === 'CSV') return row.source === 'FILE_IMPORT';
       return true;
     });
-  }, [batch, filter]);
+    const direction = sortDirection === 'ASC' ? 1 : -1;
+    const text = (value?: string | null) => value?.trim().toLocaleLowerCase('es-MX') ?? '';
+    const comparison = (left: BatchCandidate, right: BatchCandidate) => {
+      if (sortKey === 'ROW_POSITION') return left.rowPosition - right.rowPosition;
+      if (sortKey === 'DATE') return text(left.transactionDate).localeCompare(text(right.transactionDate), 'es-MX');
+      if (sortKey === 'AMOUNT') return (left.signedAmount ?? 0) - (right.signedAmount ?? 0);
+      if (sortKey === 'DESCRIPTION') return text(left.description).localeCompare(text(right.description), 'es-MX');
+      return text(left.categoryName).localeCompare(text(right.categoryName), 'es-MX');
+    };
+    return [...rows].sort((left, right) => {
+      const primary = comparison(left, right);
+      return primary === 0 ? left.rowPosition - right.rowPosition || left.id - right.id : primary * direction;
+    });
+  }, [batch, filter, provisionalCandidateId, sortDirection, sortKey]);
   const previewFor = (row: BatchCandidate) => previews.find(preview => preview.candidateId === row.id);
   const tagName = (tagId: number) => tags.find(tag => tag.id === tagId)?.name ?? `Etiqueta #${tagId}`;
   const categoryName = (categoryId: number) => categories.find(category => category.id === categoryId)?.name ?? `Categoría #${categoryId}`;
-  const addRow = async () => {
-    if (!batch) return;
-    try {
-      await addManualRow(batch.id, batch.version);
-      await reload();
-    } catch {
-      setError('No se pudo añadir el borrador. Actualiza el lote e inténtalo de nuevo.');
+  const openNewEditor = () => {
+    setEditorError('');
+    setEditorFieldError(null);
+    setEditor({ key: `new-${Date.now()}`, createMode: true });
+  };
+  const openEditor = (candidate: BatchCandidate) => {
+    setEditorError('');
+    setEditorFieldError(null);
+    setEditor({ candidate, key: `row-${candidate.id}-${candidate.version}`, createMode: false });
+  };
+  const closeEditor = async () => {
+    if (editorSaving) return;
+    if (batch && editor?.createMode && editor.candidate) {
+      setEditorSaving(true);
+      setEditorError('');
+      try {
+        await deleteRow(batch.id, editor.candidate.id, editor.candidate.version);
+        await reload();
+      } catch {
+        setEditorError('No se pudo cancelar esta creación. El borrador provisional sigue abierto para que puedas reintentar o guardarlo.');
+        return;
+      } finally {
+        setEditorSaving(false);
+      }
     }
+    setEditor(undefined);
+    setEditorError('');
+    setEditorFieldError(null);
   };
   const upload = async () => {
     if (!batch || !file) return;
     const key = appendKey ?? operationKey();
     setAppendKey(key);
+    setAppendUploading(true);
     try {
-      await appendCsv(batch.id, batch.version, key, file);
+      const result = await appendCsv(batch.id, batch.version, key, file);
+      setAppendFeedback(
+        `${file.name}: se añadieron ${result.acceptedCandidateCount ?? result.appendedCandidateIds?.length ?? 0} fila${
+          (result.acceptedCandidateCount ?? result.appendedCandidateIds?.length ?? 0) === 1 ? '' : 's'
+        }${result.evaluationStatus ? ` · evaluación ${result.evaluationStatus.toLocaleLowerCase()}` : ''}.`,
+      );
       setFile(undefined);
       setAppendKey(undefined);
+      setCsvConfirmOpen(false);
+      if (filePickerRef.current) filePickerRef.current.value = '';
       await reload();
     } catch {
       setError('No se pudo añadir el CSV. Conservamos la misma clave para que puedas reintentar esta intención sin duplicar filas.');
+    } finally {
+      setAppendUploading(false);
     }
   };
-  const saveEdit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!batch || !editing) return;
+  const persistEditorValues = async (values: BatchEditorValues) => {
+    const workspace = batchRef.current;
+    const session = editor;
+    if (!workspace || !session) return undefined;
+    setEditorSaving(true);
+    setEditorError('');
+    setEditorFieldError(null);
     try {
-      const clearFields = [
-        !editing.transactionDate ? 'TRANSACTION_DATE' : undefined,
-        !editing.postingDate ? 'POSTING_DATE' : undefined,
-        !editing.description?.trim() ? 'DESCRIPTION' : undefined,
-        editing.signedAmount === null ? 'SIGNED_AMOUNT' : undefined,
-        !editing.externalReference?.trim() ? 'EXTERNAL_REFERENCE' : undefined,
-        !editing.notes?.trim() ? 'NOTES' : undefined,
-      ].filter(Boolean);
-      await patchRow(batch.id, editing.id, {
-        expectedCandidateVersion: editing.version,
-        transactionDate: editing.transactionDate || undefined,
-        postingDate: editing.postingDate || undefined,
-        description: editing.description?.trim() || undefined,
-        signedAmount: editing.signedAmount ?? undefined,
-        externalReference: editing.externalReference?.trim() || undefined,
-        notes: editing.notes?.trim() || undefined,
-        clearFields,
-      });
-      setEditing(undefined);
-      await reload();
-    } catch {
-      setError('No se pudo guardar la fila. No se reemplazó tu edición local.');
+      const mutation = session.candidate
+        ? await patchRow(workspace.id, session.candidate.id, {
+            ...editorPayload(values),
+            expectedCandidateVersion: session.candidate.version,
+            ...classificationChanged(session.candidate, values),
+          })
+        : await addManualRow(workspace.id, workspace.version, editorPayload(values));
+      applyRowMutation(mutation);
+      setEditor(current => (current?.key === session.key ? { ...current, candidate: mutation.candidate } : current));
+      try {
+        setPreviews(await previewRules(workspace.id));
+      } catch {
+        setEditorError(
+          'Se guardó el borrador, pero no se pudieron actualizar las sugerencias. Puedes seguir editando o intentar de nuevo.',
+        );
+      }
+      return mutation.candidate;
+    } catch (failure) {
+      const mapped = editorErrorFor(failure);
+      setEditorFieldError(mapped.field ?? null);
+      setEditorError(mapped.message);
+      return undefined;
+    } finally {
+      setEditorSaving(false);
     }
+  };
+  const saveEditor = async (values: BatchEditorValues) => {
+    if (!editor) return;
+    const hasData = Boolean(
+      values.transactionDate ||
+        values.postingDate ||
+        values.description.trim() ||
+        values.amount ||
+        values.categoryId ||
+        values.tags.length ||
+        values.externalReference.trim() ||
+        values.notes.trim(),
+    );
+    if (!editor.candidate && !hasData) {
+      setEditor(undefined);
+      return;
+    }
+    const persisted = await persistEditorValues(values);
+    if (!persisted) return;
+    setEditor(undefined);
+    await reload();
   };
   const updateCategory = async (row: BatchCandidate, categoryId: string) => {
     try {
@@ -328,15 +569,17 @@ const TransactionBatchDetail = () => {
         action === 'REEVALUATE_ROW' ? 'La regla se guardó y se reevaluó sólo esta fila.' : 'La regla se guardó y se reevaluó todo el lote.',
     });
   };
-  const applySuggestion = async (row: BatchCandidate) => {
+  const applySuggestion = async (row: BatchCandidate, domain: BatchSuggestionDomain) => {
     if (!batch) return;
     const preview = previewFor(row);
     if (!preview) return;
     const suggestedDescription = preview.suggestedDescription?.trim();
-    const applyDescription = !!suggestedDescription && suggestedDescription !== row.description;
-    const applyCategory = !!preview.suggestedCategoryId && !row.categoryId;
+    const applyDescription =
+      domain === 'DESCRIPTION' && !batch.autoApplyDescriptions && !!suggestedDescription && suggestedDescription !== row.description;
+    const applyCategory = domain === 'CATEGORY' && !batch.autoApplyCategories && !!preview.suggestedCategoryId && !row.categoryId;
     const tagIds = preview.eligibleTagIds.filter(tagId => !row.tags.some(tag => tag.id === tagId));
-    if (!applyDescription && !applyCategory && !tagIds.length) return;
+    const applyTags = domain === 'TAGS' && !batch.autoApplyTags && tagIds.length > 0;
+    if (!applyDescription && !applyCategory && !applyTags) return;
     try {
       await applyRules(batch.id, row.id, {
         expectedCandidateVersion: row.version,
@@ -344,13 +587,19 @@ const TransactionBatchDetail = () => {
         expectedSuggestedDescription: applyDescription ? suggestedDescription : undefined,
         applyCategory,
         expectedSuggestedCategoryId: applyCategory ? preview.suggestedCategoryId : undefined,
-        applyTags: tagIds.length > 0,
-        expectedSuggestedTagIds: tagIds,
+        applyTags,
+        expectedSuggestedTagIds: applyTags ? tagIds : [],
       });
-      await reload();
+      const workspace = await reload();
+      const refreshed = workspace?.candidates.find(candidate => candidate.id === row.id);
+      if (refreshed) {
+        setEditor(current => (current?.candidate?.id === refreshed.id ? { ...current, candidate: refreshed } : current));
+      }
+      return refreshed;
     } catch {
       await reload();
       setError('La sugerencia cambió o ya no puede aplicarse. Actualizamos la cola para mostrar el estado actual.');
+      return undefined;
     }
   };
   const persistSettings = async () => {
@@ -425,9 +674,15 @@ const TransactionBatchDetail = () => {
     <ProductPage wide>
       <ProductPageHeader
         title="Lote de transacciones"
-        subtitle={`${batch.accountName} · ${batch.candidates.length} borrador${batch.candidates.length === 1 ? '' : 'es'}`}
+        subtitle={`${batch.accountName} · ${queuedCandidates.length} borrador${queuedCandidates.length === 1 ? '' : 'es'}`}
         actions={
           <>
+            <Button color="primary" onClick={openNewEditor} data-cy="transactionBatchAddManual">
+              + Añadir movimiento
+            </Button>
+            <Button color="secondary" outline onClick={() => filePickerRef.current?.click()} data-cy="transactionBatchImportCsv">
+              Importar CSV
+            </Button>
             <Button color="secondary" outline onClick={reload}>
               Actualizar
             </Button>
@@ -471,30 +726,26 @@ const TransactionBatchDetail = () => {
           {ruleCreationFeedback.message}
         </div>
       ) : null}
-      <div className="row g-3 mb-3">
-        <div className="col-md-6">
-          <ProductSection title="Añadir movimiento">
-            <Button color="primary" onClick={addRow} data-cy="transactionBatchAddManual">
-              + Añadir movimiento
-            </Button>
-            <p className="small text-muted mt-2 mb-0">Se guarda un borrador incompleto para que lo completes cuando estés listo.</p>
-          </ProductSection>
+      <input
+        ref={filePickerRef}
+        className="visually-hidden"
+        type="file"
+        accept=".csv,text/csv"
+        aria-label="Seleccionar CSV para importar"
+        data-cy="transactionBatchCsvFile"
+        onChange={event => {
+          const selected = event.target.files?.[0];
+          if (!selected) return;
+          setFile(selected);
+          setAppendKey(undefined);
+          setCsvConfirmOpen(true);
+        }}
+      />
+      {appendFeedback ? (
+        <div role="status" className="alert alert-success" data-cy="transactionBatchAppendFeedback">
+          {appendFeedback}
         </div>
-        <div className="col-md-6">
-          <ProductSection title="Añadir desde CSV">
-            <Input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={event => setFile(event.target.files?.[0])}
-              data-cy="transactionBatchCsvFile"
-            />
-            <Button className="mt-2" color="secondary" disabled={!file} onClick={upload} data-cy="transactionBatchAppendCsv">
-              Añadir CSV
-            </Button>
-            <p className="small text-muted mt-2 mb-0">Añade filas al final; nunca reemplaza borradores guardados.</p>
-          </ProductSection>
-        </div>
-      </div>
+      ) : null}
       <ProductSection title="Cola de revisión" dataCy="transactionBatchQueue">
         <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2 border-bottom pb-3 mb-3">
           <div className="d-flex flex-wrap gap-2" role="group" aria-label="Filtrar borradores">
@@ -516,14 +767,41 @@ const TransactionBatchDetail = () => {
               </Button>
             ))}
           </div>
-          <span className="small text-muted">
-            {visibleRows.length} de {batch.candidates.length} borradores
-          </span>
+          <div className="d-flex align-items-center gap-2">
+            <Label className="small text-muted mb-0" for="transaction-batch-sort">
+              Ordenar
+            </Label>
+            <Input
+              id="transaction-batch-sort"
+              type="select"
+              bsSize="sm"
+              value={sortKey}
+              onChange={event => setSortKey(event.target.value as BatchSortKey)}
+              data-cy="transactionBatchSort"
+            >
+              <option value="ROW_POSITION">Orden de ingreso</option>
+              <option value="DATE">Fecha</option>
+              <option value="AMOUNT">Importe</option>
+              <option value="DESCRIPTION">Descripción</option>
+              <option value="CATEGORY">Categoría</option>
+            </Input>
+            <Button
+              type="button"
+              size="sm"
+              color="secondary"
+              outline
+              onClick={() => setSortDirection(current => (current === 'ASC' ? 'DESC' : 'ASC'))}
+              aria-label={sortDirection === 'ASC' ? 'Orden ascendente' : 'Orden descendente'}
+              data-cy="transactionBatchSortDirection"
+            >
+              {sortDirection === 'ASC' ? '↑' : '↓'}
+            </Button>
+            <span className="small text-muted">
+              {visibleRows.length} de {queuedCandidates.length}
+            </span>
+          </div>
         </div>
-        <div
-          className="d-none d-md-grid fw-semibold text-muted small text-uppercase border-bottom pb-2 mb-2"
-          style={{ gridTemplateColumns: '1fr 2fr 1fr 1.6fr 2fr auto', gap: '1rem' }}
-        >
+        <div className="transaction-batch-review-grid d-none d-md-grid fw-semibold text-muted small text-uppercase border-bottom pb-2 mb-2">
           <span>Fecha</span>
           <span>Movimiento</span>
           <span>Importe</span>
@@ -538,17 +816,23 @@ const TransactionBatchDetail = () => {
             const descriptionSuggestion = !!suggestedDescription && suggestedDescription !== row.description;
             const categorySuggestion = !!preview?.suggestedCategoryId && !row.categoryId;
             const tagSuggestions = (preview?.eligibleTagIds ?? []).filter(tagId => !row.tags.some(tag => tag.id === tagId));
-            const hasSuggestion = descriptionSuggestion || categorySuggestion || tagSuggestions.length > 0;
             const currentCategory = categories.find(category => category.id === row.categoryId);
             const selectableForRow = currentCategory?.active === false ? [currentCategory, ...categoryOptions] : categoryOptions;
             const rowMutationPending = pendingRowIds.includes(row.id);
+            const descriptionRuleHref = preview?.descriptionRuleId
+              ? `/description-normalization-rule/${preview.descriptionRuleId}/view`
+              : undefined;
+            const categoryRuleHref = preview?.suggestedCategoryRuleId
+              ? `/transaction-rule/${preview.suggestedCategoryRuleId}/view`
+              : undefined;
+            const firstTagSuggestion = preview?.eligibleTagSuggestions?.find(suggestion => tagSuggestions.includes(suggestion.tagId));
             return (
               <article
                 key={row.id}
                 className={`transaction-batch-row border rounded-3 p-3${expandedMobileRowIds.includes(row.id) ? ' mobile-expanded' : ''}`}
                 data-cy={`transactionBatchRow-${row.id}`}
               >
-                <div className="transaction-batch-row-grid d-grid gap-3 align-items-start">
+                <div className="transaction-batch-review-grid d-grid gap-3 align-items-start">
                   <div>
                     <span className="d-md-none small text-muted d-block">Fecha</span>
                     {row.transactionDate || 'Pendiente'}
@@ -559,10 +843,22 @@ const TransactionBatchDetail = () => {
                     <div className="small text-muted">
                       {row.source === 'MANUAL' ? 'Manual' : 'CSV'} · {row.validationStatus}
                     </div>
+                    <div className="transaction-batch-row-detail">
+                      <DomainSuggestion
+                        title="Descripción sugerida"
+                        value={descriptionSuggestion ? suggestedDescription : undefined}
+                        ruleName={preview?.descriptionRuleName}
+                        ruleHref={descriptionRuleHref}
+                        applyLabel="Aplicar descripción"
+                        showApply={!batch.autoApplyDescriptions}
+                        pending={rowMutationPending}
+                        onApply={() => applySuggestion(row, 'DESCRIPTION')}
+                      />
+                    </div>
                   </div>
                   <div>
                     <span className="d-md-none small text-muted d-block">Importe</span>
-                    {row.signedAmount ?? 'Pendiente'}
+                    <strong>{formatBatchAmount(row.signedAmount, batch.accountCurrency ?? row.currencySnapshot ?? 'MXN')}</strong>
                   </div>
                   <div className="transaction-batch-row-detail">
                     <span className="d-md-none small text-muted d-block">Categoría</span>
@@ -582,6 +878,16 @@ const TransactionBatchDetail = () => {
                         </option>
                       ))}
                     </Input>
+                    <DomainSuggestion
+                      title="Categoría sugerida"
+                      value={categorySuggestion ? categoryName(preview?.suggestedCategoryId) : undefined}
+                      ruleName={preview?.suggestedCategoryRuleName}
+                      ruleHref={categoryRuleHref}
+                      applyLabel="Aplicar categoría"
+                      showApply={!batch.autoApplyCategories}
+                      pending={rowMutationPending}
+                      onApply={() => applySuggestion(row, 'CATEGORY')}
+                    />
                   </div>
                   <div className="transaction-batch-row-detail">
                     <span className="d-md-none small text-muted d-block">Etiquetas</span>
@@ -591,6 +897,16 @@ const TransactionBatchDetail = () => {
                       onChange={selected => updateTags(row, selected)}
                       dataCy={`transactionBatchTags-${row.id}`}
                       disabled={rowMutationPending}
+                    />
+                    <DomainSuggestion
+                      title="Etiquetas sugeridas"
+                      value={tagSuggestions.length ? tagSuggestions.map(tagName).join(', ') : undefined}
+                      ruleName={firstTagSuggestion?.ruleName}
+                      ruleHref={firstTagSuggestion?.ruleId ? `/transaction-rule/${firstTagSuggestion.ruleId}/view` : undefined}
+                      applyLabel="Aplicar etiquetas"
+                      showApply={!batch.autoApplyTags}
+                      pending={rowMutationPending}
+                      onApply={() => applySuggestion(row, 'TAGS')}
                     />
                   </div>
                   <div className="d-md-none">
@@ -609,68 +925,17 @@ const TransactionBatchDetail = () => {
                       {expandedMobileRowIds.includes(row.id) ? 'Ocultar detalles' : 'Mostrar detalles'}
                     </Button>
                   </div>
-                  <div className="transaction-batch-row-detail d-flex gap-1">
-                    <div className="d-flex flex-wrap gap-1">
-                      <Button
-                        size="sm"
-                        color="secondary"
-                        outline
-                        onClick={() => openRuleCreation('TRANSACTION', row)}
-                        disabled={rowMutationPending}
-                        data-cy={`transactionBatchCreateTransactionRule-${row.id}`}
-                        data-testid={`transactionBatchCreateTransactionRule-${row.id}`}
-                      >
-                        Regla de clasificación
-                      </Button>
-                      {row.source === 'FILE_IMPORT' && row.sourceDescription?.trim() ? (
-                        <Button
-                          size="sm"
-                          color="secondary"
-                          outline
-                          onClick={() => openRuleCreation('NORMALIZATION', row)}
-                          disabled={rowMutationPending}
-                          data-cy={`transactionBatchCreateNormalizationRule-${row.id}`}
-                          data-testid={`transactionBatchCreateNormalizationRule-${row.id}`}
-                        >
-                          Regla de descripción
-                        </Button>
-                      ) : null}
-                      <Button size="sm" color="secondary" outline onClick={() => setEditing({ ...row })} disabled={rowMutationPending}>
-                        Editar
-                      </Button>
-                      <Button size="sm" color="danger" outline onClick={() => removeRow(row)} disabled={rowMutationPending}>
-                        Eliminar
-                      </Button>
-                    </div>
-                  </div>
+                  <RowActions
+                    row={row}
+                    pending={rowMutationPending}
+                    onEdit={() => openEditor(row)}
+                    onCreateRule={openRuleCreation}
+                    onRemove={() => removeRow(row)}
+                  />
                 </div>
                 {row.inputIssues.length ? (
                   <div className="small text-danger mt-3">
-                    <strong>Requiere corrección:</strong> {row.inputIssues.map(issue => `${issue.field}: ${issue.reasonCode}`).join(' · ')}
-                  </div>
-                ) : null}
-                {hasSuggestion ? (
-                  <div className="transaction-batch-suggestion mt-3" data-cy={`transactionBatchSuggestion-${row.id}`}>
-                    <div className="small text-muted">
-                      <strong>Sugerencia de reglas:</strong>{' '}
-                      {[
-                        descriptionSuggestion ? `Descripción: ${suggestedDescription}` : undefined,
-                        categorySuggestion ? `Categoría: ${categoryName(preview?.suggestedCategoryId)}` : undefined,
-                        tagSuggestions.length ? `Etiquetas: ${tagSuggestions.map(tagName).join(', ')}` : undefined,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </div>
-                    <Button
-                      size="sm"
-                      color="primary"
-                      outline
-                      className="mt-2"
-                      onClick={() => applySuggestion(row)}
-                      disabled={rowMutationPending}
-                    >
-                      Aplicar sugerencia
-                    </Button>
+                    <strong>Requiere corrección:</strong> revisa los datos marcados antes de publicar.
                   </div>
                 ) : null}
               </article>
@@ -682,7 +947,7 @@ const TransactionBatchDetail = () => {
       <div className="d-flex justify-content-end mt-3">
         <Button
           color="primary"
-          disabled={!batch.candidates.length || invalidCount > 0 || pendingRowIds.length > 0}
+          disabled={!queuedCandidates.length || invalidCount > 0 || pendingRowIds.length > 0}
           onClick={() => setPublishOpen(true)}
           data-cy="transactionBatchPublish"
         >
@@ -691,75 +956,61 @@ const TransactionBatchDetail = () => {
       </div>
       {invalidCount ? <p className="small text-danger text-end mt-2">Corrige las filas pendientes antes de publicar.</p> : null}
 
-      <Modal isOpen={!!editing} toggle={() => setEditing(undefined)}>
-        <Form onSubmit={saveEdit}>
-          <ModalHeader toggle={() => setEditing(undefined)}>Editar movimiento</ModalHeader>
-          <ModalBody>
-            <FormGroup>
-              <Label for="batch-row-date">Fecha</Label>
-              <Input
-                id="batch-row-date"
-                type="date"
-                value={editing?.transactionDate || ''}
-                onChange={event => setEditing(current => current && { ...current, transactionDate: event.target.value })}
-              />
-            </FormGroup>
-            <FormGroup>
-              <Label for="batch-row-posting-date">Fecha de posteo</Label>
-              <Input
-                id="batch-row-posting-date"
-                type="date"
-                value={editing?.postingDate || ''}
-                onChange={event => setEditing(current => current && { ...current, postingDate: event.target.value })}
-              />
-            </FormGroup>
-            <FormGroup>
-              <Label for="batch-row-description">Descripción</Label>
-              <Input
-                id="batch-row-description"
-                value={editing?.description || ''}
-                onChange={event => setEditing(current => current && { ...current, description: event.target.value })}
-              />
-            </FormGroup>
-            <FormGroup>
-              <Label for="batch-row-amount">Importe con signo</Label>
-              <Input
-                id="batch-row-amount"
-                type="number"
-                step="0.01"
-                value={editing?.signedAmount ?? ''}
-                onChange={event =>
-                  setEditing(
-                    current => current && { ...current, signedAmount: event.target.value === '' ? null : Number(event.target.value) },
-                  )
-                }
-              />
-            </FormGroup>
-            <FormGroup>
-              <Label for="batch-row-reference">Referencia externa</Label>
-              <Input
-                id="batch-row-reference"
-                value={editing?.externalReference || ''}
-                onChange={event => setEditing(current => current && { ...current, externalReference: event.target.value })}
-              />
-            </FormGroup>
-            <FormGroup className="mb-0">
-              <Label for="batch-row-notes">Notas</Label>
-              <Input
-                id="batch-row-notes"
-                type="textarea"
-                value={editing?.notes || ''}
-                onChange={event => setEditing(current => current && { ...current, notes: event.target.value })}
-              />
-            </FormGroup>
-          </ModalBody>
-          <ModalFooter>
-            <Button type="button" color="secondary" outline onClick={() => setEditing(undefined)}>
-              Cancelar
-            </Button>
-            <Button color="primary">Guardar</Button>
-          </ModalFooter>
-        </Form>
+      <TransactionBatchEditorModal
+        open={!!editor}
+        sessionId={editor?.key ?? 'closed'}
+        candidate={editor?.candidate}
+        preview={editor?.candidate ? previewFor(editor.candidate) : undefined}
+        categories={categories}
+        tags={tags}
+        currency={batch.accountCurrency}
+        saving={editorSaving}
+        error={editorError}
+        fieldError={editorFieldError}
+        createMode={editor?.createMode ?? false}
+        onClose={closeEditor}
+        onSave={saveEditor}
+        onMaterialChange={persistEditorValues}
+        onApplySuggestion={async (domain, values) => {
+          const candidate = await persistEditorValues(values);
+          return candidate ? applySuggestion(candidate, domain) : undefined;
+        }}
+      />
+      <Modal
+        isOpen={csvConfirmOpen}
+        toggle={() => {
+          if (appendUploading) return;
+          setCsvConfirmOpen(false);
+          setFile(undefined);
+          setAppendKey(undefined);
+          if (filePickerRef.current) filePickerRef.current.value = '';
+        }}
+      >
+        <ModalHeader>Importar CSV</ModalHeader>
+        <ModalBody>
+          <p className="mb-2">
+            <strong>Archivo:</strong> {file?.name ?? 'Sin archivo seleccionado'}
+          </p>
+          <p className="mb-0">Las filas se añadirán a este lote. Los movimientos existentes no serán reemplazados.</p>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            color="secondary"
+            outline
+            disabled={appendUploading}
+            onClick={() => {
+              setCsvConfirmOpen(false);
+              setFile(undefined);
+              setAppendKey(undefined);
+              if (filePickerRef.current) filePickerRef.current.value = '';
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button color="primary" disabled={!file || appendUploading} onClick={upload} data-cy="transactionBatchAppendCsv">
+            {appendUploading ? <Spinner size="sm" /> : 'Importar archivo'}
+          </Button>
+        </ModalFooter>
       </Modal>
       <Modal isOpen={settingsOpen} toggle={() => setSettingsOpen(false)}>
         <ModalHeader toggle={() => setSettingsOpen(false)}>Preferencias de reglas</ModalHeader>
@@ -801,7 +1052,7 @@ const TransactionBatchDetail = () => {
         <ModalHeader toggle={() => setPublishOpen(false)}>Crear transacciones definitivas</ModalHeader>
         <ModalBody>
           <p>
-            <strong>{batch.accountName}</strong> · {batch.candidates.length} movimientos.
+            <strong>{batch.accountName}</strong> · {queuedCandidates.length} movimientos.
           </p>
           <p className="mb-0">Se usarán los valores guardados. Las sugerencias pendientes no se aplicarán automáticamente.</p>
         </ModalBody>

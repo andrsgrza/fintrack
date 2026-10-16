@@ -10,11 +10,15 @@ public class TransactionBatchRulePreviewDTO {
     private boolean descriptionEvaluable;
     private boolean descriptionMatched;
     private Long descriptionRuleId;
+    private String descriptionRuleName;
     private String suggestedDescription;
     private boolean classificationEvaluable;
     private Long suggestedCategoryId;
+    private Long suggestedCategoryRuleId;
+    private String suggestedCategoryRuleName;
     private List<Long> suggestedTagIds = List.of();
     private List<Long> eligibleTagIds = List.of();
+    private List<TransactionBatchTagSuggestionDTO> eligibleTagSuggestions = List.of();
 
     public Long getCandidateId() {
         return candidateId;
@@ -56,6 +60,14 @@ public class TransactionBatchRulePreviewDTO {
         this.descriptionRuleId = descriptionRuleId;
     }
 
+    public String getDescriptionRuleName() {
+        return descriptionRuleName;
+    }
+
+    public void setDescriptionRuleName(String descriptionRuleName) {
+        this.descriptionRuleName = descriptionRuleName;
+    }
+
     public String getSuggestedDescription() {
         return suggestedDescription;
     }
@@ -80,6 +92,22 @@ public class TransactionBatchRulePreviewDTO {
         this.suggestedCategoryId = suggestedCategoryId;
     }
 
+    public Long getSuggestedCategoryRuleId() {
+        return suggestedCategoryRuleId;
+    }
+
+    public void setSuggestedCategoryRuleId(Long suggestedCategoryRuleId) {
+        this.suggestedCategoryRuleId = suggestedCategoryRuleId;
+    }
+
+    public String getSuggestedCategoryRuleName() {
+        return suggestedCategoryRuleName;
+    }
+
+    public void setSuggestedCategoryRuleName(String suggestedCategoryRuleName) {
+        this.suggestedCategoryRuleName = suggestedCategoryRuleName;
+    }
+
     public List<Long> getSuggestedTagIds() {
         return suggestedTagIds;
     }
@@ -94,5 +122,13 @@ public class TransactionBatchRulePreviewDTO {
 
     public void setEligibleTagIds(List<Long> eligibleTagIds) {
         this.eligibleTagIds = eligibleTagIds == null ? List.of() : List.copyOf(eligibleTagIds);
+    }
+
+    public List<TransactionBatchTagSuggestionDTO> getEligibleTagSuggestions() {
+        return eligibleTagSuggestions;
+    }
+
+    public void setEligibleTagSuggestions(List<TransactionBatchTagSuggestionDTO> eligibleTagSuggestions) {
+        this.eligibleTagSuggestions = eligibleTagSuggestions == null ? List.of() : List.copyOf(eligibleTagSuggestions);
     }
 }

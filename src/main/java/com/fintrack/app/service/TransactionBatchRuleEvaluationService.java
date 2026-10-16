@@ -344,15 +344,32 @@ public class TransactionBatchRuleEvaluationService {
         );
         view.setDescriptionMatched(resolved.description().matched());
         view.setDescriptionRuleId(resolved.description().ruleId());
+        view.setDescriptionRuleName(resolved.description().ruleName());
         view.setSuggestedDescription(resolved.description().resultingDescription());
         view.setClassificationEvaluable(candidate.getAccount() != null);
-        view.setSuggestedCategoryId(
-            candidate.getCategory() == null && resolved.classification().suggestedCategory() != null
-                ? resolved.classification().suggestedCategory().categoryId()
-                : null
-        );
+        if (candidate.getCategory() == null && resolved.classification().suggestedCategory() != null) {
+            view.setSuggestedCategoryId(resolved.classification().suggestedCategory().categoryId());
+            view.setSuggestedCategoryRuleId(resolved.classification().suggestedCategory().sourceRuleId());
+            view.setSuggestedCategoryRuleName(resolved.classification().suggestedCategory().sourceRuleName());
+        }
         view.setSuggestedTagIds(resolved.suggestedTagIds());
         view.setEligibleTagIds(resolved.eligibleTagIds());
+        view.setEligibleTagSuggestions(
+            resolved
+                .classification()
+                .suggestedTags()
+                .stream()
+                .filter(tag -> resolved.eligibleTagIds().contains(tag.tagId()))
+                .map(tag -> {
+                    TransactionBatchTagSuggestionDTO suggestion = new TransactionBatchTagSuggestionDTO();
+                    suggestion.setTagId(tag.tagId());
+                    suggestion.setTagName(tag.tagName());
+                    suggestion.setRuleId(tag.sourceRuleId());
+                    suggestion.setRuleName(tag.sourceRuleName());
+                    return suggestion;
+                })
+                .toList()
+        );
         return view;
     }
 

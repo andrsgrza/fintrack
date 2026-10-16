@@ -1,5 +1,6 @@
 package com.fintrack.app.service.dto;
 
+import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionBatchStatus;
 import java.time.Instant;
 import java.util.List;
@@ -12,6 +13,7 @@ public class TransactionBatchWorkspaceDTO {
     private TransactionBatchStatus status;
     private Long accountId;
     private String accountName;
+    private CurrencyCode accountCurrency;
     private Boolean autoApplyDescriptions;
     private Boolean autoApplyCategories;
     private Boolean autoApplyTags;
@@ -57,6 +59,14 @@ public class TransactionBatchWorkspaceDTO {
 
     public void setAccountName(String accountName) {
         this.accountName = accountName;
+    }
+
+    public CurrencyCode getAccountCurrency() {
+        return accountCurrency;
+    }
+
+    public void setAccountCurrency(CurrencyCode accountCurrency) {
+        this.accountCurrency = accountCurrency;
     }
 
     public Boolean getAutoApplyDescriptions() {

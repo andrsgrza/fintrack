@@ -2,6 +2,7 @@ package com.fintrack.app.service.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Set;
 
 /** Internal input for adding one incomplete manual row to an owned OPEN batch. */
 public class TransactionBatchDraftCommand {
@@ -14,6 +15,8 @@ public class TransactionBatchDraftCommand {
     private BigDecimal signedAmount;
     private String externalReference;
     private String notes;
+    private Long categoryId;
+    private Set<Long> tagIds = Set.of();
 
     public Long getExpectedBatchVersion() {
         return expectedBatchVersion;
@@ -69,5 +72,21 @@ public class TransactionBatchDraftCommand {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryId) {
+        this.categoryId = categoryId;
+    }
+
+    public Set<Long> getTagIds() {
+        return tagIds;
+    }
+
+    public void setTagIds(Set<Long> tagIds) {
+        this.tagIds = tagIds == null ? Set.of() : Set.copyOf(tagIds);
     }
 }

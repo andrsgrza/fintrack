@@ -106,6 +106,7 @@ public class TransactionBatchCommandService {
         candidate.setUpdatedAt(candidate.getCreatedAt());
         applyDraftValues(candidate, command);
         normalizeAndDerive(candidate);
+        applyInitialClassification(candidate, command);
         recalculateValidation(candidate);
         validateBatchCandidate(batch, candidate);
         candidate = transactionCandidateRepository.saveAndFlush(candidate);
@@ -118,6 +119,10 @@ public class TransactionBatchCommandService {
         TransactionBatch batch = lockOpenBatch(batchId);
         TransactionCandidate candidate = lockBatchCandidate(batch, candidateId, command.getExpectedCandidateVersion());
         boolean changed = applyPatch(candidate, command);
+        // Derive the final flow before validating a category chosen in the same product edit. This permits a user to
+        // switch an expense to income and replace its category in one atomic request without a transient conflict.
+        normalizeAndDerive(candidate);
+        changed |= applyClassificationPatch(candidate, command);
         if (changed) {
             // A repaired monetary value is always expressed in the batch account's canonical currency.  CSV rows
             // with an explicit foreign/invalid currency deliberately start without a currency snapshot; accepting a
@@ -125,7 +130,6 @@ public class TransactionBatchCommandService {
             if (command.getSignedAmount() != null) {
                 candidate.setCurrencySnapshot(batch.getAccount().getCurrency());
             }
-            normalizeAndDerive(candidate);
             resolveIssuesForAppliedPatch(candidate, command);
             recalculateValidation(candidate);
             validateBatchCandidate(batch, candidate);
@@ -381,6 +385,26 @@ public class TransactionBatchCommandService {
         candidate.setNotes(command.getNotes());
     }
 
+    /** Applies the initial manual category/tags before the first candidate save, avoiding an accidental empty row. */
+    private void applyInitialClassification(TransactionCandidate candidate, TransactionBatchDraftCommand command) {
+        if (command.getCategoryId() != null) {
+            Category category = requireAccessibleCategory(command.getCategoryId());
+            CategoryReferenceValidator.validateActiveForNewReference(category);
+            candidate.setCategory(category);
+            candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
+            candidate.setCategoryManualClear(false);
+            candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        }
+        for (Long tagId : command.getTagIds()) {
+            Tag tag = requireAccessibleTag(tagId);
+            TagReferenceValidator.validateActiveForNewReference(tag);
+            candidate.addTag(tag, TransactionCandidateClassificationSource.MANUAL);
+        }
+        if (!command.getTagIds().isEmpty()) {
+            candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        }
+    }
+
     private boolean applyPatch(TransactionCandidate candidate, TransactionBatchCandidatePatchCommand command) {
         if (command == null) throw new IllegalArgumentException("Candidate patch is required");
         Set<TransactionBatchCandidatePatchField> clears = command.getClearFields();
@@ -445,6 +469,59 @@ public class TransactionBatchCommandService {
             null
         );
         else if (command.getNotes() != null) changed |= setIfDifferent(candidate::getNotes, candidate::setNotes, command.getNotes());
+        return changed;
+    }
+
+    /** Applies category/tag controls from the editor in the same transaction as the core fields. */
+    private boolean applyClassificationPatch(TransactionCandidate candidate, TransactionBatchCandidatePatchCommand command) {
+        boolean changed = false;
+        if (Boolean.TRUE.equals(command.getCategoryChanged())) {
+            if (command.getCategoryId() == null) {
+                changed |= candidate.getCategory() != null || !Boolean.TRUE.equals(candidate.getCategoryManualClear());
+                candidate.setCategory(null);
+                candidate.setCategorySource(null);
+                candidate.setCategoryManualClear(true);
+            } else {
+                Category category = requireAccessibleCategory(command.getCategoryId());
+                boolean sameCategory = candidate.getCategory() != null && Objects.equals(candidate.getCategory().getId(), category.getId());
+                if (!sameCategory) CategoryReferenceValidator.validateActiveForNewReference(category);
+                changed |=
+                    !sameCategory ||
+                    candidate.getCategorySource() != TransactionCandidateClassificationSource.MANUAL ||
+                    Boolean.TRUE.equals(candidate.getCategoryManualClear());
+                candidate.setCategory(category);
+                candidate.setCategorySource(TransactionCandidateClassificationSource.MANUAL);
+                candidate.setCategoryManualClear(false);
+            }
+            candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        }
+        if (Boolean.TRUE.equals(command.getTagsChanged())) {
+            Set<Long> selectedIds = new LinkedHashSet<>(command.getTagIds());
+            Set<Tag> selectedTags = new LinkedHashSet<>();
+            for (Long tagId : selectedIds) selectedTags.add(requireAccessibleTag(tagId));
+            Set<Tag> currentTags = new LinkedHashSet<>(candidate.getTags());
+            for (Tag existing : currentTags) {
+                if (!selectedIds.contains(existing.getId())) {
+                    candidate.removeTags(existing);
+                    candidate.suppressTag(existing);
+                    changed = true;
+                }
+            }
+            for (Tag selected : selectedTags) {
+                boolean present = currentTags.stream().anyMatch(existing -> Objects.equals(existing.getId(), selected.getId()));
+                if (!present) TagReferenceValidator.validateActiveForNewReference(selected);
+                if (
+                    !present ||
+                    candidate.getTagSource(selected) != TransactionCandidateClassificationSource.MANUAL ||
+                    candidate.isTagSuppressed(selected)
+                ) {
+                    candidate.addTag(selected, TransactionCandidateClassificationSource.MANUAL);
+                    candidate.removeTagSuppression(selected);
+                    changed = true;
+                }
+            }
+            if (changed) candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        }
         return changed;
     }
 
@@ -608,6 +685,7 @@ public class TransactionBatchCommandService {
         if (batch.getAccount() != null) {
             view.setAccountId(batch.getAccount().getId());
             view.setAccountName(batch.getAccount().getName());
+            view.setAccountCurrency(batch.getAccount().getCurrency());
         }
         view.setAutoApplyDescriptions(batch.getAutoApplyDescriptions());
         view.setAutoApplyCategories(batch.getAutoApplyCategories());

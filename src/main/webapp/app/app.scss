@@ -262,15 +262,43 @@ a {
   padding: 0.875rem;
 }
 
-/* The transaction-batch workspace deliberately uses a dense review queue on desktop and readable labelled cards
- * on narrow screens. It is a product workspace, not a restyled legacy FILE-import table. */
-.transaction-batch-row-grid {
+/* A single product grid is shared by the Batch header and every desktop row. */
+.transaction-batch-review-grid {
   grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) minmax(7rem, 1fr) minmax(10rem, 1.6fr) minmax(12rem, 2fr) auto;
 }
 
-.transaction-batch-suggestion {
+.transaction-batch-domain-suggestion {
   border-inline-start: 0.25rem solid var(--bs-primary);
   padding-inline-start: 0.75rem;
+}
+
+.transaction-batch-rule-link {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}
+
+.transaction-batch-row-actions summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.transaction-batch-row-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.transaction-batch-editor-heading {
+  color: var(--bs-secondary-color);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
 }
 
 @media (max-width: 991.98px) {
@@ -300,7 +328,7 @@ a {
 }
 
 @media (max-width: 767.98px) {
-  .transaction-batch-row-grid {
+  .transaction-batch-review-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

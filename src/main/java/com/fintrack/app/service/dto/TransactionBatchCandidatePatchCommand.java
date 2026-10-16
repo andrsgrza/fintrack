@@ -17,6 +17,11 @@ public class TransactionBatchCandidatePatchCommand {
     private BigDecimal signedAmount;
     private String externalReference;
     private String notes;
+    /** These flags distinguish an omitted classification from an explicit selection or clear in one atomic edit. */
+    private Boolean categoryChanged;
+    private Long categoryId;
+    private Boolean tagsChanged;
+    private Set<Long> tagIds = Set.of();
     private Set<TransactionBatchCandidatePatchField> clearFields = EnumSet.noneOf(TransactionBatchCandidatePatchField.class);
 
     public Long getExpectedCandidateVersion() {
@@ -73,6 +78,38 @@ public class TransactionBatchCandidatePatchCommand {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public Boolean getCategoryChanged() {
+        return categoryChanged;
+    }
+
+    public void setCategoryChanged(Boolean categoryChanged) {
+        this.categoryChanged = categoryChanged;
+    }
+
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryId) {
+        this.categoryId = categoryId;
+    }
+
+    public Boolean getTagsChanged() {
+        return tagsChanged;
+    }
+
+    public void setTagsChanged(Boolean tagsChanged) {
+        this.tagsChanged = tagsChanged;
+    }
+
+    public Set<Long> getTagIds() {
+        return tagIds;
+    }
+
+    public void setTagIds(Set<Long> tagIds) {
+        this.tagIds = tagIds == null ? Set.of() : Set.copyOf(tagIds);
     }
 
     public Set<TransactionBatchCandidatePatchField> getClearFields() {
