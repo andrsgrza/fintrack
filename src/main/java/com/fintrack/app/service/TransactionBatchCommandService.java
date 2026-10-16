@@ -114,6 +114,7 @@ public class TransactionBatchCommandService {
             validateBatchCandidate(batch, candidate);
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
         }
         return rowMutation(candidate, batch);
     }
@@ -137,6 +138,7 @@ public class TransactionBatchCommandService {
             validateBatchCandidate(batch, candidate);
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
         }
         return rowMutation(candidate, batch);
     }
@@ -152,6 +154,7 @@ public class TransactionBatchCommandService {
             candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
         }
         return rowMutation(candidate, batch);
     }
@@ -170,6 +173,7 @@ public class TransactionBatchCommandService {
             candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
         }
         return rowMutation(candidate, batch);
     }
@@ -188,6 +192,7 @@ public class TransactionBatchCommandService {
             candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
         }
         return rowMutation(candidate, batch);
     }
@@ -226,6 +231,7 @@ public class TransactionBatchCommandService {
             candidate.setClassificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
         }
         return rowMutation(candidate, batch);
     }
@@ -250,14 +256,27 @@ public class TransactionBatchCommandService {
         ) {
             throw new IllegalArgumentException("Input issue must contain a bounded field, reason, and submitted value");
         }
-        TransactionCandidateInputIssue issue = new TransactionCandidateInputIssue();
-        issue.setField(field);
-        issue.setReasonCode(reasonCode);
-        issue.setSubmittedValue(submittedValue.trim());
-        candidate.addOrReplaceInputIssue(issue);
-        candidate.setValidationStatus(TransactionCandidateValidationStatus.INVALID);
-        touch(candidate);
-        candidate = transactionCandidateRepository.saveAndFlush(candidate);
+        String normalizedValue = submittedValue.trim();
+        boolean sameIssue = candidate
+            .getInputIssues()
+            .stream()
+            .anyMatch(
+                existing ->
+                    existing.getField() == field &&
+                    existing.getReasonCode() == reasonCode &&
+                    Objects.equals(existing.getSubmittedValue(), normalizedValue)
+            );
+        if (!sameIssue || candidate.getValidationStatus() != TransactionCandidateValidationStatus.INVALID) {
+            TransactionCandidateInputIssue issue = new TransactionCandidateInputIssue();
+            issue.setField(field);
+            issue.setReasonCode(reasonCode);
+            issue.setSubmittedValue(normalizedValue);
+            candidate.addOrReplaceInputIssue(issue);
+            candidate.setValidationStatus(TransactionCandidateValidationStatus.INVALID);
+            touch(candidate);
+            candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
+        }
         return rowMutation(candidate, batch);
     }
 
@@ -266,8 +285,7 @@ public class TransactionBatchCommandService {
         TransactionBatch batch = lockOpenBatch(batchId);
         TransactionCandidate candidate = lockBatchCandidate(batch, candidateId, expectedCandidateVersion);
         transactionCandidateRepository.delete(candidate);
-        touch(batch);
-        return transactionBatchRepository.saveAndFlush(batch).getVersion();
+        return persistMaterialBatchChange(batch).getVersion();
     }
 
     /** Discards only an OPEN workspace. It cannot create CANCELLED candidates and cannot affect live catalog/ledger data. */
@@ -549,6 +567,12 @@ public class TransactionBatchCommandService {
 
     private void touch(TransactionBatch batch) {
         batch.setUpdatedAt(Instant.now());
+    }
+
+    /** A row-content change is material to a future publish, but row commands do not require this global revision. */
+    private TransactionBatch persistMaterialBatchChange(TransactionBatch batch) {
+        touch(batch);
+        return transactionBatchRepository.saveAndFlush(batch);
     }
 
     private TransactionBatchRowMutationDTO rowMutation(TransactionCandidate candidate, TransactionBatch batch) {

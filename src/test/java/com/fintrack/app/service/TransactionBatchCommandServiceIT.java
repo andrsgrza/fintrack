@@ -71,7 +71,7 @@ class TransactionBatchCommandServiceIT {
 
     @Test
     @Transactional
-    void addsIncompleteRowsWithStablePositionsAndLeavesTheBatchRevisionOutOfPerRowEdits() {
+    void advancesTheBatchRevisionForMaterialRowsWhileIndependentRowsUseTheirOwnVersions() {
         TransactionBatchWorkspaceDTO batch = service.createOpenBatch(account().getId());
         TransactionBatchRowMutationDTO first = service.addManualDraft(batch.getId(), draftFor(batch.getVersion()));
         TransactionBatchRowMutationDTO second = service.addManualDraft(batch.getId(), draftFor(first.getBatchVersion()));
@@ -92,8 +92,31 @@ class TransactionBatchCommandServiceIT {
 
         assertThat(edited.getCandidate().getDescription()).isEqualTo("office taxi");
         assertThat(edited.getCandidate().getVersion()).isGreaterThan(first.getCandidate().getVersion());
-        assertThat(edited.getBatchVersion()).isEqualTo(second.getBatchVersion());
-        Long versionAfterDelete = service.deleteCandidate(batch.getId(), second.getCandidate().getId(), second.getCandidate().getVersion());
+        assertThat(edited.getBatchVersion()).isGreaterThan(second.getBatchVersion());
+        assertThat(service.findOpenBatch(batch.getId()).orElseThrow().getCandidates()).hasSize(2);
+
+        TransactionBatchCandidatePatchCommand noOpPatch = new TransactionBatchCandidatePatchCommand();
+        noOpPatch.setExpectedCandidateVersion(edited.getCandidate().getVersion());
+        TransactionBatchRowMutationDTO noOp = service.patchCandidate(batch.getId(), first.getCandidate().getId(), noOpPatch);
+        assertThat(noOp.getCandidate().getVersion()).isEqualTo(edited.getCandidate().getVersion());
+        assertThat(noOp.getBatchVersion()).isEqualTo(edited.getBatchVersion());
+
+        TransactionBatchCandidatePatchCommand independentPatch = new TransactionBatchCandidatePatchCommand();
+        independentPatch.setExpectedCandidateVersion(second.getCandidate().getVersion());
+        independentPatch.setNotes("independent row");
+        TransactionBatchRowMutationDTO independentlyEdited = service.patchCandidate(
+            batch.getId(),
+            second.getCandidate().getId(),
+            independentPatch
+        );
+        assertThat(independentlyEdited.getCandidate().getVersion()).isGreaterThan(second.getCandidate().getVersion());
+        assertThat(independentlyEdited.getBatchVersion()).isGreaterThan(edited.getBatchVersion());
+
+        Long versionAfterDelete = service.deleteCandidate(
+            batch.getId(),
+            second.getCandidate().getId(),
+            independentlyEdited.getCandidate().getVersion()
+        );
 
         TransactionBatchRowMutationDTO third = service.addManualDraft(batch.getId(), draftFor(versionAfterDelete));
         assertThat(third.getCandidate().getRowPosition()).isEqualTo(3L);
@@ -119,8 +142,19 @@ class TransactionBatchCommandServiceIT {
             "USD",
             TransactionCandidateInputIssueReason.CURRENCY_MISMATCH
         );
+        assertThat(withCurrencyIssue.getBatchVersion()).isGreaterThan(created.getBatchVersion());
+        TransactionBatchRowMutationDTO duplicateIssue = service.recordInputIssue(
+            batch.getId(),
+            created.getCandidate().getId(),
+            withCurrencyIssue.getCandidate().getVersion(),
+            TransactionCandidateInputIssueField.CURRENCY,
+            "USD",
+            TransactionCandidateInputIssueReason.CURRENCY_MISMATCH
+        );
+        assertThat(duplicateIssue.getCandidate().getVersion()).isEqualTo(withCurrencyIssue.getCandidate().getVersion());
+        assertThat(duplicateIssue.getBatchVersion()).isEqualTo(withCurrencyIssue.getBatchVersion());
         TransactionBatchCandidatePatchCommand unrelatedPatch = new TransactionBatchCandidatePatchCommand();
-        unrelatedPatch.setExpectedCandidateVersion(withCurrencyIssue.getCandidate().getVersion());
+        unrelatedPatch.setExpectedCandidateVersion(duplicateIssue.getCandidate().getVersion());
         unrelatedPatch.setNotes("unchanged monetary input remains blocked");
         TransactionBatchRowMutationDTO unrelatedResult = service.patchCandidate(
             batch.getId(),
@@ -131,6 +165,7 @@ class TransactionBatchCommandServiceIT {
         assertThat(unrelatedResult.getCandidate().getDescription()).isEqualTo("Initial");
         assertThat(unrelatedResult.getCandidate().getInputIssues()).hasSize(1);
         assertThat(unrelatedResult.getCandidate().getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.INVALID);
+        assertThat(unrelatedResult.getBatchVersion()).isGreaterThan(duplicateIssue.getBatchVersion());
 
         TransactionBatchCandidatePatchCommand clearPatch = new TransactionBatchCandidatePatchCommand();
         clearPatch.setExpectedCandidateVersion(unrelatedResult.getCandidate().getVersion());
@@ -140,6 +175,7 @@ class TransactionBatchCommandServiceIT {
         assertThat(cleared.getCandidate().getDescription()).isNull();
         assertThat(cleared.getCandidate().getDescriptionSource()).isEqualTo(TransactionCandidateDescriptionSource.MANUAL);
         assertThat(cleared.getCandidate().getInputIssues()).hasSize(1);
+        assertThat(cleared.getBatchVersion()).isGreaterThan(unrelatedResult.getBatchVersion());
 
         TransactionBatchCandidatePatchCommand repairedAmount = new TransactionBatchCandidatePatchCommand();
         repairedAmount.setExpectedCandidateVersion(cleared.getCandidate().getVersion());
@@ -147,6 +183,7 @@ class TransactionBatchCommandServiceIT {
         TransactionBatchRowMutationDTO repaired = service.patchCandidate(batch.getId(), created.getCandidate().getId(), repairedAmount);
         assertThat(repaired.getCandidate().getInputIssues()).isEmpty();
         assertThat(repaired.getCandidate().getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.UNKNOWN);
+        assertThat(repaired.getBatchVersion()).isGreaterThan(cleared.getBatchVersion());
     }
 
     @Test
@@ -161,11 +198,19 @@ class TransactionBatchCommandServiceIT {
         draft.setExpectedBatchVersion(batch.getVersion());
         draft.setSignedAmount(new BigDecimal("-10.00"));
         TransactionBatchRowMutationDTO created = service.addManualDraft(batch.getId(), draft);
+        TransactionBatchRowMutationDTO manuallyCleared = service.clearCategory(
+            batch.getId(),
+            created.getCandidate().getId(),
+            created.getCandidate().getVersion()
+        );
+        assertThat(manuallyCleared.getCandidate().getCategoryId()).isNull();
+        assertThat(manuallyCleared.getCandidate().getCategoryManualClear()).isTrue();
+        assertThat(manuallyCleared.getBatchVersion()).isGreaterThan(created.getBatchVersion());
 
         TransactionBatchRowMutationDTO categorized = service.setCategory(
             batch.getId(),
             created.getCandidate().getId(),
-            created.getCandidate().getVersion(),
+            manuallyCleared.getCandidate().getVersion(),
             category.getId()
         );
         TransactionBatchRowMutationDTO tagged = service.addTag(
@@ -174,6 +219,8 @@ class TransactionBatchCommandServiceIT {
             categorized.getCandidate().getVersion(),
             firstTag.getId()
         );
+        assertThat(categorized.getBatchVersion()).isGreaterThan(manuallyCleared.getBatchVersion());
+        assertThat(tagged.getBatchVersion()).isGreaterThan(categorized.getBatchVersion());
         TransactionBatchRowMutationDTO removed = service.removeTag(
             batch.getId(),
             created.getCandidate().getId(),
@@ -181,6 +228,7 @@ class TransactionBatchCommandServiceIT {
             firstTag.getId()
         );
 
+        assertThat(removed.getBatchVersion()).isGreaterThan(tagged.getBatchVersion());
         assertThat(removed.getCandidate().getTags()).isEmpty();
         assertThat(removed.getCandidate().getSuppressedTagIds()).containsExactly(firstTag.getId());
 
@@ -195,6 +243,16 @@ class TransactionBatchCommandServiceIT {
             .singleElement()
             .extracting(TransactionBatchTagViewDTO::getSource)
             .isEqualTo(TransactionCandidateClassificationSource.MANUAL);
+        assertThat(readded.getCandidate().getVersion()).isGreaterThan(removed.getCandidate().getVersion());
+        assertThat(readded.getBatchVersion()).isGreaterThan(removed.getBatchVersion());
+
+        assertThatThrownBy(() ->
+            service.addTag(batch.getId(), created.getCandidate().getId(), tagged.getCandidate().getVersion(), inactiveNewTag.getId())
+        )
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("stale");
+        TransactionBatchCandidateViewDTO currentCandidate = service.findOpenBatch(batch.getId()).orElseThrow().getCandidates().get(0);
+        assertThat(currentCandidate.getTags()).extracting(TransactionBatchTagViewDTO::getId).containsExactly(firstTag.getId());
 
         category.setActive(false);
         firstTag.setActive(false);
@@ -215,6 +273,10 @@ class TransactionBatchCommandServiceIT {
         assertThat(retainedInactiveTag.getCandidate().getTags())
             .extracting(TransactionBatchTagViewDTO::getId)
             .containsExactly(firstTag.getId());
+        assertThat(sameInactiveCategory.getCandidate().getVersion()).isEqualTo(readded.getCandidate().getVersion());
+        assertThat(sameInactiveCategory.getBatchVersion()).isEqualTo(readded.getBatchVersion());
+        assertThat(retainedInactiveTag.getCandidate().getVersion()).isEqualTo(sameInactiveCategory.getCandidate().getVersion());
+        assertThat(retainedInactiveTag.getBatchVersion()).isEqualTo(sameInactiveCategory.getBatchVersion());
 
         assertThatThrownBy(() ->
             service.addTag(
@@ -234,6 +296,7 @@ class TransactionBatchCommandServiceIT {
         assertThat(cleared.getCandidate().getCategoryId()).isNull();
         assertThat(cleared.getCandidate().getCategorySource()).isNull();
         assertThat(cleared.getCandidate().getCategoryManualClear()).isTrue();
+        assertThat(cleared.getBatchVersion()).isGreaterThan(retainedInactiveTag.getBatchVersion());
     }
 
     @Test

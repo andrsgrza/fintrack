@@ -127,12 +127,12 @@ First publication locks root and candidates in stable order, rejects unresolved 
 
 ### 6.1 Separate responsibilities
 
-| Version             | Protects                                | Changes on                                                                                                |
-| ------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `candidate.version` | One candidate's effective draft state   | field/category edits; effective tag/suppression/input-issue changes; guarded candidate deletion           |
-| `batch.version`     | Workspace structure and publish consent | new append, row add/remove, settings, discard, first publish, explicit batch-wide Apply that changes rows |
+| Version             | Protects                                      | Changes on                                                                                                                                                                                 |
+| ------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `candidate.version` | One candidate's effective draft state         | field/category edits; effective tag/suppression/input-issue changes; guarded candidate deletion                                                                                            |
+| `batch.version`     | Entire material workspace and publish consent | row add/remove; any material candidate field, classification/provenance, suppression, or input-issue change; settings, discard, first publish, explicit batch-wide Apply that changes rows |
 
-Editing candidate A uses `expectedCandidateVersion`. It must not fail because candidate B changed if A remains current and its batch is OPEN. Candidate changes do not artificially advance batch revision merely to serialize independent rows. Batch locking coordinates mutation with append/discard/publish, but JPA `@Version` fields are never hand-incremented.
+Every material row change advances both its `candidate.version` and its parent `batch.version`, so a later publish consent represents the complete workspace. Editing candidate A still uses only `expectedCandidateVersion`: it must not fail because candidate B changed if A remains current and its batch is OPEN. Batch locking coordinates mutation with append/discard/publish; JPA `@Version` fields are never hand-incremented.
 
 Structural/consent commands require `expectedBatchVersion`: new append, settings save, explicit batch Apply, discard, and first publish. Per-row edit/delete requires candidate version plus membership/OPEN guard. Responses return authoritative current versions. Pure reads and real no-ops change no version.
 
