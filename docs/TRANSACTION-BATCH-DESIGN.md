@@ -1,10 +1,10 @@
 # Transaction Batch — approved V1 design
 
-**Status:** approved contract; internal Batch-3 publish, receipt, and cleanup foundation implemented
+**Status:** approved contract; Batch-4 authenticated HTTP and product workspace integration implemented
 **Working base:** `96d12027d815e1569df17ab7daf2f5f57269950f`  
 **Scope:** replaces the product FILE-import workflow. It does not migrate or preserve old FILE-ingestion history.
 
-This closes the technical contracts for the approved Transaction Batch product. The current internal slice implements canonical CSV append, durable idempotency receipts, repairable candidate preparation, persisted batch settings, shared rule preview/application, and atomic internal publication with temporary receipt cleanup. It intentionally exposes no HTTP resource or product UI and does not change or migrate the legacy FILE-ingestion workflow.
+This closes the technical contracts for the approved Transaction Batch product. The current slice adds the owner-scoped HTTP command boundary and the authenticated product workspace over the existing canonical CSV append, durable idempotency receipts, repairable candidate preparation, persisted settings, shared rule preview/application, and atomic publication foundation. The old FILE-ingestion product routes and menu entries are retired; their technical APIs remain temporarily outside the new product flow.
 
 ## Implemented internal boundary
 
@@ -260,7 +260,7 @@ Remaining legitimate consumers are standalone MANUAL drafts, direct final Financ
 2. Add batch creation/reads, append idempotency, repairable CSV preparation, and command guards.
 3. Add settings/evaluation/manual apply with this concurrency/protection policy.
 4. Add atomic publish, receipt replay/expiry, and bounded receipt cleanup.
-5. Add UI and browser acceptance after service/contracts are covered.
+5. Add the authenticated `/transaction-batches`, `/transaction-batches/new`, and `/transaction-batches/:id` product workspace, with REST contracts and browser acceptance. **Implemented:** the UI has a local full-workspace review filter, direct current-value category/tag editing, explicit per-row suggestion application, persisted automation settings, CSV append retry identity, atomic publish confirmation, and bounded receipt recovery. It also offers contextual configured-rule creation: scratch DNR/TransactionRule creation from the batch, TransactionRule creation from a current manual or CSV row, and DNR creation only from a CSV row's immutable `sourceDescription` baseline. Saving never evaluates; row reevaluation uses only that owned row, while batch reevaluation always uses the entire named OPEN batch despite local filters. If a rule save succeeds and its follow-up reevaluation fails, the UI preserves the saved identity and retries only the reevaluation.
 
 No stage may introduce a legacy FILE compatibility posting bypass.
 

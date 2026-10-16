@@ -17,6 +17,12 @@ public class TransactionBatchCandidateViewDTO {
     private LocalDate transactionDate;
     private LocalDate postingDate;
     private String description;
+    /**
+     * Temporary immutable CSV baseline. It is exposed only while the candidate belongs to an OPEN batch so a
+     * contextual description-normalization rule can be authored without treating an edited effective description as
+     * source input. Manual candidates deliberately have no baseline.
+     */
+    private String sourceDescription;
     private TransactionCandidateDescriptionSource descriptionSource;
     private BigDecimal signedAmount;
     private BigDecimal amount;
@@ -104,6 +110,14 @@ public class TransactionBatchCandidateViewDTO {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getSourceDescription() {
+        return sourceDescription;
+    }
+
+    public void setSourceDescription(String sourceDescription) {
+        this.sourceDescription = sourceDescription;
     }
 
     public TransactionCandidateDescriptionSource getDescriptionSource() {

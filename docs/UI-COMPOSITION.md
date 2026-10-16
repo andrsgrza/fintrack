@@ -735,6 +735,14 @@ The unified FILE-ingestion review opens the existing full configured rule editor
 
 ## TransactionRule generated technical/debug surfaces
 
+## Transaction Batch workspace
+
+`/transaction-batches` is the sole product entry for preparing CSV and manual movements together. It has a list of owned OPEN workspaces, a focused account-selection creation page, and one review workspace per batch. It intentionally does not embed the old FILE-ingestion or transaction-ingestion screens.
+
+The review workspace keeps add-manual and append-CSV actions separate from the review queue. Its desktop queue uses six compact review columns; narrow layouts become labelled cards without changing candidate controls or command scope. Categories are an editable, color-accented selector and tags reuse `ProductTagSelector`; neither gets a redundant read-only identity above it. Rule previews are secondary and only receive an Apply action when a saved value would actually change. Local filters only affect presentation of the fully loaded workspace.
+
+Publishing uses a confirmation dialog, refuses locally known invalid rows, and routes a successful bounded receipt to the normal transaction list. If the browser loses the first publish response, reopening the batch attempts the bounded receipt read rather than creating a second publication. CSV append preserves its operation key after a failed request so retrying the same intent remains idempotent.
+
 TR-3 clarifies the TransactionRule UI split:
 
 - `/transaction-rule/new` is the product create route and uses `POST /api/transaction-rules/configured`.

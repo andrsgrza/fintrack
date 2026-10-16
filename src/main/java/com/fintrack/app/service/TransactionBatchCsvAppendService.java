@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 /** Internal append entry point: authorize/replay-check, parse once, persist atomically, then evaluate after commit. */
@@ -42,7 +43,20 @@ public class TransactionBatchCsvAppendService {
 
         // Parsing happens after authorization and outside the root mutation transaction. No parser artifact is retained.
         var parsed = canonicalCsvIngestionParser.parse(command.getBytes(), persistenceService.readAccountCurrency(batchId));
-        PersistedAppend persisted = persistenceService.appendNew(batchId, command, digest, parsed);
+        PersistedAppend persisted;
+        try {
+            persisted = persistenceService.appendNew(batchId, command, digest, parsed);
+        } catch (ObjectOptimisticLockingFailureException concurrentAppend) {
+            // Both requests can pass the inexpensive preflight before either transaction records the operation key.
+            // PostgreSQL may then surface the loser while upgrading the aggregate lock. Re-read the durable key: an
+            // equal request is a replay, never a second append; any unrelated optimistic conflict remains visible.
+            TransactionBatchAppendOperation accepted = persistenceService.findAcceptedOperation(batchId, command.getOperationKey());
+            if (accepted == null) throw concurrentAppend;
+            if (!Objects.equals(accepted.getRequestDigest(), digest)) {
+                throw new IllegalStateException("OPERATION_KEY_REUSED_WITH_DIFFERENT_CONTENT");
+            }
+            return receipt(accepted, accepted.getTransactionBatch().getVersion(), true, "NOT_REEVALUATED_REPLAY", java.util.List.of());
+        }
         if (persisted.replayed()) {
             return receipt(persisted.operation(), persisted.batch().getVersion(), true, "NOT_REEVALUATED_REPLAY", java.util.List.of());
         }

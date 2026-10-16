@@ -1894,12 +1894,13 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void updateFinancialTransactionDoesNotApplyRules() throws Exception {
+    void updatePostedFinancialTransactionDoesNotCreateCandidateOrApplyRules() throws Exception {
         Category transport = persistCategory("Transport", financialTransaction.getAccount().getUser());
         Tag rideShare = persistTag("Ride share", financialTransaction.getAccount().getUser());
         persistMatchingRule("Transport rule", financialTransaction.getAccount().getUser(), transport, Set.of(rideShare), true, "Uber");
         financialTransaction.setDescription("Initial unmatched");
         insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
+        long candidateCountBeforeUpdate = transactionCandidateRepository.count();
 
         FinancialTransactionDTO financialTransactionDTO = financialTransactionMapper.toDto(insertedFinancialTransaction);
         financialTransactionDTO.setDescription("Uber ride");
@@ -1917,6 +1918,7 @@ class FinancialTransactionResourceIT {
             .orElseThrow();
         assertThat(persisted.getCategory()).isNull();
         assertThat(persisted.getTags()).isEmpty();
+        assertThat(transactionCandidateRepository.count()).isEqualTo(candidateCountBeforeUpdate);
     }
 
     @Test

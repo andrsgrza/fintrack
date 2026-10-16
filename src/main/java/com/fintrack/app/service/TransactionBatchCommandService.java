@@ -74,6 +74,17 @@ public class TransactionBatchCommandService {
             .map(batch -> toWorkspace(batch, transactionCandidateRepository.findAllBatchCandidatesWithRelationships(batch.getId(), login)));
     }
 
+    /** Lists only workspaces owned by the caller; published receipts intentionally have their own narrow read path. */
+    @Transactional(readOnly = true)
+    public List<TransactionBatchWorkspaceDTO> findOpenBatches() {
+        String login = currentUserService.getCurrentUserLogin();
+        return transactionBatchRepository
+            .findAllByUserLoginAndStatus(login, TransactionBatchStatus.OPEN)
+            .stream()
+            .map(batch -> toWorkspace(batch, transactionCandidateRepository.findAllBatchCandidatesWithRelationships(batch.getId(), login)))
+            .toList();
+    }
+
     /** Adds one incomplete manual row. Batch membership, account, canonical currency, and stable position are server-owned. */
     public TransactionBatchRowMutationDTO addManualDraft(Long batchId, TransactionBatchDraftCommand command) {
         TransactionBatch batch = lockOpenBatch(batchId);
@@ -618,6 +629,10 @@ public class TransactionBatchCommandService {
         view.setTransactionDate(candidate.getTransactionDate());
         view.setPostingDate(candidate.getPostingDate());
         view.setDescription(candidate.getDescription());
+        // A manual row has no immutable import baseline. Do not fabricate one from its editable current description.
+        view.setSourceDescription(
+            candidate.getSource() == TransactionCandidateSource.FILE_IMPORT ? candidate.getSourceDescription() : null
+        );
         view.setDescriptionSource(candidate.getDescriptionSource());
         view.setSignedAmount(candidate.getSignedAmount());
         view.setAmount(candidate.getAmount());

@@ -262,6 +262,17 @@ a {
   padding: 0.875rem;
 }
 
+/* The transaction-batch workspace deliberately uses a dense review queue on desktop and readable labelled cards
+ * on narrow screens. It is a product workspace, not a restyled legacy FILE-import table. */
+.transaction-batch-row-grid {
+  grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) minmax(7rem, 1fr) minmax(10rem, 1.6fr) minmax(12rem, 2fr) auto;
+}
+
+.transaction-batch-suggestion {
+  border-inline-start: 0.25rem solid var(--bs-primary);
+  padding-inline-start: 0.75rem;
+}
+
 @media (max-width: 991.98px) {
   .manual-draft-date-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -285,6 +296,24 @@ a {
     margin-inline: -0.875rem;
     margin-bottom: -0.875rem;
     margin-top: 0.875rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .transaction-batch-row-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .transaction-batch-row-detail {
+    display: none !important;
+  }
+
+  .transaction-batch-row.mobile-expanded .transaction-batch-row-detail {
+    display: block !important;
+  }
+
+  .transaction-batch-row.mobile-expanded .transaction-batch-row-detail.d-flex {
+    display: flex !important;
   }
 }
 

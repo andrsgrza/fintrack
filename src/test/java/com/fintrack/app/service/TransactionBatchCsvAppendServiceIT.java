@@ -108,6 +108,7 @@ class TransactionBatchCsvAppendServiceIT {
             assertThat(row.getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.VALID);
             assertThat(row.getDescriptionSource()).isEqualTo(TransactionCandidateDescriptionSource.SOURCE);
         });
+        assertThat(rows).extracting(TransactionBatchCandidateViewDTO::getSourceDescription).containsExactly("Uber ride", "Salary");
         TransactionCandidate persisted = candidateRepository.findById(accepted.getAppendedCandidateIds().get(0)).orElseThrow();
         assertThat(persisted.getTransactionIngestion()).isNull();
         assertThat(persisted.getIngestionRecord()).isNull();

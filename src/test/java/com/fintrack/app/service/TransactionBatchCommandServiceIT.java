@@ -77,6 +77,7 @@ class TransactionBatchCommandServiceIT {
         TransactionBatchRowMutationDTO second = service.addManualDraft(batch.getId(), draftFor(first.getBatchVersion()));
 
         assertThat(first.getCandidate().getSource()).isEqualTo(TransactionCandidateSource.MANUAL);
+        assertThat(first.getCandidate().getSourceDescription()).isNull();
         assertThat(first.getCandidate().getRowPosition()).isEqualTo(1L);
         assertThat(first.getCandidate().getValidationStatus()).isEqualTo(TransactionCandidateValidationStatus.UNKNOWN);
         assertThat(first.getCandidate().getCurrencySnapshot()).isEqualTo(CurrencyCode.MXN);

@@ -15,13 +15,12 @@ import DescriptionNormalizationRule from './description-normalization-rule';
 import FinancialSubscription from './financial-subscription';
 import Budget from './budget';
 import InternalTransfer from './internal-transfer';
-import TransactionIngestion from './transaction-ingestion';
-import FileIngestion from './file-ingestion';
 import ApiIngestion from './api-ingestion';
 import IngestionRecord from './ingestion-record';
 import ApiAccessToken from './api-access-token';
 import ApiAccessTokenPermission from './api-access-token-permission';
 import UserDashboardPreference from './user-dashboard-preference';
+import TransactionBatch from './transaction-batch';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
 export default () => {
@@ -32,6 +31,7 @@ export default () => {
         <Route path="financial-account/*" element={<FinancialAccount />} />
         <Route path="credit-account-details/*" element={<CreditAccountDetails />} />
         <Route path="financial-transaction/*" element={<FinancialTransaction />} />
+        <Route path="transaction-batches/*" element={<TransactionBatch />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />
         <Route path="rules/*" element={<Rules />} />
@@ -41,8 +41,6 @@ export default () => {
         <Route path="financial-subscription/*" element={<FinancialSubscription />} />
         <Route path="budget/*" element={<Budget />} />
         <Route path="internal-transfer/*" element={<InternalTransfer />} />
-        <Route path="transaction-ingestion/*" element={<TransactionIngestion />} />
-        <Route path="file-ingestion/*" element={<FileIngestion />} />
         <Route path="api-ingestion/*" element={<ApiIngestion />} />
         <Route path="ingestion-record/*" element={<IngestionRecord />} />
         <Route path="api-access-token/*" element={<ApiAccessToken />} />
