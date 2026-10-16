@@ -60,5 +60,6 @@
     <include file="config/liquibase/changelog/20260915160000_transaction_candidate_classification_provenance.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261008143000_remove_transaction_candidate_posted_lifecycle.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261015120000_transaction_batch_persistence.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261016153000_transaction_candidate_applied_rule_attribution.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

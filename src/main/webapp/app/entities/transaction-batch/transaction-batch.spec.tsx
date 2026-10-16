@@ -103,6 +103,64 @@ describe('TransactionBatch product workspace', () => {
     expect(screen.getByText('Work')).toBeTruthy();
   });
 
+  it('renders persisted applied attribution separately from a pending suggestion and safely keeps a deleted rule snapshot', async () => {
+    mockGet.mockImplementation(url => {
+      if (url === 'api/transaction-batches/7') {
+        return Promise.resolve({
+          data: {
+            ...workspace,
+            candidates: [
+              {
+                ...workspace.candidates[0],
+                source: 'FILE_IMPORT',
+                descriptionAppliedByRule: { id: 41, name: 'Normalize taxi' },
+                categoryAppliedByRule: { id: null, name: 'Deleted transport rule' },
+                tags: [
+                  {
+                    ...workspace.candidates[0].tags[0],
+                    appliedByRule: { id: 43, name: 'Work travel rule' },
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+      if (url === 'api/transaction-batches/7/rule-preview') {
+        return Promise.resolve({
+          data: [
+            {
+              candidateId: 81,
+              candidateVersion: 6,
+              descriptionEvaluable: true,
+              descriptionMatched: true,
+              suggestedDescription: 'Airport taxi',
+              descriptionRuleId: 51,
+              descriptionRuleName: 'Pending normalizer',
+              classificationEvaluable: true,
+              suggestedCategoryId: null,
+              suggestedTagIds: [],
+              eligibleTagIds: [],
+            },
+          ],
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDetail();
+
+    const attributions = await screen.findAllByTestId('transactionBatchAppliedRuleAttribution');
+    expect(attributions).toHaveLength(3);
+    expect(attributions.map(attribution => attribution.textContent)).toEqual(
+      expect.arrayContaining(['Aplicada por Normalize taxi', 'Aplicada por Deleted transport rule', 'Aplicada por Work travel rule']),
+    );
+    expect(screen.getByRole('link', { name: 'Normalize taxi' }).getAttribute('href')).toBe('/description-normalization-rule/41/view');
+    expect(screen.getByRole('link', { name: 'Work travel rule' }).getAttribute('href')).toBe('/transaction-rule/43/view');
+    expect(attributions.find(attribution => attribution.textContent?.includes('Deleted transport rule'))?.querySelector('a')).toBeNull();
+    expect(screen.getByText('Sugerido por', { exact: false }).textContent).toContain('Pending normalizer');
+  });
+
   it('shows a separate meaningful rule suggestion and applies it explicitly', async () => {
     mockGet.mockImplementation(url => {
       if (url === 'api/transaction-batches/7') {

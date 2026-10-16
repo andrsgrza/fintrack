@@ -14,6 +14,18 @@ import { TransactionCandidateClassificationSource } from 'app/shared/model/enume
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 
+export interface IAppliedRuleAttribution {
+  id?: number | null;
+  name?: string | null;
+}
+
+export interface ITransactionCandidateTagSelection {
+  tagId?: number | null;
+  tagName?: string | null;
+  source?: keyof typeof TransactionCandidateClassificationSource | null;
+  appliedByRule?: IAppliedRuleAttribution | null;
+}
+
 export interface ITransactionCandidate {
   id?: number;
   source?: keyof typeof TransactionCandidateSource;
@@ -22,6 +34,8 @@ export interface ITransactionCandidate {
   descriptionReviewStatus?: keyof typeof TransactionCandidateDescriptionReviewStatus;
   classificationReviewStatus?: keyof typeof TransactionCandidateClassificationReviewStatus;
   categorySource?: keyof typeof TransactionCandidateClassificationSource | null;
+  categoryAppliedByRule?: IAppliedRuleAttribution | null;
+  descriptionAppliedByRule?: IAppliedRuleAttribution | null;
   transactionDate?: dayjs.Dayjs | string | null;
   postingDate?: dayjs.Dayjs | string | null;
   description?: string | null;
@@ -42,6 +56,7 @@ export interface ITransactionCandidate {
   transactionIngestion?: ITransactionIngestion | null;
   ingestionRecord?: IIngestionRecord | null;
   tags?: ITag[] | null;
+  selectedTags?: ITransactionCandidateTagSelection[] | null;
 }
 
 export const defaultValue: Readonly<ITransactionCandidate> = {};

@@ -10,6 +10,7 @@ public class TransactionBatchTagViewDTO {
     private String color;
     private Boolean active;
     private TransactionCandidateClassificationSource source;
+    private AppliedRuleAttributionDTO appliedByRule;
 
     public Long getId() {
         return id;
@@ -49,5 +50,13 @@ public class TransactionBatchTagViewDTO {
 
     public void setSource(TransactionCandidateClassificationSource source) {
         this.source = source;
+    }
+
+    public AppliedRuleAttributionDTO getAppliedByRule() {
+        return appliedByRule;
+    }
+
+    public void setAppliedByRule(AppliedRuleAttributionDTO appliedByRule) {
+        this.appliedByRule = appliedByRule;
     }
 }

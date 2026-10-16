@@ -8,6 +8,7 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
@@ -261,7 +262,8 @@ public class TransactionCandidateService {
         LOG.debug("Request to preview TransactionRule evaluation for TransactionCandidate : {}", id);
         return findAccessibleEntity(id).map(candidate -> {
             rejectManualRuleReviewCommand(candidate);
-            TransactionRuleEvaluationResult evaluation = evaluateRules(candidate);
+            List<TransactionRule> activeRules = transactionRuleEvaluationService.loadActiveRules(candidate.getUser().getLogin());
+            TransactionRuleEvaluationResult evaluation = evaluateRules(candidate, activeRules);
             return toRulePreviewResponse(candidate, evaluation);
         });
     }
@@ -276,12 +278,15 @@ public class TransactionCandidateService {
         LOG.debug("Request to apply TransactionRule suggestions to TransactionCandidate : {}", id);
         return findAccessibleEntity(id).map(candidate -> {
             rejectManualRuleReviewCommand(candidate);
-            TransactionRuleEvaluationResult evaluation = evaluateRules(candidate);
+            List<TransactionRule> activeRules = transactionRuleEvaluationService.loadActiveRules(candidate.getUser().getLogin());
+            TransactionRuleEvaluationResult evaluation = evaluateRules(candidate, activeRules);
             boolean hadManualSelections = candidate.hasManualClassification();
             TransactionCandidateRuleApplicationResult application = transactionCandidateRuleApplicationService.applyFillEmptyOnly(
                 candidate,
                 evaluation,
                 hadManualSelections,
+                true,
+                true,
                 categoryId ->
                     requireActiveSuggestedCategory(
                         categoryRepository
@@ -293,7 +298,8 @@ public class TransactionCandidateService {
                         tagRepository
                             .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, candidate.getUser().getLogin())
                             .orElseThrow(() -> new IllegalArgumentException("Suggested tag is not accessible"))
-                    )
+                    ),
+                ruleId -> requireAppliedRule(activeRules, ruleId)
             );
 
             candidate.setClassificationReviewStatus(application.recommendedClassificationReviewStatus());
@@ -791,6 +797,10 @@ public class TransactionCandidateService {
     }
 
     private TransactionRuleEvaluationResult evaluateRules(TransactionCandidate candidate) {
+        return evaluateRules(candidate, transactionRuleEvaluationService.loadActiveRules(candidate.getUser().getLogin()));
+    }
+
+    private TransactionRuleEvaluationResult evaluateRules(TransactionCandidate candidate, List<TransactionRule> activeRules) {
         validateCandidateCanBeEvaluated(candidate);
         return transactionRuleEvaluationService.evaluate(
             new TransactionRuleEvaluationInput(
@@ -807,8 +817,17 @@ public class TransactionCandidateService {
                 candidate.getCategory() == null ? null : candidate.getCategory().getName(),
                 currentTagIds(candidate),
                 currentTagNames(candidate)
-            )
+            ),
+            activeRules
         );
+    }
+
+    private TransactionRule requireAppliedRule(List<TransactionRule> activeRules, Long ruleId) {
+        return activeRules
+            .stream()
+            .filter(rule -> Objects.equals(rule.getId(), ruleId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Applied transaction rule is no longer available"));
     }
 
     private void validateCandidateCanBeEvaluated(TransactionCandidate candidate) {
@@ -1141,6 +1160,9 @@ public class TransactionCandidateService {
         rejectCreateField(dto.getDescriptionReviewStatus(), "Description review status is server-controlled");
         rejectCreateField(dto.getClassificationReviewStatus(), "Classification review status is server-controlled");
         rejectCreateField(dto.getCategorySource(), "Category source is server-controlled");
+        rejectCreateField(dto.getCategoryAppliedByRule(), "Applied rule attribution is server-controlled");
+        rejectCreateField(dto.getDescriptionAppliedByRule(), "Applied rule attribution is server-controlled");
+        rejectCreateField(dto.getSelectedTags(), "Tag attribution is server-controlled");
         rejectCreateField(dto.getAmount(), "Amount is derived from signed amount");
         rejectCreateField(dto.getFlow(), "Flow is derived from signed amount");
         rejectCreateField(dto.getCreatedAt(), "Created at is server-controlled");
@@ -1199,6 +1221,14 @@ public class TransactionCandidateService {
             "Classification review status is server-controlled"
         );
         rejectUpdateField(dto.getCategorySource(), node, "categorySource", "Category source is server-controlled");
+        rejectUpdateField(dto.getCategoryAppliedByRule(), node, "categoryAppliedByRule", "Applied rule attribution is server-controlled");
+        rejectUpdateField(
+            dto.getDescriptionAppliedByRule(),
+            node,
+            "descriptionAppliedByRule",
+            "Applied rule attribution is server-controlled"
+        );
+        rejectUpdateField(dto.getSelectedTags(), node, "selectedTags", "Tag attribution is server-controlled");
         rejectUpdateField(dto.getAmount(), node, "amount", "Amount is derived from signed amount");
         rejectUpdateField(dto.getFlow(), node, "flow", "Flow is derived from signed amount");
     }

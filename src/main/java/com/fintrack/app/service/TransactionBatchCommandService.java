@@ -712,6 +712,7 @@ public class TransactionBatchCommandService {
             candidate.getSource() == TransactionCandidateSource.FILE_IMPORT ? candidate.getSourceDescription() : null
         );
         view.setDescriptionSource(candidate.getDescriptionSource());
+        view.setDescriptionAppliedByRule(toAppliedRule(candidate.getDescriptionAppliedRule(), candidate.getDescriptionAppliedRuleName()));
         view.setSignedAmount(candidate.getSignedAmount());
         view.setAmount(candidate.getAmount());
         view.setFlow(candidate.getFlow());
@@ -719,6 +720,7 @@ public class TransactionBatchCommandService {
         view.setExternalReference(candidate.getExternalReference());
         view.setNotes(candidate.getNotes());
         view.setCategorySource(candidate.getCategorySource());
+        view.setCategoryAppliedByRule(toAppliedRule(candidate.getCategoryAppliedRule(), candidate.getCategoryAppliedRuleName()));
         view.setCategoryManualClear(candidate.getCategoryManualClear());
         if (candidate.getCategory() != null) {
             view.setCategoryId(candidate.getCategory().getId());
@@ -739,6 +741,7 @@ public class TransactionBatchCommandService {
                     tagView.setColor(tag.getColor());
                     tagView.setActive(tag.getActive());
                     tagView.setSource(association.getSource());
+                    tagView.setAppliedByRule(toAppliedRule(association.getAppliedRule(), association.getAppliedRuleName()));
                     return tagView;
                 })
                 .toList()
@@ -761,5 +764,19 @@ public class TransactionBatchCommandService {
                 .toList()
         );
         return view;
+    }
+
+    private AppliedRuleAttributionDTO toAppliedRule(Object liveRule, String snapshotName) {
+        if (liveRule == null && (snapshotName == null || snapshotName.isBlank())) {
+            return null;
+        }
+        AppliedRuleAttributionDTO attribution = new AppliedRuleAttributionDTO();
+        if (liveRule instanceof TransactionRule transactionRule) {
+            attribution.setId(transactionRule.getId());
+        } else if (liveRule instanceof DescriptionNormalizationRule descriptionRule) {
+            attribution.setId(descriptionRule.getId());
+        }
+        attribution.setName(snapshotName);
+        return attribution;
     }
 }

@@ -328,8 +328,10 @@ entity TransactionCandidate {
   descriptionReviewStatus TransactionCandidateDescriptionReviewStatus required
   classificationReviewStatus TransactionCandidateClassificationReviewStatus required
   categorySource TransactionCandidateClassificationSource
+  categoryAppliedRuleName String maxlength(100)
   categoryManualClear Boolean required
   descriptionSource TransactionCandidateDescriptionSource
+  descriptionAppliedRuleName String maxlength(100)
   sourceDescription String maxlength(500)
   transactionDate LocalDate
   postingDate LocalDate
@@ -351,6 +353,7 @@ entity TransactionCandidate {
 
 entity TransactionCandidateTag {
   source TransactionCandidateClassificationSource required
+  appliedRuleName String maxlength(100)
 }
 
 /** A temporary owned workspace. Receipt fields retain only an expiring technical publish acknowledgement. */
@@ -643,6 +646,7 @@ relationship ManyToMany {
 relationship ManyToOne {
   TransactionCandidateTag{transactionCandidate required} to TransactionCandidate
   TransactionCandidateTag{tag required} to Tag
+  TransactionCandidateTag{appliedRule(name)} to TransactionRule
 }
 
 /**
@@ -715,6 +719,8 @@ relationship ManyToOne {
   TransactionBatch{user(login) required} to User with builtInEntity
   TransactionBatch{account(name)} to FinancialAccount
   TransactionCandidate{transactionBatch(id)} to TransactionBatch
+  TransactionCandidate{descriptionAppliedRule(name)} to DescriptionNormalizationRule
+  TransactionCandidate{categoryAppliedRule(name)} to TransactionRule
   TransactionCandidateTagSuppression{transactionCandidate required} to TransactionCandidate
   TransactionCandidateTagSuppression{tag required} to Tag
   TransactionCandidateInputIssue{transactionCandidate required} to TransactionCandidate

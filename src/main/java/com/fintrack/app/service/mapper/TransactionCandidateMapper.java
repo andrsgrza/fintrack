@@ -1,17 +1,22 @@
 package com.fintrack.app.service.mapper;
 
 import com.fintrack.app.domain.Category;
+import com.fintrack.app.domain.DescriptionNormalizationRule;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
+import com.fintrack.app.domain.TransactionCandidateTag;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.service.dto.AppliedRuleAttributionDTO;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
+import com.fintrack.app.service.dto.TransactionCandidateTagSelectionDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.dto.UserDTO;
 import java.util.Set;
@@ -29,6 +34,15 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "transactionIngestion", source = "transactionIngestion", qualifiedByName = "transactionIngestionId")
     @Mapping(target = "ingestionRecord", source = "ingestionRecord", qualifiedByName = "ingestionRecordId")
     @Mapping(target = "tags", source = "tags", qualifiedByName = "tagNameSet")
+    @Mapping(
+        target = "descriptionAppliedByRule",
+        expression = "java(toAppliedRule(s.getDescriptionAppliedRule(), s.getDescriptionAppliedRuleName()))"
+    )
+    @Mapping(
+        target = "categoryAppliedByRule",
+        expression = "java(toAppliedRule(s.getCategoryAppliedRule(), s.getCategoryAppliedRuleName()))"
+    )
+    @Mapping(target = "selectedTags", source = "tagAssociations", qualifiedByName = "tagSelectionSet")
     TransactionCandidateDTO toDto(TransactionCandidate s);
 
     @Mapping(target = "user", ignore = true)
@@ -40,6 +54,10 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "categorySource", ignore = true)
     @Mapping(target = "categoryManualClear", ignore = true)
     @Mapping(target = "descriptionSource", ignore = true)
+    @Mapping(target = "descriptionAppliedRule", ignore = true)
+    @Mapping(target = "descriptionAppliedRuleName", ignore = true)
+    @Mapping(target = "categoryAppliedRule", ignore = true)
+    @Mapping(target = "categoryAppliedRuleName", ignore = true)
     @Mapping(target = "sourceDescription", ignore = true)
     @Mapping(target = "transactionBatch", ignore = true)
     @Mapping(target = "rowPosition", ignore = true)
@@ -60,6 +78,10 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "categorySource", ignore = true)
     @Mapping(target = "categoryManualClear", ignore = true)
     @Mapping(target = "descriptionSource", ignore = true)
+    @Mapping(target = "descriptionAppliedRule", ignore = true)
+    @Mapping(target = "descriptionAppliedRuleName", ignore = true)
+    @Mapping(target = "categoryAppliedRule", ignore = true)
+    @Mapping(target = "categoryAppliedRuleName", ignore = true)
     @Mapping(target = "sourceDescription", ignore = true)
     @Mapping(target = "transactionBatch", ignore = true)
     @Mapping(target = "rowPosition", ignore = true)
@@ -107,5 +129,37 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Named("tagNameSet")
     default Set<TagDTO> toDtoTagNameSet(Set<Tag> tags) {
         return tags.stream().map(this::toDtoTagName).collect(Collectors.toSet());
+    }
+
+    @Named("tagSelectionSet")
+    default Set<TransactionCandidateTagSelectionDTO> toDtoTagSelectionSet(Set<TransactionCandidateTag> associations) {
+        return associations
+            .stream()
+            .filter(association -> association.getTag() != null)
+            .map(association -> {
+                TransactionCandidateTagSelectionDTO selection = new TransactionCandidateTagSelectionDTO();
+                selection.setTagId(association.getTag().getId());
+                selection.setTagName(association.getTag().getName());
+                selection.setSource(association.getSource());
+                selection.setAppliedByRule(toAppliedRule(association.getAppliedRule(), association.getAppliedRuleName()));
+                return selection;
+            })
+            .collect(Collectors.toSet());
+    }
+
+    default AppliedRuleAttributionDTO toAppliedRule(DescriptionNormalizationRule liveRule, String snapshotName) {
+        if (liveRule == null && (snapshotName == null || snapshotName.isBlank())) return null;
+        AppliedRuleAttributionDTO attribution = new AppliedRuleAttributionDTO();
+        attribution.setId(liveRule == null ? null : liveRule.getId());
+        attribution.setName(snapshotName);
+        return attribution;
+    }
+
+    default AppliedRuleAttributionDTO toAppliedRule(TransactionRule liveRule, String snapshotName) {
+        if (liveRule == null && (snapshotName == null || snapshotName.isBlank())) return null;
+        AppliedRuleAttributionDTO attribution = new AppliedRuleAttributionDTO();
+        attribution.setId(liveRule == null ? null : liveRule.getId());
+        attribution.setName(snapshotName);
+        return attribution;
     }
 }

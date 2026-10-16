@@ -332,6 +332,28 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(screen.getByRole('button', { name: /post transaction/i }).className).toContain('btn-primary');
   });
 
+  it('keeps applied category and tag attribution after a draft reload, including a deleted rule snapshot', async () => {
+    const attributedCandidate = {
+      ...readyCandidate,
+      category: { id: 10, name: 'Ride apps', color: '#336699' },
+      categoryAppliedByRule: { id: null, name: 'Archived ride rule' },
+      tags: [{ id: 20, name: 'Business', color: '#663399' }],
+      selectedTags: [{ tagId: 20, tagName: 'Business', source: 'AUTOMATIC', appliedByRule: { id: 91, name: 'Business travel rule' } }],
+    };
+    mockGetManualDraft.mockResolvedValue({ data: attributedCandidate });
+    mockGetSelectableFinancialAccounts.mockResolvedValue(accounts);
+    mockGetSelectableCategories.mockResolvedValue([{ id: 10, name: 'Ride apps', categoryType: 'EXPENSE', color: '#336699' }]);
+    mockGetSelectableTags.mockResolvedValue([{ id: 20, name: 'Business', color: '#663399' }]);
+
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    expect(await screen.findByDisplayValue('Coffee')).toBeTruthy();
+    expect(screen.getAllByTestId('manualDraftAppliedRuleAttribution')).toHaveLength(2);
+    expect(screen.getByText('Archived ride rule').closest('a')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Business travel rule' }).getAttribute('href')).toBe('/transaction-rule/91/view');
+    expect(screen.getAllByText('Applied by')).toHaveLength(2);
+  });
+
   it('does not create a candidate for non-meaningful independent posting-date-only changes', async () => {
     renderManualDraft();
 

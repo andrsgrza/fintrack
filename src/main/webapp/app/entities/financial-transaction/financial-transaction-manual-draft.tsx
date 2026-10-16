@@ -27,7 +27,7 @@ import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
-import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
+import { IAppliedRuleAttribution, ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { ICategory } from 'app/shared/model/category.model';
@@ -796,8 +796,22 @@ const ManualTransactionMovementSection = ({
   </ProductSection>
 );
 
+const DraftAppliedBy = ({ attribution }: { attribution?: IAppliedRuleAttribution | null }) => {
+  if (!attribution?.name) {
+    return null;
+  }
+
+  return (
+    <div className="small text-muted mt-1" data-testid="manualDraftAppliedRuleAttribution">
+      <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.appliedBy">Applied by</Translate>{' '}
+      {attribution.id ? <Link to={`/transaction-rule/${attribution.id}/view`}>{attribution.name}</Link> : attribution.name}
+    </div>
+  );
+};
+
 const ManualTransactionClassificationSection = ({
   draft,
+  candidate,
   categories,
   tags,
   selectedCategory,
@@ -810,6 +824,7 @@ const ManualTransactionClassificationSection = ({
   ruleSuggestions,
 }: {
   draft: ManualDraftFormState;
+  candidate: ITransactionCandidate | null;
   categories: ICategorySelectable[];
   tags: ITagSelectable[];
   selectedCategory: ICategory | null;
@@ -849,6 +864,7 @@ const ManualTransactionClassificationSection = ({
               </option>
             ))}
           </Input>
+          <DraftAppliedBy attribution={candidate?.categoryAppliedByRule} />
         </FormGroup>
       </Col>
       <Col md="6">
@@ -866,6 +882,9 @@ const ManualTransactionClassificationSection = ({
             loading={tagsLoading}
             error={tagsLoadError}
           />
+          {(candidate?.selectedTags ?? []).map(selection => (
+            <DraftAppliedBy key={selection.tagId} attribution={selection.appliedByRule} />
+          ))}
         </FormGroup>
       </Col>
     </Row>
@@ -1579,6 +1598,7 @@ export const FinancialTransactionManualDraft = () => {
 
         <ManualTransactionClassificationSection
           draft={draft}
+          candidate={candidate}
           categories={compatibleCategories}
           tags={selectableTags}
           selectedCategory={toCategoryPresentation(selectedCategory)}

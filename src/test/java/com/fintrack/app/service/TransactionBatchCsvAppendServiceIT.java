@@ -56,6 +56,12 @@ class TransactionBatchCsvAppendServiceIT {
     private TransactionBatchRuleEvaluationService ruleEvaluationService;
 
     @Autowired
+    private DescriptionNormalizationRuleService descriptionNormalizationRuleService;
+
+    @Autowired
+    private TransactionRuleService transactionRuleService;
+
+    @Autowired
     private TransactionCandidateRepository candidateRepository;
 
     @Autowired
@@ -171,12 +177,12 @@ class TransactionBatchCsvAppendServiceIT {
 
     @Test
     @Transactional
-    void evaluatesDescriptionBeforeClassificationAndNeverNeedsALegacyIngestionAggregate() {
+    void evaluatesDescriptionBeforeClassificationPersistsDeletionSafeAttributionAndNeverNeedsALegacyIngestionAggregate() {
         FinancialAccount account = account();
         Category category = category(CategoryType.EXPENSE);
         Tag tag = tag();
-        descriptionRule("Normalize Uber", "uber", "UBER");
-        classificationRule("Classify normalized Uber", "UBER", category, tag);
+        DescriptionNormalizationRule descriptionRule = descriptionRule("Normalize Uber", "uber", "UBER");
+        TransactionRule classificationRule = classificationRule("Classify normalized Uber", "UBER", category, tag);
 
         TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(account.getId());
         TransactionBatchSettingsCommand settings = new TransactionBatchSettingsCommand();
@@ -196,10 +202,57 @@ class TransactionBatchCsvAppendServiceIT {
         assertThat(accepted.getEvaluationStatus()).isEqualTo("EVALUATED");
         assertThat(row.getDescription()).isEqualTo("UBER");
         assertThat(row.getDescriptionSource()).isEqualTo(TransactionCandidateDescriptionSource.AUTOMATIC);
+        assertThat(row.getDescriptionAppliedByRule()).satisfies(attribution -> {
+            assertThat(attribution.getId()).isEqualTo(descriptionRule.getId());
+            assertThat(attribution.getName()).isEqualTo("Normalize Uber");
+        });
         assertThat(row.getCategoryId()).isEqualTo(category.getId());
         assertThat(row.getCategorySource()).isEqualTo(TransactionCandidateClassificationSource.AUTOMATIC);
-        assertThat(row.getTags()).extracting(TransactionBatchTagViewDTO::getId).containsExactly(tag.getId());
+        assertThat(row.getCategoryAppliedByRule()).satisfies(attribution -> {
+            assertThat(attribution.getId()).isEqualTo(classificationRule.getId());
+            assertThat(attribution.getName()).isEqualTo("Classify normalized Uber");
+        });
+        assertThat(row.getTags())
+            .singleElement()
+            .satisfies(appliedTag -> {
+                assertThat(appliedTag.getId()).isEqualTo(tag.getId());
+                assertThat(appliedTag.getAppliedByRule()).satisfies(attribution -> {
+                    assertThat(attribution.getId()).isEqualTo(classificationRule.getId());
+                    assertThat(attribution.getName()).isEqualTo("Classify normalized Uber");
+                });
+            });
         assertThat(candidateRepository.findById(row.getId()).orElseThrow().getTransactionIngestion()).isNull();
+
+        em.clear();
+        assertThat(descriptionNormalizationRuleService.delete(descriptionRule.getId())).isTrue();
+        assertThat(transactionRuleService.delete(classificationRule.getId())).isTrue();
+        em.flush();
+        em.clear();
+
+        TransactionBatchCandidateViewDTO afterRuleDeletion = commandService
+            .findOpenBatch(batch.getId())
+            .orElseThrow()
+            .getCandidates()
+            .get(0);
+        assertThat(afterRuleDeletion.getDescription()).isEqualTo("UBER");
+        assertThat(afterRuleDeletion.getDescriptionAppliedByRule()).satisfies(attribution -> {
+            assertThat(attribution.getId()).isNull();
+            assertThat(attribution.getName()).isEqualTo("Normalize Uber");
+        });
+        assertThat(afterRuleDeletion.getCategoryId()).isEqualTo(category.getId());
+        assertThat(afterRuleDeletion.getCategoryAppliedByRule()).satisfies(attribution -> {
+            assertThat(attribution.getId()).isNull();
+            assertThat(attribution.getName()).isEqualTo("Classify normalized Uber");
+        });
+        assertThat(afterRuleDeletion.getTags())
+            .singleElement()
+            .satisfies(appliedTag -> {
+                assertThat(appliedTag.getId()).isEqualTo(tag.getId());
+                assertThat(appliedTag.getAppliedByRule()).satisfies(attribution -> {
+                    assertThat(attribution.getId()).isNull();
+                    assertThat(attribution.getName()).isEqualTo("Classify normalized Uber");
+                });
+            });
     }
 
     @Test
@@ -457,7 +510,7 @@ class TransactionBatchCsvAppendServiceIT {
         return tag;
     }
 
-    private void descriptionRule(String name, String contains, String result) {
+    private DescriptionNormalizationRule descriptionRule(String name, String contains, String result) {
         DescriptionNormalizationRule rule = new DescriptionNormalizationRule()
             .name(name)
             .active(true)
@@ -480,9 +533,11 @@ class TransactionBatchCsvAppendServiceIT {
         // the aggregate rather than relying on a subsequent persistence-context refresh.
         rule.addConditions(condition);
         em.persist(condition);
+        em.flush();
+        return rule;
     }
 
-    private void classificationRule(String name, String description, Category category, Tag tag) {
+    private TransactionRule classificationRule(String name, String description, Category category, Tag tag) {
         TransactionRule rule = new TransactionRule()
             .name(name)
             .priority(0)
@@ -504,5 +559,6 @@ class TransactionBatchCsvAppendServiceIT {
         rule.addConditions(condition);
         em.persist(condition);
         em.flush();
+        return rule;
     }
 }

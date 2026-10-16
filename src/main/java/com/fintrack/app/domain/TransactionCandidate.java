@@ -73,6 +73,16 @@ public class TransactionCandidate implements Serializable {
     @Column(name = "category_source")
     private TransactionCandidateClassificationSource categorySource;
 
+    /** Temporary explanation of the TransactionRule that produced the current automatic category. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_applied_rule_id")
+    private TransactionRule categoryAppliedRule;
+
+    /** Snapshot of the applied rule's display name; retained if the live rule is later deleted or renamed. */
+    @Size(max = 100)
+    @Column(name = "category_applied_rule_name", length = 100)
+    private String categoryAppliedRuleName;
+
     /** Explicit manual clear prevents later automatic category filling while protection is enabled. */
     @NotNull
     @Column(name = "category_manual_clear", nullable = false)
@@ -82,6 +92,16 @@ public class TransactionCandidate implements Serializable {
     @Enumerated(EnumType.STRING)
     @Column(name = "description_source")
     private TransactionCandidateDescriptionSource descriptionSource;
+
+    /** Temporary explanation of the DescriptionNormalizationRule that produced the current automatic description. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "description_applied_rule_id")
+    private DescriptionNormalizationRule descriptionAppliedRule;
+
+    /** Snapshot of the applied rule's display name; retained if the live rule is later deleted or renamed. */
+    @Size(max = 100)
+    @Column(name = "description_applied_rule_name", length = 100)
+    private String descriptionAppliedRuleName;
 
     @Size(max = 500)
     @Column(name = "source_description", length = 500)
@@ -268,6 +288,9 @@ public class TransactionCandidate implements Serializable {
 
     public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
         this.categorySource = categorySource;
+        if (categorySource != TransactionCandidateClassificationSource.AUTOMATIC) {
+            clearCategoryAppliedRuleAttribution();
+        }
     }
 
     public Boolean getCategoryManualClear() {
@@ -284,6 +307,47 @@ public class TransactionCandidate implements Serializable {
 
     public void setDescriptionSource(TransactionCandidateDescriptionSource descriptionSource) {
         this.descriptionSource = descriptionSource;
+        if (descriptionSource != TransactionCandidateDescriptionSource.AUTOMATIC) {
+            clearDescriptionAppliedRuleAttribution();
+        }
+    }
+
+    public TransactionRule getCategoryAppliedRule() {
+        return categoryAppliedRule;
+    }
+
+    public String getCategoryAppliedRuleName() {
+        return categoryAppliedRuleName;
+    }
+
+    /** Records the currently effective rule output, not a history of every matched rule. */
+    public void setCategoryAppliedRuleAttribution(TransactionRule rule) {
+        this.categoryAppliedRule = rule;
+        this.categoryAppliedRuleName = rule == null ? null : rule.getName();
+    }
+
+    public void clearCategoryAppliedRuleAttribution() {
+        this.categoryAppliedRule = null;
+        this.categoryAppliedRuleName = null;
+    }
+
+    public DescriptionNormalizationRule getDescriptionAppliedRule() {
+        return descriptionAppliedRule;
+    }
+
+    public String getDescriptionAppliedRuleName() {
+        return descriptionAppliedRuleName;
+    }
+
+    /** Records the currently effective rule output, not a history of every matched rule. */
+    public void setDescriptionAppliedRuleAttribution(DescriptionNormalizationRule rule) {
+        this.descriptionAppliedRule = rule;
+        this.descriptionAppliedRuleName = rule == null ? null : rule.getName();
+    }
+
+    public void clearDescriptionAppliedRuleAttribution() {
+        this.descriptionAppliedRule = null;
+        this.descriptionAppliedRuleName = null;
     }
 
     public String getSourceDescription() {
@@ -515,6 +579,7 @@ public class TransactionCandidate implements Serializable {
         this.category = category;
         if (category == null) {
             this.categorySource = null;
+            clearCategoryAppliedRuleAttribution();
         }
     }
 
@@ -621,18 +686,34 @@ public class TransactionCandidate implements Serializable {
     }
 
     public void addTag(Tag tag, TransactionCandidateClassificationSource source) {
+        addTag(tag, source, null);
+    }
+
+    /**
+     * Adds or updates one tag association. Only rule-produced automatic tags carry an applied-rule attribution;
+     * manual choices deliberately clear it.
+     */
+    public void addTag(Tag tag, TransactionCandidateClassificationSource source, TransactionRule appliedRule) {
         if (tag == null) return;
         tagAssociations
             .stream()
             .filter(association -> tag.equals(association.getTag()))
             .findFirst()
             .ifPresentOrElse(
-                association -> association.setSource(source),
+                association -> {
+                    association.setSource(source);
+                    association.setAppliedRuleAttribution(
+                        source == TransactionCandidateClassificationSource.AUTOMATIC ? appliedRule : null
+                    );
+                },
                 () -> {
                     TransactionCandidateTag association = new TransactionCandidateTag();
                     association.setTransactionCandidate(this);
                     association.setTag(tag);
                     association.setSource(source);
+                    association.setAppliedRuleAttribution(
+                        source == TransactionCandidateClassificationSource.AUTOMATIC ? appliedRule : null
+                    );
                     tagAssociations.add(association);
                 }
             );

@@ -21,7 +21,7 @@ import {
 import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
-import { BatchCandidate, BatchRulePreview } from './transaction-batch-api';
+import { AppliedRuleAttribution, BatchCandidate, BatchRulePreview } from './transaction-batch-api';
 import { amountMagnitude } from './transaction-batch-presentation';
 
 export type BatchEditorValues = {
@@ -98,6 +98,22 @@ const materialDraftFingerprint = (values: BatchEditorValues) =>
 
 const categoryStyle = (color?: string | null): React.CSSProperties | undefined =>
   color ? { borderInlineStart: `0.3rem solid ${color}`, backgroundColor: `${color}12` } : undefined;
+
+const AppliedBy = ({ attribution, href }: { attribution?: AppliedRuleAttribution | null; href: string }) => {
+  if (!attribution?.name) return null;
+  return (
+    <div className="small text-muted mt-1" data-testid="batchAppliedRuleAttribution">
+      Aplicada por{' '}
+      {attribution.id ? (
+        <a href={`${href}/${attribution.id}/view`} className="transaction-batch-rule-link">
+          {attribution.name}
+        </a>
+      ) : (
+        attribution.name
+      )}
+    </div>
+  );
+};
 
 const Suggestion = ({
   title,
@@ -223,6 +239,7 @@ const TransactionFieldsSection = ({
           onChange={event => update('description', event.target.value)}
           disabled={saving}
         />
+        <AppliedBy attribution={candidate?.descriptionAppliedByRule} href="/description-normalization-rule" />
         {descriptionSuggestion ? (
           <Suggestion
             title="descripción sugerida"
@@ -287,6 +304,7 @@ const TransactionFieldsSection = ({
 };
 
 const ClassificationSection = ({
+  candidate,
   preview,
   categories,
   tags,
@@ -296,6 +314,7 @@ const ClassificationSection = ({
   fieldError,
   onApplySuggestion,
 }: {
+  candidate?: BatchCandidate;
   preview?: BatchRulePreview;
   categories: ICategorySelectable[];
   tags: ITagSelectable[];
@@ -338,6 +357,7 @@ const ClassificationSection = ({
                   </option>
                 ))}
             </Input>
+            <AppliedBy attribution={candidate?.categoryAppliedByRule} href="/transaction-rule" />
             {fieldError === 'category' ? (
               <FormFeedback>
                 La categoría elegida sólo es válida para el otro tipo de movimiento. Elige otra categoría o cambia el tipo.
@@ -366,6 +386,10 @@ const ClassificationSection = ({
               onChange={selected => update('tags', selected)}
               disabled={saving}
             />
+            {values.tags.map(tag => {
+              const appliedByRule = candidate?.tags.find(current => current.id === tag.id)?.appliedByRule;
+              return <AppliedBy key={tag.id ?? tag.name} attribution={appliedByRule} href="/transaction-rule" />;
+            })}
             {suggestedTags.length ? (
               <Suggestion
                 title="etiquetas sugeridas"
@@ -524,6 +548,7 @@ const TransactionBatchEditorModal = ({
             onApplySuggestion={onApplySuggestion ? applySuggestion : undefined}
           />
           <ClassificationSection
+            candidate={candidate}
             preview={preview}
             categories={categories}
             tags={tags}

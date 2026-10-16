@@ -127,37 +127,48 @@ describe('Transaction Batch product workflow', () => {
   };
 
   const createAutoApplyRules = (token: string, normalizedDescription: string) => {
-    cy.authenticatedRequest<{ id: number }>({
-      method: 'POST',
-      url: '/api/description-normalization-rules/configured',
-      body: {
-        name: uniqueName('batch-normalization-rule'),
-        active: true,
-        conditionOperator: 'ALL',
-        resultingDescription: normalizedDescription,
-        conditions: [{ operator: 'CONTAINS', value: token, caseSensitive: false, position: 0 }],
-      },
-    }).then(({ body }) => {
-      createdDescriptionRuleIds.push(body.id);
-    });
-    cy.authenticatedRequest<{ id: number }>({
-      method: 'POST',
-      url: '/api/transaction-rules/configured',
-      body: {
-        name: uniqueName('batch-classification-rule'),
-        description: 'Batch acceptance rule fixture',
-        active: true,
-        conditionLogic: 'ALL',
-        resultingCategory: { id: categoryId },
-        resultingTags: [{ id: tagId }],
-        conditions: [
-          { field: 'DESCRIPTION', operator: 'CONTAINS', value: normalizedDescription, secondValue: null, caseSensitive: false },
-          { field: 'FLOW', operator: 'EQUALS', value: 'OUT', secondValue: null, caseSensitive: false },
-        ],
-      },
-    }).then(({ body }) => {
-      createdTransactionRuleIds.push(body.id);
-    });
+    const descriptionRuleName = uniqueName('batch-normalization-rule');
+    const classificationRuleName = uniqueName('batch-classification-rule');
+
+    return cy
+      .authenticatedRequest<{ id: number }>({
+        method: 'POST',
+        url: '/api/description-normalization-rules/configured',
+        body: {
+          name: descriptionRuleName,
+          active: true,
+          conditionOperator: 'ALL',
+          resultingDescription: normalizedDescription,
+          conditions: [{ operator: 'CONTAINS', value: token, caseSensitive: false, position: 0 }],
+        },
+      })
+      .then(({ body: descriptionRule }) => {
+        createdDescriptionRuleIds.push(descriptionRule.id);
+        return cy
+          .authenticatedRequest<{ id: number }>({
+            method: 'POST',
+            url: '/api/transaction-rules/configured',
+            body: {
+              name: classificationRuleName,
+              description: 'Batch acceptance rule fixture',
+              active: true,
+              conditionLogic: 'ALL',
+              resultingCategory: { id: categoryId },
+              resultingTags: [{ id: tagId }],
+              conditions: [
+                { field: 'DESCRIPTION', operator: 'CONTAINS', value: normalizedDescription, secondValue: null, caseSensitive: false },
+                { field: 'FLOW', operator: 'EQUALS', value: 'OUT', secondValue: null, caseSensitive: false },
+              ],
+            },
+          })
+          .then(({ body: classificationRule }) => {
+            createdTransactionRuleIds.push(classificationRule.id);
+            return {
+              descriptionRule: { id: descriptionRule.id, name: descriptionRuleName },
+              classificationRule: { id: classificationRule.id, name: classificationRuleName },
+            };
+          });
+      });
   };
 
   const createManualClassificationRule = (token: string) => {
@@ -435,40 +446,77 @@ describe('Transaction Batch product workflow', () => {
   it('applies CSV normalization before classification and protects an explicit clear on reevaluation', () => {
     const token = uniqueName('batch-auto-apply');
     const normalizedDescription = `Normalizado ${token}`;
-    createAutoApplyRules(token, normalizedDescription);
-    createOpenBatch();
+    createAutoApplyRules(token, normalizedDescription).then(({ descriptionRule, classificationRule }) => {
+      createOpenBatch();
 
-    cy.get('[data-cy="transactionBatchSettings"]').click();
-    cy.get('#batch-setting-autoApplyDescriptions').check();
-    cy.get('#batch-setting-autoApplyCategories').check();
-    cy.get('#batch-setting-autoApplyTags').check();
-    cy.contains('.modal button', 'Guardar y reevaluar').click();
-    cy.get('.modal').should('not.exist');
+      cy.get('[data-cy="transactionBatchSettings"]').click();
+      cy.get('#batch-setting-autoApplyDescriptions').check();
+      cy.get('#batch-setting-autoApplyCategories').check();
+      cy.get('#batch-setting-autoApplyTags').check();
+      cy.contains('.modal button', 'Guardar y reevaluar').click();
+      cy.get('.modal').should('not.exist');
 
-    const csv = [csvHeader, `2026-10-17,,${token},-75.00,MXN,batch-auto-apply,CSV row`].join('\n');
-    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
-      {
-        contents: Cypress.Buffer.from(csv),
-        fileName: 'batch-auto-apply.csv',
-        mimeType: 'text/csv',
-        lastModified: Date.now(),
-      },
-      { force: true },
-    );
-    cy.get('[data-cy="transactionBatchAppendCsv"]').click();
-    cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).should('contain', 'CSV');
-    cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', String(categoryId));
-    cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('contain', tagName);
+      const csv = [csvHeader, `2026-10-17,,${token},-75.00,MXN,batch-auto-apply,CSV row`].join('\n');
+      cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
+        {
+          contents: Cypress.Buffer.from(csv),
+          fileName: 'batch-auto-apply.csv',
+          mimeType: 'text/csv',
+          lastModified: Date.now(),
+        },
+        { force: true },
+      );
+      cy.get('[data-cy="transactionBatchAppendCsv"]').click();
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).should('contain', 'CSV');
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', String(categoryId));
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('contain', tagName);
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).within(() => {
+        cy.get('[data-testid="transactionBatchAppliedRuleAttribution"]')
+          .should('have.length', 3)
+          .and('contain', descriptionRule.name)
+          .and('contain', classificationRule.name);
+        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', descriptionRule.name)
+          .find('a')
+          .should('have.attr', 'href', `/description-normalization-rule/${descriptionRule.id}/view`);
+        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', classificationRule.name)
+          .first()
+          .find('a')
+          .should('have.attr', 'href', `/transaction-rule/${classificationRule.id}/view`);
+      });
 
-    cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).select('');
-    cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
-    cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Remove"]').click();
-    cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
+      cy.reload();
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).within(() => {
+        cy.get('[data-testid="transactionBatchAppliedRuleAttribution"]')
+          .should('have.length', 3)
+          .and('contain', descriptionRule.name)
+          .and('contain', classificationRule.name);
+      });
 
-    cy.get('[data-cy="transactionBatchReevaluate"]').click();
-    cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
-    cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
-    cy.screenshot('transaction-batch/07-rule-protection');
+      cy.authenticatedRequest({ method: 'DELETE', url: `/api/description-normalization-rules/${descriptionRule.id}` })
+        .its('status')
+        .should('eq', 204);
+      cy.authenticatedRequest({ method: 'DELETE', url: `/api/transaction-rules/${classificationRule.id}` })
+        .its('status')
+        .should('eq', 204);
+      cy.reload();
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).within(() => {
+        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', descriptionRule.name).find('a').should('not.exist');
+        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', classificationRule.name).find('a').should('not.exist');
+      });
+
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).select('');
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Remove"]').click();
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
+      cy.get('[data-cy="transactionBatchReevaluate"]').click();
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription)
+        .find('[data-testid="transactionBatchAppliedRuleAttribution"]')
+        .should('have.length', 1)
+        .and('contain', descriptionRule.name);
+      cy.screenshot('transaction-batch/07-rule-protection');
+    });
   });
 
   it('keeps an in-progress edit when an external candidate version wins', () => {

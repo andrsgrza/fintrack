@@ -56,6 +56,8 @@ public class TransactionCandidateWorkflowSummaryDTO implements Serializable {
     private String categoryName;
 
     private TransactionCandidateClassificationSource categorySource;
+    private AppliedRuleAttributionDTO categoryAppliedByRule;
+    private AppliedRuleAttributionDTO descriptionAppliedByRule;
 
     private List<Long> tagIds = new ArrayList<>();
 
@@ -225,6 +227,22 @@ public class TransactionCandidateWorkflowSummaryDTO implements Serializable {
 
     public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
         this.categorySource = categorySource;
+    }
+
+    public AppliedRuleAttributionDTO getCategoryAppliedByRule() {
+        return categoryAppliedByRule;
+    }
+
+    public void setCategoryAppliedByRule(AppliedRuleAttributionDTO categoryAppliedByRule) {
+        this.categoryAppliedByRule = categoryAppliedByRule;
+    }
+
+    public AppliedRuleAttributionDTO getDescriptionAppliedByRule() {
+        return descriptionAppliedByRule;
+    }
+
+    public void setDescriptionAppliedByRule(AppliedRuleAttributionDTO descriptionAppliedByRule) {
+        this.descriptionAppliedByRule = descriptionAppliedByRule;
     }
 
     public List<Long> getTagIds() {

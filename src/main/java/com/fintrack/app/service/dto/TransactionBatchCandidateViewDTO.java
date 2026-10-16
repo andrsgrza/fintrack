@@ -24,6 +24,7 @@ public class TransactionBatchCandidateViewDTO {
      */
     private String sourceDescription;
     private TransactionCandidateDescriptionSource descriptionSource;
+    private AppliedRuleAttributionDTO descriptionAppliedByRule;
     private BigDecimal signedAmount;
     private BigDecimal amount;
     private TransactionFlow flow;
@@ -35,6 +36,7 @@ public class TransactionBatchCandidateViewDTO {
     private String categoryColor;
     private Boolean categoryActive;
     private TransactionCandidateClassificationSource categorySource;
+    private AppliedRuleAttributionDTO categoryAppliedByRule;
     private Boolean categoryManualClear;
     private List<TransactionBatchTagViewDTO> tags = List.of();
     private List<Long> suppressedTagIds = List.of();
@@ -128,6 +130,14 @@ public class TransactionBatchCandidateViewDTO {
         this.descriptionSource = descriptionSource;
     }
 
+    public AppliedRuleAttributionDTO getDescriptionAppliedByRule() {
+        return descriptionAppliedByRule;
+    }
+
+    public void setDescriptionAppliedByRule(AppliedRuleAttributionDTO descriptionAppliedByRule) {
+        this.descriptionAppliedByRule = descriptionAppliedByRule;
+    }
+
     public BigDecimal getSignedAmount() {
         return signedAmount;
     }
@@ -214,6 +224,14 @@ public class TransactionBatchCandidateViewDTO {
 
     public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
         this.categorySource = categorySource;
+    }
+
+    public AppliedRuleAttributionDTO getCategoryAppliedByRule() {
+        return categoryAppliedByRule;
+    }
+
+    public void setCategoryAppliedByRule(AppliedRuleAttributionDTO categoryAppliedByRule) {
+        this.categoryAppliedByRule = categoryAppliedByRule;
     }
 
     public Boolean getCategoryManualClear() {

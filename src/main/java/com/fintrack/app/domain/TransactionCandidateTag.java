@@ -23,6 +23,15 @@ public class TransactionCandidateTag implements Serializable {
     @Column(name = "source", nullable = false)
     private TransactionCandidateClassificationSource source;
 
+    /** The TransactionRule that produced this automatic association; nullable after rule deletion. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "applied_rule_id")
+    private TransactionRule appliedRule;
+
+    /** Snapshot of the applied rule name, retained for the temporary candidate lifetime if the rule is deleted. */
+    @Column(name = "applied_rule_name", length = 100)
+    private String appliedRuleName;
+
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "transaction_candidate_id", nullable = false)
@@ -47,6 +56,27 @@ public class TransactionCandidateTag implements Serializable {
 
     public void setSource(TransactionCandidateClassificationSource source) {
         this.source = source;
+        if (source != TransactionCandidateClassificationSource.AUTOMATIC) {
+            clearAppliedRuleAttribution();
+        }
+    }
+
+    public TransactionRule getAppliedRule() {
+        return appliedRule;
+    }
+
+    public String getAppliedRuleName() {
+        return appliedRuleName;
+    }
+
+    public void setAppliedRuleAttribution(TransactionRule rule) {
+        this.appliedRule = rule;
+        this.appliedRuleName = rule == null ? null : rule.getName();
+    }
+
+    public void clearAppliedRuleAttribution() {
+        this.appliedRule = null;
+        this.appliedRuleName = null;
     }
 
     public TransactionCandidate getTransactionCandidate() {

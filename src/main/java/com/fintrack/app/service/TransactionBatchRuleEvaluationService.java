@@ -186,6 +186,7 @@ public class TransactionBatchRuleEvaluationService {
             ) {
                 candidate.setDescription(result);
                 candidate.setDescriptionSource(TransactionCandidateDescriptionSource.AUTOMATIC);
+                candidate.setDescriptionAppliedRuleAttribution(requireDescriptionRule(preview.rules(), preview.description().ruleId()));
                 candidate.setDescriptionReviewStatus(TransactionCandidateDescriptionReviewStatus.AUTO_APPLIED);
                 descriptionApplied = true;
             }
@@ -208,6 +209,12 @@ public class TransactionBatchRuleEvaluationService {
                 CategoryReferenceValidator.validateActiveForNewReference(category);
                 candidate.setCategory(category);
                 candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+                candidate.setCategoryAppliedRuleAttribution(
+                    requireTransactionRule(
+                        classificationPreview.rules(),
+                        classificationPreview.classification().suggestedCategory().sourceRuleId()
+                    )
+                );
                 candidate.setCategoryManualClear(false);
                 categoryApplied = true;
             }
@@ -221,7 +228,14 @@ public class TransactionBatchRuleEvaluationService {
                 Tag tag = requireAccessibleTag(tagId);
                 if (!isExplicit && protectManual && candidate.isTagSuppressed(tag)) continue;
                 TagReferenceValidator.validateActiveForNewReference(tag);
-                candidate.addTag(tag, TransactionCandidateClassificationSource.AUTOMATIC);
+                candidate.addTag(
+                    tag,
+                    TransactionCandidateClassificationSource.AUTOMATIC,
+                    requireTransactionRule(
+                        classificationPreview.rules(),
+                        suggestedTag(classificationPreview.classification(), tagId).sourceRuleId()
+                    )
+                );
                 candidate.removeTagSuppression(tag);
                 tagsApplied.add(tag.getId());
             }
@@ -432,6 +446,34 @@ public class TransactionBatchRuleEvaluationService {
         return tagRepository
             .findOneWithToOneRelationshipsByIdAndUserLogin(tagId, currentUserService.getCurrentUserLogin())
             .orElseThrow(() -> new IllegalArgumentException("Tag is not accessible"));
+    }
+
+    private DescriptionNormalizationRule requireDescriptionRule(RuleSets rules, Long ruleId) {
+        return rules
+            .descriptionRules()
+            .stream()
+            .filter(rule -> Objects.equals(rule.getId(), ruleId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Applied description rule is no longer available"));
+    }
+
+    private TransactionRule requireTransactionRule(RuleSets rules, Long ruleId) {
+        return rules
+            .transactionRules()
+            .stream()
+            .filter(rule -> Objects.equals(rule.getId(), ruleId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Applied transaction rule is no longer available"));
+    }
+
+    private TagSuggestion suggestedTag(TransactionRuleEvaluationResult evaluation, Long tagId) {
+        return evaluation
+            .suggestedTags()
+            .stream()
+            .filter(suggestion -> Objects.equals(suggestion.tagId(), tagId))
+            .filter(suggestion -> !suggestion.alreadyPresent() && !suggestion.duplicateOfEarlierSuggestion())
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Applied tag suggestion is no longer available"));
     }
 
     private void touch(TransactionCandidate candidate) {

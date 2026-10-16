@@ -40,14 +40,15 @@ The FILE-only `transactionIngestion` and `ingestionRecord` relationships are rem
 
 ### 2.2 Minimal temporary data
 
-| Need                        | Representation                                                                                        | Retention                               |
-| --------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| CSV normalization input     | `TransactionCandidate.sourceDescription`, CSV only                                                    | Candidate lifetime                      |
-| Repairable effective values | editable candidate fields                                                                             | Candidate lifetime                      |
-| Invalid required input      | `TransactionCandidateInputIssue(candidate, field, submittedValue, reason)`                            | Deleted with candidate                  |
-| Removed-tag intent          | `TransactionCandidateTagSuppression(candidate, tag)`                                                  | Deleted with candidate or when resolved |
-| Append idempotency          | `TransactionBatchAppendOperation` with key, immutable digest, accepted count, optional filename, time | Batch lifetime                          |
-| Publish replay              | limited fields on batch root                                                                          | 24-hour receipt                         |
+| Need                        | Representation                                                                                                        | Retention                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| CSV normalization input     | `TransactionCandidate.sourceDescription`, CSV only                                                                    | Candidate lifetime                         |
+| Repairable effective values | editable candidate fields                                                                                             | Candidate lifetime                         |
+| Applied rule explanation    | candidate-level description/category rule reference + name snapshot; per-candidate-tag rule reference + name snapshot | Candidate lifetime; deleted with candidate |
+| Invalid required input      | `TransactionCandidateInputIssue(candidate, field, submittedValue, reason)`                                            | Deleted with candidate                     |
+| Removed-tag intent          | `TransactionCandidateTagSuppression(candidate, tag)`                                                                  | Deleted with candidate or when resolved    |
+| Append idempotency          | `TransactionBatchAppendOperation` with key, immutable digest, accepted count, optional filename, time                 | Batch lifetime                             |
+| Publish replay              | limited fields on batch root                                                                                          | 24-hour receipt                            |
 
 There is no CSV binary, full raw row JSON, parser-result snapshot, rule-evaluation archive, final classification snapshot, or final transaction-ID list.
 
@@ -56,6 +57,8 @@ There is no CSV binary, full raw row JSON, parser-result snapshot, rule-evaluati
 One candidate has one persisted category and `categorySource` (`AUTOMATIC` or `MANUAL`; no category has no source). Tags remain association rows with an individual source. `sourceDescription` is not another current description: `description` is always the editable/effective value.
 
 `descriptionSource` is `SOURCE`, `AUTOMATIC`, or `MANUAL`. A manual description uses `MANUAL`; disabling automation never reverts it. Manually clearing category sets `categoryManualClear=true`, so a rule cannot refill it while protection is enabled. A manual tag add promotes/creates manual membership. A manual remove deletes membership and creates a suppression. Manual Apply may intentionally override applicable suppression/protection as defined in §8; automatic application may not.
+
+When a rule actually writes an automatic effective value, the candidate records the contributing rule as temporary explainability: description/category store a nullable live-rule reference and a bounded rule-name snapshot; each automatic candidate/tag association stores its own TransactionRule reference and snapshot. A preview, pending match, no-op reevaluation, or stale output never replaces an existing applied attribution. Manual category/tag/description input clears the corresponding attribution. Rule deletion uses `SET NULL` for the live reference while preserving the candidate's name snapshot; it is still not historical ledger data and is deleted with the candidate on cancel/discard/publish.
 
 ## 3. Lifecycle and command boundary
 

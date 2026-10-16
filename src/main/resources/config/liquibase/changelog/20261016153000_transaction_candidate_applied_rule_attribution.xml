@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Candidate-only explanations of an already applied rule. These fields are never copied into posted history. -->
+    <changeSet id="20261016153000-1" author="codex">
+        <addColumn tableName="transaction_candidate">
+            <column name="description_applied_rule_id" type="bigint"/>
+            <column name="description_applied_rule_name" type="varchar(100)"/>
+            <column name="category_applied_rule_id" type="bigint"/>
+            <column name="category_applied_rule_name" type="varchar(100)"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="transaction_candidate"
+                                 baseColumnNames="description_applied_rule_id"
+                                 constraintName="fk_candidate__description_applied_rule"
+                                 referencedTableName="description_normalization_rule"
+                                 referencedColumnNames="id"
+                                 onDelete="SET NULL"/>
+        <addForeignKeyConstraint baseTableName="transaction_candidate"
+                                 baseColumnNames="category_applied_rule_id"
+                                 constraintName="fk_candidate__category_applied_rule"
+                                 referencedTableName="transaction_rule"
+                                 referencedColumnNames="id"
+                                 onDelete="SET NULL"/>
+    </changeSet>
+
+    <changeSet id="20261016153000-2" author="codex">
+        <addColumn tableName="rel_transaction_candidate__tags">
+            <column name="applied_rule_id" type="bigint"/>
+            <column name="applied_rule_name" type="varchar(100)"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="rel_transaction_candidate__tags"
+                                 baseColumnNames="applied_rule_id"
+                                 constraintName="fk_candidate_tag__applied_rule"
+                                 referencedTableName="transaction_rule"
+                                 referencedColumnNames="id"
+                                 onDelete="SET NULL"/>
+    </changeSet>
+</databaseChangeLog>

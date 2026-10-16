@@ -5,6 +5,7 @@ import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
+import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
@@ -188,7 +189,8 @@ public class FileImportCandidateClassificationService {
         FileImportCandidateRulePreviewRowDTO row = basePreviewRow(candidate);
         try {
             validateMutableFileImportCandidate(candidate);
-            TransactionRuleEvaluationResult evaluation = evaluate(candidate, userLogin);
+            List<TransactionRule> activeRules = transactionRuleEvaluationService.loadActiveRules(userLogin);
+            TransactionRuleEvaluationResult evaluation = evaluate(candidate, userLogin, activeRules);
             populateEvaluation(row, evaluation, scope);
             row.setAction("PREVIEWED");
         } catch (IllegalArgumentException e) {
@@ -208,7 +210,8 @@ public class FileImportCandidateClassificationService {
         FileImportCandidateApplyRulesRowDTO row = baseApplyRow(candidate);
         try {
             validateMutableFileImportCandidate(candidate);
-            TransactionRuleEvaluationResult evaluation = evaluate(candidate, userLogin);
+            List<TransactionRule> activeRules = transactionRuleEvaluationService.loadActiveRules(userLogin);
+            TransactionRuleEvaluationResult evaluation = evaluate(candidate, userLogin, activeRules);
             TransactionCandidateRuleApplicationResult application;
             if (automatic) {
                 application = transactionCandidateRuleApplicationService.applyAutomatically(
@@ -224,7 +227,8 @@ public class FileImportCandidateClassificationService {
                             candidate.getFlow(),
                             candidate.getCategory() == null ? null : candidate.getCategory().getId()
                         ),
-                    tagId -> resolveSuggestedTag(tagId, userLogin, currentTagIds(candidate))
+                    tagId -> resolveSuggestedTag(tagId, userLogin, currentTagIds(candidate)),
+                    ruleId -> requireAppliedRule(activeRules, ruleId)
                 );
             } else {
                 boolean hadManualClassification = candidate.hasManualClassification();
@@ -241,7 +245,8 @@ public class FileImportCandidateClassificationService {
                             candidate.getFlow(),
                             candidate.getCategory() == null ? null : candidate.getCategory().getId()
                         ),
-                    tagId -> resolveSuggestedTag(tagId, userLogin, currentTagIds(candidate))
+                    tagId -> resolveSuggestedTag(tagId, userLogin, currentTagIds(candidate)),
+                    ruleId -> requireAppliedRule(activeRules, ruleId)
                 );
             }
 
@@ -361,6 +366,10 @@ public class FileImportCandidateClassificationService {
     }
 
     private TransactionRuleEvaluationResult evaluate(TransactionCandidate candidate, String userLogin) {
+        return evaluate(candidate, userLogin, transactionRuleEvaluationService.loadActiveRules(userLogin));
+    }
+
+    private TransactionRuleEvaluationResult evaluate(TransactionCandidate candidate, String userLogin, List<TransactionRule> activeRules) {
         if (candidate.getDescription() == null || candidate.getDescription().isBlank()) {
             throw new IllegalArgumentException("Description is required for rule preview");
         }
@@ -385,8 +394,17 @@ public class FileImportCandidateClassificationService {
                 candidate.getCategory() == null ? null : candidate.getCategory().getName(),
                 currentTagIds(candidate),
                 currentTagNames(candidate)
-            )
+            ),
+            activeRules
         );
+    }
+
+    private TransactionRule requireAppliedRule(List<TransactionRule> activeRules, Long ruleId) {
+        return activeRules
+            .stream()
+            .filter(rule -> Objects.equals(rule.getId(), ruleId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Applied transaction rule is no longer available"));
     }
 
     private Category resolveCategory(Long categoryId, String userLogin, TransactionFlow flow, Long existingCategoryId) {

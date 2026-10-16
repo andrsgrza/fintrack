@@ -44,6 +44,22 @@ const operationKey = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.ra
 const categoryStyle = (color?: string | null): React.CSSProperties | undefined =>
   color ? { borderInlineStart: `0.3rem solid ${color}`, backgroundColor: `${color}12` } : undefined;
 
+const AppliedBy = ({ attribution, href }: { attribution?: { id?: number | null; name?: string | null } | null; href: string }) => {
+  if (!attribution?.name) return null;
+  return (
+    <div className="small text-muted mt-1" data-testid="transactionBatchAppliedRuleAttribution">
+      Aplicada por{' '}
+      {attribution.id ? (
+        <Link className="transaction-batch-rule-link" to={`${href}/${attribution.id}/view`}>
+          {attribution.name}
+        </Link>
+      ) : (
+        attribution.name
+      )}
+    </div>
+  );
+};
+
 type BatchEditorSession = { candidate?: BatchCandidate; key: string; createMode: boolean };
 type BatchSortKey = 'ROW_POSITION' | 'DATE' | 'AMOUNT' | 'DESCRIPTION' | 'CATEGORY';
 type BatchSortDirection = 'ASC' | 'DESC';
@@ -840,6 +856,7 @@ const TransactionBatchDetail = () => {
                   <div>
                     <span className="d-md-none small text-muted d-block">Movimiento</span>
                     <strong>{row.description || 'Sin descripción'}</strong>
+                    <AppliedBy attribution={row.descriptionAppliedByRule} href="/description-normalization-rule" />
                     <div className="small text-muted">
                       {row.source === 'MANUAL' ? 'Manual' : 'CSV'} · {row.validationStatus}
                     </div>
@@ -878,6 +895,7 @@ const TransactionBatchDetail = () => {
                         </option>
                       ))}
                     </Input>
+                    <AppliedBy attribution={row.categoryAppliedByRule} href="/transaction-rule" />
                     <DomainSuggestion
                       title="Categoría sugerida"
                       value={categorySuggestion ? categoryName(preview?.suggestedCategoryId) : undefined}
@@ -898,6 +916,9 @@ const TransactionBatchDetail = () => {
                       dataCy={`transactionBatchTags-${row.id}`}
                       disabled={rowMutationPending}
                     />
+                    {row.tags.map(tag => (
+                      <AppliedBy key={tag.id ?? tag.name} attribution={tag.appliedByRule} href="/transaction-rule" />
+                    ))}
                     <DomainSuggestion
                       title="Etiquetas sugeridas"
                       value={tagSuggestions.length ? tagSuggestions.map(tagName).join(', ') : undefined}

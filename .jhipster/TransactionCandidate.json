@@ -42,6 +42,12 @@
       "fieldValues": "AUTOMATIC,MANUAL"
     },
     {
+      "fieldName": "categoryAppliedRuleName",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
       "fieldName": "categoryManualClear",
       "fieldType": "Boolean",
       "fieldValidateRules": ["required"]
@@ -50,6 +56,12 @@
       "fieldName": "descriptionSource",
       "fieldType": "TransactionCandidateDescriptionSource",
       "fieldValues": "SOURCE,AUTOMATIC,MANUAL"
+    },
+    {
+      "fieldName": "descriptionAppliedRuleName",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
     },
     {
       "fieldName": "sourceDescription",
@@ -181,6 +193,20 @@
       "otherEntityField": "id",
       "otherEntityName": "transactionBatch",
       "relationshipName": "transactionBatch",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "descriptionNormalizationRule",
+      "relationshipName": "descriptionAppliedRule",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "transactionRule",
+      "relationshipName": "categoryAppliedRule",
       "relationshipSide": "left",
       "relationshipType": "many-to-one"
     }

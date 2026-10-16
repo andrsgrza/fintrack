@@ -1,6 +1,14 @@
 import axios from 'axios';
 
-export type BatchTag = { id?: number; name?: string; color?: string | null; active?: boolean | null; source?: string };
+export type AppliedRuleAttribution = { id?: number | null; name?: string | null };
+export type BatchTag = {
+  id?: number;
+  name?: string;
+  color?: string | null;
+  active?: boolean | null;
+  source?: string;
+  appliedByRule?: AppliedRuleAttribution | null;
+};
 export type BatchCandidate = {
   id: number;
   version: number;
@@ -12,6 +20,7 @@ export type BatchCandidate = {
   description?: string | null;
   /** Immutable temporary CSV baseline; absent for manual rows. */
   sourceDescription?: string | null;
+  descriptionAppliedByRule?: AppliedRuleAttribution | null;
   externalReference?: string | null;
   notes?: string | null;
   signedAmount?: number | null;
@@ -21,6 +30,7 @@ export type BatchCandidate = {
   categoryName?: string | null;
   categoryColor?: string | null;
   categoryActive?: boolean | null;
+  categoryAppliedByRule?: AppliedRuleAttribution | null;
   tags: BatchTag[];
   inputIssues: { field: string; reasonCode: string; submittedValue?: string | null }[];
 };
