@@ -84,10 +84,6 @@ public class TransactionCandidateDTO implements Serializable {
 
     private CategoryDTO category;
 
-    private TransactionIngestionDTO transactionIngestion;
-
-    private IngestionRecordDTO ingestionRecord;
-
     private Set<TagDTO> tags = new HashSet<>();
 
     /**
@@ -302,22 +298,6 @@ public class TransactionCandidateDTO implements Serializable {
 
     public void setCategory(CategoryDTO category) {
         this.category = category;
-    }
-
-    public TransactionIngestionDTO getTransactionIngestion() {
-        return transactionIngestion;
-    }
-
-    public void setTransactionIngestion(TransactionIngestionDTO transactionIngestion) {
-        this.transactionIngestion = transactionIngestion;
-    }
-
-    public IngestionRecordDTO getIngestionRecord() {
-        return ingestionRecord;
-    }
-
-    public void setIngestionRecord(IngestionRecordDTO ingestionRecord) {
-        this.ingestionRecord = ingestionRecord;
     }
 
     public Set<TagDTO> getTags() {

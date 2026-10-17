@@ -17,6 +17,7 @@ import com.fintrack.app.domain.ApiIngestion;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.repository.ApiAccessTokenRepository;
 import com.fintrack.app.repository.ApiIngestionRepository;
@@ -156,9 +157,20 @@ class ApiIngestionResourceIT {
     }
 
     public static TransactionIngestion createApiTransactionIngestionEntity(EntityManager em) {
-        TransactionIngestion transactionIngestion = TransactionIngestionResourceIT.createEntity(em);
-        transactionIngestion.setIngestionType(IngestionType.API);
-        return transactionIngestion;
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(em);
+        em.persist(account);
+        em.flush();
+        return new TransactionIngestion()
+            .ingestionType(IngestionType.API)
+            .status(IngestionStatus.PENDING)
+            .sourceLabel("API test import")
+            .startedAt(DEFAULT_CREATED_AT)
+            .recordsReceived(0)
+            .recordsCreated(0)
+            .recordsSkipped(0)
+            .recordsRejected(0)
+            .createdAt(DEFAULT_CREATED_AT)
+            .account(account);
     }
 
     /**
@@ -201,6 +213,14 @@ class ApiIngestionResourceIT {
             apiIngestionRepository.delete(insertedApiIngestion);
             insertedApiIngestion = null;
         }
+    }
+
+    @Test
+    @Transactional
+    void doesNotExposeRetiredFileIngestionRoutes() throws Exception {
+        restApiIngestionMockMvc.perform(get("/api/file-ingestions")).andExpect(status().isNotFound());
+        restApiIngestionMockMvc.perform(get("/api/ingestion-records")).andExpect(status().isNotFound());
+        restApiIngestionMockMvc.perform(get("/api/transaction-ingestions/1/workflow")).andExpect(status().isNotFound());
     }
 
     @Test
@@ -815,25 +835,6 @@ class ApiIngestionResourceIT {
             apiIngestion.getTransactionIngestion().getId(),
             otherToken.getId(),
             "REQ-FOREIGN-TOKEN-" + longCount.incrementAndGet()
-        );
-
-        restApiIngestionMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(apiIngestionDTO)))
-            .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @Transactional
-    void createApiIngestionWithFileTransactionIngestionFails() throws Exception {
-        TransactionIngestion fileIngestion = TransactionIngestionResourceIT.createEntity(em);
-        fileIngestion.setIngestionType(IngestionType.FILE);
-        em.persist(fileIngestion);
-        em.flush();
-
-        ApiIngestionCreateRequestDTO apiIngestionDTO = buildCreateApiIngestionDTO(
-            fileIngestion.getId(),
-            apiIngestion.getApiTokenIdSnapshot(),
-            "REQ-FILE-PARENT-" + longCount.incrementAndGet()
         );
 
         restApiIngestionMockMvc

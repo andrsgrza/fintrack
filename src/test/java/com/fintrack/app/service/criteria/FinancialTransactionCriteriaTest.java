@@ -93,7 +93,6 @@ class FinancialTransactionCriteriaTest {
         financialTransactionCriteria.tagsId();
         financialTransactionCriteria.outgoingInternalTransferId();
         financialTransactionCriteria.incomingInternalTransferId();
-        financialTransactionCriteria.ingestionRecordId();
         financialTransactionCriteria.distinct();
     }
 
@@ -118,7 +117,6 @@ class FinancialTransactionCriteriaTest {
                 condition.apply(criteria.getTagsId()) &&
                 condition.apply(criteria.getOutgoingInternalTransferId()) &&
                 condition.apply(criteria.getIncomingInternalTransferId()) &&
-                condition.apply(criteria.getIngestionRecordId()) &&
                 condition.apply(criteria.getDistinct()),
             "every filter matches"
         );
@@ -148,7 +146,6 @@ class FinancialTransactionCriteriaTest {
                 condition.apply(criteria.getTagsId(), copy.getTagsId()) &&
                 condition.apply(criteria.getOutgoingInternalTransferId(), copy.getOutgoingInternalTransferId()) &&
                 condition.apply(criteria.getIncomingInternalTransferId(), copy.getIncomingInternalTransferId()) &&
-                condition.apply(criteria.getIngestionRecordId(), copy.getIngestionRecordId()) &&
                 condition.apply(criteria.getDistinct(), copy.getDistinct()),
             "every filter matches"
         );

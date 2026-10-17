@@ -16,7 +16,6 @@ export interface IFinancialAccountDeletionPreviewCounts {
   financialTransactions: number;
   manualCandidates: number;
   transactionIngestions: number;
-  ingestionRecords: number;
   fileImportCandidates: number;
   creditAccountDetails: number;
   budgetLinks: number;

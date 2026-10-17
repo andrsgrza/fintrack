@@ -1,10 +1,8 @@
 package com.fintrack.app.domain;
 
 import static com.fintrack.app.domain.ApiIngestionTestSamples.*;
-import static com.fintrack.app.domain.FileIngestionTestSamples.*;
 import static com.fintrack.app.domain.FinancialAccountTestSamples.*;
 import static com.fintrack.app.domain.FinancialTransactionTestSamples.*;
-import static com.fintrack.app.domain.IngestionRecordTestSamples.*;
 import static com.fintrack.app.domain.TransactionIngestionTestSamples.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,20 +40,6 @@ class TransactionIngestionTest {
     }
 
     @Test
-    void fileIngestionTest() {
-        TransactionIngestion transactionIngestion = getTransactionIngestionRandomSampleGenerator();
-        FileIngestion fileIngestionBack = getFileIngestionRandomSampleGenerator();
-
-        transactionIngestion.setFileIngestion(fileIngestionBack);
-        assertThat(transactionIngestion.getFileIngestion()).isEqualTo(fileIngestionBack);
-        assertThat(fileIngestionBack.getTransactionIngestion()).isEqualTo(transactionIngestion);
-
-        transactionIngestion.fileIngestion(null);
-        assertThat(transactionIngestion.getFileIngestion()).isNull();
-        assertThat(fileIngestionBack.getTransactionIngestion()).isNull();
-    }
-
-    @Test
     void apiIngestionTest() {
         TransactionIngestion transactionIngestion = getTransactionIngestionRandomSampleGenerator();
         ApiIngestion apiIngestionBack = getApiIngestionRandomSampleGenerator();
@@ -89,27 +73,5 @@ class TransactionIngestionTest {
         transactionIngestion.setFinancialTransactions(new HashSet<>());
         assertThat(transactionIngestion.getFinancialTransactions()).doesNotContain(financialTransactionBack);
         assertThat(financialTransactionBack.getTransactionIngestion()).isNull();
-    }
-
-    @Test
-    void recordsTest() {
-        TransactionIngestion transactionIngestion = getTransactionIngestionRandomSampleGenerator();
-        IngestionRecord ingestionRecordBack = getIngestionRecordRandomSampleGenerator();
-
-        transactionIngestion.addRecords(ingestionRecordBack);
-        assertThat(transactionIngestion.getRecords()).containsOnly(ingestionRecordBack);
-        assertThat(ingestionRecordBack.getTransactionIngestion()).isEqualTo(transactionIngestion);
-
-        transactionIngestion.removeRecords(ingestionRecordBack);
-        assertThat(transactionIngestion.getRecords()).doesNotContain(ingestionRecordBack);
-        assertThat(ingestionRecordBack.getTransactionIngestion()).isNull();
-
-        transactionIngestion.records(new HashSet<>(Set.of(ingestionRecordBack)));
-        assertThat(transactionIngestion.getRecords()).containsOnly(ingestionRecordBack);
-        assertThat(ingestionRecordBack.getTransactionIngestion()).isEqualTo(transactionIngestion);
-
-        transactionIngestion.setRecords(new HashSet<>());
-        assertThat(transactionIngestion.getRecords()).doesNotContain(ingestionRecordBack);
-        assertThat(ingestionRecordBack.getTransactionIngestion()).isNull();
     }
 }

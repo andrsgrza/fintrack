@@ -8,7 +8,6 @@ public class FinancialAccountDeletionPreviewCountsDTO implements Serializable {
     private Long financialTransactions = 0L;
     private Long manualCandidates = 0L;
     private Long transactionIngestions = 0L;
-    private Long ingestionRecords = 0L;
     private Long fileImportCandidates = 0L;
     private Long creditAccountDetails = 0L;
     private Long budgetLinks = 0L;
@@ -38,14 +37,6 @@ public class FinancialAccountDeletionPreviewCountsDTO implements Serializable {
 
     public void setTransactionIngestions(Long value) {
         this.transactionIngestions = value;
-    }
-
-    public Long getIngestionRecords() {
-        return ingestionRecords;
-    }
-
-    public void setIngestionRecords(Long value) {
-        this.ingestionRecords = value;
     }
 
     public Long getFileImportCandidates() {

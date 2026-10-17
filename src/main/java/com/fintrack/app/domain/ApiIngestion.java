@@ -71,7 +71,7 @@ public class ApiIngestion implements Serializable {
     @Column(name = "api_token_name_snapshot", length = 100, nullable = false)
     private String apiTokenNameSnapshot;
 
-    @JsonIgnoreProperties(value = { "accounts", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
+    @JsonIgnoreProperties(value = { "accounts", "apiIngestion", "financialTransactions" }, allowSetters = true)
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @NotNull
     @JoinColumn(unique = true)

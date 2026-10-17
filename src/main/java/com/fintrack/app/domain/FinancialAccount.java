@@ -104,7 +104,6 @@ public class FinancialAccount implements Serializable {
             "tags",
             "outgoingInternalTransfer",
             "incomingInternalTransfer",
-            "ingestionRecord",
         },
         allowSetters = true
     )
@@ -122,7 +121,7 @@ public class FinancialAccount implements Serializable {
     private Set<Budget> budgets = new HashSet<>();
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "account")
-    @JsonIgnoreProperties(value = { "account", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
+    @JsonIgnoreProperties(value = { "account", "apiIngestion", "financialTransactions" }, allowSetters = true)
     private Set<TransactionIngestion> transactionIngestions = new HashSet<>();
 
     // jhipster-needle-entity-add-field - JHipster will add fields here

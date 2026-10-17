@@ -16,7 +16,6 @@ import FinancialSubscription from './financial-subscription';
 import Budget from './budget';
 import InternalTransfer from './internal-transfer';
 import ApiIngestion from './api-ingestion';
-import IngestionRecord from './ingestion-record';
 import ApiAccessToken from './api-access-token';
 import ApiAccessTokenPermission from './api-access-token-permission';
 import UserDashboardPreference from './user-dashboard-preference';
@@ -42,7 +41,6 @@ export default () => {
         <Route path="budget/*" element={<Budget />} />
         <Route path="internal-transfer/*" element={<InternalTransfer />} />
         <Route path="api-ingestion/*" element={<ApiIngestion />} />
-        <Route path="ingestion-record/*" element={<IngestionRecord />} />
         <Route path="api-access-token/*" element={<ApiAccessToken />} />
         <Route path="api-access-token-permission/*" element={<ApiAccessTokenPermission />} />
         <Route path="user-dashboard-preference/*" element={<UserDashboardPreference />} />

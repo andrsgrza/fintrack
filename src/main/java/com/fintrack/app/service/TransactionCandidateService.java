@@ -4,10 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
-import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
-import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
@@ -21,15 +19,12 @@ import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
-import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
-import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftTagSummaryDTO;
 import com.fintrack.app.service.dto.RuleMatchResultDTO;
@@ -40,7 +35,6 @@ import com.fintrack.app.service.dto.TagSuggestionDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRulePreviewResponseDTO;
-import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
@@ -106,10 +100,6 @@ public class TransactionCandidateService {
 
     private final TagRepository tagRepository;
 
-    private final TransactionIngestionRepository transactionIngestionRepository;
-
-    private final IngestionRecordRepository ingestionRecordRepository;
-
     private final TransactionRuleEvaluationService transactionRuleEvaluationService;
 
     private final TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService;
@@ -124,8 +114,6 @@ public class TransactionCandidateService {
         FinancialTransactionRepository financialTransactionRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
-        TransactionIngestionRepository transactionIngestionRepository,
-        IngestionRecordRepository ingestionRecordRepository,
         TransactionRuleEvaluationService transactionRuleEvaluationService,
         TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService
     ) {
@@ -138,8 +126,6 @@ public class TransactionCandidateService {
         this.financialTransactionRepository = financialTransactionRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
-        this.transactionIngestionRepository = transactionIngestionRepository;
-        this.ingestionRecordRepository = ingestionRecordRepository;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
         this.transactionCandidateRuleApplicationService = transactionCandidateRuleApplicationService;
     }
@@ -366,7 +352,6 @@ public class TransactionCandidateService {
         rejectGenericStatusChange(existing, transactionCandidateDTO, updateNode);
         rejectServerTimestampChanges(existing, transactionCandidateDTO, updateNode);
         rejectClientControlledFieldsOnUpdate(transactionCandidateDTO, updateNode);
-        rejectGenericWorkflowLinkMutation(transactionCandidateDTO, updateNode);
         if (existing.getSource() == TransactionCandidateSource.MANUAL) {
             validateActiveAccountForManualAccountPatch(existing, transactionCandidateDTO, updateNode);
         }
@@ -408,7 +393,6 @@ public class TransactionCandidateService {
                 rejectGenericStatusChange(existing, transactionCandidateDTO, patchNode);
                 rejectServerTimestampChanges(existing, transactionCandidateDTO, patchNode);
                 rejectClientControlledFieldsOnUpdate(transactionCandidateDTO, patchNode);
-                rejectGenericWorkflowLinkMutation(transactionCandidateDTO, patchNode);
                 if (existing.getSource() == TransactionCandidateSource.MANUAL) {
                     validateActiveAccountForManualAccountPatch(existing, transactionCandidateDTO, patchNode);
                 }
@@ -608,8 +592,6 @@ public class TransactionCandidateService {
         Set<Tag> requestedTags = resolveTags(dto.getTags(), ownerLogin);
         validateNewTagReferences(existingReference, requestedTags);
         candidate.replaceTags(requestedTags, TransactionCandidateClassificationSource.MANUAL);
-        candidate.setTransactionIngestion(resolveOptionalTransactionIngestion(dto.getTransactionIngestion(), ownerLogin));
-        candidate.setIngestionRecord(resolveOptionalIngestionRecord(dto.getIngestionRecord(), ownerLogin));
     }
 
     private void applyRelationshipPatches(TransactionCandidate candidate, TransactionCandidateDTO dto, JsonNode patchNode) {
@@ -629,12 +611,6 @@ public class TransactionCandidateService {
             Set<Tag> requestedTags = resolveTags(dto.getTags(), ownerLogin);
             validateNewTagReferences(candidate, requestedTags);
             candidate.replaceTags(requestedTags, TransactionCandidateClassificationSource.MANUAL);
-        }
-        if (fieldPresent(patchNode, "transactionIngestion")) {
-            candidate.setTransactionIngestion(resolveOptionalTransactionIngestion(dto.getTransactionIngestion(), ownerLogin));
-        }
-        if (fieldPresent(patchNode, "ingestionRecord")) {
-            candidate.setIngestionRecord(resolveOptionalIngestionRecord(dto.getIngestionRecord(), ownerLogin));
         }
     }
 
@@ -725,30 +701,6 @@ public class TransactionCandidateService {
             .stream()
             .filter(tag -> tag.getId() != null && !existingIds.contains(tag.getId()))
             .forEach(TagReferenceValidator::validateActiveForNewReference);
-    }
-
-    private TransactionIngestion resolveOptionalTransactionIngestion(TransactionIngestionDTO dto, String ownerLogin) {
-        if (dto == null) {
-            return null;
-        }
-        if (dto.getId() == null) {
-            throw new IllegalArgumentException("Transaction ingestion id is required");
-        }
-        return transactionIngestionRepository
-            .findOneWithEagerRelationshipsByIdAndAccountUserLogin(dto.getId(), ownerLogin)
-            .orElseThrow(() -> new IllegalArgumentException("Transaction ingestion is not accessible"));
-    }
-
-    private IngestionRecord resolveOptionalIngestionRecord(IngestionRecordDTO dto, String ownerLogin) {
-        if (dto == null) {
-            return null;
-        }
-        if (dto.getId() == null) {
-            throw new IllegalArgumentException("Ingestion record id is required");
-        }
-        return ingestionRecordRepository
-            .findOneWithRelationshipsByIdAndTransactionIngestionAccountUserLogin(dto.getId(), ownerLogin)
-            .orElseThrow(() -> new IllegalArgumentException("Ingestion record is not accessible"));
     }
 
     private void normalizeFields(TransactionCandidate candidate) {
@@ -973,18 +925,6 @@ public class TransactionCandidateService {
                 throw new IllegalArgumentException("Tags must belong to candidate owner");
             }
         }
-        if (
-            candidate.getTransactionIngestion() != null &&
-            !Objects.equals(ownerId, candidate.getTransactionIngestion().getAccount().getUser().getId())
-        ) {
-            throw new IllegalArgumentException("Transaction ingestion must belong to candidate owner");
-        }
-        if (
-            candidate.getIngestionRecord() != null &&
-            !Objects.equals(ownerId, candidate.getIngestionRecord().getTransactionIngestion().getAccount().getUser().getId())
-        ) {
-            throw new IllegalArgumentException("Ingestion record must belong to candidate owner");
-        }
     }
 
     private void validateCurrency(TransactionCandidate candidate) {
@@ -1105,9 +1045,6 @@ public class TransactionCandidateService {
         if (existing.getTransactionBatch() != null) {
             throw new IllegalArgumentException("Batch candidates cannot be posted through the standalone command");
         }
-        if (existing.getTransactionIngestion() != null || existing.getIngestionRecord() != null) {
-            throw new IllegalArgumentException("Manual candidates cannot be linked to ingestion records");
-        }
         if (existing.getStatus() == TransactionCandidateStatus.CANCELLED) {
             throw new IllegalArgumentException("Cancelled transaction candidates cannot be posted");
         }
@@ -1179,8 +1116,6 @@ public class TransactionCandidateService {
             throw new IllegalArgumentException("Generic candidate CRUD cannot create api import candidates");
         }
         rejectCreateField(dto.getStatus(), "Status is controlled by command endpoints");
-        rejectCreateField(dto.getTransactionIngestion(), "Transaction ingestion links are managed by ingestion workflow commands");
-        rejectCreateField(dto.getIngestionRecord(), "Ingestion record links are managed by ingestion workflow commands");
     }
 
     private void rejectManualCommandControlledFieldsOnCreate(TransactionCandidateDTO dto) {
@@ -1188,8 +1123,6 @@ public class TransactionCandidateService {
             throw new IllegalArgumentException("Manual draft source must be MANUAL");
         }
         rejectCreateField(dto.getStatus(), "Status is server-controlled for manual drafts");
-        rejectCreateField(dto.getTransactionIngestion(), "Manual drafts cannot be linked to transaction ingestion");
-        rejectCreateField(dto.getIngestionRecord(), "Manual drafts cannot be linked to ingestion records");
         rejectClientControlledFieldsOnCreate(dto);
     }
 
@@ -1198,12 +1131,6 @@ public class TransactionCandidateService {
         rejectUpdateField(dto.getStatus(), node, "status", "Status is server-controlled for manual drafts");
         rejectClientControlledFieldsOnUpdate(dto, node);
         rejectServerTimestampFieldsPresent(node);
-        if (fieldPresent(node, "transactionIngestion")) {
-            throw new IllegalArgumentException("Manual drafts cannot be linked to transaction ingestion");
-        }
-        if (fieldPresent(node, "ingestionRecord")) {
-            throw new IllegalArgumentException("Manual drafts cannot be linked to ingestion records");
-        }
     }
 
     private void rejectClientControlledFieldsOnUpdate(TransactionCandidateDTO dto, JsonNode node) {
@@ -1252,24 +1179,6 @@ public class TransactionCandidateService {
         if (existing.getSource() == TransactionCandidateSource.API_IMPORT) {
             throw new IllegalArgumentException("API import candidates are not supported by generic candidate CRUD");
         }
-        if (existing.getTransactionIngestion() != null || existing.getIngestionRecord() != null) {
-            throw new IllegalArgumentException("Workflow-linked candidates are managed by workflow commands");
-        }
-    }
-
-    private void rejectGenericWorkflowLinkMutation(TransactionCandidateDTO dto, JsonNode node) {
-        rejectUpdateField(
-            dto.getTransactionIngestion(),
-            node,
-            "transactionIngestion",
-            "Transaction ingestion links are managed by ingestion workflow commands"
-        );
-        rejectUpdateField(
-            dto.getIngestionRecord(),
-            node,
-            "ingestionRecord",
-            "Ingestion record links are managed by ingestion workflow commands"
-        );
     }
 
     private void rejectGenericDelete(TransactionCandidate candidate) {
@@ -1284,9 +1193,6 @@ public class TransactionCandidateService {
         }
         if (candidate.getSource() == TransactionCandidateSource.API_IMPORT) {
             throw new IllegalArgumentException("API import candidates cannot be deleted through generic candidate CRUD");
-        }
-        if (candidate.getTransactionIngestion() != null || candidate.getIngestionRecord() != null) {
-            throw new IllegalArgumentException("Workflow-linked candidates cannot be deleted through generic candidate CRUD");
         }
         if (candidate.getStatus() != TransactionCandidateStatus.DRAFT || candidate.getSource() != TransactionCandidateSource.MANUAL) {
             throw new IllegalArgumentException("Generic candidate CRUD can delete only unlinked manual draft candidates");

@@ -641,9 +641,9 @@ Do not extend this as:
 - audit log;
 - `MANUAL`-only backend apply behavior.
 
-## CSV Ingestion v1 — upload/review workflow
+## Historical (retired) CSV Ingestion v1 — upload/review workflow
 
-Status: implemented through I2C persisted upload/review/confirm workflow.
+Status: **retired**. This section is retained only as historical design context. Its `FileIngestion`, `IngestionRecord`, `FILE` TransactionIngestion, routes, and command endpoints no longer exist. Transaction Batch is the sole active product workflow for CSV preparation, review, and publication.
 
 CSV import upload/review is a `TransactionIngestion` domain workflow, not generated `FileIngestion` CRUD.
 
@@ -737,7 +737,7 @@ The unified FILE-ingestion review opens the existing full configured rule editor
 
 ## Transaction Batch workspace
 
-`/transaction-batches` is the sole product entry for preparing CSV and manual movements together. It has a list of owned OPEN workspaces, a focused account-selection creation page, and one review workspace per batch. It intentionally does not embed the old FILE-ingestion or transaction-ingestion screens.
+`/transaction-batches` is the sole product entry for preparing CSV and manual movements together. It has a list of owned OPEN workspaces, a focused account-selection creation page, and one review workspace per batch. It intentionally does not embed the retired FILE-ingestion or transaction-ingestion screens. CSV rows are transient `FILE_IMPORT` TransactionCandidates inside that workspace; this source/origin label does not reintroduce the retired FileIngestion/IngestionRecord model.
 
 The review workspace keeps add-manual and append-CSV actions separate from the review queue. Its desktop queue uses six compact review columns; narrow layouts become labelled cards without changing candidate controls or command scope. Categories are an editable, color-accented selector and tags reuse `ProductTagSelector`; neither gets a redundant read-only identity above it. Rule previews are secondary and only receive an Apply action when a saved value would actually change. Local filters only affect presentation of the fully loaded workspace.
 

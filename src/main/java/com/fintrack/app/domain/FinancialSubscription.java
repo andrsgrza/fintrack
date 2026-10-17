@@ -130,7 +130,6 @@ public class FinancialSubscription implements Serializable {
             "tags",
             "outgoingInternalTransfer",
             "incomingInternalTransfer",
-            "ingestionRecord",
         },
         allowSetters = true
     )

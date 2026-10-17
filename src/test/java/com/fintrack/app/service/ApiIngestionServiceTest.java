@@ -59,7 +59,6 @@ class ApiIngestionServiceTest {
     private User otherUser;
     private FinancialAccount account;
     private TransactionIngestion transactionIngestion;
-    private TransactionIngestion fileTransactionIngestion;
     private ApiAccessToken apiAccessToken;
     private ApiIngestion apiIngestion;
     private ApiIngestionCreateRequestDTO createRequest;
@@ -83,11 +82,6 @@ class ApiIngestionServiceTest {
         transactionIngestion.setId(50L);
         transactionIngestion.setIngestionType(IngestionType.API);
         transactionIngestion.setAccount(account);
-
-        fileTransactionIngestion = new TransactionIngestion();
-        fileTransactionIngestion.setId(51L);
-        fileTransactionIngestion.setIngestionType(IngestionType.FILE);
-        fileTransactionIngestion.setAccount(account);
 
         apiAccessToken = new ApiAccessToken();
         apiAccessToken.setId(70L);
@@ -125,7 +119,7 @@ class ApiIngestionServiceTest {
     }
 
     @Test
-    void saveShouldResolveParentsValidateSameOwnerApplyTimestampsAndRejectFileParent() {
+    void saveShouldResolveParentsValidateSameOwnerAndApplyTimestamps() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
         when(transactionIngestionRepository.findOneWithToOneRelationshipsByIdAndAccountUserLogin(50L, CURRENT_USER_LOGIN)).thenReturn(
@@ -148,15 +142,6 @@ class ApiIngestionServiceTest {
         assertThat(saved.getApiTokenNameSnapshot()).isEqualTo("Import Token");
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getReceivedAt()).isNotNull();
-
-        TransactionIngestionDTO fileParentDTO = new TransactionIngestionDTO();
-        fileParentDTO.setId(51L);
-        createRequest.setTransactionIngestion(fileParentDTO);
-        when(transactionIngestionRepository.findOneWithToOneRelationshipsByIdAndAccountUserLogin(51L, CURRENT_USER_LOGIN)).thenReturn(
-            Optional.of(fileTransactionIngestion)
-        );
-
-        assertThatThrownBy(() -> apiIngestionService.save(createRequest)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

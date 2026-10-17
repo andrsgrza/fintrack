@@ -3,8 +3,6 @@ package com.fintrack.app.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,14 +11,12 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.User;
-import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
@@ -76,9 +72,6 @@ class FinancialTransactionServiceTest {
 
     @Mock
     private InternalTransferRepository internalTransferRepository;
-
-    @Mock
-    private IngestionRecordRepository ingestionRecordRepository;
 
     @Mock
     private CurrentUserService currentUserService;
@@ -248,12 +241,6 @@ class FinancialTransactionServiceTest {
         );
 
         assertThat(financialTransactionService.delete(30L)).isTrue();
-        verify(ingestionRecordRepository).markFinancialTransactionDeleted(
-            eq(30L),
-            eq(IngestionRecordStatus.DELETED_AFTER_IMPORT),
-            isNull(),
-            isNull()
-        );
         verify(internalTransferRepository).deleteByTransactionIdInEitherRole(30L);
         verify(financialTransactionRepository).deleteTagLinksByFinancialTransactionId(30L);
         verify(financialTransactionRepository).deleteById(30L);
@@ -274,10 +261,7 @@ class FinancialTransactionServiceTest {
         Page<FinancialTransactionDTO> result = financialTransactionService.findAllWithEagerRelationships(pageable);
 
         assertThat(result.getContent()).containsExactly(financialTransactionDTO);
-        verify(financialTransactionRepository).findAllAccessibleWithToOneRelationshipsByAccountUserLogin(
-            eq(CURRENT_USER_LOGIN),
-            eq(pageable)
-        );
+        verify(financialTransactionRepository).findAllAccessibleWithToOneRelationshipsByAccountUserLogin(CURRENT_USER_LOGIN, pageable);
     }
 
     @Test

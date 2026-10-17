@@ -26,13 +26,6 @@ public interface TransactionCandidateRepository
             "account.user",
             "category",
             "category.user",
-            "transactionIngestion",
-            "transactionIngestion.account",
-            "transactionIngestion.account.user",
-            "ingestionRecord",
-            "ingestionRecord.transactionIngestion",
-            "ingestionRecord.transactionIngestion.account",
-            "ingestionRecord.transactionIngestion.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -48,13 +41,6 @@ public interface TransactionCandidateRepository
             "account.user",
             "category",
             "category.user",
-            "transactionIngestion",
-            "transactionIngestion.account",
-            "transactionIngestion.account.user",
-            "ingestionRecord",
-            "ingestionRecord.transactionIngestion",
-            "ingestionRecord.transactionIngestion.account",
-            "ingestionRecord.transactionIngestion.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -73,13 +59,6 @@ public interface TransactionCandidateRepository
             "account.user",
             "category",
             "category.user",
-            "transactionIngestion",
-            "transactionIngestion.account",
-            "transactionIngestion.account.user",
-            "ingestionRecord",
-            "ingestionRecord.transactionIngestion",
-            "ingestionRecord.transactionIngestion.account",
-            "ingestionRecord.transactionIngestion.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -216,13 +195,6 @@ public interface TransactionCandidateRepository
             "account.user",
             "category",
             "category.user",
-            "transactionIngestion",
-            "transactionIngestion.account",
-            "transactionIngestion.account.user",
-            "ingestionRecord",
-            "ingestionRecord.transactionIngestion",
-            "ingestionRecord.transactionIngestion.account",
-            "ingestionRecord.transactionIngestion.account.user",
             "tagAssociations",
             "tagAssociations.tag",
             "tagAssociations.tag.user",
@@ -232,72 +204,6 @@ public interface TransactionCandidateRepository
         "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
     )
     Optional<TransactionCandidate> findOneWithRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
-
-    @EntityGraph(
-        attributePaths = {
-            "user",
-            "account",
-            "account.user",
-            "category",
-            "category.user",
-            "transactionIngestion",
-            "transactionIngestion.account",
-            "transactionIngestion.account.user",
-            "ingestionRecord",
-            "ingestionRecord.transactionIngestion",
-            "ingestionRecord.transactionIngestion.account",
-            "ingestionRecord.transactionIngestion.account.user",
-            "tagAssociations",
-            "tagAssociations.tag",
-            "tagAssociations.tag.user",
-        }
-    )
-    @Query(
-        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.ingestionRecord.id = :ingestionRecordId and transactionCandidate.user.login = :login"
-    )
-    Optional<TransactionCandidate> findOneWithRelationshipsByIngestionRecordIdAndUserLogin(
-        @Param("ingestionRecordId") Long ingestionRecordId,
-        @Param("login") String login
-    );
-
-    @EntityGraph(
-        attributePaths = {
-            "user",
-            "account",
-            "account.user",
-            "category",
-            "category.user",
-            "transactionIngestion",
-            "transactionIngestion.account",
-            "transactionIngestion.account.user",
-            "ingestionRecord",
-            "ingestionRecord.transactionIngestion",
-            "ingestionRecord.transactionIngestion.account",
-            "ingestionRecord.transactionIngestion.account.user",
-            "tagAssociations",
-            "tagAssociations.tag",
-            "tagAssociations.tag.user",
-        }
-    )
-    @Query(
-        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id = :transactionIngestionId and transactionCandidate.user.login = :login"
-    )
-    List<TransactionCandidate> findAllWithRelationshipsByTransactionIngestionIdAndUserLogin(
-        @Param("transactionIngestionId") Long transactionIngestionId,
-        @Param("login") String login
-    );
-
-    boolean existsByTransactionIngestionId(Long transactionIngestionId);
-
-    @Query(
-        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
-        "where transactionCandidate.transactionIngestion.id = :transactionIngestionId " +
-        "and (transactionCandidate.user is null or transactionCandidate.user.login <> :login)"
-    )
-    boolean existsByTransactionIngestionIdAndUserLoginNot(
-        @Param("transactionIngestionId") Long transactionIngestionId,
-        @Param("login") String login
-    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
@@ -318,33 +224,18 @@ public interface TransactionCandidateRepository
     boolean existsTagSuppressionByTagId(@Param("tagId") Long tagId);
 
     @Query(
-        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
-        "where transactionCandidate.account.id = :accountId and (transactionCandidate.source <> com.fintrack.app.domain.enumeration.TransactionCandidateSource.FILE_IMPORT or transactionCandidate.transactionIngestion is null)"
+        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate where transactionCandidate.account.id = :accountId"
     )
     boolean existsAccountCandidateOutsideWorkflowCleanup(@Param("accountId") Long accountId);
 
     boolean existsByAccountId(Long accountId);
 
     /**
-     * Loads every candidate that could be part of an account deletion aggregate, including malformed links that
-     * point at the account through an ingestion instead of through candidate.account.
+     * Loads every candidate that could be part of an account deletion aggregate.
      */
-    @EntityGraph(
-        attributePaths = {
-            "account",
-            "transactionBatch",
-            "transactionBatch.account",
-            "transactionIngestion",
-            "transactionIngestion.account",
-            "ingestionRecord",
-            "ingestionRecord.transactionIngestion",
-            "ingestionRecord.transactionIngestion.account",
-        }
-    )
+    @EntityGraph(attributePaths = { "account", "transactionBatch", "transactionBatch.account" })
     @Query(
-        "select distinct transactionCandidate from TransactionCandidate transactionCandidate " +
-        "where transactionCandidate.account.id = :accountId " +
-        "or transactionCandidate.transactionIngestion.account.id = :accountId"
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.account.id = :accountId"
     )
     List<TransactionCandidate> findAllForAccountDeletionPreview(@Param("accountId") Long accountId);
 
@@ -369,32 +260,6 @@ public interface TransactionCandidateRepository
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from TransactionCandidate transactionCandidate where transactionCandidate.account.id = :accountId")
     void deleteByAccountId(@Param("accountId") Long accountId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(
-        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select id from transaction_candidate where transaction_ingestion_id = :transactionIngestionId)",
-        nativeQuery = true
-    )
-    void deleteTagLinksByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(
-        "delete from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id = :transactionIngestionId"
-    )
-    void deleteByTransactionIngestionId(@Param("transactionIngestionId") Long transactionIngestionId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(
-        value = "delete from rel_transaction_candidate__tags where transaction_candidate_id in (select tc.id from transaction_candidate tc join transaction_ingestion ti on tc.transaction_ingestion_id = ti.id where ti.account_id = :accountId)",
-        nativeQuery = true
-    )
-    void deleteTagLinksByTransactionIngestionAccountId(@Param("accountId") Long accountId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(
-        "delete from TransactionCandidate transactionCandidate where transactionCandidate.transactionIngestion.id in (select transactionIngestion.id from TransactionIngestion transactionIngestion where transactionIngestion.account.id = :accountId)"
-    )
-    void deleteByTransactionIngestionAccountId(@Param("accountId") Long accountId);
 
     long countByUserLogin(String login);
 }

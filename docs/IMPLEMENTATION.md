@@ -82,13 +82,11 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | UserDashboardPreference  | A — direct `user` (1:1)                                | ✅        |
 | InternalTransfer         | D — via both tx legs                                   | ✅        |
 | TransactionIngestion     | B — via `account`                                      | ✅        |
-| FileIngestion            | C — via `transactionIngestion`                         | ✅        |
 | ApiIngestion             | C — via `transactionIngestion` + token snapshots (11C) | ✅        |
-| IngestionRecord          | C — via `transactionIngestion` + FT                    | ✅        |
 
 ---
 
-## Master tracker — 17 entidades
+## Master tracker — 15 entidades
 
 | #   | Entity                       | Pattern                                                | Phase | Ownership | Domain rules  | Validations | Tests                                                                                                |
 | --- | ---------------------------- | ------------------------------------------------------ | ----- | --------- | ------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
@@ -104,12 +102,10 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | 9   | **Budget**                   | A + M2M                                                | 3 / 4 | ✅        | ✅            | ✅          | [TESTING.md § Budget](TESTING.md#budget)                                                             |
 | 10  | **InternalTransfer**         | D — via 2 transactions                                 | 4     | ✅        | ✅            | ✅          | [TESTING.md § IT](TESTING.md#internaltransfer)                                                       |
 | 11  | **TransactionIngestion**     | B — via `account`                                      | 6     | ✅        | ✅            | ✅          | [TESTING.md § TI](TESTING.md#transactioningestion)                                                   |
-| 12  | **FileIngestion**            | C — via `transactionIngestion`                         | 6     | ✅        | ✅            | ✅          | [TESTING.md § FI](TESTING.md#fileingestion)                                                          |
-| 13  | **ApiIngestion**             | C — via `transactionIngestion` + token snapshots (11C) | 6     | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AI](TESTING.md#apiingestion)                                                           |
-| 14  | **IngestionRecord**          | C — via `transactionIngestion`                         | 6     | ✅        | ✅            | ✅          | [TESTING.md § IR](TESTING.md#ingestionrecord) · [VALIDATIONS §14](VALIDATIONS.md#14-ingestionrecord) |
-| 15  | **ApiAccessToken**           | A — direct `user`                                      | 3 / 6 | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AAT](TESTING.md#apiaccesstoken)                                                        |
-| 16  | **ApiAccessTokenPermission** | C — via `apiAccessToken`                               | 6     | ✅        | ✅            | ✅          | [TESTING.md § AATP](TESTING.md#apiaccesstokenpermission)                                             |
-| 17  | **UserDashboardPreference**  | A — direct `user` (1:1 user)                           | 3     | ✅        | ✅            | ✅          | [TESTING.md § UDP](TESTING.md#userdashboardpreference)                                               |
+| 12  | **ApiIngestion**             | C — via `transactionIngestion` + token snapshots (11C) | 6     | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AI](TESTING.md#apiingestion)                                                           |
+| 13  | **ApiAccessToken**           | A — direct `user`                                      | 3 / 6 | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AAT](TESTING.md#apiaccesstoken)                                                        |
+| 14  | **ApiAccessTokenPermission** | C — via `apiAccessToken`                               | 6     | ✅        | ✅            | ✅          | [TESTING.md § AATP](TESTING.md#apiaccesstokenpermission)                                             |
+| 15  | **UserDashboardPreference**  | A — direct `user` (1:1 user)                           | 3     | ✅        | ✅            | ✅          | [TESTING.md § UDP](TESTING.md#userdashboardpreference)                                               |
 
 ### Delete confirmation dialogs — Grupo 1 UX ✅
 
@@ -133,7 +129,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | ------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | **A**   | `user` directo required            | FinancialAccount, Category, Tag, TransactionRule, FinancialSubscription, Budget, ApiAccessToken, UserDashboardPreference |
 | **B**   | Owned vía relación padre (1 nivel) | FinancialTransaction → account; CreditAccountDetails → account; TransactionIngestion → account                           |
-| **C**   | Owned vía cadena (hijo de hijo)    | TransactionRuleCondition, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessTokenPermission                         |
+| **C**   | Owned vía cadena (hijo de hijo)    | TransactionRuleCondition, ApiIngestion, ApiAccessTokenPermission                                                         |
 | **D**   | Owned vía reglas compuestas        | InternalTransfer (2 tx, mismo user/moneda)                                                                               |
 
 **Admin:** en todas las entidades user-scoped, `ROLE_ADMIN` debe poder ver y modificar todo (mismo criterio que FinancialAccount).
@@ -148,7 +144,7 @@ The active foundation includes:
 
 - JDL/.jhipster metadata, Liquibase table, backend entity/DTO/mapper/repository/service/resource.
 - Direct owner via `user`.
-- Optional links to `FinancialAccount`, `Category`, `Tag`, `TransactionIngestion`, and `IngestionRecord`; the optional `FinancialTransaction` link is readable but server-controlled/write-rejected in normal CRUD.
+- Optional links to `FinancialAccount`, `Category`, `Tag`, and `TransactionBatch`. A candidate is pre-post state only and has no link to a final transaction or legacy ingestion record.
 - Category and tag activity is historical-only: a new candidate, direct transaction, FILE_IMPORT classification, or rule output can reference only an active value. Existing inactive values remain linked for unrelated edits and completion/posting. Product controls use owner-scoped `GET /api/categories/selectable` and `GET /api/tags/selectable`; their `includeId` support is only for rendering existing inactive values.
 - Lifecycle/status support for manual drafts and `FILE_IMPORT` ingestion review. Active `TransactionCandidateStatus` values are `DRAFT`, `READY_TO_POST`, `CANCELLED`, and `FAILED`; `API_IMPORT` and bank sync are deferred. Candidates are strictly pre-post and have no `postedAt` or final-transaction relation.
 - Server-owned timestamps, derived `amount`/`flow`, server-owned review statuses, and same-owner validations.

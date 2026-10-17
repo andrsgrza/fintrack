@@ -175,14 +175,6 @@ public class TransactionCandidate implements Serializable {
     )
     private Category category;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties(value = { "account", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
-    private TransactionIngestion transactionIngestion;
-
-    @OneToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties(value = { "financialTransaction", "transactionIngestion" }, allowSetters = true)
-    private IngestionRecord ingestionRecord;
-
     /** Optional membership in the new batch workspace. A standalone candidate has no batch and no row position. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "transaction_batch_id")
@@ -581,32 +573,6 @@ public class TransactionCandidate implements Serializable {
             this.categorySource = null;
             clearCategoryAppliedRuleAttribution();
         }
-    }
-
-    public TransactionIngestion getTransactionIngestion() {
-        return this.transactionIngestion;
-    }
-
-    public TransactionCandidate transactionIngestion(TransactionIngestion transactionIngestion) {
-        this.setTransactionIngestion(transactionIngestion);
-        return this;
-    }
-
-    public void setTransactionIngestion(TransactionIngestion transactionIngestion) {
-        this.transactionIngestion = transactionIngestion;
-    }
-
-    public IngestionRecord getIngestionRecord() {
-        return this.ingestionRecord;
-    }
-
-    public TransactionCandidate ingestionRecord(IngestionRecord ingestionRecord) {
-        this.setIngestionRecord(ingestionRecord);
-        return this;
-    }
-
-    public void setIngestionRecord(IngestionRecord ingestionRecord) {
-        this.ingestionRecord = ingestionRecord;
     }
 
     public TransactionBatch getTransactionBatch() {

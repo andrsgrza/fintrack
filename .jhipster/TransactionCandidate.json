@@ -177,20 +177,6 @@
     },
     {
       "otherEntityField": "id",
-      "otherEntityName": "transactionIngestion",
-      "relationshipName": "transactionIngestion",
-      "relationshipSide": "left",
-      "relationshipType": "many-to-one"
-    },
-    {
-      "otherEntityField": "id",
-      "otherEntityName": "ingestionRecord",
-      "relationshipName": "ingestionRecord",
-      "relationshipSide": "left",
-      "relationshipType": "one-to-one"
-    },
-    {
-      "otherEntityField": "id",
       "otherEntityName": "transactionBatch",
       "relationshipName": "transactionBatch",
       "relationshipSide": "left",

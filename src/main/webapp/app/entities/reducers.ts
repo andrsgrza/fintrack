@@ -10,10 +10,7 @@ import descriptionNormalizationRuleCondition from 'app/entities/description-norm
 import financialSubscription from 'app/entities/financial-subscription/financial-subscription.reducer';
 import budget from 'app/entities/budget/budget.reducer';
 import internalTransfer from 'app/entities/internal-transfer/internal-transfer.reducer';
-import transactionIngestion from 'app/entities/transaction-ingestion/transaction-ingestion.reducer';
-import fileIngestion from 'app/entities/file-ingestion/file-ingestion.reducer';
 import apiIngestion from 'app/entities/api-ingestion/api-ingestion.reducer';
-import ingestionRecord from 'app/entities/ingestion-record/ingestion-record.reducer';
 import apiAccessToken from 'app/entities/api-access-token/api-access-token.reducer';
 import apiAccessTokenPermission from 'app/entities/api-access-token-permission/api-access-token-permission.reducer';
 import userDashboardPreference from 'app/entities/user-dashboard-preference/user-dashboard-preference.reducer';
@@ -32,10 +29,7 @@ const entitiesReducers = {
   financialSubscription,
   budget,
   internalTransfer,
-  transactionIngestion,
-  fileIngestion,
   apiIngestion,
-  ingestionRecord,
   apiAccessToken,
   apiAccessTokenPermission,
   userDashboardPreference,

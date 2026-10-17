@@ -180,9 +180,7 @@ public class TransactionBatchPublishService {
             candidate.getUser() == null ||
             !Objects.equals(candidate.getUser().getId(), batch.getUser().getId()) ||
             candidate.getAccount() == null ||
-            !Objects.equals(candidate.getAccount().getId(), account.getId()) ||
-            candidate.getTransactionIngestion() != null ||
-            candidate.getIngestionRecord() != null
+            !Objects.equals(candidate.getAccount().getId(), account.getId())
         ) {
             throw new IllegalStateException("Transaction candidate is outside the batch publication scope");
         }

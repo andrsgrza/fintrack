@@ -72,7 +72,6 @@ public interface TransactionIngestionRepository
     @Query(
         "select distinct transactionIngestion from TransactionIngestion transactionIngestion " +
         "left join fetch transactionIngestion.account account " +
-        "left join fetch transactionIngestion.fileIngestion " +
         "left join fetch transactionIngestion.apiIngestion " +
         "where account.id = :accountId"
     )

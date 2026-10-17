@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * Preview methods are strictly observational. Apply methods load the current candidate again, resolve current rule
  * output on the server, and share the same conservative fill-only policy for automatic and explicit acceptance.
- * This keeps candidate membership/version guards out of the legacy standalone and FILE workflows.
+ * This keeps candidate membership and version guards out of other standalone workflows.
  */
 @Service
 public class TransactionBatchRuleEvaluationService {

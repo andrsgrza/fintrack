@@ -111,9 +111,6 @@ public class FinancialTransactionQueryService extends QueryService<FinancialTran
                 ),
                 buildSpecification(criteria.getIncomingInternalTransferId(), root ->
                     root.join(FinancialTransaction_.incomingInternalTransfer, JoinType.LEFT).get(InternalTransfer_.id)
-                ),
-                buildSpecification(criteria.getIngestionRecordId(), root ->
-                    root.join(FinancialTransaction_.ingestionRecord, JoinType.LEFT).get(IngestionRecord_.id)
                 )
             );
             if (!currentUserService.isAdmin()) {

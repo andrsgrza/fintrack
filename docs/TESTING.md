@@ -2798,6 +2798,10 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 **Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. FILE candidate preparation/sync exposes optional prepared candidate summaries in the workflow response. Ingestion-scoped candidate classification commands power unified category/tag review, and Confirm Import posts reviewed `FILE_IMPORT` candidates directly.
 
+### Historical (retired) CSV Ingestion v1 tests
+
+The following CSV Ingestion v1 coverage is retained as historical evidence only. The FILE workflow, its browser specs, FileIngestion and IngestionRecord ResourceIT/service tests, and generated UI routes were intentionally removed. Current CSV product coverage is the Transaction Batch suite below; migration coverage is exercised by clean-database API ingestion integration tests.
+
 ### I1A unit tests — parser/validator
 
 - exact header accepted.
@@ -3191,6 +3195,8 @@ Focused coverage lives in `FinancialAccountResourceIT` (owner-scoped selectable 
 ## Transaction Batch — internal publication and receipt
 
 `TransactionBatchPublishServiceIT` runs against the isolated PostgreSQL Testcontainers database and covers atomic current-value publication, category/tag copy, `FILE_IMPORT` origin, transition to a root-only receipt, replay with an obsolete expected version, different-key rejection, incomplete-row all-or-nothing rejection, inactive persisted category retention, exact expiry boundary, and cleanup that removes only the receipt while retaining final transactions. The service has no rule-evaluator dependency, which is the structural regression guard that publish cannot reevaluate or auto-apply classifications.
+
+The legacy-retirement regression checks prove that the forward Liquibase migration removes old FILE workflow tables and links while preserving API ingestion metadata and final financial transactions. `ApiIngestionResourceIT` exercises that migration against a clean isolated PostgreSQL database; `FinancialAccountResourceIT` verifies the retained account-deletion tree; and `TransactionBatchCsvAppendServiceIT` verifies CSV candidates belong to a batch rather than an old ingestion record.
 
 The Testcontainers JDBC customizer sets `sslmode=disable` for its disposable non-TLS PostgreSQL instance. This keeps Liquibase/Testcontainers startup isolated and avoids a host-JDK SSL handshake before integration tests begin; it does not affect application runtime datasource configuration.
 

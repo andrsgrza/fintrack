@@ -47,12 +47,6 @@ const EntitiesMenu = () => {
           <Translate contentKey="global.menu.entities.technical">Technical</Translate>
         </Badge>
       </MenuItem>
-      <MenuItem icon="asterisk" to="/ingestion-record">
-        <Translate contentKey="global.menu.entities.ingestionRecord" />{' '}
-        <Badge color="secondary" pill>
-          <Translate contentKey="global.menu.entities.technical">Technical</Translate>
-        </Badge>
-      </MenuItem>
       <MenuItem icon="asterisk" to="/api-access-token">
         <Translate contentKey="global.menu.entities.apiAccessToken" />
       </MenuItem>

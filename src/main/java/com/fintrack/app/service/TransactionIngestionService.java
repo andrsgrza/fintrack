@@ -6,11 +6,8 @@ import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.repository.ApiIngestionRepository;
-import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
-import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
@@ -47,40 +44,28 @@ public class TransactionIngestionService {
 
     private final FinancialAccountService financialAccountService;
 
-    private final FileIngestionRepository fileIngestionRepository;
-
     private final ApiIngestionRepository apiIngestionRepository;
 
     private final FinancialTransactionRepository financialTransactionRepository;
 
     private final InternalTransferRepository internalTransferRepository;
 
-    private final IngestionRecordRepository ingestionRecordRepository;
-
-    private final TransactionCandidateRepository transactionCandidateRepository;
-
     public TransactionIngestionService(
         TransactionIngestionRepository transactionIngestionRepository,
         TransactionIngestionMapper transactionIngestionMapper,
         CurrentUserService currentUserService,
         FinancialAccountService financialAccountService,
-        FileIngestionRepository fileIngestionRepository,
         ApiIngestionRepository apiIngestionRepository,
         FinancialTransactionRepository financialTransactionRepository,
-        InternalTransferRepository internalTransferRepository,
-        IngestionRecordRepository ingestionRecordRepository,
-        TransactionCandidateRepository transactionCandidateRepository
+        InternalTransferRepository internalTransferRepository
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.transactionIngestionMapper = transactionIngestionMapper;
         this.currentUserService = currentUserService;
         this.financialAccountService = financialAccountService;
-        this.fileIngestionRepository = fileIngestionRepository;
         this.apiIngestionRepository = apiIngestionRepository;
         this.financialTransactionRepository = financialTransactionRepository;
         this.internalTransferRepository = internalTransferRepository;
-        this.ingestionRecordRepository = ingestionRecordRepository;
-        this.transactionCandidateRepository = transactionCandidateRepository;
     }
 
     /**
@@ -93,6 +78,9 @@ public class TransactionIngestionService {
         LOG.debug("Request to save TransactionIngestion : {}", transactionIngestionDTO);
         if (transactionIngestionDTO.getIngestionType() == null) {
             throw new IllegalArgumentException("Ingestion type is required");
+        }
+        if (transactionIngestionDTO.getIngestionType() != IngestionType.API) {
+            throw new IllegalArgumentException("Only API transaction ingestions are supported");
         }
         TransactionIngestion transactionIngestion = transactionIngestionMapper.toEntity(transactionIngestionDTO);
         transactionIngestion.setIngestionType(transactionIngestionDTO.getIngestionType());
@@ -164,21 +152,6 @@ public class TransactionIngestionService {
     }
 
     /**
-     *  Get all the transactionIngestions where FileIngestion is {@code null}.
-     *  @return the list of entities.
-     */
-    @Transactional(readOnly = true)
-    public List<TransactionIngestionDTO> findAllWhereFileIngestionIsNull() {
-        LOG.debug("Request to get all transactionIngestions where FileIngestion is null");
-        return findAccessibleEntities()
-            .stream()
-            .filter(transactionIngestion -> transactionIngestion.getIngestionType() == IngestionType.FILE)
-            .filter(transactionIngestion -> transactionIngestion.getFileIngestion() == null)
-            .map(transactionIngestionMapper::toDto)
-            .collect(Collectors.toCollection(LinkedList::new));
-    }
-
-    /**
      *  Get all the transactionIngestions where ApiIngestion is {@code null}.
      *  @return the list of entities.
      */
@@ -228,12 +201,8 @@ public class TransactionIngestionService {
         if (transactionIngestion.isEmpty()) {
             return false;
         }
-        fileIngestionRepository.deleteByTransactionIngestionId(id);
         apiIngestionRepository.deleteByTransactionIngestionId(id);
         internalTransferRepository.deleteByTransactionIngestionIdInEitherRole(id);
-        transactionCandidateRepository.deleteTagLinksByTransactionIngestionId(id);
-        transactionCandidateRepository.deleteByTransactionIngestionId(id);
-        ingestionRecordRepository.deleteByTransactionIngestionId(id);
         financialTransactionRepository.deleteTagLinksByTransactionIngestionId(id);
         financialTransactionRepository.deleteByTransactionIngestionId(id);
         transactionIngestionRepository.deleteById(id);
@@ -248,12 +217,8 @@ public class TransactionIngestionService {
     public void deleteAllForAccount(FinancialAccount account) {
         Long accountId = requireAccountId(account);
         LOG.debug("Request to delete all TransactionIngestions for FinancialAccount : {}", accountId);
-        fileIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
         apiIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
         internalTransferRepository.deleteByTransactionIngestionAccountIdInEitherRole(accountId);
-        transactionCandidateRepository.deleteTagLinksByTransactionIngestionAccountId(accountId);
-        transactionCandidateRepository.deleteByTransactionIngestionAccountId(accountId);
-        ingestionRecordRepository.deleteByTransactionIngestionAccountId(accountId);
         financialTransactionRepository.deleteTagLinksByTransactionIngestionAccountId(accountId);
         financialTransactionRepository.deleteByTransactionIngestionAccountId(accountId);
         transactionIngestionRepository.deleteByAccountId(accountId);
@@ -608,20 +573,13 @@ public class TransactionIngestionService {
     }
 
     private void validateChildMetadataConsistency(TransactionIngestion transactionIngestion) {
-        boolean hasFileIngestion = fileIngestionRepository.existsByTransactionIngestionId(transactionIngestion.getId());
         boolean hasApiIngestion = apiIngestionRepository.existsByTransactionIngestionId(transactionIngestion.getId());
 
-        if (transactionIngestion.getIngestionType() == IngestionType.FILE && hasApiIngestion) {
-            throw new IllegalArgumentException("FILE ingestion cannot have API metadata");
-        }
-        if (transactionIngestion.getIngestionType() == IngestionType.API && hasFileIngestion) {
-            throw new IllegalArgumentException("API ingestion cannot have file metadata");
+        if (transactionIngestion.getIngestionType() != IngestionType.API) {
+            throw new IllegalArgumentException("Only API transaction ingestions are supported");
         }
         if (isFinalStatus(transactionIngestion.getStatus())) {
-            if (transactionIngestion.getIngestionType() == IngestionType.FILE && !hasFileIngestion) {
-                throw new IllegalArgumentException("Final FILE ingestion requires file metadata");
-            }
-            if (transactionIngestion.getIngestionType() == IngestionType.API && !hasApiIngestion) {
+            if (!hasApiIngestion) {
                 throw new IllegalArgumentException("Final API ingestion requires API metadata");
             }
         }

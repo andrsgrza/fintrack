@@ -2,8 +2,6 @@ import dayjs from 'dayjs';
 import { IUser } from 'app/shared/model/user.model';
 import { IFinancialAccount } from 'app/shared/model/financial-account.model';
 import { ICategory } from 'app/shared/model/category.model';
-import { ITransactionIngestion } from 'app/shared/model/transaction-ingestion.model';
-import { IIngestionRecord } from 'app/shared/model/ingestion-record.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { TransactionCandidateSource } from 'app/shared/model/enumerations/transaction-candidate-source.model';
 import { TransactionCandidateStatus } from 'app/shared/model/enumerations/transaction-candidate-status.model';
@@ -53,8 +51,6 @@ export interface ITransactionCandidate {
   user?: IUser;
   account?: IFinancialAccount | null;
   category?: ICategory | null;
-  transactionIngestion?: ITransactionIngestion | null;
-  ingestionRecord?: IIngestionRecord | null;
   tags?: ITag[] | null;
   selectedTags?: ITransactionCandidateTagSelection[] | null;
 }

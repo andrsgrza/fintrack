@@ -18,17 +18,13 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
-import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
-import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
-import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
-import com.fintrack.app.domain.enumeration.IngestionStatus;
 import com.fintrack.app.domain.enumeration.RuleConditionLogic;
 import com.fintrack.app.domain.enumeration.RuleOperator;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
@@ -41,7 +37,6 @@ import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.FinancialTransactionService;
@@ -71,7 +66,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
@@ -124,9 +118,6 @@ class FinancialTransactionResourceIT {
     private static final String OUTGOING_INTERNAL_TRANSFER_CANDIDATES_API_URL = ENTITY_API_URL + "/outgoing-internal-transfer-candidates";
     private static final String INCOMING_INTERNAL_TRANSFER_CANDIDATES_API_URL = ENTITY_API_URL + "/incoming-internal-transfer-candidates";
 
-    private static final String DELETE_FAILURE_TRIGGER = "financial_transaction_delete_failure_trigger";
-    private static final String DELETE_FAILURE_FUNCTION = "raise_financial_transaction_delete_failure";
-
     private static final String CURRENT_MOCK_USER_LOGIN = "user";
 
     private static Random random = new Random();
@@ -144,17 +135,11 @@ class FinancialTransactionResourceIT {
     @Autowired
     private TransactionCandidateRepository transactionCandidateRepository;
 
-    @Autowired
-    private IngestionRecordRepository ingestionRecordRepository;
-
     @Mock
     private FinancialTransactionRepository financialTransactionRepositoryMock;
 
     @Autowired
     private FinancialTransactionMapper financialTransactionMapper;
-
-    @Autowired
-    private FinancialTransactionService financialTransactionService;
 
     @Mock
     private FinancialTransactionService financialTransactionServiceMock;
@@ -1141,28 +1126,6 @@ class FinancialTransactionResourceIT {
 
         // Get all the financialTransactionList where financialSubscription equals to (financialSubscriptionId + 1)
         defaultFinancialTransactionShouldNotBeFound("financialSubscriptionId.equals=" + (financialSubscriptionId + 1));
-    }
-
-    @Test
-    @Transactional
-    void getAllFinancialTransactionsByTransactionIngestionIsEqualToSomething() throws Exception {
-        TransactionIngestion transactionIngestion;
-        if (TestUtil.findAll(em, TransactionIngestion.class).isEmpty()) {
-            financialTransactionRepository.saveAndFlush(financialTransaction);
-            transactionIngestion = TransactionIngestionResourceIT.createEntity(em);
-        } else {
-            transactionIngestion = TestUtil.findAll(em, TransactionIngestion.class).get(0);
-        }
-        em.persist(transactionIngestion);
-        em.flush();
-        financialTransaction.setTransactionIngestion(transactionIngestion);
-        financialTransactionRepository.saveAndFlush(financialTransaction);
-        Long transactionIngestionId = transactionIngestion.getId();
-        // Get all the financialTransactionList where transactionIngestion equals to transactionIngestionId
-        defaultFinancialTransactionShouldBeFound("transactionIngestionId.equals=" + transactionIngestionId);
-
-        // Get all the financialTransactionList where transactionIngestion equals to (transactionIngestionId + 1)
-        defaultFinancialTransactionShouldNotBeFound("transactionIngestionId.equals=" + (transactionIngestionId + 1));
     }
 
     @Test
@@ -2358,105 +2321,6 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void deleteDirectFileImportTransactionKeepsDeletedAfterImportAuditHistory() throws Exception {
-        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
-        IngestionRecord ingestionRecord = IngestionRecordResourceIT.createEntity(em);
-        TransactionIngestion ingestion = ingestionRecord.getTransactionIngestion();
-        ingestion.setAccount(financialTransaction.getAccount());
-        ingestion.setStatus(IngestionStatus.COMPLETED);
-        ingestion.setCompletedAt(Instant.now());
-        ingestion.setRecordsReceived(1);
-        ingestion.setRecordsCreated(1);
-        ingestion.setRecordsSkipped(0);
-        ingestion.setRecordsRejected(0);
-        ingestion.setErrorMessage(null);
-        financialTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
-        financialTransaction.setTransactionIngestion(ingestion);
-        ingestionRecord.setStatus(IngestionRecordStatus.IMPORTED);
-        ingestionRecord.setFinancialTransaction(financialTransaction);
-        ingestionRecord.setRawData("{\"raw\": {\"description\": \"original imported row\"}}");
-        ingestionRecord.setErrorCode(null);
-        ingestionRecord.setErrorMessage(null);
-        em.persist(ingestionRecord);
-        em.flush();
-        Long ingestionRecordId = ingestionRecord.getId();
-        Long ingestionId = ingestion.getId();
-        String rawDataBeforeDelete = ingestionRecord.getRawData();
-
-        restFinancialTransactionMockMvc
-            .perform(delete(ENTITY_API_URL_ID, financialTransaction.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
-
-        em.flush();
-        em.clear();
-        IngestionRecord persistedRecord = em.find(IngestionRecord.class, ingestionRecordId);
-        assertThat(financialTransactionRepository.findById(financialTransaction.getId())).isEmpty();
-        assertThat(persistedRecord.getFinancialTransaction()).isNull();
-        assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.DELETED_AFTER_IMPORT);
-        assertThat(persistedRecord.getRawData()).isEqualTo(rawDataBeforeDelete);
-        assertThat(persistedRecord.getErrorCode()).isNull();
-        assertThat(persistedRecord.getErrorMessage()).isNull();
-        TransactionIngestion persistedIngestion = em.find(TransactionIngestion.class, ingestionId);
-        assertThat(persistedIngestion.getStatus()).isEqualTo(IngestionStatus.COMPLETED);
-        assertThat(persistedIngestion.getRecordsCreated()).isEqualTo(1);
-        assertThat(persistedIngestion.getRecordsRejected()).isZero();
-        insertedFinancialTransaction = null;
-    }
-
-    @Test
-    @Transactional
-    void deleteDirectFileImportTransactionRollsBackIngestionRecordChangeWhenFinancialTransactionDeleteFails() throws Exception {
-        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
-        IngestionRecord ingestionRecord = IngestionRecordResourceIT.createEntity(em);
-        TransactionIngestion ingestion = ingestionRecord.getTransactionIngestion();
-        ingestion.setAccount(financialTransaction.getAccount());
-        ingestion.setStatus(IngestionStatus.COMPLETED);
-        ingestion.setCompletedAt(Instant.now());
-        ingestion.setRecordsReceived(1);
-        ingestion.setRecordsCreated(1);
-        ingestion.setRecordsSkipped(0);
-        ingestion.setRecordsRejected(0);
-        ingestion.setErrorMessage(null);
-        financialTransaction.setOrigin(TransactionOrigin.FILE_IMPORT);
-        financialTransaction.setTransactionIngestion(ingestion);
-        ingestionRecord.setStatus(IngestionRecordStatus.IMPORTED);
-        ingestionRecord.setFinancialTransaction(financialTransaction);
-        ingestionRecord.setRawData("{\"raw\": {\"description\": \"original imported row\"}}");
-        ingestionRecord.setErrorCode(null);
-        ingestionRecord.setErrorMessage(null);
-        em.persist(ingestionRecord);
-        em.flush();
-
-        Long financialTransactionId = financialTransaction.getId();
-        Long ingestionRecordId = ingestionRecord.getId();
-        Long ingestionId = ingestion.getId();
-        Long accountId = financialTransaction.getAccount().getId();
-        createFinancialTransactionDeleteFailureTrigger();
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-
-        try {
-            restFinancialTransactionMockMvc
-                .perform(delete(ENTITY_API_URL_ID, financialTransactionId).accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isInternalServerError());
-
-            IngestionRecord persistedRecord = ingestionRecordRepository.findById(ingestionRecordId).orElseThrow();
-            assertThat(financialTransactionRepository.findById(financialTransactionId)).isPresent();
-            assertThat(persistedRecord.getStatus()).isEqualTo(IngestionRecordStatus.IMPORTED);
-            assertThat(persistedRecord.getFinancialTransaction()).isNotNull();
-            assertThat(persistedRecord.getFinancialTransaction().getId()).isEqualTo(financialTransactionId);
-        } finally {
-            TestTransaction.start();
-            removeFinancialTransactionDeleteFailureTrigger();
-            removeCommittedDeleteRollbackFixture(ingestionRecordId, financialTransactionId, ingestionId, accountId);
-            TestTransaction.flagForCommit();
-            TestTransaction.end();
-            insertedFinancialTransaction = null;
-        }
-    }
-
-    @Test
-    @Transactional
     void getFinancialTransactionOnAnotherUsersAccountIsNotFound() throws Exception {
         FinancialTransaction otherTransaction = saveTransactionOnOtherUsersAccount();
 
@@ -2622,36 +2486,6 @@ class FinancialTransactionResourceIT {
 
     @Test
     @Transactional
-    void findAllWhereIngestionRecordIsNullIsScopedAndUnlinkedOnly() throws Exception {
-        insertedFinancialTransaction = financialTransactionRepository.saveAndFlush(financialTransaction);
-
-        FinancialTransaction otherUnlinked = saveTransactionOnOtherUsersAccount();
-
-        FinancialTransaction linkedTransaction = createEntity(em);
-        linkedTransaction.setAccount(financialTransaction.getAccount());
-        linkedTransaction = financialTransactionRepository.saveAndFlush(linkedTransaction);
-
-        IngestionRecord ingestionRecord = IngestionRecordResourceIT.createEntity(em);
-        ingestionRecord.setFinancialTransaction(linkedTransaction);
-        ingestionRecord.setRecordIndex((int) (Math.floorMod(longCount.incrementAndGet(), 100000)));
-        em.persist(ingestionRecord);
-        em.flush();
-
-        assertThat(financialTransactionService.findAllWhereIngestionRecordIsNull())
-            .extracting(FinancialTransactionDTO::getId)
-            .contains(financialTransaction.getId())
-            .doesNotContain(otherUnlinked.getId(), linkedTransaction.getId());
-
-        restFinancialTransactionMockMvc
-            .perform(get(ENTITY_API_URL + "/ingestion-record-is-null"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[*].id").value(hasItem(financialTransaction.getId().intValue())))
-            .andExpect(jsonPath("$[*].id").value(not(hasItem(otherUnlinked.getId().intValue()))))
-            .andExpect(jsonPath("$[*].id").value(not(hasItem(linkedTransaction.getId().intValue()))));
-    }
-
-    @Test
-    @Transactional
     void getOutgoingInternalTransferCandidatesDoesNotIncludeAnotherUsersTransactions() throws Exception {
         FinancialTransaction otherOutgoing = saveTransactionOnOtherUsersAccount();
         otherOutgoing.setFlow(TransactionFlow.OUT);
@@ -2801,61 +2635,6 @@ class FinancialTransactionResourceIT {
                 .getContentAsString(),
             FinancialTransactionDTO.class
         );
-    }
-
-    private void createFinancialTransactionDeleteFailureTrigger() {
-        em
-            .createNativeQuery(
-                """
-                create or replace function %s()
-                returns trigger
-                language plpgsql
-                as $$
-                begin
-                  raise exception 'forced financial transaction delete failure';
-                end;
-                $$
-                """.formatted(DELETE_FAILURE_FUNCTION)
-            )
-            .executeUpdate();
-        em
-            .createNativeQuery(
-                "create trigger %s before delete on financial_transaction for each row execute function %s()".formatted(
-                        DELETE_FAILURE_TRIGGER,
-                        DELETE_FAILURE_FUNCTION
-                    )
-            )
-            .executeUpdate();
-    }
-
-    private void removeFinancialTransactionDeleteFailureTrigger() {
-        em.createNativeQuery("drop trigger if exists %s on financial_transaction".formatted(DELETE_FAILURE_TRIGGER)).executeUpdate();
-        em.createNativeQuery("drop function if exists %s()".formatted(DELETE_FAILURE_FUNCTION)).executeUpdate();
-    }
-
-    private void removeCommittedDeleteRollbackFixture(
-        Long ingestionRecordId,
-        Long financialTransactionId,
-        Long ingestionId,
-        Long accountId
-    ) {
-        IngestionRecord ingestionRecord = em.find(IngestionRecord.class, ingestionRecordId);
-        if (ingestionRecord != null) {
-            em.remove(ingestionRecord);
-        }
-        FinancialTransaction persistedFinancialTransaction = em.find(FinancialTransaction.class, financialTransactionId);
-        if (persistedFinancialTransaction != null) {
-            em.remove(persistedFinancialTransaction);
-        }
-        TransactionIngestion ingestion = em.find(TransactionIngestion.class, ingestionId);
-        if (ingestion != null) {
-            em.remove(ingestion);
-        }
-        FinancialAccount account = em.find(FinancialAccount.class, accountId);
-        if (account != null) {
-            em.remove(account);
-        }
-        em.flush();
     }
 
     private ResultActions createTransactionWithCategoryAndFlow(Category category, TransactionFlow flow) throws Exception {

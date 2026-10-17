@@ -11,7 +11,7 @@
       "fieldType": "IngestionType",
       "fieldTypeDocumentation": "INGESTION AND API ENUMS",
       "fieldValidateRules": ["required"],
-      "fieldValues": "FILE,API"
+      "fieldValues": "API"
     },
     {
       "fieldName": "status",
@@ -85,13 +85,6 @@
       "relationshipValidateRules": "required"
     },
     {
-      "otherEntityName": "fileIngestion",
-      "otherEntityRelationshipName": "transactionIngestion",
-      "relationshipName": "fileIngestion",
-      "relationshipSide": "right",
-      "relationshipType": "one-to-one"
-    },
-    {
       "otherEntityName": "apiIngestion",
       "otherEntityRelationshipName": "transactionIngestion",
       "relationshipName": "apiIngestion",
@@ -102,13 +95,6 @@
       "otherEntityName": "financialTransaction",
       "otherEntityRelationshipName": "transactionIngestion",
       "relationshipName": "financialTransactions",
-      "relationshipSide": "right",
-      "relationshipType": "one-to-many"
-    },
-    {
-      "otherEntityName": "ingestionRecord",
-      "otherEntityRelationshipName": "transactionIngestion",
-      "relationshipName": "records",
       "relationshipSide": "right",
       "relationshipType": "one-to-many"
     }

@@ -31,7 +31,6 @@ const DeletionSummary = ({ preview }: { preview: IFinancialAccountDeletionPrevie
     { count: preview.counts.financialTransactions, key: 'transactions' },
     { count: manualDrafts, key: 'manualDrafts' },
     { count: preview.counts.transactionIngestions, key: 'imports' },
-    { count: preview.counts.ingestionRecords, key: 'importRecords' },
   ].filter(item => item.count > 0);
 
   return (

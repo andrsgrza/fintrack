@@ -116,8 +116,8 @@ class TransactionBatchCsvAppendServiceIT {
         });
         assertThat(rows).extracting(TransactionBatchCandidateViewDTO::getSourceDescription).containsExactly("Uber ride", "Salary");
         TransactionCandidate persisted = candidateRepository.findById(accepted.getAppendedCandidateIds().get(0)).orElseThrow();
-        assertThat(persisted.getTransactionIngestion()).isNull();
-        assertThat(persisted.getIngestionRecord()).isNull();
+        assertThat(persisted.getTransactionBatch()).isNotNull();
+        assertThat(persisted.getTransactionBatch().getId()).isEqualTo(batch.getId());
         assertThat(persisted.getSourceDescription()).isEqualTo("Uber ride");
 
         TransactionBatchCandidatePatchCommand patch = new TransactionBatchCandidatePatchCommand();
@@ -221,7 +221,7 @@ class TransactionBatchCsvAppendServiceIT {
                     assertThat(attribution.getName()).isEqualTo("Classify normalized Uber");
                 });
             });
-        assertThat(candidateRepository.findById(row.getId()).orElseThrow().getTransactionIngestion()).isNull();
+        assertThat(candidateRepository.findById(row.getId()).orElseThrow().getTransactionBatch().getId()).isEqualTo(batch.getId());
 
         em.clear();
         assertThat(descriptionNormalizationRuleService.delete(descriptionRule.getId())).isTrue();

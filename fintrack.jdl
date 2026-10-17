@@ -219,7 +219,6 @@ enum TagMatchMode {
  */
 
 enum IngestionType {
-  FILE,
   API
 }
 
@@ -230,24 +229,6 @@ enum IngestionStatus {
   PROCESSING,
   COMPLETED,
   PARTIALLY_COMPLETED,
-  FAILED
-}
-
-enum ImportFileType {
-  CSV,
-  PDF,
-  XLSX,
-  JSON,
-  OFX,
-  OTHER
-}
-
-enum IngestionRecordStatus {
-  VALID,
-  DISABLED,
-  IMPORTED,
-  SKIPPED_DUPLICATE,
-  REJECTED,
   FAILED
 }
 
@@ -522,23 +503,6 @@ entity TransactionIngestion {
 }
 
 /**
- * File-specific metadata for a FILE ingestion.
- */
-entity FileIngestion {
-  originalFilename String required minlength(1) maxlength(255)
-  fileType ImportFileType required
-  contentType String maxlength(100)
-  fileSizeBytes Long min(0)
-  checksum String maxlength(128)
-  storageKey String maxlength(500)
-  parserName String maxlength(100)
-  parserVersion String maxlength(50)
-  statementStartDate LocalDate
-  statementEndDate LocalDate
-  createdAt Instant required
-}
-
-/**
  * Request metadata for an API ingestion.
  */
 entity ApiIngestion {
@@ -553,19 +517,6 @@ entity ApiIngestion {
   apiTokenIdSnapshot Long required
   apiTokenPrefixSnapshot String required maxlength(20)
   apiTokenNameSnapshot String required maxlength(100)
-}
-
-/**
- * One row, object or extracted item processed during an ingestion.
- */
-entity IngestionRecord {
-  recordIndex Integer required min(0)
-  externalRecordId String maxlength(150)
-  status IngestionRecordStatus required
-  rawData TextBlob
-  errorCode String maxlength(100)
-  errorMessage String maxlength(1000)
-  createdAt Instant required
 }
 
 /**
@@ -636,7 +587,6 @@ relationship ManyToOne {
   FinancialTransaction{transactionIngestion(id)} to TransactionIngestion{financialTransactions}
   TransactionCandidate{account(name)} to FinancialAccount
   TransactionCandidate{category(name)} to Category
-  TransactionCandidate{transactionIngestion(id)} to TransactionIngestion
 }
 
 relationship ManyToMany {
@@ -708,14 +658,10 @@ relationship ManyToOne {
 }
 
 relationship OneToOne {
-  FileIngestion{transactionIngestion(id) required} to TransactionIngestion{fileIngestion}
   ApiIngestion{transactionIngestion(id) required} to TransactionIngestion{apiIngestion}
-  IngestionRecord{financialTransaction(id)} to FinancialTransaction
-  TransactionCandidate{ingestionRecord(id)} to IngestionRecord
 }
 
 relationship ManyToOne {
-  IngestionRecord{transactionIngestion(id) required} to TransactionIngestion{records}
   TransactionBatch{user(login) required} to User with builtInEntity
   TransactionBatch{account(name)} to FinancialAccount
   TransactionCandidate{transactionBatch(id)} to TransactionBatch
@@ -744,6 +690,6 @@ relationship ManyToOne {
 dto * with mapstruct
 service * with serviceClass
 
-filter FinancialAccount, FinancialTransaction, Category, Tag, TransactionRule, FinancialSubscription, Budget, TransactionIngestion, IngestionRecord
+filter FinancialAccount, FinancialTransaction, Category, Tag, TransactionRule, FinancialSubscription, Budget, TransactionIngestion
 
-use pagination for FinancialTransaction, TransactionCandidate, TransactionIngestion, IngestionRecord
+use pagination for FinancialTransaction, TransactionCandidate, TransactionIngestion

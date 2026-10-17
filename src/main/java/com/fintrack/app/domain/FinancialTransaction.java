@@ -97,7 +97,7 @@ public class FinancialTransaction implements Serializable {
     private FinancialSubscription financialSubscription;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties(value = { "accounts", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
+    @JsonIgnoreProperties(value = { "accounts", "apiIngestion", "financialTransactions" }, allowSetters = true)
     private TransactionIngestion transactionIngestion;
 
     @ManyToMany(fetch = FetchType.LAZY)
@@ -116,10 +116,6 @@ public class FinancialTransaction implements Serializable {
     @JsonIgnoreProperties(value = { "outgoingTransaction", "incomingTransaction" }, allowSetters = true)
     @OneToOne(fetch = FetchType.LAZY, mappedBy = "incomingTransaction")
     private InternalTransfer incomingInternalTransfer;
-
-    @JsonIgnoreProperties(value = { "financialTransaction", "transactionIngestion" }, allowSetters = true)
-    @OneToOne(fetch = FetchType.LAZY, mappedBy = "financialTransaction")
-    private IngestionRecord ingestionRecord;
 
     // jhipster-needle-entity-add-field - JHipster will add fields here
 
@@ -376,25 +372,6 @@ public class FinancialTransaction implements Serializable {
 
     public FinancialTransaction incomingInternalTransfer(InternalTransfer internalTransfer) {
         this.setIncomingInternalTransfer(internalTransfer);
-        return this;
-    }
-
-    public IngestionRecord getIngestionRecord() {
-        return this.ingestionRecord;
-    }
-
-    public void setIngestionRecord(IngestionRecord ingestionRecord) {
-        if (this.ingestionRecord != null) {
-            this.ingestionRecord.setFinancialTransaction(null);
-        }
-        if (ingestionRecord != null) {
-            ingestionRecord.setFinancialTransaction(this);
-        }
-        this.ingestionRecord = ingestionRecord;
-    }
-
-    public FinancialTransaction ingestionRecord(IngestionRecord ingestionRecord) {
-        this.setIngestionRecord(ingestionRecord);
         return this;
     }
 
