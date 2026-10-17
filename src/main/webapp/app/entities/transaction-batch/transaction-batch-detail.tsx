@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { translate } from 'react-jhipster';
 import {
   Button,
   DropdownItem,
@@ -56,6 +57,9 @@ import TransactionBatchEditorModal, { BatchEditorValues, BatchSuggestionDomain }
 import { signedAmountForFlow } from './transaction-batch-presentation';
 
 const operationKey = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `batch-${Date.now()}-${Math.random()}`);
+
+const batchTranslation = (key: string, values?: Record<string, string | number>) =>
+  translate(`fintrackApp.transactionBatch.${key}`, values);
 
 const categoryStyle = (color?: string | null): React.CSSProperties | undefined =>
   color ? { borderInlineStart: `0.3rem solid ${color}`, backgroundColor: `${color}12` } : undefined;
@@ -697,36 +701,60 @@ const TransactionBatchDetail = () => {
   return (
     <ProductPage wide>
       <ProductPageHeader
+        className="transaction-batch-page-header"
         title="Lote de transacciones"
         subtitle={`${batch.accountName} · ${queuedCandidates.length} borrador${queuedCandidates.length === 1 ? '' : 'es'}`}
+        actionsClassName="transaction-batch-page-header-actions"
         actions={
-          <>
-            <div className="transaction-batch-toolbar-group" aria-label="Añadir movimientos">
+          <div className="transaction-batch-toolbar" data-cy="transactionBatchToolbar">
+            <div
+              className="transaction-batch-toolbar-group transaction-batch-toolbar-group--creation"
+              role="group"
+              aria-label={batchTranslation('toolbar.creation')}
+              data-cy="transactionBatchToolbarCreation"
+              data-testid="transactionBatchToolbarCreation"
+            >
               <Button color="primary" onClick={openNewEditor} data-cy="transactionBatchAddManual">
-                + Añadir movimiento
+                {batchTranslation('toolbar.addMovement')}
               </Button>
               <Button color="secondary" outline onClick={() => filePickerRef.current?.click()} data-cy="transactionBatchImportCsv">
-                Importar CSV
+                {batchTranslation('toolbar.importCsv')}
               </Button>
             </div>
-            <div className="transaction-batch-toolbar-group" aria-label="Revisión del lote">
+            <div
+              className="transaction-batch-toolbar-group transaction-batch-toolbar-group--review"
+              role="group"
+              aria-label={batchTranslation('toolbar.review')}
+              data-cy="transactionBatchToolbarReview"
+              data-testid="transactionBatchToolbarReview"
+            >
               <Button color="secondary" outline onClick={reload}>
-                Actualizar
+                {batchTranslation('toolbar.refresh')}
               </Button>
               <Button color="secondary" outline onClick={refreshSuggestions} data-cy="transactionBatchReevaluate">
-                Reevaluar reglas
+                {batchTranslation('toolbar.reevaluateRules')}
               </Button>
             </div>
-            <UncontrolledDropdown className="transaction-batch-toolbar-menu">
-              <DropdownToggle color="secondary" outline caret data-cy="transactionBatchRulesMenu">
-                Reglas
+            <UncontrolledDropdown
+              className="transaction-batch-toolbar-group transaction-batch-toolbar-group--rules transaction-batch-toolbar-menu"
+              data-cy="transactionBatchToolbarRules"
+              data-testid="transactionBatchToolbarRules"
+            >
+              <DropdownToggle
+                color="secondary"
+                outline
+                caret
+                aria-label={batchTranslation('toolbar.rules')}
+                data-cy="transactionBatchRulesMenu"
+              >
+                {batchTranslation('toolbar.rules')}
               </DropdownToggle>
               <DropdownMenu end>
                 <DropdownItem tag={Link} to="/rules" data-cy="transactionBatchRulesLanding">
-                  Ir a reglas
+                  {batchTranslation('toolbar.viewRules')}
                 </DropdownItem>
                 <DropdownItem onClick={() => setSettingsOpen(true)} data-cy="transactionBatchSettings">
-                  Preferencias de reglas
+                  {batchTranslation('toolbar.rulePreferences')}
                 </DropdownItem>
                 <DropdownItem divider />
                 <DropdownItem
@@ -734,21 +762,29 @@ const TransactionBatchDetail = () => {
                   data-cy="transactionBatchCreateNormalizationRule"
                   data-testid="transactionBatchCreateNormalizationRule"
                 >
-                  Crear regla de descripción
+                  {batchTranslation('toolbar.createDescriptionRule')}
                 </DropdownItem>
                 <DropdownItem
                   onClick={() => openRuleCreation('TRANSACTION')}
                   data-cy="transactionBatchCreateTransactionRule"
                   data-testid="transactionBatchCreateTransactionRule"
                 >
-                  Crear regla de clasificación
+                  {batchTranslation('toolbar.createClassificationRule')}
                 </DropdownItem>
               </DropdownMenu>
             </UncontrolledDropdown>
-            <Button color="danger" outline onClick={discard}>
-              Descartar lote
-            </Button>
-          </>
+            <div
+              className="transaction-batch-toolbar-group transaction-batch-toolbar-group--destructive"
+              role="group"
+              aria-label={batchTranslation('toolbar.destructive')}
+              data-cy="transactionBatchToolbarDestructive"
+              data-testid="transactionBatchToolbarDestructive"
+            >
+              <Button color="danger" outline onClick={discard} data-cy="transactionBatchDiscard">
+                {batchTranslation('toolbar.discard')}
+              </Button>
+            </div>
+          </div>
         }
       />
       {error ? (
@@ -781,14 +817,14 @@ const TransactionBatchDetail = () => {
           {appendFeedback}
         </div>
       ) : null}
-      <ProductSection title="Cola de revisión" dataCy="transactionBatchQueue">
-        <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2 border-bottom pb-3 mb-3">
-          <div className="d-flex flex-wrap gap-2" role="group" aria-label="Filtrar borradores">
+      <ProductSection title={batchTranslation('review.title')} dataCy="transactionBatchQueue">
+        <div className="transaction-batch-review-controls border-bottom pb-3 mb-3" data-cy="transactionBatchReviewControls">
+          <div className="transaction-batch-filter-controls" role="group" aria-label={batchTranslation('review.filterDrafts')}>
             {[
-              ['ALL', 'Todos'],
-              ['NEEDS_ATTENTION', `Por corregir${invalidCount ? ` (${invalidCount})` : ''}`],
-              ['MANUAL', 'Manual'],
-              ['CSV', 'CSV'],
+              ['ALL', batchTranslation('filters.all')],
+              ['NEEDS_ATTENTION', `${batchTranslation('filters.needsCorrection')}${invalidCount ? ` (${invalidCount})` : ''}`],
+              ['MANUAL', batchTranslation('filters.manual')],
+              ['CSV', batchTranslation('filters.csv')],
             ].map(([value, label]) => (
               <Button
                 key={value}
@@ -797,43 +833,53 @@ const TransactionBatchDetail = () => {
                 color={filter === value ? 'primary' : 'secondary'}
                 outline={filter !== value}
                 onClick={() => setFilter(value as typeof filter)}
+                aria-pressed={filter === value}
+                data-cy={`transactionBatchFilter${value}`}
               >
                 {label}
               </Button>
             ))}
           </div>
-          <div className="d-flex align-items-center gap-2">
-            <Label className="small text-muted mb-0" for="transaction-batch-sort">
-              Ordenar
-            </Label>
-            <Input
-              id="transaction-batch-sort"
-              type="select"
-              bsSize="sm"
-              value={sortKey}
-              onChange={event => setSortKey(event.target.value as BatchSortKey)}
-              data-cy="transactionBatchSort"
-            >
-              <option value="ROW_POSITION">Orden de ingreso</option>
-              <option value="DATE">Fecha</option>
-              <option value="AMOUNT">Importe</option>
-              <option value="DESCRIPTION">Descripción</option>
-              <option value="CATEGORY">Categoría</option>
-            </Input>
-            <Button
-              type="button"
-              size="sm"
-              color="secondary"
-              outline
-              onClick={() => setSortDirection(current => (current === 'ASC' ? 'DESC' : 'ASC'))}
-              aria-label={sortDirection === 'ASC' ? 'Orden ascendente' : 'Orden descendente'}
-              data-cy="transactionBatchSortDirection"
-            >
-              {sortDirection === 'ASC' ? '↑' : '↓'}
-            </Button>
-            <span className="small text-muted">
-              {visibleRows.length} de {queuedCandidates.length}
-            </span>
+          <div className="transaction-batch-review-meta">
+            <div className="transaction-batch-sort-controls" role="group" aria-label={batchTranslation('review.sortControls')}>
+              <Label className="small text-muted mb-0" for="transaction-batch-sort">
+                {batchTranslation('review.sortBy')}
+              </Label>
+              <div className="transaction-batch-sort-input-group">
+                <Input
+                  id="transaction-batch-sort"
+                  type="select"
+                  bsSize="sm"
+                  value={sortKey}
+                  onChange={event => setSortKey(event.target.value as BatchSortKey)}
+                  data-cy="transactionBatchSort"
+                >
+                  <option value="ROW_POSITION">{batchTranslation('sortOptions.rowPosition')}</option>
+                  <option value="DATE">{batchTranslation('sortOptions.date')}</option>
+                  <option value="AMOUNT">{batchTranslation('sortOptions.amount')}</option>
+                  <option value="DESCRIPTION">{batchTranslation('sortOptions.description')}</option>
+                  <option value="CATEGORY">{batchTranslation('sortOptions.category')}</option>
+                </Input>
+                <Button
+                  type="button"
+                  size="sm"
+                  color="secondary"
+                  outline
+                  onClick={() => setSortDirection(current => (current === 'ASC' ? 'DESC' : 'ASC'))}
+                  aria-label={sortDirection === 'ASC' ? batchTranslation('review.ascending') : batchTranslation('review.descending')}
+                  aria-pressed={sortDirection === 'ASC'}
+                  title={sortDirection === 'ASC' ? batchTranslation('review.ascending') : batchTranslation('review.descending')}
+                  data-cy="transactionBatchSortDirection"
+                >
+                  {sortDirection === 'ASC' ? '↑' : '↓'}
+                </Button>
+              </div>
+            </div>
+            <div className="transaction-batch-visible-count-row">
+              <span className="transaction-batch-visible-count small text-muted" data-cy="transactionBatchVisibleCount">
+                {batchTranslation('review.showingCount', { visibleCount: visibleRows.length, totalCount: queuedCandidates.length })}
+              </span>
+            </div>
           </div>
         </div>
         <div className="transaction-batch-review-grid d-none d-md-grid fw-semibold text-muted small text-uppercase border-bottom pb-2 mb-2">

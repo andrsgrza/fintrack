@@ -1,0 +1,43 @@
+{
+  "fintrackApp": {
+    "transactionBatch": {
+      "toolbar": {
+        "creation": "Creación de movimientos",
+        "addMovement": "+ Añadir movimiento",
+        "importCsv": "Importar CSV",
+        "review": "Revisión del lote",
+        "refresh": "Actualizar",
+        "reevaluateRules": "Reevaluar reglas",
+        "rules": "Reglas",
+        "viewRules": "Ver reglas",
+        "rulePreferences": "Preferencias de reglas",
+        "createDescriptionRule": "Crear regla de descripción",
+        "createClassificationRule": "Crear regla de clasificación",
+        "destructive": "Acciones destructivas",
+        "discard": "Descartar lote"
+      },
+      "review": {
+        "title": "Cola de revisión",
+        "filterDrafts": "Filtrar borradores",
+        "sortControls": "Controles de orden",
+        "sortBy": "Ordenar por",
+        "ascending": "Ascendente",
+        "descending": "Descendente",
+        "showingCount": "Mostrando {{visibleCount}} de {{totalCount}} borradores"
+      },
+      "filters": {
+        "all": "Todos",
+        "needsCorrection": "Por corregir",
+        "manual": "Manual",
+        "csv": "CSV"
+      },
+      "sortOptions": {
+        "rowPosition": "Orden de ingreso",
+        "date": "Fecha",
+        "amount": "Importe",
+        "description": "Descripción",
+        "category": "Categoría"
+      }
+    }
+  }
+}

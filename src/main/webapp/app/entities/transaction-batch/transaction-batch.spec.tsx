@@ -1,8 +1,10 @@
 import React from 'react';
 import axios from 'axios';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { TranslatorContext } from 'react-jhipster';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
+import esTransactionBatch from 'app/../i18n/es/transactionBatch.json';
 import TransactionBatch from './transaction-batch';
 import TransactionBatchDetail from './transaction-batch-detail';
 
@@ -70,7 +72,12 @@ const renderDetail = () =>
   );
 
 describe('TransactionBatch product workspace', () => {
+  beforeAll(() => {
+    TranslatorContext.registerTranslations('es', esTransactionBatch);
+  });
+
   beforeEach(() => {
+    TranslatorContext.setLocale('es');
     jest.clearAllMocks();
     mockGet.mockImplementation(url => {
       if (url === 'api/transaction-batches') return Promise.resolve({ data: [workspace] });
@@ -251,12 +258,67 @@ describe('TransactionBatch product workspace', () => {
     expect(document.querySelector('[data-cy="transactionBatchRowMetadata-81"]')?.textContent).toContain('Manual');
     expect(document.querySelector('[data-cy="transactionBatchRowMetadata-81"]')?.textContent).toContain('Lista');
     expect(document.querySelector('[data-cy="transactionBatchAmount-81"]')?.className).toContain('financial-amount--expense');
-    expect(document.querySelectorAll('.transaction-batch-toolbar-group')).toHaveLength(2);
+    expect(document.querySelectorAll('.transaction-batch-toolbar-group')).toHaveLength(4);
     expect(document.querySelector('details.transaction-batch-row-actions')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Más acciones de la fila' }));
     expect(screen.getByRole('menuitem', { name: 'Crear regla de clasificación' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'Eliminar' })).toBeTruthy();
+  });
+
+  it('groups the header actions by intent and exposes one complete Rules menu', async () => {
+    renderDetail();
+
+    await screen.findByText('Taxi airport');
+    expect(screen.getByTestId('transactionBatchToolbarCreation')).toBeTruthy();
+    expect(screen.getByTestId('transactionBatchToolbarReview')).toBeTruthy();
+    expect(screen.getByTestId('transactionBatchToolbarRules')).toBeTruthy();
+    expect(screen.getByTestId('transactionBatchToolbarDestructive')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Reglas' })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Descartar lote' }).closest('[data-cy="transactionBatchToolbarDestructive"]')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reglas' }));
+    expect(await screen.findByRole('menuitem', { name: 'Ver reglas' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Crear regla de descripción' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Crear regla de clasificación' })).toBeTruthy();
+    expect(document.querySelectorAll('[data-cy="transactionBatchToolbar"] > [data-cy^="transactionBatchCreate"]')).toHaveLength(0);
+  });
+
+  it('keeps sort and count as readable related-but-separate review controls', async () => {
+    mockGet.mockImplementation(url => {
+      if (url === 'api/transaction-batches/7') {
+        return Promise.resolve({
+          data: {
+            ...workspace,
+            candidates: [
+              workspace.candidates[0],
+              {
+                ...workspace.candidates[0],
+                id: 82,
+                rowPosition: 2,
+                source: 'FILE_IMPORT',
+                description: 'CSV airport taxi',
+              },
+            ],
+          },
+        });
+      }
+      if (url === 'api/transaction-batches/7/rule-preview') return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+    renderDetail();
+
+    const sort = await screen.findByLabelText('Ordenar por');
+    expect((sort as HTMLSelectElement).value).toBe('ROW_POSITION');
+    expect(screen.getByText('Mostrando 2 de 2 borradores')).toBeTruthy();
+    const direction = screen.getByRole('button', { name: 'Ascendente' });
+    expect(direction.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(direction);
+    expect(screen.getByRole('button', { name: 'Descendente' }).getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'CSV' }));
+    expect(await screen.findByText('Mostrando 1 de 2 borradores')).toBeTruthy();
+    expect(screen.queryByText(/2 de 2$/)).toBeNull();
   });
 
   it('opens the manual editor before creating a candidate and leaves no empty row when cancelled', async () => {
@@ -470,17 +532,17 @@ describe('TransactionBatch product workspace', () => {
 
     await screen.findByText('Zebra payment');
     expect(container.querySelectorAll('.transaction-batch-review-grid')).toHaveLength(3);
-    fireEvent.change(screen.getByLabelText('Ordenar'), { target: { value: 'AMOUNT' } });
+    fireEvent.change(screen.getByLabelText('Ordenar por'), { target: { value: 'AMOUNT' } });
     expect(Array.from(container.querySelectorAll('[data-cy^="transactionBatchRow-"]')).map(row => row.getAttribute('data-cy'))).toEqual([
       'transactionBatchRow-81',
       'transactionBatchRow-82',
     ]);
-    fireEvent.click(screen.getByRole('button', { name: 'Orden ascendente' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ascendente' }));
     expect(Array.from(container.querySelectorAll('[data-cy^="transactionBatchRow-"]')).map(row => row.getAttribute('data-cy'))).toEqual([
       'transactionBatchRow-82',
       'transactionBatchRow-81',
     ]);
-    fireEvent.change(screen.getByLabelText('Ordenar'), { target: { value: 'ROW_POSITION' } });
+    fireEvent.change(screen.getByLabelText('Ordenar por'), { target: { value: 'ROW_POSITION' } });
     expect(Array.from(container.querySelectorAll('[data-cy^="transactionBatchRow-"]')).map(row => row.getAttribute('data-cy'))).toEqual([
       'transactionBatchRow-82',
       'transactionBatchRow-81',

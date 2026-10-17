@@ -341,15 +341,104 @@ a {
   color: color-mix(in srgb, var(--bs-warning) 66%, black);
 }
 
+.transaction-batch-page-header {
+  flex-direction: column !important;
+}
+
+.transaction-batch-page-header-actions {
+  align-self: stretch;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  min-width: 0;
+  width: 100%;
+}
+
+.transaction-batch-toolbar {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
 .transaction-batch-toolbar-group {
   align-items: center;
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.375rem;
+}
+
+.transaction-batch-toolbar-group--review,
+.transaction-batch-toolbar-group--rules,
+.transaction-batch-toolbar-group--destructive {
+  border-inline-start: 1px solid var(--bs-border-color);
+  padding-inline-start: 1rem;
+}
+
+.transaction-batch-toolbar-group--destructive {
+  margin-inline-start: auto;
 }
 
 .transaction-batch-toolbar-menu {
-  display: inline-block;
+  display: inline-flex;
+}
+
+.transaction-batch-review-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem 1.25rem;
+  justify-content: space-between;
+}
+
+.transaction-batch-filter-controls,
+.transaction-batch-review-meta,
+.transaction-batch-sort-controls,
+.transaction-batch-sort-input-group {
+  align-items: center;
+  display: flex;
+}
+
+.transaction-batch-filter-controls {
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.transaction-batch-review-meta {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: flex-end;
+}
+
+.transaction-batch-sort-controls {
+  gap: 0.5rem;
+}
+
+.transaction-batch-sort-input-group {
+  min-width: 13rem;
+}
+
+.transaction-batch-sort-input-group .form-select {
+  border-end-end-radius: 0;
+  border-start-end-radius: 0;
+}
+
+.transaction-batch-sort-input-group .btn {
+  border-inline-start: 0;
+  border-end-start-radius: 0;
+  border-start-start-radius: 0;
+}
+
+.transaction-batch-visible-count {
+  white-space: nowrap;
+}
+
+.transaction-batch-visible-count-row {
+  align-items: center;
+  display: flex;
 }
 
 .financial-amount {
@@ -465,16 +554,78 @@ a {
   }
 
   .transaction-batch-toolbar-group {
-    width: 100%;
+    flex: 1 1 calc(50% - 0.25rem);
 
-    > .btn {
+    > .btn,
+    &.transaction-batch-toolbar-menu > .btn {
       flex: 1 1 auto;
     }
   }
 
-  .transaction-batch-toolbar-menu,
-  .transaction-batch-toolbar-menu > .btn {
-    flex: 1 1 auto;
+  .transaction-batch-toolbar-group--creation,
+  .transaction-batch-toolbar-group--review {
+    flex-basis: 100%;
+  }
+
+  .transaction-batch-toolbar-group--rules,
+  .transaction-batch-toolbar-group--destructive {
+    flex: 1 1 calc(50% - 0.5rem);
+
+    > .btn {
+      width: 100%;
+    }
+  }
+
+  .transaction-batch-toolbar-group--review,
+  .transaction-batch-toolbar-group--rules,
+  .transaction-batch-toolbar-group--destructive {
+    border-inline-start: 0;
+    padding-inline-start: 0;
+  }
+
+  .transaction-batch-toolbar-group--destructive {
+    margin-inline-start: 0;
+  }
+
+  .transaction-batch-review-controls,
+  .transaction-batch-review-meta,
+  .transaction-batch-sort-controls {
+    align-items: stretch;
+  }
+
+  .transaction-batch-review-meta,
+  .transaction-batch-sort-controls {
+    flex-basis: 100%;
+    flex-direction: column;
+  }
+
+  .transaction-batch-sort-input-group {
+    width: 100%;
+  }
+
+  .transaction-batch-visible-count {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .transaction-batch-review-controls {
+    display: block;
+  }
+
+  .transaction-batch-filter-controls {
+    margin-block-end: 0.875rem;
+  }
+
+  .transaction-batch-review-meta {
+    display: block;
+    width: 100%;
+  }
+
+  .transaction-batch-visible-count-row {
+    margin-block-start: 0.75rem;
+    justify-content: flex-start;
+    width: 100%;
   }
 }
 

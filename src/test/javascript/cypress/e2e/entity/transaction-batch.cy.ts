@@ -447,6 +447,85 @@ describe('Transaction Batch product workflow', () => {
     cy.screenshot('transaction-batch/01-open-batch-list');
   });
 
+  it('groups toolbar actions and keeps sort/count controls readable across responsive review layouts', () => {
+    const manualDescription = uniqueName('toolbar-manual');
+    const csvDescription = uniqueName('toolbar-csv');
+
+    createOpenBatch();
+    addCompleteManualRow(manualDescription);
+    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
+      {
+        contents: Cypress.Buffer.from([csvHeader, `2026-10-17,,${csvDescription},-40.00,MXN,toolbar,Review controls fixture`].join('\n')),
+        fileName: 'toolbar-review-controls.csv',
+        mimeType: 'text/csv',
+        lastModified: Date.now(),
+      },
+      { force: true },
+    );
+    cy.get('[data-cy="transactionBatchAppendCsv"]').click();
+    cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', 2);
+
+    cy.viewport(1280, 900);
+    cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(document.documentElement.clientWidth));
+    cy.get('[data-cy="transactionBatchToolbarCreation"]').should('contain', 'Añadir movimiento').and('contain', 'Importar CSV');
+    cy.get('[data-cy="transactionBatchToolbarReview"]').should('contain', 'Actualizar').and('contain', 'Reevaluar reglas');
+    cy.get('[data-cy="transactionBatchRulesMenu"]').should('have.length', 1);
+    cy.get('[data-cy="transactionBatchToolbarDestructive"]').should('contain', 'Descartar lote');
+    cy.screenshot('transaction-batch/17-toolbar-wide', { capture: 'viewport' });
+
+    cy.get('[data-cy="transactionBatchRulesMenu"]').click();
+    cy.get('[data-cy="transactionBatchRulesLanding"]').should('contain', 'Ver reglas');
+    cy.contains('[data-cy="transactionBatchToolbarRules"]', 'Crear regla de descripción').should('be.visible');
+    cy.contains('[data-cy="transactionBatchToolbarRules"]', 'Crear regla de clasificación').should('be.visible');
+    cy.screenshot('transaction-batch/18-rules-menu', { capture: 'viewport' });
+    cy.get('[data-cy="transactionBatchRulesMenu"]').click();
+    cy.get('[data-cy="transactionBatchRulesLanding"]').should('not.be.visible');
+
+    cy.get('[data-cy="transactionBatchReviewControls"]').within(() => {
+      cy.contains('Ordenar por').should('be.visible');
+      cy.get('[data-cy="transactionBatchVisibleCount"]').should('have.text', 'Mostrando 2 de 2 borradores');
+      cy.get('[data-cy="transactionBatchSort"]').select('Fecha');
+      cy.get('[data-cy="transactionBatchSortDirection"]').should('have.attr', 'aria-label', 'Ascendente').click();
+      cy.get('[data-cy="transactionBatchSortDirection"]').should('have.attr', 'aria-label', 'Descendente');
+      cy.get('[data-cy="transactionBatchVisibleCount"]').should('have.text', 'Mostrando 2 de 2 borradores');
+    });
+    cy.screenshot('transaction-batch/19-review-all', { capture: 'viewport' });
+
+    cy.get('[data-cy="transactionBatchFilterCSV"]').click();
+    cy.get('[data-cy="transactionBatchVisibleCount"]').should('have.text', 'Mostrando 1 de 2 borradores');
+    cy.get('[data-cy^="transactionBatchRow-"]').should('have.length', 1).and('contain', csvDescription);
+    cy.screenshot('transaction-batch/20-review-filtered', { capture: 'viewport' });
+
+    cy.viewport(1024, 768);
+    cy.get('[data-cy="transactionBatchToolbar"]').should('be.visible');
+    cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(document.documentElement.clientWidth));
+    cy.screenshot('transaction-batch/21-toolbar-laptop', { capture: 'viewport' });
+
+    cy.viewport(375, 667);
+    cy.get('[data-cy="transactionBatchToolbar"]').should('be.visible');
+    cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(document.documentElement.clientWidth));
+    cy.screenshot('transaction-batch/22-toolbar-mobile', { capture: 'viewport' });
+    cy.get('[data-cy="transactionBatchQueue"]').scrollIntoView();
+    cy.get('[data-cy="transactionBatchReviewControls"]').within(() => {
+      cy.contains('Ordenar por').should('be.visible');
+      cy.get('[data-cy="transactionBatchVisibleCount"]').should('be.visible').and('have.text', 'Mostrando 1 de 2 borradores');
+    });
+    cy.get('[data-cy="transactionBatchReviewControls"]').then($controls => {
+      const sortControl = $controls.find('[data-cy="transactionBatchSort"]')[0].getBoundingClientRect();
+      const visibleCount = $controls.find('[data-cy="transactionBatchVisibleCount"]')[0].getBoundingClientRect();
+      const reviewMeta = $controls.find('.transaction-batch-review-meta')[0];
+      const reviewControls = $controls[0];
+      const metaStyle = window.getComputedStyle(reviewMeta);
+      const controlsStyle = window.getComputedStyle(reviewControls);
+      expect(visibleCount.top).to.be.greaterThan(sortControl.bottom - 1);
+      expect(
+        visibleCount.left,
+        `mobile review layout: meta=${metaStyle.display}/${metaStyle.flexDirection}/${metaStyle.width}, controls=${controlsStyle.display}/${controlsStyle.width}`,
+      ).to.be.lessThan(sortControl.right);
+    });
+    cy.screenshot('transaction-batch/23-review-mobile', { capture: 'viewport' });
+  });
+
   it('applies CSV normalization before classification and protects an explicit clear on reevaluation', () => {
     const token = uniqueName('batch-auto-apply');
     const normalizedDescription = `Normalizado ${token}`;
