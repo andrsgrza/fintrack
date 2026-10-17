@@ -4,7 +4,6 @@ import static com.fintrack.app.domain.CategoryTestSamples.*;
 import static com.fintrack.app.domain.FinancialAccountTestSamples.*;
 import static com.fintrack.app.domain.FinancialSubscriptionTestSamples.*;
 import static com.fintrack.app.domain.FinancialTransactionTestSamples.*;
-import static com.fintrack.app.domain.IngestionRecordTestSamples.*;
 import static com.fintrack.app.domain.InternalTransferTestSamples.*;
 import static com.fintrack.app.domain.TagTestSamples.*;
 import static com.fintrack.app.domain.TransactionIngestionTestSamples.*;
@@ -123,19 +122,5 @@ class FinancialTransactionTest {
         financialTransaction.incomingInternalTransfer(null);
         assertThat(financialTransaction.getIncomingInternalTransfer()).isNull();
         assertThat(internalTransferBack.getIncomingTransaction()).isNull();
-    }
-
-    @Test
-    void ingestionRecordTest() {
-        FinancialTransaction financialTransaction = getFinancialTransactionRandomSampleGenerator();
-        IngestionRecord ingestionRecordBack = getIngestionRecordRandomSampleGenerator();
-
-        financialTransaction.setIngestionRecord(ingestionRecordBack);
-        assertThat(financialTransaction.getIngestionRecord()).isEqualTo(ingestionRecordBack);
-        assertThat(ingestionRecordBack.getFinancialTransaction()).isEqualTo(financialTransaction);
-
-        financialTransaction.ingestionRecord(null);
-        assertThat(financialTransaction.getIngestionRecord()).isNull();
-        assertThat(ingestionRecordBack.getFinancialTransaction()).isNull();
     }
 }

@@ -38,6 +38,13 @@ describe('FinancialTransaction e2e test', () => {
     suggestedTags?: Array<{ tagId?: number; tagName?: string }>;
   }
 
+  interface ManualCandidateRuleApplyResponse {
+    candidate?: {
+      categoryAppliedByRule?: { id?: number; name?: string } | null;
+      selectedTags?: Array<{ appliedByRule?: { id?: number; name?: string } | null }>;
+    };
+  }
+
   interface FinancialTransactionResponse extends E2EEntity {
     description: string;
     notes?: string | null;
@@ -647,6 +654,12 @@ describe('FinancialTransaction e2e test', () => {
       cy.get('[data-cy="amount"]').type('100.5');
       cy.get('[data-cy="flow-OUT"]').click();
       cy.get('[data-cy="flow-OUT"]').should('have.attr', 'aria-pressed', 'true');
+      cy.screenshot('financial-transaction/01-expense-flow-selector');
+      cy.get('[data-cy="flow-IN"]').click();
+      cy.get('[data-cy="flow-IN"]').should('have.attr', 'aria-pressed', 'true');
+      cy.screenshot('financial-transaction/02-income-flow-selector');
+      cy.get('[data-cy="flow-OUT"]').click();
+      cy.get('[data-cy="flow-OUT"]').should('have.attr', 'aria-pressed', 'true');
       waitForSavedManualCandidateDraft(manualCandidateDescription);
       cy.get('[data-cy="manualDraftPostButton"]').should('be.disabled');
 
@@ -668,7 +681,15 @@ describe('FinancialTransaction e2e test', () => {
         suggestedTagNames.forEach(suggestedTagName => expect($section.text()).to.contain(suggestedTagName));
       });
       cy.get('[data-cy="manualDraftApplyRulesButton"]').click();
-      cy.wait('@candidateApplyRulesRequest').its('response.statusCode').should('eq', 200);
+      let appliedAttributionCount = 0;
+      cy.wait('@candidateApplyRulesRequest').then(({ response }) => {
+        expect(response?.statusCode).to.equal(200);
+        const appliedCandidate = (response?.body as ManualCandidateRuleApplyResponse | undefined)?.candidate;
+        appliedAttributionCount =
+          (appliedCandidate?.categoryAppliedByRule ? 1 : 0) +
+          (appliedCandidate?.selectedTags ?? []).filter(selection => selection.appliedByRule).length;
+        expect(appliedAttributionCount).to.be.greaterThan(0);
+      });
       cy.then(() => {
         if (suggestedCategoryId) {
           cy.get('[data-cy="category"]').should('have.value', String(suggestedCategoryId));
@@ -676,6 +697,15 @@ describe('FinancialTransaction e2e test', () => {
         suggestedTagNames.forEach(suggestedTagName => {
           cy.get('[data-cy="manualDraftTagsChip"]').should('contain', suggestedTagName);
         });
+      });
+      cy.then(() => {
+        cy.get('[data-testid="manualDraftAppliedRuleAttribution"]')
+          .should('have.length', appliedAttributionCount)
+          .each($attribution => {
+            expect($attribution.text()).to.match(/Aplicada por|Applied by/);
+            expect($attribution.text()).to.contain(transactionRule.name);
+            cy.wrap($attribution).find('a').should('have.attr', 'href', `/transaction-rule/${transactionRule.id}/view`);
+          });
       });
 
       cy.authenticatedRequest({
@@ -698,6 +728,11 @@ describe('FinancialTransaction e2e test', () => {
         .should('match', /Inactiv[ae]/);
       cy.get('[data-cy="amount"]').should('have.value', '100.5');
       cy.get('[data-cy="flow-OUT"]').should('have.attr', 'aria-pressed', 'true');
+      cy.then(() => {
+        cy.get('[data-testid="manualDraftAppliedRuleAttribution"]')
+          .should('have.length', appliedAttributionCount)
+          .each($attribution => expect($attribution.text()).to.contain(transactionRule.name));
+      });
 
       // Explicit selections after applying suggestions are user-owned and must survive another preview.
       cy.get('[data-cy="category"]').select(String(category.id));
@@ -711,6 +746,7 @@ describe('FinancialTransaction e2e test', () => {
           candidate.category?.id === category.id &&
           candidate.tags?.some(candidateTag => candidateTag.id === tag.id) === true,
       );
+      cy.get('[data-testid="manualDraftAppliedRuleAttribution"]').should('not.exist');
 
       const reEvaluatedDescription = `${manualCandidateDescription} revised`;
       cy.get('[data-cy="description"]').should('have.value', manualCandidateDescription).type(' revised');

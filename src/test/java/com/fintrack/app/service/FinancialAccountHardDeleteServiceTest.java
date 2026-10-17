@@ -9,11 +9,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.Budget;
-import com.fintrack.app.domain.FileIngestion;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
-import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.InternalTransfer;
+import com.fintrack.app.domain.TransactionBatch;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.TransactionRule;
@@ -21,7 +20,6 @@ import com.fintrack.app.domain.TransactionRuleCondition;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.FinancialAccountDeletionBlockerCode;
-import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
@@ -30,12 +28,11 @@ import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
-import com.fintrack.app.repository.FileIngestionRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
+import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.repository.TransactionRuleConditionRepository;
@@ -61,9 +58,6 @@ class FinancialAccountHardDeleteServiceTest {
     private FinancialAccountRepository financialAccountRepository;
 
     @Mock
-    private FileIngestionRepository fileIngestionRepository;
-
-    @Mock
     private ApiIngestionRepository apiIngestionRepository;
 
     @Mock
@@ -73,10 +67,10 @@ class FinancialAccountHardDeleteServiceTest {
     private TransactionCandidateRepository transactionCandidateRepository;
 
     @Mock
-    private TransactionIngestionRepository transactionIngestionRepository;
+    private TransactionBatchRepository transactionBatchRepository;
 
     @Mock
-    private IngestionRecordRepository ingestionRecordRepository;
+    private TransactionIngestionRepository transactionIngestionRepository;
 
     @Mock
     private InternalTransferRepository internalTransferRepository;
@@ -117,7 +111,6 @@ class FinancialAccountHardDeleteServiceTest {
         lenient().when(financialTransactionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
         lenient().when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
         lenient().when(transactionIngestionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
-        lenient().when(ingestionRecordRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
         lenient().when(internalTransferRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
         lenient().when(budgetRepository.findAllWithAccountsByAccountId(ACCOUNT_ID)).thenReturn(List.of());
         lenient()
@@ -151,7 +144,7 @@ class FinancialAccountHardDeleteServiceTest {
     @Test
     void hardDeleteAbortsBeforeCleanupWhenPreflightFindsABlocker() {
         TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.READY_TO_POST);
-        candidate.setTransactionIngestion(ingestion(account));
+        candidate.setSource(TransactionCandidateSource.FILE_IMPORT);
         when(financialAccountRepository.findOneForHardDeleteByIdAndUserLogin(ACCOUNT_ID, USER_LOGIN)).thenReturn(Optional.of(account));
         when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
 
@@ -163,12 +156,11 @@ class FinancialAccountHardDeleteServiceTest {
                     .containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE)
             );
 
-        verify(fileIngestionRepository, never()).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
         verify(apiIngestionRepository, never()).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
         verify(internalTransferRepository, never()).deleteLocalByAccountId(ACCOUNT_ID);
         verify(transactionCandidateRepository, never()).deleteTagLinksByAccountId(ACCOUNT_ID);
         verify(transactionCandidateRepository, never()).deleteByAccountId(ACCOUNT_ID);
-        verify(ingestionRecordRepository, never()).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
+        verify(transactionBatchRepository, never()).deleteByAccountId(ACCOUNT_ID);
         verify(financialTransactionRepository, never()).deleteTagLinksByAccountId(ACCOUNT_ID);
         verify(financialTransactionRepository, never()).deleteByAccountId(ACCOUNT_ID);
         verify(transactionIngestionRepository, never()).deleteByAccountId(ACCOUNT_ID);
@@ -185,11 +177,10 @@ class FinancialAccountHardDeleteServiceTest {
         assertThat(financialAccountHardDeleteService.hardDelete(ACCOUNT_ID)).isTrue();
 
         org.mockito.InOrder order = org.mockito.Mockito.inOrder(
-            fileIngestionRepository,
             apiIngestionRepository,
             internalTransferRepository,
             transactionCandidateRepository,
-            ingestionRecordRepository,
+            transactionBatchRepository,
             financialTransactionRepository,
             transactionIngestionRepository,
             budgetRepository,
@@ -197,12 +188,11 @@ class FinancialAccountHardDeleteServiceTest {
             creditAccountDetailsRepository,
             financialAccountRepository
         );
-        order.verify(fileIngestionRepository).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
         order.verify(apiIngestionRepository).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
         order.verify(internalTransferRepository).deleteLocalByAccountId(ACCOUNT_ID);
         order.verify(transactionCandidateRepository).deleteTagLinksByAccountId(ACCOUNT_ID);
         order.verify(transactionCandidateRepository).deleteByAccountId(ACCOUNT_ID);
-        order.verify(ingestionRecordRepository).deleteByTransactionIngestionAccountId(ACCOUNT_ID);
+        order.verify(transactionBatchRepository).deleteByAccountId(ACCOUNT_ID);
         order.verify(financialTransactionRepository).deleteTagLinksByAccountId(ACCOUNT_ID);
         order.verify(financialTransactionRepository).deleteByAccountId(ACCOUNT_ID);
         order.verify(transactionIngestionRepository).deleteByAccountId(ACCOUNT_ID);
@@ -238,19 +228,8 @@ class FinancialAccountHardDeleteServiceTest {
     }
 
     @Test
-    void previewBlocksManualCandidateAttachedToIngestion() {
-        TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.DRAFT);
-        candidate.setTransactionIngestion(ingestion(account));
-        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
-
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE);
-    }
-
-    @Test
     void previewAllowsPreparedFileImportCandidate() {
-        TransactionIngestion ingestion = fileIngestion(account);
-        IngestionRecord record = record(ingestion, IngestionRecordStatus.VALID, null);
-        TransactionCandidate candidate = fileCandidate(ingestion, record, TransactionCandidateStatus.READY_TO_POST, null);
+        TransactionCandidate candidate = batchCandidate(account, TransactionCandidateStatus.READY_TO_POST);
         when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
 
         FinancialAccountDeletionPreviewDTO preview = preview();
@@ -260,40 +239,21 @@ class FinancialAccountHardDeleteServiceTest {
     }
 
     @Test
-    void previewAllowsCompletedFileImportRecordWithFinalTransactionAndNoCandidate() {
-        TransactionIngestion ingestion = fileIngestion(account);
+    void previewAllowsApiIngestionLinkedFinalTransaction() {
+        TransactionIngestion ingestion = ingestion(account);
+        ingestion.setIngestionType(IngestionType.API);
         FinancialTransaction transaction = transaction(account);
-        transaction.setOrigin(TransactionOrigin.FILE_IMPORT);
+        transaction.setOrigin(TransactionOrigin.API);
         transaction.setTransactionIngestion(ingestion);
-        IngestionRecord record = record(ingestion, IngestionRecordStatus.IMPORTED, transaction);
         when(financialTransactionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(transaction));
         when(transactionIngestionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(ingestion));
-        when(ingestionRecordRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(record));
 
         FinancialAccountDeletionPreviewDTO preview = preview();
 
         assertThat(preview.getCanHardDelete()).isTrue();
         assertThat(preview.getCounts().getFinancialTransactions()).isEqualTo(1L);
         assertThat(preview.getCounts().getTransactionIngestions()).isEqualTo(1L);
-        assertThat(preview.getCounts().getIngestionRecords()).isEqualTo(1L);
         assertThat(preview.getCounts().getFileImportCandidates()).isZero();
-    }
-
-    @Test
-    void previewAllowsDeletedAfterImportRecordWithoutFinalTransactionOrCandidate() {
-        TransactionIngestion ingestion = fileIngestion(account);
-        IngestionRecord record = record(ingestion, IngestionRecordStatus.DELETED_AFTER_IMPORT, null);
-        when(transactionIngestionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(ingestion));
-        when(ingestionRecordRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(record));
-
-        FinancialAccountDeletionPreviewDTO preview = preview();
-
-        assertThat(preview.getCanHardDelete()).isTrue();
-        assertThat(preview.getCounts().getFinancialTransactions()).isZero();
-        assertThat(preview.getCounts().getTransactionIngestions()).isEqualTo(1L);
-        assertThat(preview.getCounts().getIngestionRecords()).isEqualTo(1L);
-        assertThat(preview.getCounts().getFileImportCandidates()).isZero();
-        assertThat(preview.getBlockers()).isEmpty();
     }
 
     @Test
@@ -302,19 +262,17 @@ class FinancialAccountHardDeleteServiceTest {
         candidate.setSource(TransactionCandidateSource.FILE_IMPORT);
         when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
 
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_INGESTION_GRAPH);
+        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE);
     }
 
     @Test
-    void previewBlocksFileImportCandidateWithDifferentIngestionAccount() {
+    void previewBlocksFileImportCandidateWithDifferentBatchAccount() {
         FinancialAccount otherAccount = account(20L, account.getUser());
-        TransactionIngestion ingestion = fileIngestion(otherAccount);
-        IngestionRecord record = record(ingestion, IngestionRecordStatus.VALID, null);
-        TransactionCandidate candidate = fileCandidate(ingestion, record, TransactionCandidateStatus.READY_TO_POST, null);
+        TransactionCandidate candidate = batchCandidate(otherAccount, TransactionCandidateStatus.READY_TO_POST);
         candidate.setAccount(account);
         when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
 
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_INGESTION_GRAPH);
+        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE);
     }
 
     @Test
@@ -449,35 +407,16 @@ class FinancialAccountHardDeleteServiceTest {
         return ingestion;
     }
 
-    private TransactionIngestion fileIngestion(FinancialAccount owner) {
-        TransactionIngestion ingestion = ingestion(owner);
-        ingestion.setIngestionType(IngestionType.FILE);
-        ingestion.setFileIngestion(new FileIngestion());
-        return ingestion;
-    }
-
-    private IngestionRecord record(TransactionIngestion ingestion, IngestionRecordStatus status, FinancialTransaction transaction) {
-        IngestionRecord record = new IngestionRecord();
-        record.setId(60L + ingestion.getId());
-        record.setTransactionIngestion(ingestion);
-        record.setStatus(status);
-        record.setFinancialTransaction(transaction);
-        return record;
-    }
-
-    private TransactionCandidate fileCandidate(
-        TransactionIngestion ingestion,
-        IngestionRecord record,
-        TransactionCandidateStatus status,
-        FinancialTransaction transaction
-    ) {
+    private TransactionCandidate batchCandidate(FinancialAccount owner, TransactionCandidateStatus status) {
+        TransactionBatch batch = new TransactionBatch();
+        batch.setId(60L + owner.getId());
+        batch.setAccount(owner);
         TransactionCandidate candidate = new TransactionCandidate();
-        candidate.setId(50L + ingestion.getId());
+        candidate.setId(50L + owner.getId());
         candidate.setSource(TransactionCandidateSource.FILE_IMPORT);
         candidate.setStatus(status);
-        candidate.setAccount(ingestion.getAccount());
-        candidate.setTransactionIngestion(ingestion);
-        candidate.setIngestionRecord(record);
+        candidate.setAccount(owner);
+        candidate.setTransactionBatch(batch);
         return candidate;
     }
 }

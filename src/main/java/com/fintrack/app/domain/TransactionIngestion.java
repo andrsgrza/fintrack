@@ -85,10 +85,6 @@ public class TransactionIngestion implements Serializable {
 
     @JsonIgnoreProperties(value = { "transactionIngestion" }, allowSetters = true)
     @OneToOne(fetch = FetchType.LAZY, mappedBy = "transactionIngestion")
-    private FileIngestion fileIngestion;
-
-    @JsonIgnoreProperties(value = { "transactionIngestion" }, allowSetters = true)
-    @OneToOne(fetch = FetchType.LAZY, mappedBy = "transactionIngestion")
     private ApiIngestion apiIngestion;
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "transactionIngestion")
@@ -101,15 +97,10 @@ public class TransactionIngestion implements Serializable {
             "tags",
             "outgoingInternalTransfer",
             "incomingInternalTransfer",
-            "ingestionRecord",
         },
         allowSetters = true
     )
     private Set<FinancialTransaction> financialTransactions = new HashSet<>();
-
-    @OneToMany(fetch = FetchType.LAZY, mappedBy = "transactionIngestion")
-    @JsonIgnoreProperties(value = { "financialTransaction", "transactionIngestion" }, allowSetters = true)
-    private Set<IngestionRecord> records = new HashSet<>();
 
     // jhipster-needle-entity-add-field - JHipster will add fields here
 
@@ -282,25 +273,6 @@ public class TransactionIngestion implements Serializable {
         return this;
     }
 
-    public FileIngestion getFileIngestion() {
-        return this.fileIngestion;
-    }
-
-    public void setFileIngestion(FileIngestion fileIngestion) {
-        if (this.fileIngestion != null) {
-            this.fileIngestion.setTransactionIngestion(null);
-        }
-        if (fileIngestion != null) {
-            fileIngestion.setTransactionIngestion(this);
-        }
-        this.fileIngestion = fileIngestion;
-    }
-
-    public TransactionIngestion fileIngestion(FileIngestion fileIngestion) {
-        this.setFileIngestion(fileIngestion);
-        return this;
-    }
-
     public ApiIngestion getApiIngestion() {
         return this.apiIngestion;
     }
@@ -348,37 +320,6 @@ public class TransactionIngestion implements Serializable {
     public TransactionIngestion removeFinancialTransactions(FinancialTransaction financialTransaction) {
         this.financialTransactions.remove(financialTransaction);
         financialTransaction.setTransactionIngestion(null);
-        return this;
-    }
-
-    public Set<IngestionRecord> getRecords() {
-        return this.records;
-    }
-
-    public void setRecords(Set<IngestionRecord> ingestionRecords) {
-        if (this.records != null) {
-            this.records.forEach(i -> i.setTransactionIngestion(null));
-        }
-        if (ingestionRecords != null) {
-            ingestionRecords.forEach(i -> i.setTransactionIngestion(this));
-        }
-        this.records = ingestionRecords;
-    }
-
-    public TransactionIngestion records(Set<IngestionRecord> ingestionRecords) {
-        this.setRecords(ingestionRecords);
-        return this;
-    }
-
-    public TransactionIngestion addRecords(IngestionRecord ingestionRecord) {
-        this.records.add(ingestionRecord);
-        ingestionRecord.setTransactionIngestion(this);
-        return this;
-    }
-
-    public TransactionIngestion removeRecords(IngestionRecord ingestionRecord) {
-        this.records.remove(ingestionRecord);
-        ingestionRecord.setTransactionIngestion(null);
         return this;
     }
 

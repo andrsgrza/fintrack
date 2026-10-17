@@ -40,7 +40,6 @@ public class InternalTransfer implements Serializable {
             "tags",
             "outgoingInternalTransfer",
             "incomingInternalTransfer",
-            "ingestionRecord",
         },
         allowSetters = true
     )
@@ -58,7 +57,6 @@ public class InternalTransfer implements Serializable {
             "tags",
             "outgoingInternalTransfer",
             "incomingInternalTransfer",
-            "ingestionRecord",
         },
         allowSetters = true
     )

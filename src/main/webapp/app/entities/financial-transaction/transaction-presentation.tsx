@@ -6,6 +6,7 @@ import { Translate, translate } from 'react-jhipster';
 import { IFinancialAccount } from 'app/shared/model/financial-account.model';
 import { ICategory } from 'app/shared/model/category.model';
 import { CategoryPath } from 'app/entities/category/category-presentation';
+import { FinancialAmount } from 'app/shared/ui/financial-amount';
 
 type Flow = string | null | undefined;
 
@@ -41,13 +42,6 @@ const colorIdentityStyle = (color?: string | null, accentWidth = '0.3rem'): Reac
         borderInlineStart: `${accentWidth} solid ${color}`,
       }
     : undefined;
-
-const formatNumber = (amount?: number | null) => {
-  if (amount === undefined || amount === null) {
-    return null;
-  }
-  return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
-};
 
 export const formatTransactionAccountLabel = (account?: AccountPresentation | null) => {
   if (!account?.name) {
@@ -87,25 +81,9 @@ export const TransactionAmount = ({
   flow?: Flow;
   compact?: boolean;
 }) => {
-  const formattedAmount = formatNumber(amount);
-  if (!formattedAmount) {
-    return (
-      <span className="text-muted small" data-cy="transactionAmountMissing">
-        —
-      </span>
-    );
-  }
-
-  const isIncoming = flow === 'IN';
-  const isOutgoing = flow === 'OUT';
-  const sign = isIncoming ? '+' : isOutgoing ? '−' : '';
-
   return (
     <div className={compact ? '' : 'text-md-end'} data-cy="transactionAmount">
-      <div className={`${compact ? 'fw-semibold' : 'fs-5 fw-semibold'} ${isIncoming ? 'text-success' : isOutgoing ? 'text-danger' : ''}`}>
-        {sign}
-        {formattedAmount} {currency ?? ''}
-      </div>
+      <FinancialAmount amount={amount} currency={currency} flow={flow} compact={compact} dataCy="transactionAmountValue" />
       <TransactionFlowBadge flow={flow} />
     </div>
   );

@@ -30,6 +30,37 @@ Do **not** assert `$.title` — JHipster responds with `title: "Bad Request"`; t
 
 ## How to run tests
 
+### Supported JVM and Mockito instrumentation
+
+Use the Maven wrapper with Java 17. Maven resolves Mockito 5.14.2 and configures its supported startup agent automatically for both Surefire unit tests and Failsafe integration tests. This avoids Mockito's unsupported-on-some-JVMs dynamic self-attach path; do not add an ad-hoc `-javaagent` flag locally.
+
+### Ordinary unit tests
+
+Run the ordinary Java unit suite without starting Testcontainers:
+
+```bash
+./mvnw -ntp --batch-mode -Dskip.installnodenpm -Dskip.npm test
+```
+
+### Integration tests
+
+Integration tests use a disposable PostgreSQL Testcontainers database. Docker Desktop must be running; the test suite creates and removes its own database container.
+
+```bash
+./mvnw -ntp --batch-mode -Dskip.installnodenpm -Dskip.npm \
+  -Dit.test=DescriptionNormalizationRuleResourceIT,DescriptionNormalizationRuleConditionResourceIT verify
+```
+
+### Production package quality gate
+
+Run the normal production packaging command when validating the integrated frontend/backend build:
+
+```bash
+./mvnw -ntp --batch-mode -DskipTests -Pprod package
+```
+
+This command uses Maven-managed Node 22.15.0 and npm 11.3.0, runs the configured `npm install` and production frontend build, then packages the JAR. It intentionally skips Java tests only; it does not skip frontend work or Modernizer. Do not add a Modernizer skip flag to production packaging.
+
 ### Backend — ownership suites
 
 **FinancialAccount (pattern A — direct `user`):**
@@ -646,10 +677,13 @@ The FinancialAccount UI specs cover the product overview (calculated balances/de
 
 ### Summary counts
 
-| Type           | File                              | Tests | Notes                                                                                                                                                                                                                                                            |
-| -------------- | --------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration IT | `TransactionCandidateResourceIT`  | 57    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked manual-post deletion/rollback/concurrency coverage, no rule-on-post, manual draft recovery query, final delete protection, and autosave classification freshness. |
-| Unit — service | `TransactionCandidateServiceTest` | 81    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening. May require Mockito inline attach support in local JVM.                                                                                                   |
+| Type           | File                                     | Tests | Notes                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------- | ---------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Integration IT | `TransactionCandidateResourceIT`         | 57    | Foundation CRUD safety plus manual draft create/autosave/cancel/post command endpoints, locked manual-post deletion/rollback/concurrency coverage, no rule-on-post, manual draft recovery query, final delete protection, and autosave classification freshness.                                                                                                                                                   |
+| Unit — service | `TransactionCandidateServiceTest`        | 73    | Lifecycle/defaults/timestamps/ownership/derivation/final-state behavior plus manual command hardening, including rejection of batch members by standalone CRUD. Mockito instrumentation is supplied automatically by the Maven test configuration.                                                                                                                                                                 |
+| Integration IT | `TransactionBatchCommandServiceIT`       | 5     | PostgreSQL-backed internal-batch defaults/ownership, stable positions and gaps, presence-aware patch and repair issues, material batch/candidate versioning with independent row commands, category/tag manual provenance plus inactive historical references, candidate-version conflicts, and physical discard.                                                                                                  |
+| Integration IT | `TransactionBatchCsvAppendServiceIT`     | 6     | PostgreSQL-backed canonical append/replay receipts, same-key concurrency, repairable currency mismatch, CSV-only normalization before classification, pure preview, empty-only category application, add-only tags, suppression protection, explicit accepted tag restoration, per-domain applied-rule attribution with deletion-safe snapshots, structural-file rejection, and representative 40/500-row appends. |
+| Migration IT   | `TransactionBatchPersistenceMigrationIT` | 1     | Isolated PostgreSQL Liquibase coverage of OPEN/PUBLISHED root-state checks, candidate batch membership and position uniqueness, and temporary-child cascade cleanup.                                                                                                                                                                                                                                               |
 
 **Run:**
 
@@ -673,6 +707,8 @@ Key TC-1/TC-2A assertions:
 - `CANCELLED` candidates cannot be mutated as drafts.
 - deleting a candidate clears candidate tag join rows.
 - candidates do not affect `FinancialAccountBalanceService`, which reads only posted `FinancialTransaction` rows.
+- TransactionBatch foundation keeps standalone manual creation/recovery/posting batchless; generic/manual candidate routes reject a batch member, while the internal batch commands own membership, position, category/tags, candidate version, and discard.
+- `FinancialAccountServiceTest` verifies ordinary account deletion rejects a live batch before legacy ingestion or ledger cleanup; hard delete removes batch candidates before their roots, preserving unrelated catalog and final-ledger data.
 - `POST /api/transaction-candidates/manual` creates current-user MANUAL DRAFT candidates and rejects client-controlled status/server fields.
 - `PATCH /api/transaction-candidates/{id}/manual-draft` updates editable draft fields, derives amount/flow from signedAmount, and recalculates DRAFT vs READY_TO_POST.
 - `POST /api/transaction-candidates/{id}/cancel` marks non-final manual drafts CANCELLED and sets `cancelledAt`.
@@ -2762,6 +2798,10 @@ Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; l
 
 **Scope:** canonical CSV import workflow. I1 creates persisted workflows. I2B adds review actions. I2C confirms ready review rows into `FinancialTransaction` rows. FILE candidate preparation/sync exposes optional prepared candidate summaries in the workflow response. Ingestion-scoped candidate classification commands power unified category/tag review, and Confirm Import posts reviewed `FILE_IMPORT` candidates directly.
 
+### Historical (retired) CSV Ingestion v1 tests
+
+The following CSV Ingestion v1 coverage is retained as historical evidence only. The FILE workflow, its browser specs, FileIngestion and IngestionRecord ResourceIT/service tests, and generated UI routes were intentionally removed. Current CSV product coverage is the Transaction Batch suite below; migration coverage is exercised by clean-database API ingestion integration tests.
+
 ### I1A unit tests — parser/validator
 
 - exact header accepted.
@@ -2836,6 +2876,12 @@ Covered by `transaction-ingestion-workflow-detail.spec.tsx`.
 - `PARTIALLY_COMPLETED` renders as Import partially completed / Importación parcialmente completada, but it is not expected in the current CSV review flow.
 - Duplicate checksum warning renders as a non-blocking warning.
 - Row table renders statuses strictly from `row.status`, including `DISABLED`.
+- INGESTION-POLISH-2 focused Jest coverage verifies the six-column desktop candidate queue, compact signed amount/current category/tags, expansion state and secondary data, explicit category/tag/description suggestion actions, and preserved row actions.
+- INGESTION-POLISH-3 focused Jest coverage verifies that the saved category/tag values remain primary, suggestion Apply controls have domain-specific accessible names, a `NOT_EVALUATED` saved status can truthfully coexist with a transient preview, and server-confirmed application feedback does not fabricate affected-row counts. Existing responsive queue, local-filter scope, manual-override, contextual-rule, and Confirm Import tests remain the regression guard.
+- INGESTION-POLISH-4 focused Jest/Cypress coverage verifies that Confirm Import first opens a modal with persisted workflow context, cancellation sends no confirm command, one pending confirmation cannot submit twice, the existing bodyless confirm command remains the only mutation, and completed/recovery presentation uses server-confirmed workflow data. The workflow Cypress spec verifies that opening the dialog does not emit `POST /confirm` and that its explicit submit does.
+- The same focused coverage verifies the local All / With suggestions / With errors / Disabled filters, accurate visible counts, empty-state/reset behavior, and that a global reevaluation request remains ingestion-scoped while a filter is active.
+- Responsive unit coverage renders only mobile cards at the narrow breakpoint, exposes category/tags and general edit/actions only after expansion, and does not duplicate mutation controls across the desktop/mobile presentations.
+- An active general row edit remains intact when a filter hides it; unrelated review mutations are disabled until it is saved or cancelled.
 
 `file-ingestion-update.spec.tsx` covers the cleaned generated FileIngestion write routes:
 
@@ -2919,6 +2965,7 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - candidate-backed preview respects TransactionRule FLOW/category semantics; the regression case covers an Uber EXPENSE rule with `FLOW = OUT`, where an OUT row receives the category/tag suggestion and an IN refund row does not.
 - direct deletion of a confirmed FILE_IMPORT FinancialTransaction remains available and transitions its record to `DELETED_AFTER_IMPORT`; workflow-level TransactionIngestion delete remains the controlled cleanup path for deleting the whole workflow tree.
 - A READY review with valid rows missing candidates automatically prepares FILE_IMPORT candidates once for the missing-row set, reloads the workflow, calls candidate rule preview, and keeps row review plus classification in one table.
+- INGESTION-POLISH-1/2 frontend coverage verifies the product review header's account/file/status context, lifecycle-accurate compact counters, collapsed keyboard-operable file-details disclosure, grouped review controls, EN/ES labels, and the six-column candidate queue with expansion. Cypress expands the persisted FILE workflow journey with header, summary, filtered queue, row expansion, contextual rules, application, and Confirm Import.
 - The unified table displays transient suggestions only for rows returned by candidate preview, filters category options by row flow, and persists user/apply/no-suggestion review decisions on `TransactionCandidate`.
 - Unified category/tag decisions survive refresh because workflow row candidate summaries reload persisted selections.
 - Transaction Ingestion tag-selector coverage uses the shared `ProductTagSelector`: no native tag multi-select remains; persisted tags render as color-accented removable pills; active-only Add tag search prevents duplicates; inactive historical selections remain visible/removable but are unavailable for new assignment. The existing ingestion-scoped classification PATCH remains the only persistence path. Jest and Cypress keep transient rule suggestions distinct from persisted pills, cover remove/add/reload, per-row and batch apply, reevaluate, auto-apply, and protected manual selections.
@@ -2927,7 +2974,7 @@ CSV review row action tests continue to cover the canonical mutation flow:
   `INGESTION_E2E_USERNAME=user INGESTION_E2E_PASSWORD=user npm run e2e:headless -- --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
   `e2e:headless` first waits for application health on the configured default backend port (normally `http://127.0.0.1:8080/management/health`). When intentionally validating an isolated app on another local port, run Cypress directly with its matching base URL after the app health endpoint is UP, for example:
   `npm run e2e:cypress -- --config baseUrl=http://localhost:18080 --spec "src/test/javascript/cypress/e2e/entity/transaction-ingestion-workflow.cy.ts"`.
-- The workflow E2E also asserts all four global reevaluation controls and the eligible-row action are visible, sends their description/candidate-preview requests with the correct global or row scope, and proves no rule-apply or confirm-no-suggestions request occurs until the test explicitly applies the relevant domain suggestion. It verifies per-row category/tag apply uses `CATEGORY`/`TAGS`, the global category action leaves tag suggestions pending until the global tag action runs, and description application does not invoke category/tag rule application or Confirm Import.
+- The workflow E2E also asserts all four global reevaluation controls and the eligible-row action are visible, sends their description/candidate-preview requests with the correct global or row scope, and proves no rule-apply or confirm-no-suggestions request occurs until the test explicitly applies the relevant domain suggestion. It verifies per-row category/tag apply uses `CATEGORY`/`TAGS`, the global category action leaves tag suggestions pending until the global tag action runs, and description application does not invoke category/tag rule application or Confirm Import. It additionally exercises a narrow viewport card expansion without the desktop table.
 - Contextual-rule Jest coverage verifies scratch and selected-row normalization/classification forms, immutable-original/current-candidate prefill, selected-row identity, no implicit `ACCOUNT` condition, active-only outputs for new TransactionRules, save-only isolation, row/all reevaluation scopes, source-unavailable handling, and save-success/reevaluation-failure feedback without duplicate create requests. The Description Rule form also has a pending-save duplicate-submit regression test.
 - The Transaction Ingestion workflow E2E creates both rule kinds from scratch and from a row, exercises save-only plus row/all reevaluation actions, confirms the normalization/classification explanations and prefilled typed conditions, and asserts that scoped requests stay within the current ingestion. It continues through review/application and Confirm Import.
 - Cypress workflow hardening coverage also includes:
@@ -2947,6 +2994,7 @@ CSV review row action tests continue to cover the canonical mutation flow:
 - Candidate-backed classification persists category/tags on prepared `FILE_IMPORT` candidates only; it does not persist category/tags into `rawData` and does not create transactions before Confirm Import.
 - TI-CONFIG-0A coverage proves server-owned classification provenance: manual category set/replace/clear maps to `MANUAL`/`MANUAL`/absent; category-only edits preserve tag sources; tag multi-select promotes every retained/new submitted association to `MANUAL`, removes omitted associations, and creates no duplicate candidate/tag row; rule application marks only newly applied values `AUTOMATIC` and preserves `MANUAL` values; prepare/sync and read-only preview/reevaluation preserve provenance; Confirm Import copies category/tags but not provenance.
 - `TransactionCandidateClassificationProvenanceMigrationIT` creates a pre-provenance PostgreSQL schema and runs the actual Liquibase changeset. It verifies conservative historical mapping (`USER_SELECTED` to `MANUAL`, all other historic classifications to `AUTOMATIC`, null category remains null), association id/unique/non-null-source constraints, and candidate/tag foreign-key integrity.
+- Liquibase migration fixtures use `MigrationTestSchemaScope` on one auto-commit, test-owned JDBC session: it captures the session's actual `search_path`, creates/selects and drops the temporary schema, then restores that exact setting before the connection returns to the pool. `MigrationTestSchemaScopeIT` uses an isolated one-connection Hikari pool plus PostgreSQL backend identity to prove success and intentional-failure cleanup leave no schema behind and allow an ordinary `jhi_user` query after the same session is reborrowed.
 - Candidate cleanup coverage verifies row invalidation removes pre-post candidates with association rows, individual candidate deletion uses orphan removal, workflow/account bulk cleanup removes association rows before bulk candidate deletion, and Category/Tag delete guards detect candidate references.
 - TC-3C.2 candidate preview/apply uses `TransactionOrigin.FILE_IMPORT` and returns candidate-scoped suggestions without using `/api/financial-transactions/rule-preview` or the legacy ingestion `classification-preview` endpoint as the UI source of truth.
 - TC-3D.2 frontend confirm reloads and validates persisted candidates, then calls `/confirm` with no legacy `records`/category/tag payload.
@@ -3143,3 +3191,35 @@ Focused coverage lives in `FinancialAccountResourceIT` (owner-scoped selectable 
 ## CAT-UX-3 — Tag product UX
 
 `npm run jest -- tag` covers product list/detail presentation (compact color-accented identity chip with adjacent translated status, secondary description, and no technical metadata), create/edit hydration, an aligned native picker plus editable hex field without a preview, exact hex validation, product-safe duplicate copy, and candidate-reference delete wording. `tag.cy.ts` covers creating, presenting, editing color/description, deactivating/reactivating, safe deletion, and the candidate-reference deletion block. Existing `TagResourceIT` and `TagServiceTest` remain the source for ownership, historical-only selection, timestamp, cleanup, and delete-guard behavior because CAT-UX-3 adds no backend behavior.
+
+## Transaction Batch — internal publication and receipt
+
+`TransactionBatchPublishServiceIT` runs against the isolated PostgreSQL Testcontainers database and covers atomic current-value publication, category/tag copy, `FILE_IMPORT` origin, transition to a root-only receipt, replay with an obsolete expected version, different-key rejection, incomplete-row all-or-nothing rejection, inactive persisted category retention, exact expiry boundary, and cleanup that removes only the receipt while retaining final transactions. The service has no rule-evaluator dependency, which is the structural regression guard that publish cannot reevaluate or auto-apply classifications.
+
+The legacy-retirement regression checks prove that the forward Liquibase migration removes old FILE workflow tables and links while preserving API ingestion metadata and final financial transactions. `ApiIngestionResourceIT` exercises that migration against a clean isolated PostgreSQL database; `FinancialAccountResourceIT` verifies the retained account-deletion tree; and `TransactionBatchCsvAppendServiceIT` verifies CSV candidates belong to a batch rather than an old ingestion record.
+
+The Testcontainers JDBC customizer sets `sslmode=disable` for its disposable non-TLS PostgreSQL instance. This keeps Liquibase/Testcontainers startup isolated and avoids a host-JDK SSL handshake before integration tests begin; it does not affect application runtime datasource configuration.
+
+## Transaction Batch — authenticated API and product workspace
+
+Focused frontend coverage is `npm run jest -- transaction-batch menu.spec`. It verifies the product list route, direct persisted category editing with category color identity, separate explicit rule suggestions, the A-to-B stale accepted-intent reconciliation, and the local pre-publication invalid-row guard. It also covers contextual DNR/TR creation: CSV-only `sourceDescription` prefill, no fabricated manual baseline, current-description/flow classification prefill with no implicit account condition, save-only isolation, and save-success/reevaluation-failure retry without a duplicate create. `transaction-batch.spec.tsx` also verifies persisted **Aplicada por** attribution for description/category/per-tag values, a live-rule link versus a deleted-rule text snapshot, and its separation from a pending **Sugerida por** preview. `financial-transaction-manual-draft.spec.tsx` verifies recovered manual category/tag attribution, including a deleted-rule snapshot. `menu.spec.tsx` asserts that Transaction Batches replaces the legacy FILE/Transaction Ingestion product entries.
+
+The browser acceptance spec must run against an isolated backend/database and cover: account-selected batch creation, manual row add/edit/category/tags/delete, append CSV and same-key retry behavior, local filters over the complete workspace, contextual DNR/TR creation through the real configured editors, save-only/row/batch reevaluation scopes, explicit and automatic rule behavior, invalid-row publish block, publish confirmation and receipt recovery, discard confirmation, and normal navigation to final transactions. It must not run against the developer's regular `localhost:9000` database.
+
+### Transaction Batch-4 acceptance matrix
+
+The browser spec `transaction-batch.cy.ts` uses Chrome against a disposable PostgreSQL database and the packaged application. It covers these product interactions directly: create an account-scoped batch, add an incomplete manual row, repair and persist it, append CSV without replacing that row, reload the workspace, use the Manual filter, edit category and tags in sequence, physically delete a row, discard a separate OPEN workspace, open/cancel the publication confirmation, publish, and recover a live receipt after reload. It also captures the open-batch list, repairable row, desktop queue, expanded mobile row, confirmation modal, and receipt.
+
+| Approved concern                                                                             | Browser evidence                                                                                                                 | Complementary authoritative coverage                                                                         |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Candidate ownership, membership, omitted/null, row versions, and physical discard            | Real authenticated workspace requests from the product flow                                                                      | `TransactionBatchCommandServiceIT`, `TransactionBatchResourceIT`                                             |
+| CSV append order, same-key replay, repairable CSV issues, structural failure and 40/500 rows | Real UI append retaining existing manual work                                                                                    | `TransactionBatchCsvAppendServiceIT`                                                                         |
+| DNR/TR preview, autoapply, protection/suppression and explicit stale-apply behavior          | Product suggestion surface and explicit Apply control; a UI preview A changed to B is reconciled rather than silently applying B | `TransactionBatchCsvAppendServiceIT` and rule service tests                                                  |
+| Contextual DNR/TR authoring and follow-up reevaluation                                       | Real configured DNR/TR modal from batch/row, CSV baseline, mobile modal, and saved-rule/failed-reevaluation state                | `transaction-batch.spec.tsx`, `transaction-batch-rule-creation-modal.spec.tsx`, `TransactionBatchResourceIT` |
+| Sequential local category/tag changes and no stale-version overwrite                         | Real UI category then tag mutation/reload                                                                                        | Batch command/evaluation integration tests cover external stale conflicts                                    |
+| Publish atomicity, values/origins, replay, receipt expiry, and temporary aggregate cleanup   | Modal → publish → reload/recovered receipt                                                                                       | `TransactionBatchPublishServiceIT` with PostgreSQL and controlled clock                                      |
+| Individual manual draft/final transaction and account/transfer regression                    | Existing isolated `financial-transaction.cy.ts`, account, and transfer suites                                                    | Existing resource/service integration tests                                                                  |
+
+`FinancialTransactionResourceIT.updatePostedFinancialTransactionDoesNotCreateCandidateOrApplyRules` is the direct posted-transaction edit regression: it updates an existing final transaction to match a rule, then verifies category/tags remain direct-edit values and `TransactionCandidate` count is unchanged. This is distinct from batch publication, which already has no evaluator dependency.
+
+The browser acceptance intentionally does not simulate server clocks or lock races. Those are deterministic Java integration tests with isolated PostgreSQL, not timing-sensitive browser assertions. Native discard confirmation is asserted through the browser confirmation callback; it has no DOM surface to capture as a screenshot.

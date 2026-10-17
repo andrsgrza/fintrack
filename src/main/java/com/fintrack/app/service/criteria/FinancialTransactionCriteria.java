@@ -94,8 +94,6 @@ public class FinancialTransactionCriteria implements Serializable, Criteria {
 
     private LongFilter incomingInternalTransferId;
 
-    private LongFilter ingestionRecordId;
-
     private Boolean distinct;
 
     public FinancialTransactionCriteria() {}
@@ -119,7 +117,6 @@ public class FinancialTransactionCriteria implements Serializable, Criteria {
         this.tagsId = other.optionalTagsId().map(LongFilter::copy).orElse(null);
         this.outgoingInternalTransferId = other.optionalOutgoingInternalTransferId().map(LongFilter::copy).orElse(null);
         this.incomingInternalTransferId = other.optionalIncomingInternalTransferId().map(LongFilter::copy).orElse(null);
-        this.ingestionRecordId = other.optionalIngestionRecordId().map(LongFilter::copy).orElse(null);
         this.distinct = other.distinct;
     }
 
@@ -470,25 +467,6 @@ public class FinancialTransactionCriteria implements Serializable, Criteria {
         this.incomingInternalTransferId = incomingInternalTransferId;
     }
 
-    public LongFilter getIngestionRecordId() {
-        return ingestionRecordId;
-    }
-
-    public Optional<LongFilter> optionalIngestionRecordId() {
-        return Optional.ofNullable(ingestionRecordId);
-    }
-
-    public LongFilter ingestionRecordId() {
-        if (ingestionRecordId == null) {
-            setIngestionRecordId(new LongFilter());
-        }
-        return ingestionRecordId;
-    }
-
-    public void setIngestionRecordId(LongFilter ingestionRecordId) {
-        this.ingestionRecordId = ingestionRecordId;
-    }
-
     public Boolean getDistinct() {
         return distinct;
     }
@@ -536,7 +514,6 @@ public class FinancialTransactionCriteria implements Serializable, Criteria {
             Objects.equals(tagsId, that.tagsId) &&
             Objects.equals(outgoingInternalTransferId, that.outgoingInternalTransferId) &&
             Objects.equals(incomingInternalTransferId, that.incomingInternalTransferId) &&
-            Objects.equals(ingestionRecordId, that.ingestionRecordId) &&
             Objects.equals(distinct, that.distinct)
         );
     }
@@ -562,7 +539,6 @@ public class FinancialTransactionCriteria implements Serializable, Criteria {
             tagsId,
             outgoingInternalTransferId,
             incomingInternalTransferId,
-            ingestionRecordId,
             distinct
         );
     }
@@ -589,7 +565,6 @@ public class FinancialTransactionCriteria implements Serializable, Criteria {
             optionalTagsId().map(f -> "tagsId=" + f + ", ").orElse("") +
             optionalOutgoingInternalTransferId().map(f -> "outgoingInternalTransferId=" + f + ", ").orElse("") +
             optionalIncomingInternalTransferId().map(f -> "incomingInternalTransferId=" + f + ", ").orElse("") +
-            optionalIngestionRecordId().map(f -> "ingestionRecordId=" + f + ", ").orElse("") +
             optionalDistinct().map(f -> "distinct=" + f + ", ").orElse("") +
         "}";
     }

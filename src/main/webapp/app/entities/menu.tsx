@@ -14,6 +14,9 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/financial-transaction">
         <Translate contentKey="global.menu.entities.financialTransaction" />
       </MenuItem>
+      <MenuItem icon="asterisk" to="/transaction-batches">
+        Lotes de transacciones
+      </MenuItem>
       <MenuItem icon="asterisk" to="/category">
         <Translate contentKey="global.menu.entities.category" />
       </MenuItem>
@@ -38,23 +41,8 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/internal-transfer">
         <Translate contentKey="global.menu.entities.internalTransfer" />
       </MenuItem>
-      <MenuItem icon="asterisk" to="/transaction-ingestion">
-        <Translate contentKey="global.menu.entities.transactionIngestion" />
-      </MenuItem>
-      <MenuItem icon="asterisk" to="/file-ingestion">
-        <Translate contentKey="global.menu.entities.fileIngestion" />{' '}
-        <Badge color="secondary" pill>
-          <Translate contentKey="global.menu.entities.technical">Technical</Translate>
-        </Badge>
-      </MenuItem>
       <MenuItem icon="asterisk" to="/api-ingestion">
         <Translate contentKey="global.menu.entities.apiIngestion" />{' '}
-        <Badge color="secondary" pill>
-          <Translate contentKey="global.menu.entities.technical">Technical</Translate>
-        </Badge>
-      </MenuItem>
-      <MenuItem icon="asterisk" to="/ingestion-record">
-        <Translate contentKey="global.menu.entities.ingestionRecord" />{' '}
         <Badge color="secondary" pill>
           <Translate contentKey="global.menu.entities.technical">Technical</Translate>
         </Badge>

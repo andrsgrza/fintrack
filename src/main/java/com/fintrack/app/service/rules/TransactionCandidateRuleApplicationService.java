@@ -4,6 +4,7 @@ import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionCandidateTag;
+import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import java.util.ArrayList;
@@ -32,7 +33,16 @@ public class TransactionCandidateRuleApplicationService {
         Function<Long, Category> categoryResolver,
         Function<Long, Tag> tagResolver
     ) {
-        return applyFillEmptyOnly(candidate, evaluation, preserveUserSelectedClassification, true, true, categoryResolver, tagResolver);
+        return applyFillEmptyOnly(
+            candidate,
+            evaluation,
+            preserveUserSelectedClassification,
+            true,
+            true,
+            categoryResolver,
+            tagResolver,
+            ignored -> null
+        );
     }
 
     /**
@@ -47,8 +57,30 @@ public class TransactionCandidateRuleApplicationService {
         Function<Long, Category> categoryResolver,
         Function<Long, Tag> tagResolver
     ) {
-        boolean categoryApplied = applyCategory && applySuggestedCategory(candidate, evaluation, categoryResolver);
-        List<Long> tagIdsApplied = applyTags ? applySuggestedTags(candidate, evaluation, tagResolver) : List.of();
+        return applyFillEmptyOnly(
+            candidate,
+            evaluation,
+            preserveUserSelectedClassification,
+            applyCategory,
+            applyTags,
+            categoryResolver,
+            tagResolver,
+            ignored -> null
+        );
+    }
+
+    public TransactionCandidateRuleApplicationResult applyFillEmptyOnly(
+        TransactionCandidate candidate,
+        TransactionRuleEvaluationResult evaluation,
+        boolean preserveUserSelectedClassification,
+        boolean applyCategory,
+        boolean applyTags,
+        Function<Long, Category> categoryResolver,
+        Function<Long, Tag> tagResolver,
+        Function<Long, TransactionRule> ruleResolver
+    ) {
+        boolean categoryApplied = applyCategory && applySuggestedCategory(candidate, evaluation, categoryResolver, ruleResolver);
+        List<Long> tagIdsApplied = applyTags ? applySuggestedTags(candidate, evaluation, tagResolver, ruleResolver) : List.of();
         TransactionCandidateClassificationReviewStatus recommendedClassificationReviewStatus = recommendedClassificationReviewStatus(
             preserveUserSelectedClassification,
             categoryApplied,
@@ -78,9 +110,32 @@ public class TransactionCandidateRuleApplicationService {
         Function<Long, Category> categoryResolver,
         Function<Long, Tag> tagResolver
     ) {
-        boolean categoryApplied = applyCategory && synchronizeCategory(candidate, evaluation, protectManualChanges, categoryResolver);
+        return applyAutomatically(
+            candidate,
+            evaluation,
+            applyCategory,
+            applyTags,
+            protectManualChanges,
+            categoryResolver,
+            tagResolver,
+            ignored -> null
+        );
+    }
+
+    public TransactionCandidateRuleApplicationResult applyAutomatically(
+        TransactionCandidate candidate,
+        TransactionRuleEvaluationResult evaluation,
+        boolean applyCategory,
+        boolean applyTags,
+        boolean protectManualChanges,
+        Function<Long, Category> categoryResolver,
+        Function<Long, Tag> tagResolver,
+        Function<Long, TransactionRule> ruleResolver
+    ) {
+        boolean categoryApplied =
+            applyCategory && synchronizeCategory(candidate, evaluation, protectManualChanges, categoryResolver, ruleResolver);
         TagSynchronizationResult tagSynchronization = applyTags
-            ? synchronizeTags(candidate, evaluation, protectManualChanges, tagResolver)
+            ? synchronizeTags(candidate, evaluation, protectManualChanges, tagResolver, ruleResolver)
             : TagSynchronizationResult.unchanged();
         boolean protectedManualClassification = protectManualChanges && candidate.hasManualClassification();
         boolean hasScopedSuggestions =
@@ -97,7 +152,8 @@ public class TransactionCandidateRuleApplicationService {
     private boolean applySuggestedCategory(
         TransactionCandidate candidate,
         TransactionRuleEvaluationResult evaluation,
-        Function<Long, Category> categoryResolver
+        Function<Long, Category> categoryResolver,
+        Function<Long, TransactionRule> ruleResolver
     ) {
         if (
             candidate.getCategory() == null &&
@@ -106,6 +162,7 @@ public class TransactionCandidateRuleApplicationService {
         ) {
             candidate.setCategory(categoryResolver.apply(evaluation.suggestedCategory().categoryId()));
             candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+            candidate.setCategoryAppliedRuleAttribution(ruleResolver.apply(evaluation.suggestedCategory().sourceRuleId()));
             return true;
         }
         return false;
@@ -115,7 +172,8 @@ public class TransactionCandidateRuleApplicationService {
         TransactionCandidate candidate,
         TransactionRuleEvaluationResult evaluation,
         boolean protectManualChanges,
-        Function<Long, Category> categoryResolver
+        Function<Long, Category> categoryResolver,
+        Function<Long, TransactionRule> ruleResolver
     ) {
         boolean manualCategoryIsProtected =
             protectManualChanges && candidate.getCategorySource() == TransactionCandidateClassificationSource.MANUAL;
@@ -140,13 +198,17 @@ public class TransactionCandidateRuleApplicationService {
             candidate.setCategory(suggestedCategory);
         }
         candidate.setCategorySource(TransactionCandidateClassificationSource.AUTOMATIC);
+        if (categoryChanged || provenanceChanged) {
+            candidate.setCategoryAppliedRuleAttribution(ruleResolver.apply(suggestion.sourceRuleId()));
+        }
         return categoryChanged || provenanceChanged;
     }
 
     private List<Long> applySuggestedTags(
         TransactionCandidate candidate,
         TransactionRuleEvaluationResult evaluation,
-        Function<Long, Tag> tagResolver
+        Function<Long, Tag> tagResolver,
+        Function<Long, TransactionRule> ruleResolver
     ) {
         List<Long> tagIdsApplied = new ArrayList<>();
         Set<Long> tagIds = currentTagIds(candidate);
@@ -155,7 +217,7 @@ public class TransactionCandidateRuleApplicationService {
                 continue;
             }
             Tag tag = tagResolver.apply(suggestedTag.tagId());
-            candidate.addTag(tag, TransactionCandidateClassificationSource.AUTOMATIC);
+            candidate.addTag(tag, TransactionCandidateClassificationSource.AUTOMATIC, ruleResolver.apply(suggestedTag.sourceRuleId()));
             tagIds.add(tag.getId());
             tagIdsApplied.add(tag.getId());
         }
@@ -166,7 +228,8 @@ public class TransactionCandidateRuleApplicationService {
         TransactionCandidate candidate,
         TransactionRuleEvaluationResult evaluation,
         boolean protectManualChanges,
-        Function<Long, Tag> tagResolver
+        Function<Long, Tag> tagResolver,
+        Function<Long, TransactionRule> ruleResolver
     ) {
         Set<Long> suggestedTagIds = evaluation
             .suggestedTags()
@@ -175,23 +238,10 @@ public class TransactionCandidateRuleApplicationService {
             .filter(Objects::nonNull)
             .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (!protectManualChanges) {
-            Set<Tag> suggestedTags = suggestedTagIds.stream().map(tagResolver).collect(Collectors.toCollection(LinkedHashSet::new));
-            Set<Long> existingIds = currentTagIds(candidate);
-            boolean provenanceChanged = candidate
-                .getTagAssociations()
-                .stream()
-                .anyMatch(association -> association.getSource() != TransactionCandidateClassificationSource.AUTOMATIC);
-            boolean valuesChanged = !existingIds.equals(suggestedTagIds);
-            candidate.replaceTags(suggestedTags, TransactionCandidateClassificationSource.AUTOMATIC);
-            List<Long> addedTagIds = suggestedTagIds.stream().filter(tagId -> !existingIds.contains(tagId)).toList();
-            return new TagSynchronizationResult(addedTagIds, valuesChanged || provenanceChanged);
-        }
-
         List<Tag> obsoleteAutomaticTags = candidate
             .getTagAssociations()
             .stream()
-            .filter(association -> association.getSource() == TransactionCandidateClassificationSource.AUTOMATIC)
+            .filter(association -> !protectManualChanges || association.getSource() == TransactionCandidateClassificationSource.AUTOMATIC)
             .map(TransactionCandidateTag::getTag)
             .filter(tag -> tag != null && !suggestedTagIds.contains(tag.getId()))
             .toList();
@@ -199,15 +249,53 @@ public class TransactionCandidateRuleApplicationService {
 
         Set<Long> existingIds = currentTagIds(candidate);
         List<Long> addedTagIds = new ArrayList<>();
+        boolean convertedManualAssociation = false;
         for (Long suggestedTagId : suggestedTagIds) {
             Tag suggestedTag = tagResolver.apply(suggestedTagId);
+            TransactionCandidateTag existing = association(candidate, suggestedTagId);
+            TagSuggestion suggestion = suggestion(evaluation, suggestedTagId);
             if (!existingIds.contains(suggestedTagId)) {
-                candidate.addTag(suggestedTag, TransactionCandidateClassificationSource.AUTOMATIC);
+                candidate.addTag(
+                    suggestedTag,
+                    TransactionCandidateClassificationSource.AUTOMATIC,
+                    ruleResolver.apply(suggestion.sourceRuleId())
+                );
                 existingIds.add(suggestedTagId);
                 addedTagIds.add(suggestedTagId);
+            } else if (
+                !protectManualChanges && existing != null && existing.getSource() != TransactionCandidateClassificationSource.AUTOMATIC
+            ) {
+                candidate.addTag(
+                    suggestedTag,
+                    TransactionCandidateClassificationSource.AUTOMATIC,
+                    ruleResolver.apply(suggestion.sourceRuleId())
+                );
+                convertedManualAssociation = true;
             }
         }
-        return new TagSynchronizationResult(addedTagIds, !obsoleteAutomaticTags.isEmpty() || !addedTagIds.isEmpty());
+        return new TagSynchronizationResult(
+            addedTagIds,
+            !obsoleteAutomaticTags.isEmpty() || !addedTagIds.isEmpty() || convertedManualAssociation
+        );
+    }
+
+    private TransactionCandidateTag association(TransactionCandidate candidate, Long tagId) {
+        return candidate
+            .getTagAssociations()
+            .stream()
+            .filter(association -> association.getTag() != null && Objects.equals(association.getTag().getId(), tagId))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private TagSuggestion suggestion(TransactionRuleEvaluationResult evaluation, Long tagId) {
+        return evaluation
+            .suggestedTags()
+            .stream()
+            .filter(suggestion -> Objects.equals(suggestion.tagId(), tagId))
+            .filter(suggestion -> !suggestion.duplicateOfEarlierSuggestion())
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Automatic tag has no contributing rule"));
     }
 
     private TransactionCandidateClassificationReviewStatus recommendedClassificationReviewStatus(

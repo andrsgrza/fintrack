@@ -36,6 +36,7 @@ export const ProductTagSelector = ({
   error = false,
   id = 'product-tag-selector',
   dataCy = 'productTagSelector',
+  tagAdornment,
 }: {
   selectedTags: ProductTagSelectorTag[];
   availableTags: ProductTagSelectorTag[];
@@ -45,6 +46,8 @@ export const ProductTagSelector = ({
   error?: boolean;
   id?: string;
   dataCy?: string;
+  /** Optional compact metadata rendered inside a selected tag chip. */
+  tagAdornment?: (tag: ProductTagSelectorTag) => React.ReactNode;
 }) => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -75,41 +78,38 @@ export const ProductTagSelector = ({
   return (
     <div data-cy={dataCy} data-testid={dataCy} aria-label={translate('fintrackApp.tag.selector.label')}>
       <div className="d-flex flex-wrap align-items-center gap-2" data-cy={`${dataCy}Selected`} data-testid={`${dataCy}Selected`}>
-        {displayedSelectedTags.length ? (
-          displayedSelectedTags.map((tag, index) => (
-            <span
-              key={tagKey(tag, index)}
-              className="d-inline-flex align-items-center rounded-pill border py-1 ps-2 pe-1 small fw-semibold"
-              data-cy={`${dataCy}Chip`}
-              data-testid={`${dataCy}Chip`}
-              data-color-treatment="tag"
-              style={tagIdentityStyle(tag.color)}
-            >
-              <span>{tag.name}</span>
-              {tag.active === false ? (
-                <span className="ms-1 text-muted" data-cy={`${dataCy}Inactive`} data-testid={`${dataCy}Inactive`}>
-                  · <Translate contentKey="fintrackApp.tag.selector.inactive">Inactive</Translate>
-                </span>
-              ) : null}
-              <button
-                className="btn btn-sm border-0 p-0 ms-1 lh-1 text-body"
-                type="button"
-                aria-label={translate('fintrackApp.tag.selector.remove', { name: tag.name ?? '' })}
-                title={translate('fintrackApp.tag.selector.remove', { name: tag.name ?? '' })}
-                onClick={() => removeTag(tag)}
-                disabled={disabled}
-                data-cy={`${dataCy}Remove`}
-                data-testid={`${dataCy}Remove`}
+        {displayedSelectedTags.length
+          ? displayedSelectedTags.map((tag, index) => (
+              <span
+                key={tagKey(tag, index)}
+                className="d-inline-flex align-items-center rounded-pill border py-1 ps-2 pe-1 small fw-semibold"
+                data-cy={`${dataCy}Chip`}
+                data-testid={`${dataCy}Chip`}
+                data-color-treatment="tag"
+                style={tagIdentityStyle(tag.color)}
               >
-                ×
-              </button>
-            </span>
-          ))
-        ) : (
-          <span className="text-muted small" data-cy={`${dataCy}Empty`}>
-            <Translate contentKey="fintrackApp.tag.selector.empty">No tags</Translate>
-          </span>
-        )}
+                <span>{tag.name}</span>
+                {tag.active === false ? (
+                  <span className="ms-1 text-muted" data-cy={`${dataCy}Inactive`} data-testid={`${dataCy}Inactive`}>
+                    · <Translate contentKey="fintrackApp.tag.selector.inactive">Inactive</Translate>
+                  </span>
+                ) : null}
+                {tagAdornment ? <span className="d-inline-flex align-items-center ms-1">{tagAdornment(tag)}</span> : null}
+                <button
+                  className="btn btn-sm border-0 p-0 ms-1 lh-1 text-body"
+                  type="button"
+                  aria-label={translate('fintrackApp.tag.selector.remove', { name: tag.name ?? '' })}
+                  title={translate('fintrackApp.tag.selector.remove', { name: tag.name ?? '' })}
+                  onClick={() => removeTag(tag)}
+                  disabled={disabled}
+                  data-cy={`${dataCy}Remove`}
+                  data-testid={`${dataCy}Remove`}
+                >
+                  ×
+                </button>
+              </span>
+            ))
+          : null}
 
         <Button
           color="secondary"

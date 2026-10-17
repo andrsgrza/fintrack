@@ -1,21 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  Alert,
-  Badge,
-  Button,
-  ButtonGroup,
-  Col,
-  Form,
-  FormGroup,
-  FormText,
-  Input,
-  InputGroup,
-  InputGroupText,
-  Label,
-  Row,
-  Spinner,
-} from 'reactstrap';
+import { Alert, Badge, Button, Col, Form, FormGroup, FormText, Input, InputGroup, InputGroupText, Label, Row, Spinner } from 'reactstrap';
 import { Translate, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { IconProp } from '@fortawesome/fontawesome-svg-core';
@@ -27,13 +12,14 @@ import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
-import { ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
+import { IAppliedRuleAttribution, ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { ICategory } from 'app/shared/model/category.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
+import { FinancialFlowSelector } from 'app/shared/ui/financial-flow-selector';
 import {
   applyManualDraftRules,
   cancelManualDraft,
@@ -752,23 +738,15 @@ const ManualTransactionMovementSection = ({
           <Label id="financial-transaction-flow-label">
             <Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>
           </Label>
-          <ButtonGroup className="d-flex" role="group" aria-labelledby="financial-transaction-flow-label" data-cy="flow">
-            {Object.keys(TransactionFlow).map(transactionFlow => (
-              <Button
-                key={transactionFlow}
-                type="button"
-                color={draft.flow === transactionFlow ? (transactionFlow === 'OUT' ? 'secondary' : 'success') : 'light'}
-                outline={draft.flow !== transactionFlow}
-                aria-pressed={draft.flow === transactionFlow}
-                data-cy={`flow-${transactionFlow}`}
-                data-testid={`flow-${transactionFlow}`}
-                onClick={() => onFlowChange(transactionFlow as keyof typeof TransactionFlow)}
-                disabled={readOnly}
-              >
-                {translate(`fintrackApp.TransactionFlow.${transactionFlow}`)}
-              </Button>
-            ))}
-          </ButtonGroup>
+          <FinancialFlowSelector
+            flow={draft.flow}
+            onChange={onFlowChange}
+            incomeLabel={translate('fintrackApp.TransactionFlow.IN')}
+            expenseLabel={translate('fintrackApp.TransactionFlow.OUT')}
+            disabled={readOnly}
+            ariaLabelledBy="financial-transaction-flow-label"
+            dataCy="flow"
+          />
         </FormGroup>
       </Col>
       <Col md="6">
@@ -796,8 +774,22 @@ const ManualTransactionMovementSection = ({
   </ProductSection>
 );
 
+const DraftAppliedBy = ({ attribution }: { attribution?: IAppliedRuleAttribution | null }) => {
+  if (!attribution?.name) {
+    return null;
+  }
+
+  return (
+    <div className="small text-muted mt-1" data-testid="manualDraftAppliedRuleAttribution">
+      <Translate contentKey="fintrackApp.financialTransaction.manualDraft.ruleSuggestions.appliedBy">Applied by</Translate>{' '}
+      {attribution.id ? <Link to={`/transaction-rule/${attribution.id}/view`}>{attribution.name}</Link> : attribution.name}
+    </div>
+  );
+};
+
 const ManualTransactionClassificationSection = ({
   draft,
+  candidate,
   categories,
   tags,
   selectedCategory,
@@ -810,6 +802,7 @@ const ManualTransactionClassificationSection = ({
   ruleSuggestions,
 }: {
   draft: ManualDraftFormState;
+  candidate: ITransactionCandidate | null;
   categories: ICategorySelectable[];
   tags: ITagSelectable[];
   selectedCategory: ICategory | null;
@@ -849,6 +842,7 @@ const ManualTransactionClassificationSection = ({
               </option>
             ))}
           </Input>
+          <DraftAppliedBy attribution={candidate?.categoryAppliedByRule} />
         </FormGroup>
       </Col>
       <Col md="6">
@@ -866,6 +860,9 @@ const ManualTransactionClassificationSection = ({
             loading={tagsLoading}
             error={tagsLoadError}
           />
+          {(candidate?.selectedTags ?? []).map(selection => (
+            <DraftAppliedBy key={selection.tagId} attribution={selection.appliedByRule} />
+          ))}
         </FormGroup>
       </Col>
     </Row>
@@ -1579,6 +1576,7 @@ export const FinancialTransactionManualDraft = () => {
 
         <ManualTransactionClassificationSection
           draft={draft}
+          candidate={candidate}
           categories={compatibleCategories}
           tags={selectableTags}
           selectedCategory={toCategoryPresentation(selectedCategory)}

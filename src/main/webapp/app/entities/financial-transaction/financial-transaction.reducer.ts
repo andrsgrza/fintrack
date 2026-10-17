@@ -12,8 +12,6 @@ const initialState = {
   updating: false,
   totalItems: 0,
   updateSuccess: false,
-  ingestionRecordParentCandidates: [] as IFinancialTransaction[],
-  loadingIngestionRecordParentCandidates: false,
   currentListRequestId: null as string | null,
 };
 
@@ -78,12 +76,6 @@ export const partialUpdateEntity = createAsyncThunk(
   { serializeError: serializeAxiosError },
 );
 
-export const getEntitiesWhereIngestionRecordIsNull = createAsyncThunk(
-  'financialTransaction/fetch_ingestion_record_parent_candidates',
-  async () => axios.get<IFinancialTransaction[]>(`${apiUrl}/ingestion-record-is-null`),
-  { serializeError: serializeAxiosError },
-);
-
 export const deleteEntity = createAsyncThunk(
   'financialTransaction/delete_entity',
   async (id: string | number, thunkAPI) => {
@@ -137,17 +129,6 @@ export const FinancialTransactionSlice = createEntitySlice({
         state.updating = false;
         state.updateSuccess = true;
         state.entity = {};
-      })
-      .addCase(getEntitiesWhereIngestionRecordIsNull.pending, state => {
-        (state as FinancialTransactionState).loadingIngestionRecordParentCandidates = true;
-      })
-      .addCase(getEntitiesWhereIngestionRecordIsNull.fulfilled, (state, action) => {
-        const typedState = state as FinancialTransactionState;
-        typedState.loadingIngestionRecordParentCandidates = false;
-        typedState.ingestionRecordParentCandidates = action.payload.data;
-      })
-      .addCase(getEntitiesWhereIngestionRecordIsNull.rejected, state => {
-        (state as FinancialTransactionState).loadingIngestionRecordParentCandidates = false;
       })
       .addMatcher(isFulfilled(createEntity, updateEntity, partialUpdateEntity), (state, action) => {
         state.updating = false;

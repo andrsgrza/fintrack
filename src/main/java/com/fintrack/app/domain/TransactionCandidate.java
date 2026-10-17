@@ -5,6 +5,7 @@ import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -37,6 +38,11 @@ public class TransactionCandidate implements Serializable {
     @Column(name = "id")
     private Long id;
 
+    /** Optimistic concurrency token for one candidate and its mutable child aggregate. */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "source", nullable = false)
@@ -66,6 +72,40 @@ public class TransactionCandidate implements Serializable {
     @Enumerated(EnumType.STRING)
     @Column(name = "category_source")
     private TransactionCandidateClassificationSource categorySource;
+
+    /** Temporary explanation of the TransactionRule that produced the current automatic category. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_applied_rule_id")
+    private TransactionRule categoryAppliedRule;
+
+    /** Snapshot of the applied rule's display name; retained if the live rule is later deleted or renamed. */
+    @Size(max = 100)
+    @Column(name = "category_applied_rule_name", length = 100)
+    private String categoryAppliedRuleName;
+
+    /** Explicit manual clear prevents later automatic category filling while protection is enabled. */
+    @NotNull
+    @Column(name = "category_manual_clear", nullable = false)
+    private Boolean categoryManualClear = false;
+
+    /** Current-description provenance. sourceDescription is reserved for future CSV rows only. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "description_source")
+    private TransactionCandidateDescriptionSource descriptionSource;
+
+    /** Temporary explanation of the DescriptionNormalizationRule that produced the current automatic description. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "description_applied_rule_id")
+    private DescriptionNormalizationRule descriptionAppliedRule;
+
+    /** Snapshot of the applied rule's display name; retained if the live rule is later deleted or renamed. */
+    @Size(max = 100)
+    @Column(name = "description_applied_rule_name", length = 100)
+    private String descriptionAppliedRuleName;
+
+    @Size(max = 500)
+    @Column(name = "source_description", length = 500)
+    private String sourceDescription;
 
     @Column(name = "transaction_date")
     private LocalDate transactionDate;
@@ -135,16 +175,22 @@ public class TransactionCandidate implements Serializable {
     )
     private Category category;
 
+    /** Optional membership in the new batch workspace. A standalone candidate has no batch and no row position. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties(value = { "account", "fileIngestion", "apiIngestion", "financialTransactions", "records" }, allowSetters = true)
-    private TransactionIngestion transactionIngestion;
+    @JoinColumn(name = "transaction_batch_id")
+    private TransactionBatch transactionBatch;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties(value = { "financialTransaction", "transactionIngestion" }, allowSetters = true)
-    private IngestionRecord ingestionRecord;
+    @Column(name = "row_position")
+    private Long rowPosition;
 
     @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<TransactionCandidateTag> tagAssociations = new HashSet<>();
+
+    @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TransactionCandidateTagSuppression> tagSuppressions = new HashSet<>();
+
+    @OneToMany(mappedBy = "transactionCandidate", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TransactionCandidateInputIssue> inputIssues = new HashSet<>();
 
     public Long getId() {
         return this.id;
@@ -157,6 +203,10 @@ public class TransactionCandidate implements Serializable {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public TransactionCandidateSource getSource() {
@@ -230,6 +280,74 @@ public class TransactionCandidate implements Serializable {
 
     public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
         this.categorySource = categorySource;
+        if (categorySource != TransactionCandidateClassificationSource.AUTOMATIC) {
+            clearCategoryAppliedRuleAttribution();
+        }
+    }
+
+    public Boolean getCategoryManualClear() {
+        return categoryManualClear;
+    }
+
+    public void setCategoryManualClear(Boolean categoryManualClear) {
+        this.categoryManualClear = Boolean.TRUE.equals(categoryManualClear);
+    }
+
+    public TransactionCandidateDescriptionSource getDescriptionSource() {
+        return descriptionSource;
+    }
+
+    public void setDescriptionSource(TransactionCandidateDescriptionSource descriptionSource) {
+        this.descriptionSource = descriptionSource;
+        if (descriptionSource != TransactionCandidateDescriptionSource.AUTOMATIC) {
+            clearDescriptionAppliedRuleAttribution();
+        }
+    }
+
+    public TransactionRule getCategoryAppliedRule() {
+        return categoryAppliedRule;
+    }
+
+    public String getCategoryAppliedRuleName() {
+        return categoryAppliedRuleName;
+    }
+
+    /** Records the currently effective rule output, not a history of every matched rule. */
+    public void setCategoryAppliedRuleAttribution(TransactionRule rule) {
+        this.categoryAppliedRule = rule;
+        this.categoryAppliedRuleName = rule == null ? null : rule.getName();
+    }
+
+    public void clearCategoryAppliedRuleAttribution() {
+        this.categoryAppliedRule = null;
+        this.categoryAppliedRuleName = null;
+    }
+
+    public DescriptionNormalizationRule getDescriptionAppliedRule() {
+        return descriptionAppliedRule;
+    }
+
+    public String getDescriptionAppliedRuleName() {
+        return descriptionAppliedRuleName;
+    }
+
+    /** Records the currently effective rule output, not a history of every matched rule. */
+    public void setDescriptionAppliedRuleAttribution(DescriptionNormalizationRule rule) {
+        this.descriptionAppliedRule = rule;
+        this.descriptionAppliedRuleName = rule == null ? null : rule.getName();
+    }
+
+    public void clearDescriptionAppliedRuleAttribution() {
+        this.descriptionAppliedRule = null;
+        this.descriptionAppliedRuleName = null;
+    }
+
+    public String getSourceDescription() {
+        return sourceDescription;
+    }
+
+    public void setSourceDescription(String sourceDescription) {
+        this.sourceDescription = sourceDescription;
     }
 
     public LocalDate getTransactionDate() {
@@ -453,33 +571,27 @@ public class TransactionCandidate implements Serializable {
         this.category = category;
         if (category == null) {
             this.categorySource = null;
+            clearCategoryAppliedRuleAttribution();
         }
     }
 
-    public TransactionIngestion getTransactionIngestion() {
-        return this.transactionIngestion;
+    public TransactionBatch getTransactionBatch() {
+        return transactionBatch;
     }
 
-    public TransactionCandidate transactionIngestion(TransactionIngestion transactionIngestion) {
-        this.setTransactionIngestion(transactionIngestion);
-        return this;
+    public void setTransactionBatch(TransactionBatch transactionBatch) {
+        this.transactionBatch = transactionBatch;
+        if (transactionBatch == null) {
+            this.rowPosition = null;
+        }
     }
 
-    public void setTransactionIngestion(TransactionIngestion transactionIngestion) {
-        this.transactionIngestion = transactionIngestion;
+    public Long getRowPosition() {
+        return rowPosition;
     }
 
-    public IngestionRecord getIngestionRecord() {
-        return this.ingestionRecord;
-    }
-
-    public TransactionCandidate ingestionRecord(IngestionRecord ingestionRecord) {
-        this.setIngestionRecord(ingestionRecord);
-        return this;
-    }
-
-    public void setIngestionRecord(IngestionRecord ingestionRecord) {
-        this.ingestionRecord = ingestionRecord;
+    public void setRowPosition(Long rowPosition) {
+        this.rowPosition = rowPosition;
     }
 
     /**
@@ -540,18 +652,34 @@ public class TransactionCandidate implements Serializable {
     }
 
     public void addTag(Tag tag, TransactionCandidateClassificationSource source) {
+        addTag(tag, source, null);
+    }
+
+    /**
+     * Adds or updates one tag association. Only rule-produced automatic tags carry an applied-rule attribution;
+     * manual choices deliberately clear it.
+     */
+    public void addTag(Tag tag, TransactionCandidateClassificationSource source, TransactionRule appliedRule) {
         if (tag == null) return;
         tagAssociations
             .stream()
             .filter(association -> tag.equals(association.getTag()))
             .findFirst()
             .ifPresentOrElse(
-                association -> association.setSource(source),
+                association -> {
+                    association.setSource(source);
+                    association.setAppliedRuleAttribution(
+                        source == TransactionCandidateClassificationSource.AUTOMATIC ? appliedRule : null
+                    );
+                },
                 () -> {
                     TransactionCandidateTag association = new TransactionCandidateTag();
                     association.setTransactionCandidate(this);
                     association.setTag(tag);
                     association.setSource(source);
+                    association.setAppliedRuleAttribution(
+                        source == TransactionCandidateClassificationSource.AUTOMATIC ? appliedRule : null
+                    );
                     tagAssociations.add(association);
                 }
             );
@@ -566,10 +694,46 @@ public class TransactionCandidate implements Serializable {
             .orElse(null);
     }
 
+    public Set<TransactionCandidateTagSuppression> getTagSuppressions() {
+        return tagSuppressions;
+    }
+
+    public boolean isTagSuppressed(Tag tag) {
+        return tagSuppressions.stream().anyMatch(suppression -> tag != null && tag.equals(suppression.getTag()));
+    }
+
+    public void suppressTag(Tag tag) {
+        if (tag == null || isTagSuppressed(tag)) return;
+        TransactionCandidateTagSuppression suppression = new TransactionCandidateTagSuppression();
+        suppression.setTransactionCandidate(this);
+        suppression.setTag(tag);
+        tagSuppressions.add(suppression);
+    }
+
+    public void removeTagSuppression(Tag tag) {
+        tagSuppressions.removeIf(suppression -> tag != null && tag.equals(suppression.getTag()));
+    }
+
+    public Set<TransactionCandidateInputIssue> getInputIssues() {
+        return inputIssues;
+    }
+
+    public void addOrReplaceInputIssue(TransactionCandidateInputIssue issue) {
+        inputIssues.removeIf(existing -> existing.getField() == issue.getField());
+        issue.setTransactionCandidate(this);
+        inputIssues.add(issue);
+    }
+
+    public void removeInputIssue(com.fintrack.app.domain.enumeration.TransactionCandidateInputIssueField field) {
+        inputIssues.removeIf(issue -> issue.getField() == field);
+    }
+
     public boolean hasManualClassification() {
         return (
+            Boolean.TRUE.equals(categoryManualClear) ||
             categorySource == TransactionCandidateClassificationSource.MANUAL ||
-            tagAssociations.stream().anyMatch(association -> association.getSource() == TransactionCandidateClassificationSource.MANUAL)
+            tagAssociations.stream().anyMatch(association -> association.getSource() == TransactionCandidateClassificationSource.MANUAL) ||
+            !tagSuppressions.isEmpty()
         );
     }
 

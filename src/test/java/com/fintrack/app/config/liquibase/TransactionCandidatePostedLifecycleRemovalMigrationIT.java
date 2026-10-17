@@ -34,61 +34,67 @@ class TransactionCandidatePostedLifecycleRemovalMigrationIT {
 
     @Test
     void removesObsoleteColumnsWhenNoPostedCandidatesRemain() throws Exception {
-        String schema = createSchemaWithLegacyCandidateTable("tc_posted_lifecycle_clean_");
-        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
-            statement.execute("set search_path to " + schema);
-            statement.execute("insert into financial_transaction (id) values (100)");
-            statement.execute(
-                "insert into transaction_candidate (id, status, financial_transaction_id, posted_at) values (1, 'READY_TO_POST', null, null)"
-            );
+        String schema = newSchema("tc_posted_lifecycle_clean_");
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
+            try (
+                MigrationTestSchemaScope schemaScope = MigrationTestSchemaScope.open(connection, schema);
+                Statement statement = connection.createStatement()
+            ) {
+                createLegacyCandidateTables(statement);
+                statement.execute("insert into financial_transaction (id) values (100)");
+                statement.execute(
+                    "insert into transaction_candidate (id, status, financial_transaction_id, posted_at) values (1, 'READY_TO_POST', null, null)"
+                );
 
-            runMigration(connection, schema);
+                runMigration(connection, schemaScope.schema());
 
-            assertThat(columnExists(connection, schema, "transaction_candidate", "financial_transaction_id")).isFalse();
-            assertThat(columnExists(connection, schema, "transaction_candidate", "posted_at")).isFalse();
-        } finally {
-            dropSchema(schema);
+                assertThat(columnExists(connection, schemaScope.schema(), "transaction_candidate", "financial_transaction_id")).isFalse();
+                assertThat(columnExists(connection, schemaScope.schema(), "transaction_candidate", "posted_at")).isFalse();
+            }
         }
     }
 
     @Test
     void haltsBeforeAnyDestructiveStepWhenPostedCandidatesRemain() throws Exception {
-        String schema = createSchemaWithLegacyCandidateTable("tc_posted_lifecycle_blocked_");
-        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
-            statement.execute("set search_path to " + schema);
-            statement.execute("insert into financial_transaction (id) values (100)");
-            statement.execute(
-                "insert into transaction_candidate (id, status, financial_transaction_id, posted_at) values (1, 'POSTED', 100, current_timestamp)"
-            );
+        String schema = newSchema("tc_posted_lifecycle_blocked_");
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
+            try (
+                MigrationTestSchemaScope schemaScope = MigrationTestSchemaScope.open(connection, schema);
+                Statement statement = connection.createStatement()
+            ) {
+                createLegacyCandidateTables(statement);
+                statement.execute("insert into financial_transaction (id) values (100)");
+                statement.execute(
+                    "insert into transaction_candidate (id, status, financial_transaction_id, posted_at) values (1, 'POSTED', 100, current_timestamp)"
+                );
 
-            assertThatThrownBy(() -> runMigration(connection, schema))
-                .isInstanceOf(LiquibaseException.class)
-                .hasMessageContaining("POSTED candidates remain");
+                assertThatThrownBy(() -> runMigration(connection, schemaScope.schema()))
+                    .isInstanceOf(LiquibaseException.class)
+                    .hasMessageContaining("POSTED candidates remain");
 
-            assertThat(columnExists(connection, schema, "transaction_candidate", "financial_transaction_id")).isTrue();
-            assertThat(columnExists(connection, schema, "transaction_candidate", "posted_at")).isTrue();
-        } finally {
-            dropSchema(schema);
+                assertThat(columnExists(connection, schemaScope.schema(), "transaction_candidate", "financial_transaction_id")).isTrue();
+                assertThat(columnExists(connection, schemaScope.schema(), "transaction_candidate", "posted_at")).isTrue();
+            }
         }
     }
 
-    private String createSchemaWithLegacyCandidateTable(String prefix) throws SQLException {
-        String schema = prefix + UUID.randomUUID().toString().replace("-", "");
-        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
-            statement.execute("create schema " + schema);
-            statement.execute("set search_path to " + schema);
-            statement.execute("create table financial_transaction (id bigint primary key)");
-            statement.execute(
-                "create table transaction_candidate (id bigint primary key, status varchar(255) not null, financial_transaction_id bigint, posted_at timestamp)"
-            );
-            statement.execute(
-                "alter table transaction_candidate add constraint fk_transaction_candidate__financial_transaction_id foreign key (financial_transaction_id) references financial_transaction(id)"
-            );
-            statement.execute(
-                "alter table transaction_candidate add constraint ux_transaction_candidate__financial_transaction_id unique (financial_transaction_id)"
-            );
-        }
-        return schema;
+    private String newSchema(String prefix) {
+        return prefix + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private void createLegacyCandidateTables(Statement statement) throws SQLException {
+        statement.execute("create table financial_transaction (id bigint primary key)");
+        statement.execute(
+            "create table transaction_candidate (id bigint primary key, status varchar(255) not null, financial_transaction_id bigint, posted_at timestamp)"
+        );
+        statement.execute(
+            "alter table transaction_candidate add constraint fk_transaction_candidate__financial_transaction_id foreign key (financial_transaction_id) references financial_transaction(id)"
+        );
+        statement.execute(
+            "alter table transaction_candidate add constraint ux_transaction_candidate__financial_transaction_id unique (financial_transaction_id)"
+        );
     }
 
     private void runMigration(Connection connection, String schema) throws LiquibaseException {
@@ -101,12 +107,6 @@ class TransactionCandidatePostedLifecycleRemovalMigrationIT {
         DatabaseMetaData metadata = connection.getMetaData();
         try (var columns = metadata.getColumns(null, schema, table, column)) {
             return columns.next();
-        }
-    }
-
-    private void dropSchema(String schema) throws SQLException {
-        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
-            statement.execute("drop schema if exists " + schema + " cascade");
         }
     }
 }

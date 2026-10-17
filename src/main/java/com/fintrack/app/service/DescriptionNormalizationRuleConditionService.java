@@ -130,7 +130,7 @@ public class DescriptionNormalizationRuleConditionService {
         if (condition.isEmpty()) {
             return false;
         }
-        Long ruleId = condition.get().getDescriptionNormalizationRule().getId();
+        Long ruleId = condition.orElseThrow().getDescriptionNormalizationRule().getId();
         conditionRepository.deleteById(id);
         conditionRepository.flush();
         reindexPositions(ruleId);

@@ -2,8 +2,6 @@ import dayjs from 'dayjs';
 import { IUser } from 'app/shared/model/user.model';
 import { IFinancialAccount } from 'app/shared/model/financial-account.model';
 import { ICategory } from 'app/shared/model/category.model';
-import { ITransactionIngestion } from 'app/shared/model/transaction-ingestion.model';
-import { IIngestionRecord } from 'app/shared/model/ingestion-record.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { TransactionCandidateSource } from 'app/shared/model/enumerations/transaction-candidate-source.model';
 import { TransactionCandidateStatus } from 'app/shared/model/enumerations/transaction-candidate-status.model';
@@ -14,6 +12,18 @@ import { TransactionCandidateClassificationSource } from 'app/shared/model/enume
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
 
+export interface IAppliedRuleAttribution {
+  id?: number | null;
+  name?: string | null;
+}
+
+export interface ITransactionCandidateTagSelection {
+  tagId?: number | null;
+  tagName?: string | null;
+  source?: keyof typeof TransactionCandidateClassificationSource | null;
+  appliedByRule?: IAppliedRuleAttribution | null;
+}
+
 export interface ITransactionCandidate {
   id?: number;
   source?: keyof typeof TransactionCandidateSource;
@@ -22,6 +32,8 @@ export interface ITransactionCandidate {
   descriptionReviewStatus?: keyof typeof TransactionCandidateDescriptionReviewStatus;
   classificationReviewStatus?: keyof typeof TransactionCandidateClassificationReviewStatus;
   categorySource?: keyof typeof TransactionCandidateClassificationSource | null;
+  categoryAppliedByRule?: IAppliedRuleAttribution | null;
+  descriptionAppliedByRule?: IAppliedRuleAttribution | null;
   transactionDate?: dayjs.Dayjs | string | null;
   postingDate?: dayjs.Dayjs | string | null;
   description?: string | null;
@@ -39,9 +51,8 @@ export interface ITransactionCandidate {
   user?: IUser;
   account?: IFinancialAccount | null;
   category?: ICategory | null;
-  transactionIngestion?: ITransactionIngestion | null;
-  ingestionRecord?: IIngestionRecord | null;
   tags?: ITag[] | null;
+  selectedTags?: ITransactionCandidateTagSelection[] | null;
 }
 
 export const defaultValue: Readonly<ITransactionCandidate> = {};

@@ -1,0 +1,43 @@
+{
+  "fintrackApp": {
+    "transactionBatch": {
+      "toolbar": {
+        "creation": "Transaction creation",
+        "addMovement": "+ Add transaction",
+        "importCsv": "Import CSV",
+        "review": "Batch review",
+        "refresh": "Refresh",
+        "reevaluateRules": "Reevaluate rules",
+        "rules": "Rules",
+        "viewRules": "View rules",
+        "rulePreferences": "Rule preferences",
+        "createDescriptionRule": "Create description rule",
+        "createClassificationRule": "Create classification rule",
+        "destructive": "Destructive actions",
+        "discard": "Discard batch"
+      },
+      "review": {
+        "title": "Review queue",
+        "filterDrafts": "Filter drafts",
+        "sortControls": "Sort controls",
+        "sortBy": "Sort by",
+        "ascending": "Ascending",
+        "descending": "Descending",
+        "showingCount": "Showing {{visibleCount}} of {{totalCount}} drafts"
+      },
+      "filters": {
+        "all": "All",
+        "needsCorrection": "Needs correction",
+        "manual": "Manual",
+        "csv": "CSV"
+      },
+      "sortOptions": {
+        "rowPosition": "Entry order",
+        "date": "Date",
+        "amount": "Amount",
+        "description": "Description",
+        "category": "Category"
+      }
+    }
+  }
+}

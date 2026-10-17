@@ -41,11 +41,9 @@ import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
-import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
-import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -234,32 +232,6 @@ class TransactionCandidateResourceIT {
 
     @Test
     @Transactional
-    void genericCreateRejectsTransactionIngestionLink() throws Exception {
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setSource(TransactionCandidateSource.MANUAL);
-        dto.setTransactionIngestion(refTransactionIngestion(1L));
-
-        restTransactionCandidateMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.message").value("error.invalid"));
-    }
-
-    @Test
-    @Transactional
-    void genericCreateRejectsIngestionRecordLink() throws Exception {
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setSource(TransactionCandidateSource.MANUAL);
-        dto.setIngestionRecord(refIngestionRecord(1L));
-
-        restTransactionCandidateMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.message").value("error.invalid"));
-    }
-
-    @Test
-    @Transactional
     void patchManualDraftUpdatesEditableFieldsAndRecalculatesReadyStatus() throws Exception {
         FinancialAccount account = createAccount(currentUser());
         TransactionCandidate candidate = createDraftCandidate(currentUser());
@@ -380,36 +352,6 @@ class TransactionCandidateResourceIT {
                 patch(ENTITY_API_URL_ID, candidate.getId())
                     .contentType("application/merge-patch+json")
                     .content("{\"status\":\"CANCELLED\"}")
-            )
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.message").value("error.invalid"));
-    }
-
-    @Test
-    @Transactional
-    void genericPutRejectsWorkflowLinkMutation() throws Exception {
-        TransactionCandidate candidate = createDraftCandidate(currentUser());
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setId(candidate.getId());
-        dto.setSource(TransactionCandidateSource.MANUAL);
-        dto.setTransactionIngestion(refTransactionIngestion(1L));
-
-        restTransactionCandidateMockMvc
-            .perform(put(ENTITY_API_URL_ID, candidate.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(dto)))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.message").value("error.invalid"));
-    }
-
-    @Test
-    @Transactional
-    void genericPatchRejectsWorkflowLinkMutation() throws Exception {
-        TransactionCandidate candidate = createDraftCandidate(currentUser());
-
-        restTransactionCandidateMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, candidate.getId())
-                    .contentType("application/merge-patch+json")
-                    .content("{\"ingestionRecord\":{\"id\":1}}")
             )
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("error.invalid"));
@@ -1479,18 +1421,6 @@ class TransactionCandidateResourceIT {
 
     private FinancialTransactionDTO refFinancialTransaction(Long id) {
         FinancialTransactionDTO dto = new FinancialTransactionDTO();
-        dto.setId(id);
-        return dto;
-    }
-
-    private TransactionIngestionDTO refTransactionIngestion(Long id) {
-        TransactionIngestionDTO dto = new TransactionIngestionDTO();
-        dto.setId(id);
-        return dto;
-    }
-
-    private IngestionRecordDTO refIngestionRecord(Long id) {
-        IngestionRecordDTO dto = new IngestionRecordDTO();
         dto.setId(id);
         return dto;
     }

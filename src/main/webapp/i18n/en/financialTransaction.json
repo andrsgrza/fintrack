@@ -125,6 +125,7 @@
           },
           "suggestedCategory": "Suggested category",
           "suggestedTags": "Suggested tags",
+          "appliedBy": "Applied by",
           "noSuggestions": "No rule suggestions found.",
           "conflicts": "Some suggestions conflict with existing selections.",
           "matchedRules": "Matched rules",

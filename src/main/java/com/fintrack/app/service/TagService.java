@@ -200,7 +200,7 @@ public class TagService {
             return false;
         }
         Long tagId = tag.orElseThrow().getId();
-        if (transactionCandidateRepository.existsByTagId(tagId)) {
+        if (transactionCandidateRepository.existsByTagId(tagId) || transactionCandidateRepository.existsTagSuppressionByTagId(tagId)) {
             throw new IllegalArgumentException("Tag cannot be deleted because it is used by transaction candidates.");
         }
         unlinkTagFromAllRelationships(tagId);

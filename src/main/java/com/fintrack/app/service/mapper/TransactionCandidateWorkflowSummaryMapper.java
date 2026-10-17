@@ -3,6 +3,7 @@ package com.fintrack.app.service.mapper;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionCandidateTag;
+import com.fintrack.app.service.dto.AppliedRuleAttributionDTO;
 import com.fintrack.app.service.dto.TransactionCandidateTagSelectionDTO;
 import com.fintrack.app.service.dto.TransactionCandidateWorkflowSummaryDTO;
 import java.util.Comparator;
@@ -38,6 +39,10 @@ public class TransactionCandidateWorkflowSummaryMapper {
         summary.setCategoryId(candidate.getCategory() == null ? null : candidate.getCategory().getId());
         summary.setCategoryName(candidate.getCategory() == null ? null : candidate.getCategory().getName());
         summary.setCategorySource(candidate.getCategorySource());
+        summary.setCategoryAppliedByRule(toAppliedRule(candidate.getCategoryAppliedRule(), candidate.getCategoryAppliedRuleName()));
+        summary.setDescriptionAppliedByRule(
+            toAppliedRule(candidate.getDescriptionAppliedRule(), candidate.getDescriptionAppliedRuleName())
+        );
         Set<Tag> tags = candidate.getTags() == null ? Set.of() : candidate.getTags();
         summary.setTagIds(tags.stream().map(Tag::getId).filter(Objects::nonNull).sorted().toList());
         summary.setTagNames(
@@ -62,6 +67,21 @@ public class TransactionCandidateWorkflowSummaryMapper {
         selection.setTagId(association.getTag().getId());
         selection.setTagName(association.getTag().getName());
         selection.setSource(association.getSource());
+        selection.setAppliedByRule(toAppliedRule(association.getAppliedRule(), association.getAppliedRuleName()));
         return selection;
+    }
+
+    private AppliedRuleAttributionDTO toAppliedRule(Object liveRule, String snapshotName) {
+        if (liveRule == null && (snapshotName == null || snapshotName.isBlank())) {
+            return null;
+        }
+        AppliedRuleAttributionDTO attribution = new AppliedRuleAttributionDTO();
+        if (liveRule instanceof com.fintrack.app.domain.TransactionRule transactionRule) {
+            attribution.setId(transactionRule.getId());
+        } else if (liveRule instanceof com.fintrack.app.domain.DescriptionNormalizationRule descriptionRule) {
+            attribution.setId(descriptionRule.getId());
+        }
+        attribution.setName(snapshotName);
+        return attribution;
     }
 }

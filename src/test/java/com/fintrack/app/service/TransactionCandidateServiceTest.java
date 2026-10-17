@@ -13,10 +13,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
-import com.fintrack.app.domain.IngestionRecord;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.domain.TransactionBatch;
 import com.fintrack.app.domain.TransactionCandidate;
-import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CategoryType;
@@ -32,17 +31,13 @@ import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
-import com.fintrack.app.repository.TransactionIngestionRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
-import com.fintrack.app.service.dto.IngestionRecordDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
-import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
@@ -89,12 +84,6 @@ class TransactionCandidateServiceTest {
     private TagRepository tagRepository;
 
     @Mock
-    private TransactionIngestionRepository transactionIngestionRepository;
-
-    @Mock
-    private IngestionRecordRepository ingestionRecordRepository;
-
-    @Mock
     private TransactionRuleEvaluationService transactionRuleEvaluationService;
 
     private TransactionCandidateService transactionCandidateService;
@@ -113,8 +102,6 @@ class TransactionCandidateServiceTest {
             financialTransactionRepository,
             categoryRepository,
             tagRepository,
-            transactionIngestionRepository,
-            ingestionRecordRepository,
             transactionRuleEvaluationService,
             new TransactionCandidateRuleApplicationService()
         );
@@ -227,16 +214,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void createManualDraftRejectsIngestionLinks() {
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setTransactionIngestion(refTransactionIngestion(1L));
-
-        assertThatThrownBy(() -> transactionCandidateService.createManualDraft(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Manual drafts cannot be linked to transaction ingestion");
-    }
-
-    @Test
     void genericCreateRejectsFileImportCandidate() {
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
 
@@ -252,26 +229,6 @@ class TransactionCandidateServiceTest {
         assertThatThrownBy(() -> transactionCandidateService.save(dto))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Generic candidate CRUD cannot create api import candidates");
-    }
-
-    @Test
-    void genericCreateRejectsTransactionIngestionLink() {
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
-        dto.setTransactionIngestion(refTransactionIngestion(1L));
-
-        assertThatThrownBy(() -> transactionCandidateService.save(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Transaction ingestion links are managed by ingestion workflow commands");
-    }
-
-    @Test
-    void genericCreateRejectsIngestionRecordLink() {
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
-        dto.setIngestionRecord(refIngestionRecord(1L));
-
-        assertThatThrownBy(() -> transactionCandidateService.save(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Ingestion record links are managed by ingestion workflow commands");
     }
 
     @Test
@@ -731,26 +688,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void foreignTransactionIngestionRejected() {
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
-        dto.setTransactionIngestion(refTransactionIngestion(1L));
-
-        assertThatThrownBy(() -> transactionCandidateService.save(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Generic candidate CRUD cannot create file import candidates");
-    }
-
-    @Test
-    void foreignIngestionRecordRejected() {
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.FILE_IMPORT);
-        dto.setIngestionRecord(refIngestionRecord(1L));
-
-        assertThatThrownBy(() -> transactionCandidateService.save(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Generic candidate CRUD cannot create file import candidates");
-    }
-
-    @Test
     void adminHasNoCrossUserProductBypass() {
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
         dto.setAccount(refAccount(1L));
@@ -956,38 +893,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void genericUpdateRejectsTransactionIngestionLinkMutation() {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
-        dto.setId(1L);
-        dto.setCreatedAt(existing.getCreatedAt());
-        dto.setUpdatedAt(existing.getUpdatedAt());
-        dto.setTransactionIngestion(refTransactionIngestion(1L));
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> transactionCandidateService.update(dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Transaction ingestion links are managed by ingestion workflow commands");
-    }
-
-    @Test
-    void genericPatchRejectsIngestionRecordLinkMutation() throws Exception {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        TransactionCandidateDTO dto = new TransactionCandidateDTO();
-        dto.setId(1L);
-        dto.setIngestionRecord(refIngestionRecord(1L));
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() ->
-            transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"ingestionRecord\":{\"id\":1}}"))
-        )
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Ingestion record links are managed by ingestion workflow commands");
-    }
-
-    @Test
     void genericUpdateRejectsFileImportCandidateMutation() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST);
         existing.setSource(TransactionCandidateSource.FILE_IMPORT);
@@ -1021,19 +926,20 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void genericUpdateRejectsExistingWorkflowLinkedCandidate() {
+    void genericUpdateRejectsBatchCandidate() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        existing.setTransactionIngestion(transactionIngestion(user));
+        existing.setTransactionBatch(new TransactionBatch());
         TransactionCandidateDTO dto = dto(TransactionCandidateSource.MANUAL);
         dto.setId(1L);
-        dto.setCreatedAt(existing.getCreatedAt());
-        dto.setUpdatedAt(existing.getUpdatedAt());
+        dto.setDescription("Patched");
 
         when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> transactionCandidateService.update(dto))
+        assertThatThrownBy(() ->
+            transactionCandidateService.partialUpdate(dto, new ObjectMapper().readTree("{\"description\":\"Patched\"}"))
+        )
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Workflow-linked candidates are managed by workflow commands");
+            .hasMessageContaining("Batch candidates are managed by batch commands");
     }
 
     @Test
@@ -1187,18 +1093,6 @@ class TransactionCandidateServiceTest {
     }
 
     @Test
-    void deleteRejectsWorkflowLinkedCandidate() {
-        TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.DRAFT);
-        existing.setIngestionRecord(ingestionRecord(user));
-
-        when(transactionCandidateRepository.findOneWithRelationshipsByIdAndUserLogin(1L, "user")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> transactionCandidateService.delete(1L))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Workflow-linked candidates cannot be deleted through generic candidate CRUD");
-    }
-
-    @Test
     void deleteRejectsReadyManualCandidate() {
         TransactionCandidate existing = existingCandidate(TransactionCandidateStatus.READY_TO_POST);
 
@@ -1310,20 +1204,6 @@ class TransactionCandidateServiceTest {
         return tag;
     }
 
-    private TransactionIngestion transactionIngestion(User owner) {
-        TransactionIngestion transactionIngestion = new TransactionIngestion();
-        transactionIngestion.setId(1L);
-        transactionIngestion.setAccount(account(owner));
-        return transactionIngestion;
-    }
-
-    private IngestionRecord ingestionRecord(User owner) {
-        IngestionRecord ingestionRecord = new IngestionRecord();
-        ingestionRecord.setId(1L);
-        ingestionRecord.setTransactionIngestion(transactionIngestion(owner));
-        return ingestionRecord;
-    }
-
     private FinancialAccountDTO refAccount(Long id) {
         FinancialAccountDTO accountDTO = new FinancialAccountDTO();
         accountDTO.setId(id);
@@ -1334,18 +1214,6 @@ class TransactionCandidateServiceTest {
         CategoryDTO categoryDTO = new CategoryDTO();
         categoryDTO.setId(id);
         return categoryDTO;
-    }
-
-    private TransactionIngestionDTO refTransactionIngestion(Long id) {
-        TransactionIngestionDTO dto = new TransactionIngestionDTO();
-        dto.setId(id);
-        return dto;
-    }
-
-    private IngestionRecordDTO refIngestionRecord(Long id) {
-        IngestionRecordDTO dto = new IngestionRecordDTO();
-        dto.setId(id);
-        return dto;
     }
 
     private FinancialTransactionDTO refFinancialTransaction(Long id) {

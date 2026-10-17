@@ -240,7 +240,7 @@ public class TransactionRuleService {
         }
         transactionRuleConditionRepository.deleteByTransactionRuleId(id);
         transactionRuleRepository.deleteResultingTagsByRuleId(id);
-        Long ownerId = transactionRule.get().getUser().getId();
+        Long ownerId = transactionRule.orElseThrow().getUser().getId();
         transactionRuleRepository.deleteById(id);
         transactionRuleRepository.flush();
         reindexPriorities(ownerId);

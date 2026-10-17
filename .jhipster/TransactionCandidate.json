@@ -42,6 +42,34 @@
       "fieldValues": "AUTOMATIC,MANUAL"
     },
     {
+      "fieldName": "categoryAppliedRuleName",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "categoryManualClear",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "descriptionSource",
+      "fieldType": "TransactionCandidateDescriptionSource",
+      "fieldValues": "SOURCE,AUTOMATIC,MANUAL"
+    },
+    {
+      "fieldName": "descriptionAppliedRuleName",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "sourceDescription",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
       "fieldName": "transactionDate",
       "fieldType": "LocalDate"
     },
@@ -108,6 +136,15 @@
     {
       "fieldName": "failedAt",
       "fieldType": "Instant"
+    },
+    {
+      "fieldName": "version",
+      "fieldType": "Long",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "rowPosition",
+      "fieldType": "Long"
     }
   ],
   "incrementalChangelog": false,
@@ -140,17 +177,24 @@
     },
     {
       "otherEntityField": "id",
-      "otherEntityName": "transactionIngestion",
-      "relationshipName": "transactionIngestion",
+      "otherEntityName": "transactionBatch",
+      "relationshipName": "transactionBatch",
       "relationshipSide": "left",
       "relationshipType": "many-to-one"
     },
     {
-      "otherEntityField": "id",
-      "otherEntityName": "ingestionRecord",
-      "relationshipName": "ingestionRecord",
+      "otherEntityField": "name",
+      "otherEntityName": "descriptionNormalizationRule",
+      "relationshipName": "descriptionAppliedRule",
       "relationshipSide": "left",
-      "relationshipType": "one-to-one"
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "transactionRule",
+      "relationshipName": "categoryAppliedRule",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
     }
   ],
   "searchEngine": "no",

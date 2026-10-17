@@ -150,15 +150,7 @@ export const ApiIngestion = () => {
                   <td>
                     {apiIngestion.createdAt ? <TextFormat type="date" value={apiIngestion.createdAt} format={APP_DATE_FORMAT} /> : null}
                   </td>
-                  <td>
-                    {apiIngestion.transactionIngestion ? (
-                      <Link to={`/transaction-ingestion/${apiIngestion.transactionIngestion.id}`}>
-                        {apiIngestion.transactionIngestion.id}
-                      </Link>
-                    ) : (
-                      ''
-                    )}
-                  </td>
+                  <td>{apiIngestion.transactionIngestion?.id ?? ''}</td>
                   <td>{apiIngestion.apiTokenNameSnapshot}</td>
                   <td className="text-end">
                     <div className="btn-group flex-btn-group-container">

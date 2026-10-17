@@ -14,15 +14,17 @@ describe('Entities menu technical markers', () => {
     TranslatorContext.setLocale('en');
   });
 
-  it('keeps FileIngestion and IngestionRecord visible and marks both as Technical', () => {
+  it('uses Transaction Batches as the only CSV product entry and removes retired legacy ingestion entries', () => {
     render(
       <MemoryRouter>
         <EntitiesMenu />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('menuitem', { name: /file ingestion technical/i }).getAttribute('href')).toBe('/file-ingestion');
-    expect(screen.getByRole('menuitem', { name: /ingestion record technical/i }).getAttribute('href')).toBe('/ingestion-record');
+    expect(screen.getByRole('menuitem', { name: /lotes de transacciones/i }).getAttribute('href')).toBe('/transaction-batches');
+    expect(screen.queryByRole('menuitem', { name: /file ingestion/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /transaction ingestion/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /ingestion record/i })).toBeNull();
   });
 
   it('keeps Financial Accounts as the product entry and hides CreditAccountDetails from the normal menu', () => {

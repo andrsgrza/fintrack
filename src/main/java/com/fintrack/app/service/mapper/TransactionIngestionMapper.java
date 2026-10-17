@@ -25,7 +25,6 @@ public interface TransactionIngestionMapper extends EntityMapper<TransactionInge
     @Mapping(target = "completedAt", ignore = true)
     @Mapping(target = "errorMessage", ignore = true)
     @Mapping(target = "removeFinancialTransactions", ignore = true)
-    @Mapping(target = "removeRecords", ignore = true)
     TransactionIngestion toEntity(TransactionIngestionDTO transactionIngestionDTO);
 
     @Named("partialUpdate")

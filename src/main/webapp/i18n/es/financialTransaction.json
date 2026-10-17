@@ -125,6 +125,7 @@
           },
           "suggestedCategory": "Categoría sugerida",
           "suggestedTags": "Etiquetas sugeridas",
+          "appliedBy": "Aplicada por",
           "noSuggestions": "No se encontraron sugerencias de reglas.",
           "conflicts": "Algunas sugerencias entran en conflicto con selecciones existentes.",
           "matchedRules": "Reglas coincidentes",

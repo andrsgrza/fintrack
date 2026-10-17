@@ -332,6 +332,20 @@ class TagServiceTest {
     }
 
     @Test
+    void deleteShouldRejectWhenTagIsOnlyUsedByBatchCandidateSuppression() {
+        when(currentUserService.isAdmin()).thenReturn(false);
+        when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);
+        when(tagRepository.findOneWithToOneRelationshipsByIdAndUserLogin(10L, CURRENT_USER_LOGIN)).thenReturn(Optional.of(tag));
+        when(transactionCandidateRepository.existsTagSuppressionByTagId(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> tagService.delete(10L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Tag cannot be deleted because it is used by transaction candidates.");
+        verify(tagRepository, never()).deleteFinancialTransactionTagLinksByTagId(any());
+        verify(tagRepository, never()).deleteById(any());
+    }
+
+    @Test
     void deleteShouldReturnFalseWhenTagIsNotAccessible() {
         when(currentUserService.isAdmin()).thenReturn(false);
         when(currentUserService.getCurrentUserLogin()).thenReturn(CURRENT_USER_LOGIN);

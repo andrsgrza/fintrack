@@ -7,14 +7,12 @@ import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionIngestion;
-import com.fintrack.app.domain.enumeration.IngestionRecordStatus;
 import com.fintrack.app.domain.enumeration.IngestionType;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
-import com.fintrack.app.repository.IngestionRecordRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
@@ -70,10 +68,6 @@ public class FinancialTransactionService {
 
     private static final Logger LOG = LoggerFactory.getLogger(FinancialTransactionService.class);
 
-    private static final String FINANCIAL_TRANSACTION_DELETED = "FINANCIAL_TRANSACTION_DELETED";
-
-    private static final String FINANCIAL_TRANSACTION_DELETED_MESSAGE = "Financial transaction was deleted manually.";
-
     private final FinancialTransactionRepository financialTransactionRepository;
 
     private final FinancialTransactionMapper financialTransactionMapper;
@@ -90,8 +84,6 @@ public class FinancialTransactionService {
 
     private final InternalTransferRepository internalTransferRepository;
 
-    private final IngestionRecordRepository ingestionRecordRepository;
-
     private final CurrentUserService currentUserService;
 
     private final TransactionRuleEvaluationService transactionRuleEvaluationService;
@@ -105,7 +97,6 @@ public class FinancialTransactionService {
         FinancialSubscriptionRepository financialSubscriptionRepository,
         TransactionIngestionRepository transactionIngestionRepository,
         InternalTransferRepository internalTransferRepository,
-        IngestionRecordRepository ingestionRecordRepository,
         CurrentUserService currentUserService,
         TransactionRuleEvaluationService transactionRuleEvaluationService
     ) {
@@ -117,7 +108,6 @@ public class FinancialTransactionService {
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.internalTransferRepository = internalTransferRepository;
-        this.ingestionRecordRepository = ingestionRecordRepository;
         this.currentUserService = currentUserService;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
     }
@@ -340,19 +330,6 @@ public class FinancialTransactionService {
     }
 
     /**
-     *  Get all the financialTransactions where IngestionRecord is {@code null}.
-     *  @return the list of entities.
-     */
-    @Transactional(readOnly = true)
-    public List<FinancialTransactionDTO> findAllWhereIngestionRecordIsNull() {
-        LOG.debug("Request to get all financialTransactions where IngestionRecord is null");
-        return accessibleTransactionStream()
-            .filter(financialTransaction -> !ingestionRecordRepository.existsByFinancialTransactionId(financialTransaction.getId()))
-            .map(financialTransactionMapper::toDto)
-            .collect(Collectors.toCollection(LinkedList::new));
-    }
-
-    /**
      * Get one financialTransaction by id.
      *
      * @param id the id of the entity.
@@ -387,7 +364,6 @@ public class FinancialTransactionService {
         if (financialTransaction.isEmpty()) {
             return false;
         }
-        ingestionRecordRepository.markFinancialTransactionDeleted(id, IngestionRecordStatus.DELETED_AFTER_IMPORT, null, null);
         internalTransferRepository.deleteByTransactionIdInEitherRole(id);
         financialTransactionRepository.deleteTagLinksByFinancialTransactionId(id);
         financialTransactionRepository.deleteById(id);
@@ -402,12 +378,6 @@ public class FinancialTransactionService {
     public void deleteAllForAccount(FinancialAccount account) {
         Long accountId = requireAccountId(account);
         LOG.debug("Request to delete all FinancialTransactions for FinancialAccount : {}", accountId);
-        ingestionRecordRepository.markFinancialTransactionsDeletedByAccountId(
-            accountId,
-            IngestionRecordStatus.REJECTED,
-            FINANCIAL_TRANSACTION_DELETED,
-            FINANCIAL_TRANSACTION_DELETED_MESSAGE
-        );
         internalTransferRepository.deleteByAccountIdInEitherRole(accountId);
         financialTransactionRepository.deleteTagLinksByAccountId(accountId);
         financialTransactionRepository.deleteByAccountId(accountId);
@@ -934,9 +904,6 @@ public class FinancialTransactionService {
     }
 
     private TransactionOrigin requiredOriginFor(IngestionType ingestionType) {
-        if (ingestionType == IngestionType.FILE) {
-            return TransactionOrigin.FILE_IMPORT;
-        }
         if (ingestionType == IngestionType.API) {
             return TransactionOrigin.API;
         }

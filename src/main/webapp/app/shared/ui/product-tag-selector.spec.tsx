@@ -61,4 +61,11 @@ describe('ProductTagSelector', () => {
 
     expect(screen.getByTestId('productTagSelectorInactive')).toBeTruthy();
   });
+
+  it('keeps an empty selection quiet while retaining the add-tag action', () => {
+    render(<SelectorHarness initialTags={[]} />);
+
+    expect(screen.queryByTestId('productTagSelectorEmpty')).toBeNull();
+    expect(screen.getByRole('button', { name: /add tag/i })).toBeTruthy();
+  });
 });

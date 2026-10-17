@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Transaction Batch replaces the retired FILE ingestion product. This forward-only migration removes
+         FILE-owned draft/history rows, detaches posted transactions first, and preserves API ingestion. -->
+    <changeSet id="20261016180000-1" author="codex">
+        <sql>
+            update financial_transaction
+            set transaction_ingestion_id = null
+            where transaction_ingestion_id in (
+                select id from transaction_ingestion where ingestion_type = 'FILE'
+            )
+        </sql>
+
+        <!-- FILE candidates were temporary review rows; their owned children must go first. -->
+        <sql>
+            delete from rel_transaction_candidate__tags
+            where transaction_candidate_id in (
+                select id from transaction_candidate
+                where transaction_ingestion_id in (select id from transaction_ingestion where ingestion_type = 'FILE')
+                   or ingestion_record_id is not null
+            )
+        </sql>
+        <sql>
+            delete from transaction_candidate_tag_suppression
+            where transaction_candidate_id in (
+                select id from transaction_candidate
+                where transaction_ingestion_id in (select id from transaction_ingestion where ingestion_type = 'FILE')
+                   or ingestion_record_id is not null
+            )
+        </sql>
+        <sql>
+            delete from transaction_candidate_input_issue
+            where transaction_candidate_id in (
+                select id from transaction_candidate
+                where transaction_ingestion_id in (select id from transaction_ingestion where ingestion_type = 'FILE')
+                   or ingestion_record_id is not null
+            )
+        </sql>
+        <sql>
+            delete from transaction_candidate
+            where transaction_ingestion_id in (select id from transaction_ingestion where ingestion_type = 'FILE')
+               or ingestion_record_id is not null
+        </sql>
+
+        <dropForeignKeyConstraint baseTableName="transaction_candidate" constraintName="fk_transaction_candidate__ingestion_record_id"/>
+        <dropUniqueConstraint tableName="transaction_candidate" constraintName="ux_transaction_candidate__ingestion_record_id"/>
+        <dropColumn tableName="transaction_candidate" columnName="ingestion_record_id"/>
+        <dropForeignKeyConstraint baseTableName="transaction_candidate" constraintName="fk_transaction_candidate__transaction_ingestion_id"/>
+        <dropColumn tableName="transaction_candidate" columnName="transaction_ingestion_id"/>
+
+        <dropForeignKeyConstraint baseTableName="ingestion_record" constraintName="fk_ingestion_record__financial_transaction_id"/>
+        <dropForeignKeyConstraint baseTableName="ingestion_record" constraintName="fk_ingestion_record__transaction_ingestion_id"/>
+        <dropTable tableName="ingestion_record"/>
+
+        <dropForeignKeyConstraint baseTableName="file_ingestion" constraintName="fk_file_ingestion__transaction_ingestion_id"/>
+        <dropTable tableName="file_ingestion"/>
+
+        <!-- API TransactionIngestion rows remain the minimal non-FILE API root. -->
+        <delete tableName="transaction_ingestion">
+            <where>ingestion_type = 'FILE'</where>
+        </delete>
+    </changeSet>
+</databaseChangeLog>

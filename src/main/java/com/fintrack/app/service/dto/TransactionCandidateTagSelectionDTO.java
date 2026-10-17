@@ -9,6 +9,7 @@ public class TransactionCandidateTagSelectionDTO implements Serializable {
     private Long tagId;
     private String tagName;
     private TransactionCandidateClassificationSource source;
+    private AppliedRuleAttributionDTO appliedByRule;
 
     public Long getTagId() {
         return tagId;
@@ -32,5 +33,13 @@ public class TransactionCandidateTagSelectionDTO implements Serializable {
 
     public void setSource(TransactionCandidateClassificationSource source) {
         this.source = source;
+    }
+
+    public AppliedRuleAttributionDTO getAppliedByRule() {
+        return appliedByRule;
+    }
+
+    public void setAppliedByRule(AppliedRuleAttributionDTO appliedByRule) {
+        this.appliedByRule = appliedByRule;
     }
 }

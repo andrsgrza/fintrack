@@ -20,6 +20,8 @@ type ProductPageHeaderProps = {
   subtitle?: React.ReactNode;
   metadata?: React.ReactNode;
   actions?: React.ReactNode;
+  actionsClassName?: string;
+  className?: string;
   headingId?: string;
   dataCy?: string;
   accentColor?: string | null;
@@ -31,13 +33,15 @@ export const ProductPageHeader = ({
   subtitle,
   metadata,
   actions,
+  actionsClassName = '',
+  className = '',
   headingId,
   dataCy,
   accentColor,
   accentDataCy,
 }: ProductPageHeaderProps) => (
   <header
-    className="d-flex flex-column flex-md-row align-items-md-start justify-content-between gap-3 border-bottom pb-3 mb-4"
+    className={`d-flex flex-column flex-md-row align-items-md-start justify-content-between gap-3 border-bottom pb-3 mb-4 ${className}`}
     data-cy={accentDataCy}
     data-testid={accentDataCy}
     style={accentColor ? { borderInlineStart: `0.35rem solid ${accentColor}`, paddingInlineStart: '1rem' } : undefined}
@@ -49,7 +53,7 @@ export const ProductPageHeader = ({
       {metadata ? <div className="d-flex flex-wrap align-items-center gap-2 mb-1">{metadata}</div> : null}
       {subtitle ? <p className="text-muted mb-0">{subtitle}</p> : null}
     </div>
-    {actions ? <div className="d-flex flex-wrap align-items-center gap-2 flex-shrink-0">{actions}</div> : null}
+    {actions ? <div className={`d-flex flex-wrap align-items-center gap-2 flex-shrink-0 ${actionsClassName}`}>{actions}</div> : null}
   </header>
 );
 

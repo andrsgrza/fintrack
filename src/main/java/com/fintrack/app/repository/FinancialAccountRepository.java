@@ -29,6 +29,14 @@ public interface FinancialAccountRepository extends JpaRepository<FinancialAccou
     )
     Optional<FinancialAccount> findOneForHardDeleteByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
+    /** Locks the account before the batch root so publication and account removal use the same resource order. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user " +
+        "where financialAccount.id = :id and financialAccount.user.login = :login"
+    )
+    Optional<FinancialAccount> findOneForBatchPublicationByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.id = :id"

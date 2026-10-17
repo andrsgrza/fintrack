@@ -40,6 +40,12 @@ public class TransactionCandidateDTO implements Serializable {
 
     private TransactionCandidateClassificationSource categorySource;
 
+    /** Read-only, candidate-lifetime rule attribution. */
+    private AppliedRuleAttributionDTO categoryAppliedByRule;
+
+    /** Read-only, candidate-lifetime rule attribution. */
+    private AppliedRuleAttributionDTO descriptionAppliedByRule;
+
     private LocalDate transactionDate;
 
     private LocalDate postingDate;
@@ -78,11 +84,13 @@ public class TransactionCandidateDTO implements Serializable {
 
     private CategoryDTO category;
 
-    private TransactionIngestionDTO transactionIngestion;
-
-    private IngestionRecordDTO ingestionRecord;
-
     private Set<TagDTO> tags = new HashSet<>();
+
+    /**
+     * Per-tag source and temporary applied-rule attribution for product draft screens. Kept nullable so input commands can
+     * distinguish an omitted read-only field from a client attempt to set it.
+     */
+    private Set<TransactionCandidateTagSelectionDTO> selectedTags;
 
     public Long getId() {
         return id;
@@ -138,6 +146,22 @@ public class TransactionCandidateDTO implements Serializable {
 
     public void setCategorySource(TransactionCandidateClassificationSource categorySource) {
         this.categorySource = categorySource;
+    }
+
+    public AppliedRuleAttributionDTO getCategoryAppliedByRule() {
+        return categoryAppliedByRule;
+    }
+
+    public void setCategoryAppliedByRule(AppliedRuleAttributionDTO categoryAppliedByRule) {
+        this.categoryAppliedByRule = categoryAppliedByRule;
+    }
+
+    public AppliedRuleAttributionDTO getDescriptionAppliedByRule() {
+        return descriptionAppliedByRule;
+    }
+
+    public void setDescriptionAppliedByRule(AppliedRuleAttributionDTO descriptionAppliedByRule) {
+        this.descriptionAppliedByRule = descriptionAppliedByRule;
     }
 
     public LocalDate getTransactionDate() {
@@ -276,28 +300,20 @@ public class TransactionCandidateDTO implements Serializable {
         this.category = category;
     }
 
-    public TransactionIngestionDTO getTransactionIngestion() {
-        return transactionIngestion;
-    }
-
-    public void setTransactionIngestion(TransactionIngestionDTO transactionIngestion) {
-        this.transactionIngestion = transactionIngestion;
-    }
-
-    public IngestionRecordDTO getIngestionRecord() {
-        return ingestionRecord;
-    }
-
-    public void setIngestionRecord(IngestionRecordDTO ingestionRecord) {
-        this.ingestionRecord = ingestionRecord;
-    }
-
     public Set<TagDTO> getTags() {
         return tags;
     }
 
     public void setTags(Set<TagDTO> tags) {
         this.tags = tags;
+    }
+
+    public Set<TransactionCandidateTagSelectionDTO> getSelectedTags() {
+        return selectedTags;
+    }
+
+    public void setSelectedTags(Set<TransactionCandidateTagSelectionDTO> selectedTags) {
+        this.selectedTags = selectedTags;
     }
 
     @Override

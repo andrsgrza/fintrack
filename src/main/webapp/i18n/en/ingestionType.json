@@ -2,7 +2,6 @@
   "fintrackApp": {
     "IngestionType": {
       "null": "",
-      "FILE": "FILE",
       "API": "API"
     }
   }

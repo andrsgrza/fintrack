@@ -31,7 +31,6 @@ const safePreview = (overrides: Partial<IFinancialAccountDeletionPreview> = {}):
     financialTransactions: 2,
     manualCandidates: 3,
     transactionIngestions: 1,
-    ingestionRecords: 4,
     fileImportCandidates: 1,
     creditAccountDetails: 1,
     budgetLinks: 0,
@@ -99,7 +98,7 @@ describe('FinancialAccountDeleteDialog', () => {
     expect(screen.getByText('2 transactions')).toBeTruthy();
     expect(screen.getByText('3 manual drafts')).toBeTruthy();
     expect(screen.getByText('1 import')).toBeTruthy();
-    expect(screen.getByText('4 import records')).toBeTruthy();
+    expect(screen.queryByText(/import records/i)).toBeNull();
     expect(screen.getByText("This account's card details")).toBeTruthy();
     expect(screen.queryByText('0 imports')).toBeNull();
     expect(screen.getByText('Will be preserved')).toBeTruthy();

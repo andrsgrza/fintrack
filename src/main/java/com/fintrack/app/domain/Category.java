@@ -81,7 +81,6 @@ public class Category implements Serializable {
             "tags",
             "outgoingInternalTransfer",
             "incomingInternalTransfer",
-            "ingestionRecord",
         },
         allowSetters = true
     )
