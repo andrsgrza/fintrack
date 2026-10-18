@@ -481,8 +481,10 @@ entity Budget {
  * accounts owned by the same user and using the same currency.
  */
 entity InternalTransfer {
+  version Long required
   notes String maxlength(500)
   createdAt Instant required
+  updatedAt Instant
 }
 
 /**

@@ -26,6 +26,7 @@ import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
+import com.fintrack.app.service.transfer.InternalTransferCommandService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -78,6 +79,9 @@ class FinancialTransactionServiceTest {
 
     @Mock
     private TransactionRuleEvaluationService transactionRuleEvaluationService;
+
+    @Mock
+    private InternalTransferCommandService internalTransferCommandService;
 
     @InjectMocks
     private FinancialTransactionService financialTransactionService;
@@ -241,7 +245,7 @@ class FinancialTransactionServiceTest {
         );
 
         assertThat(financialTransactionService.delete(30L)).isTrue();
-        verify(internalTransferRepository).deleteByTransactionIdInEitherRole(30L);
+        verify(internalTransferCommandService).unlinkForFinancialTransactionDeletion(30L);
         verify(financialTransactionRepository).deleteTagLinksByFinancialTransactionId(30L);
         verify(financialTransactionRepository).deleteById(30L);
     }

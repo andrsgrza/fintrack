@@ -61,6 +61,12 @@ Run the normal production packaging command when validating the integrated front
 
 This command uses Maven-managed Node 22.15.0 and npm 11.3.0, runs the configured `npm install` and production frontend build, then packages the JAR. It intentionally skips Java tests only; it does not skip frontend work or Modernizer. Do not add a Modernizer skip flag to production packaging.
 
+### Canonical Maven verify gate
+
+`./mvnw -ntp --batch-mode verify` is the canonical full gate and uses Maven-managed Node 22.15.0 with npm 11.3.0. Local Node use is pinned to the same version through `.nvmrc`; `package.json` requires Node 22.15.0 or later.
+
+Webpack keeps its development filesystem cache in `target/webpack/default-development`. If a local build deterministically fails inside Webpack with `HarmonyImportSpecifierDependency` and `buildMeta` undefined, preserve source, lockfiles, and `node_modules`; remove only that generated cache directory and rerun the canonical command. A successful rebuild must be followed by a second canonical verify run to prove the regenerated cache is valid.
+
 ### Backend — ownership suites
 
 **FinancialAccount (pattern A — direct `user`):**
@@ -2428,20 +2434,34 @@ Create rehabilitated; no user selector on form.
 
 ### Summary counts
 
-| Type           | File                          | Tests  | Custom vs generated                                      |
-| -------------- | ----------------------------- | ------ | -------------------------------------------------------- |
-| Integration IT | `InternalTransferResourceIT`  | **47** | 32 custom (ownership + domain guards) + 15 JHipster CRUD |
-| Unit — service | `InternalTransferServiceTest` | **13** | All custom                                               |
-| Unit — mapper  | `InternalTransferMapperTest`  | **1**  | Generated                                                |
-| Unit — domain  | `InternalTransferTest`        | **6**  | Generated                                                |
-| Unit — DTO     | `InternalTransferDTOTest`     | **1**  | Generated                                                |
-| E2E            | `internal-transfer.cy.ts`     | **8**  | Rehabilitated create/edit/delete                         |
+| Type           | File                          | Tests  | Custom vs generated                                                         |
+| -------------- | ----------------------------- | ------ | --------------------------------------------------------------------------- |
+| Integration IT | `InternalTransferResourceIT`  | **54** | 39 custom (ownership, domain guards, aggregate commands) + 15 JHipster CRUD |
+| Unit — service | `InternalTransferServiceTest` | **13** | All custom                                                                  |
+| Unit — mapper  | `InternalTransferMapperTest`  | **1**  | Generated                                                                   |
+| Unit — domain  | `InternalTransferTest`        | **6**  | Generated                                                                   |
+| Unit — DTO     | `InternalTransferDTOTest`     | **1**  | Generated                                                                   |
+| E2E            | `internal-transfer.cy.ts`     | **7**  | Product create/edit/unlink, navigation + responsive acceptance              |
 
 **Quick run:**
 
 ```bash
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
   -Dtest=InternalTransferResourceIT,InternalTransferServiceTest test
+```
+
+### Command foundation — `INTERNAL-TRANSFER-1`
+
+The command boundary is covered separately from legacy CRUD compatibility:
+
+- `InternalTransferInvariantServiceTest`: canonical pair, same account/owner/currency/amount/date/flow failures, inactive-account policy and any-role duplicate detection.
+- `InternalTransferCommandServiceTest`: atomic two-leg MANUAL creation, existing-leg provenance/classification preservation, counterpart derivation, and stale-version rejection before either leg is changed.
+- `InternalTransferResourceIT`: runs against PostgreSQL and proves the version migration applies alongside the existing ownership/link/unlink/delete regression coverage. `aggregateVersionProtectsIndependentEditAndUnlinkCommands` uses separate committed transactions to prove read `N` → edit `N+1`, stale update/unlink rejection, and successful unlink using the returned version; `aggregateUpdateThenUnlinkPreservesBothLegsAndAdvancesTheAggregateVersion` preserves the Hibernate unlink-after-edit regression.
+
+The command-specific PostgreSQL run is:
+
+```bash
+./mvnw -ntp --batch-mode -Dskip.npm=true -Dtest=InternalTransferResourceIT test
 ```
 
 ### Integration tests — `InternalTransferResourceIT`
@@ -2497,22 +2517,39 @@ Resolve legs, validate pair, reject duplicate link, immutable legs on update/PAT
 
 ### E2E — `internal-transfer.cy.ts`
 
-Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; legs read-only on edit; delete rehabilitated.
+The product acceptance seeds isolated same-owner accounts and uses the direct-transfer command flow. It covers the empty state, product list labels (not raw IDs), create with shared/per-leg posting dates, account/currency validation, read-only account identities in edit, aggregate update/version-conflict feedback without erasing local form data, detail leg presentation, and unlink confirmation that keeps both transactions. It also verifies the entity-menu entry, singular-to-plural canonical-route redirect, and list, create, edit, and detail at a mobile width.
+
+### Product page — `INTERNAL-TRANSFER-2`
+
+- Jest: `src/main/webapp/app/entities/internal-transfer/internal-transfer.spec.tsx` tests product list identity/amount/sort, empty state, atomic create payload, and source/destination exclusion.
+- REST: `InternalTransferResourceIT` verifies `/api/internal-transfers/product` returns summary legs without raw DTO shapes and `/product/{id}` returns both persisted legs through the owner-scoped read boundary.
+- The focused PostgreSQL command remains:
+
+```bash
+./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
+  -Dtest=InternalTransferResourceIT,InternalTransferServiceTest test
+```
+
+The browser product spec is:
+
+```bash
+npm run e2e -- --spec src/test/javascript/cypress/e2e/entity/internal-transfer.cy.ts
+```
 
 ### Gaps / deuda
 
-| Priority | Layer  | Tema                                                            | Status                                                                           |
-| -------- | ------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Low      | IT     | PATCH `incomingTransaction: null` explícito                     | ⏳ service cubierto                                                              |
-| Low      | IT     | PATCH otro outgoing `{id}`                                      | ⏳ PUT cubierto                                                                  |
-| Low      | IT     | Incoming ya enlazada (simétrico)                                | ⏳                                                                               |
-| Low      | IT     | Outgoing wrong flow / non-MANUAL (simétrico)                    | ⏳                                                                               |
-| Low      | E2E    | UI ownership smoke (user vs admin list)                         | ⏳                                                                               |
-| —        | Domain | Balances no se recalculan en create/delete                      | ⏳ fuera de scope                                                                |
-| —        | Domain | Create atómico out+in+transfer                                  | ⏳ fuera de scope                                                                |
-| —        | Domain | Validación posting dates entre patas                            | ⏳ fuera de scope                                                                |
-| —        | Domain | FinancialTransaction delete cleanup for linked InternalTransfer | ✅ covered by FinancialTransactionResourceIT                                     |
-| —        | Domain | Origin unrestricted for existing transaction legs               | ✅ covered; ingestion-created transfer pairing remains a future product decision |
+| Priority | Layer  | Tema                                                            | Status                                                                                             |
+| -------- | ------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Low      | IT     | PATCH `incomingTransaction: null` explícito                     | ⏳ service cubierto                                                                                |
+| Low      | IT     | PATCH otro outgoing `{id}`                                      | ⏳ PUT cubierto                                                                                    |
+| Low      | IT     | Incoming ya enlazada (simétrico)                                | ⏳                                                                                                 |
+| Low      | IT     | Outgoing wrong flow / non-MANUAL (simétrico)                    | ⏳                                                                                                 |
+| Low      | E2E    | UI ownership smoke (user vs admin list)                         | ⏳                                                                                                 |
+| —        | Domain | Balances no se recalculan en create/delete                      | ⏳ fuera de scope                                                                                  |
+| —        | Domain | Create atómico out+in+transfer                                  | ✅ `InternalTransferCommandServiceTest` verifica ambas patas `MANUAL` y el root en una transacción |
+| —        | Domain | Posting dates entre patas                                       | ✅ fecha de transacción compartida; `postingDate` independiente por pata                           |
+| —        | Domain | FinancialTransaction delete cleanup for linked InternalTransfer | ✅ covered by FinancialTransactionResourceIT                                                       |
+| —        | Domain | Origin unrestricted for existing transaction legs               | ✅ covered; ingestion-created transfer pairing remains a future product decision                   |
 
 ---
 

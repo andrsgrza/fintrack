@@ -3,6 +3,7 @@ package com.fintrack.app.web.rest;
 import static com.fintrack.app.domain.InternalTransferAsserts.*;
 import static com.fintrack.app.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
@@ -15,21 +16,34 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
+import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.InternalTransferCreateCommand;
 import com.fintrack.app.service.dto.InternalTransferDTO;
+import com.fintrack.app.service.dto.InternalTransferReadDTO;
+import com.fintrack.app.service.dto.InternalTransferUnlinkCommand;
+import com.fintrack.app.service.dto.InternalTransferUpdateCommand;
 import com.fintrack.app.service.mapper.InternalTransferMapper;
+import com.fintrack.app.service.transfer.InternalTransferCommandException;
+import com.fintrack.app.service.transfer.InternalTransferCommandService;
+import com.fintrack.app.service.transfer.InternalTransferErrorCode;
+import com.fintrack.app.service.transfer.InternalTransferProductQueryService;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +52,11 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Integration tests for the {@link InternalTransferResource} REST controller.
@@ -72,6 +90,21 @@ class InternalTransferResourceIT {
 
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private FinancialAccountRepository financialAccountRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private InternalTransferCommandService internalTransferCommandService;
+
+    @Autowired
+    private InternalTransferProductQueryService internalTransferProductQueryService;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Autowired
     private InternalTransferMapper internalTransferMapper;
@@ -203,13 +236,17 @@ class InternalTransferResourceIT {
 
     @BeforeEach
     void initTest() {
-        internalTransfer = createEntity(em);
+        // The independent-command acceptance test deliberately runs without the
+        // class fixture transaction so its commands use separate database transactions.
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            internalTransfer = createEntity(em);
+        }
     }
 
     @AfterEach
     void cleanup() {
         if (insertedInternalTransfer != null) {
-            internalTransferRepository.delete(insertedInternalTransfer);
+            internalTransferRepository.deleteById(insertedInternalTransfer.getId());
             insertedInternalTransfer = null;
         }
     }
@@ -337,6 +374,40 @@ class InternalTransferResourceIT {
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$.[*].id").value(hasItem(internalTransfer.getId().intValue())))
             .andExpect(jsonPath("$.[*].notes").value(hasItem(DEFAULT_NOTES)));
+    }
+
+    @Test
+    @Transactional
+    void getProductInternalTransfersReturnsHumanReadableLegSummaries() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+
+        restInternalTransferMockMvc
+            .perform(get(ENTITY_API_URL + "/product").param("sort", "outgoingTransaction.transactionDate,DESC"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content[0].transferId").value(internalTransfer.getId().intValue()))
+            .andExpect(jsonPath("$.content[0].source.accountName").value(internalTransfer.getOutgoingTransaction().getAccount().getName()))
+            .andExpect(
+                jsonPath("$.content[0].destination.accountName").value(internalTransfer.getIncomingTransaction().getAccount().getName())
+            )
+            .andExpect(jsonPath("$.content[0].source.transactionId").value(internalTransfer.getOutgoingTransaction().getId().intValue()))
+            .andExpect(
+                jsonPath("$.content[0].destination.transactionId").value(internalTransfer.getIncomingTransaction().getId().intValue())
+            );
+    }
+
+    @Test
+    @Transactional
+    void getProductInternalTransferReturnsBothLegsForDetail() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+
+        restInternalTransferMockMvc
+            .perform(get(ENTITY_API_URL + "/product/{id}", internalTransfer.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transferId").value(internalTransfer.getId().intValue()))
+            .andExpect(jsonPath("$.source.flow").value(TransactionFlow.OUT.name()))
+            .andExpect(jsonPath("$.destination.flow").value(TransactionFlow.IN.name()))
+            .andExpect(jsonPath("$.source.origin").value(TransactionOrigin.MANUAL.name()))
+            .andExpect(jsonPath("$.destination.origin").value(TransactionOrigin.MANUAL.name()));
     }
 
     @Test
@@ -1023,6 +1094,276 @@ class InternalTransferResourceIT {
             .perform(patch(ENTITY_API_URL_ID, internalTransfer.getId()).contentType("application/merge-patch+json").content(patchJson))
             .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @Transactional
+    void aggregateCommandAcceptsInitialVersionZeroAndUpdatesBothLegsAtomically() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        Long transferId = insertedInternalTransfer.getId();
+        LocalDate updatedDate = LocalDate.of(2026, 11, 1);
+
+        String command =
+            "{\"expectedVersion\":0,\"amount\":\"125.00\",\"transactionDate\":\"" +
+            updatedDate +
+            "\",\"sourcePostingDate\":\"2026-11-02\",\"destinationPostingDate\":\"2026-11-03\",\"sourceDescription\":\"Updated source\",\"destinationDescription\":\"Updated destination\",\"notes\":\"updated atomically\"}";
+
+        restInternalTransferMockMvc
+            .perform(put(ENTITY_API_URL + "/" + transferId + "/aggregate").contentType(MediaType.APPLICATION_JSON).content(command))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.version").value(1))
+            .andExpect(jsonPath("$.amount").value(125.00))
+            .andExpect(jsonPath("$.transactionDate").value(updatedDate.toString()));
+
+        InternalTransfer persisted = internalTransferRepository.findById(transferId).orElseThrow();
+        assertThat(persisted.getOutgoingTransaction().getAmount()).isEqualByComparingTo("125.00");
+        assertThat(persisted.getIncomingTransaction().getAmount()).isEqualByComparingTo("125.00");
+        assertThat(persisted.getOutgoingTransaction().getTransactionDate()).isEqualTo(updatedDate);
+        assertThat(persisted.getIncomingTransaction().getTransactionDate()).isEqualTo(updatedDate);
+    }
+
+    @Test
+    @Transactional
+    void commandUnlinkWithInitialVersionZeroPreservesBothLegs() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        Long transferId = insertedInternalTransfer.getId();
+        Long outgoingId = insertedInternalTransfer.getOutgoingTransaction().getId();
+        Long incomingId = insertedInternalTransfer.getIncomingTransaction().getId();
+
+        restInternalTransferMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/" + transferId + "/unlink")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"expectedVersion\":0}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transferId").value(transferId));
+
+        assertThat(internalTransferRepository.findById(transferId)).isEmpty();
+        assertThat(financialTransactionRepository.findById(outgoingId)).isPresent();
+        assertThat(financialTransactionRepository.findById(incomingId)).isPresent();
+        insertedInternalTransfer = null;
+    }
+
+    @Test
+    @Transactional
+    void aggregateUpdateThenUnlinkPreservesBothLegsAndAdvancesTheAggregateVersion() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        Long transferId = insertedInternalTransfer.getId();
+        Long outgoingId = insertedInternalTransfer.getOutgoingTransaction().getId();
+        Long incomingId = insertedInternalTransfer.getIncomingTransaction().getId();
+
+        String updateCommand =
+            "{\"expectedVersion\":0,\"amount\":\"125.00\",\"transactionDate\":\"2026-11-01\",\"sourcePostingDate\":\"2026-11-02\",\"destinationPostingDate\":\"2026-11-03\",\"sourceDescription\":\"Updated source\",\"destinationDescription\":\"Updated destination\",\"notes\":\"" +
+            DEFAULT_NOTES +
+            "\"}";
+
+        restInternalTransferMockMvc
+            .perform(put(ENTITY_API_URL + "/" + transferId + "/aggregate").contentType(MediaType.APPLICATION_JSON).content(updateCommand))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.version").value(1));
+
+        restInternalTransferMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/" + transferId + "/unlink")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"expectedVersion\":1}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transferId").value(transferId));
+
+        assertThat(internalTransferRepository.findById(transferId)).isEmpty();
+        assertThat(financialTransactionRepository.findById(outgoingId)).isPresent();
+        assertThat(financialTransactionRepository.findById(incomingId)).isPresent();
+        insertedInternalTransfer = null;
+    }
+
+    @Test
+    @Transactional
+    void aggregateCommandsRejectTheStaleVersionWithConflictAndKeepBothLegsLinked() throws Exception {
+        insertedInternalTransfer = internalTransferRepository.saveAndFlush(internalTransfer);
+        Long transferId = insertedInternalTransfer.getId();
+
+        String firstUpdate =
+            "{\"expectedVersion\":0,\"amount\":\"125.00\",\"transactionDate\":\"2026-11-01\",\"sourcePostingDate\":\"2026-11-02\",\"destinationPostingDate\":\"2026-11-03\",\"sourceDescription\":\"First source\",\"destinationDescription\":\"First destination\",\"notes\":\"" +
+            DEFAULT_NOTES +
+            "\"}";
+        String staleUpdate = firstUpdate.replace("First source", "Stale source").replace("First destination", "Stale destination");
+
+        restInternalTransferMockMvc
+            .perform(put(ENTITY_API_URL + "/" + transferId + "/aggregate").contentType(MediaType.APPLICATION_JSON).content(firstUpdate))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.version").value(1));
+
+        restInternalTransferMockMvc
+            .perform(put(ENTITY_API_URL + "/" + transferId + "/aggregate").contentType(MediaType.APPLICATION_JSON).content(staleUpdate))
+            .andExpect(status().isConflict());
+        restInternalTransferMockMvc
+            .perform(
+                post(ENTITY_API_URL + "/" + transferId + "/unlink")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"expectedVersion\":0}")
+            )
+            .andExpect(status().isConflict());
+
+        InternalTransfer persisted = internalTransferRepository.findById(transferId).orElseThrow();
+        assertThat(persisted.getVersion()).isEqualTo(1L);
+        assertThat(persisted.getOutgoingTransaction().getDescription()).isEqualTo("First source");
+        assertThat(persisted.getIncomingTransaction().getDescription()).isEqualTo("First destination");
+    }
+
+    /** Each command/read commits independently, representing two clients against PostgreSQL. */
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void aggregateVersionProtectsIndependentEditAndUnlinkCommands() {
+        CommandTransferFixture fixture = createCommandTransferFixture();
+        try {
+            InternalTransferReadDTO firstRead = inNewTransaction(() -> internalTransferProductQueryService.findOne(fixture.transferId()));
+            InternalTransferReadDTO secondRead = inNewTransaction(() -> internalTransferProductQueryService.findOne(fixture.transferId()));
+            assertThat(firstRead.getVersion()).isZero();
+            assertThat(secondRead.getVersion()).isZero();
+
+            InternalTransferReadDTO updated = inNewTransaction(() ->
+                internalTransferCommandService.updateTransfer(
+                    fixture.transferId(),
+                    commandUpdate(0L, "First client source", "First client destination")
+                )
+            );
+            assertThat(updated.getVersion()).isEqualTo(1L);
+            assertThat(updated.getNotes()).isEqualTo("Initial transfer note");
+
+            assertThatThrownBy(() ->
+                inNewTransaction(() -> internalTransferCommandService.unlinkTransfer(fixture.transferId(), commandUnlink(0L)))
+            )
+                .isInstanceOf(InternalTransferCommandException.class)
+                .extracting(exception -> ((InternalTransferCommandException) exception).getCode())
+                .isEqualTo(InternalTransferErrorCode.TRANSFER_VERSION_CONFLICT);
+            assertThatThrownBy(() ->
+                inNewTransaction(() ->
+                    internalTransferCommandService.updateTransfer(
+                        fixture.transferId(),
+                        commandUpdate(0L, "Stale source", "Stale destination")
+                    )
+                )
+            )
+                .isInstanceOf(InternalTransferCommandException.class)
+                .extracting(exception -> ((InternalTransferCommandException) exception).getCode())
+                .isEqualTo(InternalTransferErrorCode.TRANSFER_VERSION_CONFLICT);
+
+            InternalTransfer persisted = inNewTransaction(() -> internalTransferRepository.findById(fixture.transferId()).orElseThrow());
+            assertThat(persisted.getVersion()).isEqualTo(updated.getVersion());
+            assertThat(
+                inNewTransaction(() -> financialTransactionRepository.findById(fixture.sourceTransactionId()).orElseThrow()
+                ).getDescription()
+            ).isEqualTo("First client source");
+            assertThat(
+                inNewTransaction(() -> financialTransactionRepository.findById(fixture.destinationTransactionId()).orElseThrow()
+                ).getDescription()
+            ).isEqualTo("First client destination");
+
+            InternalTransferReadDTO unlinked = inNewTransaction(() ->
+                internalTransferCommandService.unlinkTransfer(fixture.transferId(), commandUnlink(updated.getVersion()))
+            );
+            assertThat(unlinked.getTransferId()).isEqualTo(fixture.transferId());
+            assertThat(inNewTransaction(() -> internalTransferRepository.findById(fixture.transferId()))).isEmpty();
+            assertThat(inNewTransaction(() -> financialTransactionRepository.findById(fixture.sourceTransactionId()))).isPresent();
+            assertThat(inNewTransaction(() -> financialTransactionRepository.findById(fixture.destinationTransactionId()))).isPresent();
+        } finally {
+            cleanupCommandTransferFixture(fixture);
+        }
+    }
+
+    private CommandTransferFixture createCommandTransferFixture() {
+        return inNewTransaction(() -> {
+            User owner = userRepository.findOneByLogin(CURRENT_MOCK_USER_LOGIN).orElseThrow();
+            String suffix = String.valueOf(longCount.incrementAndGet());
+            Instant now = Instant.now();
+            FinancialAccount source = financialAccountRepository.saveAndFlush(commandAccount("Version source " + suffix, owner, now));
+            FinancialAccount destination = financialAccountRepository.saveAndFlush(
+                commandAccount("Version destination " + suffix, owner, now)
+            );
+
+            InternalTransferCreateCommand command = new InternalTransferCreateCommand();
+            command.setSourceAccountId(source.getId());
+            command.setDestinationAccountId(destination.getId());
+            command.setAmount(new BigDecimal("100.00"));
+            command.setTransactionDate(LocalDate.of(2026, 10, 18));
+            command.setSourcePostingDate(LocalDate.of(2026, 10, 18));
+            command.setDestinationPostingDate(LocalDate.of(2026, 10, 19));
+            command.setSourceDescription("Initial source");
+            command.setDestinationDescription("Initial destination");
+            command.setTransferNotes("Initial transfer note");
+            InternalTransferReadDTO transfer = internalTransferCommandService.createTransfer(command);
+            return new CommandTransferFixture(
+                transfer.getTransferId(),
+                source.getId(),
+                destination.getId(),
+                transfer.getSource().getTransactionId(),
+                transfer.getDestination().getTransactionId()
+            );
+        });
+    }
+
+    private FinancialAccount commandAccount(String name, User owner, Instant now) {
+        FinancialAccount account = new FinancialAccount();
+        account.setName(name);
+        account.setAccountType(AccountType.DEBIT);
+        account.setCurrency(CurrencyCode.MXN);
+        account.setInitialBalance(BigDecimal.ZERO);
+        account.setInitialBalanceDate(LocalDate.of(2026, 10, 18));
+        account.setActive(true);
+        account.setCreatedAt(now);
+        account.setUpdatedAt(now);
+        account.setUser(owner);
+        return account;
+    }
+
+    private InternalTransferUpdateCommand commandUpdate(Long version, String sourceDescription, String destinationDescription) {
+        InternalTransferUpdateCommand command = new InternalTransferUpdateCommand();
+        command.setExpectedVersion(version);
+        command.setAmount(new BigDecimal("125.00"));
+        command.setTransactionDate(LocalDate.of(2026, 10, 20));
+        command.setSourcePostingDate(LocalDate.of(2026, 10, 21));
+        command.setDestinationPostingDate(LocalDate.of(2026, 10, 22));
+        command.setSourceDescription(sourceDescription);
+        command.setDestinationDescription(destinationDescription);
+        command.setNotes("Initial transfer note");
+        return command;
+    }
+
+    private InternalTransferUnlinkCommand commandUnlink(Long version) {
+        InternalTransferUnlinkCommand command = new InternalTransferUnlinkCommand();
+        command.setExpectedVersion(version);
+        return command;
+    }
+
+    private void cleanupCommandTransferFixture(CommandTransferFixture fixture) {
+        inNewTransaction(() -> {
+            internalTransferRepository
+                .findById(fixture.transferId())
+                .ifPresent(transfer ->
+                    internalTransferCommandService.unlinkTransfer(fixture.transferId(), commandUnlink(transfer.getVersion()))
+                );
+            financialTransactionRepository.deleteById(fixture.sourceTransactionId());
+            financialTransactionRepository.deleteById(fixture.destinationTransactionId());
+            financialAccountRepository.deleteById(fixture.sourceAccountId());
+            financialAccountRepository.deleteById(fixture.destinationAccountId());
+            return null;
+        });
+    }
+
+    private <T> T inNewTransaction(Supplier<T> action) {
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return transaction.execute(status -> action.get());
+    }
+
+    private record CommandTransferFixture(
+        Long transferId,
+        Long sourceAccountId,
+        Long destinationAccountId,
+        Long sourceTransactionId,
+        Long destinationTransactionId
+    ) {}
 
     protected long getRepositoryCount() {
         return internalTransferRepository.count();

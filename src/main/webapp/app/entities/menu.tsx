@@ -38,7 +38,7 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/budget">
         <Translate contentKey="global.menu.entities.budget" />
       </MenuItem>
-      <MenuItem icon="asterisk" to="/internal-transfer">
+      <MenuItem icon="asterisk" to="/internal-transfers">
         <Translate contentKey="global.menu.entities.internalTransfer" />
       </MenuItem>
       <MenuItem icon="asterisk" to="/api-ingestion">

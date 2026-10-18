@@ -23,6 +23,15 @@ public class InternalTransfer implements Serializable {
     @Column(name = "id")
     private Long id;
 
+    /**
+     * Optimistic concurrency token for changes to the transfer aggregate itself.
+     * The two financial legs are additionally protected by deterministic write locks
+     * in the transfer command service.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Size(max = 500)
     @Column(name = "notes", length = 500)
     private String notes;
@@ -30,6 +39,14 @@ public class InternalTransfer implements Serializable {
     @NotNull
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    /**
+     * Server-owned aggregate revision timestamp. It is updated with every
+     * effective aggregate mutation so changes to either persisted leg also
+     * make the versioned root dirty.
+     */
+    @Column(name = "updated_at")
+    private Instant updatedAt;
 
     @JsonIgnoreProperties(
         value = {
@@ -80,6 +97,14 @@ public class InternalTransfer implements Serializable {
         this.id = id;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
     public String getNotes() {
         return this.notes;
     }
@@ -104,6 +129,19 @@ public class InternalTransfer implements Serializable {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return this.updatedAt;
+    }
+
+    public InternalTransfer updatedAt(Instant updatedAt) {
+        this.setUpdatedAt(updatedAt);
+        return this;
+    }
+
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
     }
 
     public FinancialTransaction getOutgoingTransaction() {
@@ -158,6 +196,7 @@ public class InternalTransfer implements Serializable {
             "id=" + getId() +
             ", notes='" + getNotes() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
+            ", updatedAt='" + getUpdatedAt() + "'" +
             "}";
     }
 }

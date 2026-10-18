@@ -18,6 +18,7 @@ public interface InternalTransferMapper extends EntityMapper<InternalTransferDTO
     @Mapping(target = "outgoingTransaction", ignore = true)
     @Mapping(target = "incomingTransaction", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "version", ignore = true)
     InternalTransfer toEntity(InternalTransferDTO internalTransferDTO);
 
     @Named("partialUpdate")
@@ -25,6 +26,7 @@ public interface InternalTransferMapper extends EntityMapper<InternalTransferDTO
     @Mapping(target = "outgoingTransaction", ignore = true)
     @Mapping(target = "incomingTransaction", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "version", ignore = true)
     void partialUpdate(@MappingTarget InternalTransfer entity, InternalTransferDTO dto);
 
     @Named("financialTransactionId")

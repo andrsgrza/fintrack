@@ -1,5 +1,6 @@
 import React from 'react';
 import { Route } from 'react-router';
+import { Navigate } from 'react-router-dom';
 
 import ErrorBoundaryRoutes from 'app/shared/error/error-boundary-routes';
 
@@ -39,7 +40,8 @@ export default () => {
         <Route path="description-normalization-rule/*" element={<DescriptionNormalizationRule />} />
         <Route path="financial-subscription/*" element={<FinancialSubscription />} />
         <Route path="budget/*" element={<Budget />} />
-        <Route path="internal-transfer/*" element={<InternalTransfer />} />
+        <Route path="internal-transfers/*" element={<InternalTransfer />} />
+        <Route path="internal-transfer/*" element={<Navigate to="/internal-transfers" replace />} />
         <Route path="api-ingestion/*" element={<ApiIngestion />} />
         <Route path="api-access-token/*" element={<ApiAccessToken />} />
         <Route path="api-access-token-permission/*" element={<ApiAccessTokenPermission />} />

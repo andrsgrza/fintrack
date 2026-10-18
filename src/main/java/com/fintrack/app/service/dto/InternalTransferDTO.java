@@ -16,9 +16,13 @@ public class InternalTransferDTO implements Serializable {
 
     private Long id;
 
+    private Long version;
+
     private String notes;
 
     private Instant createdAt;
+
+    private Instant updatedAt;
 
     private FinancialTransactionDTO outgoingTransaction;
 
@@ -30,6 +34,14 @@ public class InternalTransferDTO implements Serializable {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 
     public String getNotes() {
@@ -46,6 +58,14 @@ public class InternalTransferDTO implements Serializable {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
     }
 
     public FinancialTransactionDTO getOutgoingTransaction() {
@@ -90,8 +110,10 @@ public class InternalTransferDTO implements Serializable {
     public String toString() {
         return "InternalTransferDTO{" +
             "id=" + getId() +
+            ", version=" + getVersion() +
             ", notes='" + getNotes() + "'" +
             ", createdAt='" + getCreatedAt() + "'" +
+            ", updatedAt='" + getUpdatedAt() + "'" +
             ", outgoingTransaction=" + getOutgoingTransaction() +
             ", incomingTransaction=" + getIncomingTransaction() +
             "}";

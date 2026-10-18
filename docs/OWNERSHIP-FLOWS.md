@@ -367,14 +367,16 @@ flowchart TB
 
 ### Usuario normal
 
-| Flujo           | Comportamiento                                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **List / GET**  | Solo transfers donde **out e in** pertenecen a sus cuentas                                                                                        |
-| **POST**        | Enlaza txs existentes accesibles; valida: distintas cuentas, misma moneda/monto, OUT+IN, MANUAL, mismo owner, sin link previo; `createdAt` server |
-| **PUT / PATCH** | Solo propios; patas y `createdAt` **inmutables**; solo `notes` mutable                                                                            |
-| **PATCH patas** | Ausente → preserva; `null` → `400`; otro `{id}` → `400`                                                                                           |
-| **DELETE**      | Solo propios; **borra solo el transfer**; las dos txs siguen vivas                                                                                |
-| **UI create**   | Selectores desde candidatos OUT/IN (propios, MANUAL, sin link)                                                                                    |
+| Flujo           | Comportamiento                                                                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **List / GET**  | Solo transfers donde **out e in** pertenecen a sus cuentas                                                                                                                                                                           |
+| **Commands**    | `create`, `link-existing`, `counterpart`, aggregate update and unlink derive ownership from persisted accounts/legs. New legs require active accounts; existing historical legs may remain readable/reconcilable after deactivation. |
+| **PUT / PATCH** | Solo propios; patas y `createdAt` **inmutables**; solo `notes` mutable                                                                                                                                                               |
+| **PATCH patas** | Ausente → preserva; `null` → `400`; otro `{id}` → `400`                                                                                                                                                                              |
+| **DELETE**      | Solo propios; **borra solo el transfer**; las dos txs siguen vivas                                                                                                                                                                   |
+
+The product reads at `/api/internal-transfers/product` and `/api/internal-transfers/product/{id}` follow the same pattern-D requirement: a regular user receives a transfer only when both linked accounts belong to the current user. Account/date filtering never relaxes that condition; administrators retain the existing global support view. Product unlink removes only the relation, never either FinancialTransaction.
+| **Counterparts** | Paginated lookup is scoped to the caller's owner and returns only a different-account, same-currency/amount/date, opposite-flow and unlinked leg. Existing-leg provenance is not rewritten. |
 
 ### Admin
 

@@ -861,15 +861,21 @@ Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. 
 
 **Interacción con FinancialTransaction:** `FinancialTransactionService.delete()` borra primero cualquier vínculo `InternalTransfer` de esa transacción y luego borra sólo esa transacción; no borra la contraparte.
 
-**Fuera de scope:** balances, create atómico out+in+transfer, QueryService.
+**Command foundation (v1):** `InternalTransferCommandService` is the only structural mutation boundary. It creates two `MANUAL` legs plus the root atomically, links matching existing legs without mutating their classifications/provenance, creates one counterpart leg for an existing transaction, performs bounded aggregate updates, and unlinks without deleting either leg. Its lock order is accounts by ID, transactions by ID, then root. Every effective aggregate update touches the root's server-owned `updatedAt`, so JPA advances `InternalTransfer.version` together with leg-only structural changes; `expectedVersion` then rejects stale update and unlink commands before a partial leg mutation. `InternalTransferCounterpartQueryService` is owner-scoped and paginated, returning only unlinked same-currency/same-amount/same-date opposite-flow candidates. New automatic legs are deliberately constructed without `FinancialTransactionService`, so DNR and `TransactionRule` evaluation are not invoked.
+
+**Migration:** `20261017120000_internal_transfer_command_foundation.xml` adds `internal_transfer.version` (backfilled as `0`) and `ck_internal_transfer__different_legs`. `20261018100000_internal_transfer_aggregate_revision.xml` adds the nullable server-owned `updated_at` touch column used to make aggregate-leg edits versioned. The command-foundation migration halts instead of silently changing any pre-existing row where both leg IDs are equal.
+
+**Product UI (v1):** `/internal-transfers` uses owner-scoped product projections rather than generic CRUD DTOs. `InternalTransferProductQueryService` returns paginated list summaries without category/tag collection traversal and complete read models for the detail page. The UI creates through `POST /commands/create`, updates through `PUT /{id}/aggregate`, and unlinks through `POST /{id}/unlink`; generated CRUD endpoints remain technical compatibility only. The direct-create screen has a single positive amount and shared transaction date; source and destination flows are derived. Account changes are deliberately outside aggregate update, so the edit UI explains unlink/recreate. New direct legs are still rule-free. Product work does not include Single Transaction or Transaction Batch linking.
+
+**Fuera de scope:** balances, cross-currency transfers, Single Transaction linking, and Transaction Batch linking.
 
 #### Deuda / riesgos documentados
 
 | Tema                                              | Estado      | Notas                                                                                                                                        |
 | ------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Balances                                          | ⏳          | DELETE y create no recalculan saldos                                                                                                         |
-| Create atómico out+in+transfer                    | ⏳          | Solo enlazar txs existentes en este PR                                                                                                       |
-| Posting dates                                     | ⏳          | Sin validación de alineación entre patas                                                                                                     |
+| Create atómico out+in+transfer                    | ✅          | `InternalTransferCommandService.createTransfer()` persiste ambas patas `MANUAL` y el root en una sola transacción                            |
+| Posting dates                                     | ✅          | La fecha de transacción es compartida; cada pata conserva su propia `postingDate`                                                            |
 | FT delete cleanup                                 | ✅          | `FinancialTransactionService.delete()` elimina el vínculo InternalTransfer y preserva la contraparte                                         |
 | Origin unrestricted for existing transaction legs | ✅ baseline | `MANUAL` / `FILE_IMPORT` / `API` are allowed; ingestion-created transfer pairing remains a future product decision                           |
 | Admin transfer-leg lookup                         | ✅ diseño   | Admin lookup for existing transfer legs follows InternalTransfer rules; TransactionCandidate admin behavior has no cross-user product bypass |

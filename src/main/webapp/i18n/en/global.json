@@ -19,7 +19,7 @@
         "descriptionNormalizationRule": "Description Normalization Rule",
         "financialSubscription": "Financial Subscription",
         "budget": "Budget",
-        "internalTransfer": "Internal Transfer",
+        "internalTransfer": "Internal Transfers",
         "transactionIngestion": "Transaction Ingestion",
         "apiIngestion": "Api Ingestion",
         "technical": "Technical",

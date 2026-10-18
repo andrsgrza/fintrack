@@ -1,0 +1,18 @@
+package com.fintrack.app.service.transfer;
+
+/** Stable machine-readable failures for the InternalTransfer command boundary. */
+public enum InternalTransferErrorCode {
+    TRANSFER_SAME_ACCOUNT,
+    TRANSFER_CROSS_OWNER,
+    TRANSFER_CURRENCY_MISMATCH,
+    TRANSFER_AMOUNT_MISMATCH,
+    TRANSFER_DATE_MISMATCH,
+    TRANSFER_FLOW_MISMATCH,
+    TRANSFER_LEG_ALREADY_LINKED,
+    TRANSFER_ACCOUNT_INACTIVE,
+    TRANSFER_COUNTERPART_STALE,
+    TRANSFER_NOT_FOUND,
+    TRANSFER_VERSION_CONFLICT,
+    TRANSFER_INVALID_REQUEST,
+    TRANSFER_INVALID_CLASSIFICATION,
+}

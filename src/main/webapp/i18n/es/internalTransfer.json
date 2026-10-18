@@ -1,27 +1,79 @@
 {
   "fintrackApp": {
     "internalTransfer": {
-      "home": {
-        "title": "Internal Transfers",
-        "refreshListLabel": "Refrescar lista",
-        "createLabel": "Crear nuevo Internal Transfer",
-        "createOrEditLabel": "Crear o editar Internal Transfer",
-        "notFound": "Ningún Internal Transfers encontrado"
-      },
-      "created": "Un nuevo Internal Transfer ha sido creado con el identificador {{ param }}",
-      "updated": "Un Internal Transfer ha sido actualizado con el identificador {{ param }}",
-      "deleted": "Un Internal Transfer ha sido eliminado con el identificador {{ param }}",
-      "delete": {
-        "question": "¿Eliminar Internal Transfer {{ id }}? Esto sólo elimina el vínculo de transferencia; las transacciones de salida y entrada se conservan."
-      },
-      "detail": {
-        "title": "Internal Transfer"
-      },
-      "id": "ID",
-      "notes": "Notes",
-      "createdAt": "Created At",
-      "outgoingTransaction": "Outgoing Transaction",
-      "incomingTransaction": "Incoming Transaction"
+      "product": {
+        "title": "Transferencias internas",
+        "listSubtitle": "Mueve dinero entre tus propias cuentas sin crear ingreso ni gasto.",
+        "new": "Nueva transferencia",
+        "create": "Crear transferencia",
+        "edit": "Editar transferencia",
+        "detailTitle": "Transferencia interna",
+        "formSubtitle": "Los dos movimientos se guardan juntos como una transferencia interna.",
+        "filters": "Filtros",
+        "account": "Cuenta",
+        "allAccounts": "Todas las cuentas",
+        "fromDate": "Fecha desde",
+        "toDate": "Fecha hasta",
+        "sort": "Ordenar",
+        "sortDateDesc": "Fecha de transferencia: recientes primero",
+        "sortDateAsc": "Fecha de transferencia: antiguas primero",
+        "sortAmount": "Monto",
+        "sortSource": "Cuenta de salida",
+        "sortDestination": "Cuenta de entrada",
+        "clear": "Limpiar",
+        "transactionDate": "Fecha de transferencia",
+        "source": "Sale de",
+        "destination": "Llega a",
+        "to": "Llega a",
+        "amount": "Monto",
+        "accounts": "Cuentas",
+        "selectAccount": "Selecciona una cuenta",
+        "accountsLocked": "Para cambiar las cuentas, desvincula esta transferencia y crea una nueva.",
+        "transferDetails": "Datos de la transferencia",
+        "postingDates": "Fechas de posteo",
+        "postingDate": "Fecha de posteo",
+        "sourcePostingDate": "Fecha de posteo de salida",
+        "destinationPostingDate": "Fecha de posteo de entrada",
+        "samePostingDate": "Usar la fecha de transferencia para ambas",
+        "descriptions": "Descripciones",
+        "sourceDescription": "Descripción de salida",
+        "destinationDescription": "Descripción de entrada",
+        "optionalDetails": "Detalles opcionales",
+        "sourceReference": "Referencia externa de salida",
+        "destinationReference": "Referencia externa de entrada",
+        "sourceNotes": "Notas de salida",
+        "destinationNotes": "Notas de entrada",
+        "externalReference": "Referencia externa",
+        "legNotes": "Notas del movimiento",
+        "transferNote": "Nota de transferencia",
+        "transferMetadata": "Detalles de la transferencia",
+        "createdAt": "Creada",
+        "moreActions": "Más acciones",
+        "viewTransaction": "Ver transacción",
+        "noClassification": "Sin categoría ni etiquetas",
+        "historicalDateMismatch": "Esta transferencia histórica tiene fechas distintas entre sus movimientos.",
+        "deleteLegNote": "Si eliminas una de las transacciones, la contraparte se conservará como transacción normal.",
+        "reload": "Recargar la versión actual",
+        "empty": {
+          "title": "No hay transferencias internas",
+          "body": "Las transferencias internas mueven dinero entre tus propias cuentas."
+        },
+        "unlink": {
+          "title": "Desvincular transferencia",
+          "body": "Las dos transacciones se conservarán y dejarán de estar vinculadas como transferencia interna.",
+          "action": "Desvincular"
+        },
+        "errors": {
+          "load": "No se pudieron cargar las transferencias internas. Inténtalo de nuevo.",
+          "accountRequired": "Selecciona una cuenta.",
+          "accountMismatch": "Elige dos cuentas diferentes.",
+          "currencyMismatch": "Las cuentas deben usar la misma moneda.",
+          "invalidAmount": "Ingresa un monto mayor que cero.",
+          "versionConflict": "Esta transferencia cambió mientras la editabas. Tus cambios siguen aquí; recarga la versión actual para conciliarlos.",
+          "notFound": "La transferencia no existe o ya no está disponible.",
+          "unexpectedError": "No se pudo guardar la transferencia. Inténtalo de nuevo."
+        }
+      }
     }
   }
 }

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Existing internal-transfer rows are intentionally not rewritten. A same-leg
+        row is corrupt under the aggregate invariant, so halt rather than silently
+        changing historic financial records during migration.
+    -->
+    <changeSet id="20261017120000-1" author="fintrack">
+        <preConditions onFail="HALT" onError="HALT">
+            <sqlCheck expectedResult="0">select count(*) from internal_transfer where outgoing_transaction_id = incoming_transaction_id</sqlCheck>
+        </preConditions>
+        <addColumn tableName="internal_transfer">
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <dropDefaultValue tableName="internal_transfer" columnName="version" columnDataType="bigint"/>
+        <sql dbms="postgresql">ALTER TABLE internal_transfer ADD CONSTRAINT ck_internal_transfer__different_legs CHECK (outgoing_transaction_id &lt;&gt; incoming_transaction_id)</sql>
+        <rollback>
+            <sql dbms="postgresql">ALTER TABLE internal_transfer DROP CONSTRAINT ck_internal_transfer__different_legs</sql>
+            <dropColumn tableName="internal_transfer" columnName="version"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
