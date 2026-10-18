@@ -136,6 +136,7 @@ public interface FinancialTransactionRepository
         "where account.user.login = :ownerLogin " +
         "and financialTransaction.id <> :sourceTransactionId " +
         "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
         "and account.currency = :currency " +
         "and financialTransaction.flow = :flow " +
         "and financialTransaction.amount = :amount " +
@@ -147,6 +148,7 @@ public interface FinancialTransactionRepository
         "where account.user.login = :ownerLogin " +
         "and financialTransaction.id <> :sourceTransactionId " +
         "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
         "and account.currency = :currency " +
         "and financialTransaction.flow = :flow " +
         "and financialTransaction.amount = :amount " +
@@ -157,6 +159,43 @@ public interface FinancialTransactionRepository
     Page<FinancialTransaction> findEligibleInternalTransferCounterparts(
         @Param("ownerLogin") String ownerLogin,
         @Param("sourceTransactionId") Long sourceTransactionId,
+        @Param("sourceAccountId") Long sourceAccountId,
+        @Param("currency") CurrencyCode currency,
+        @Param("flow") TransactionFlow flow,
+        @Param("amount") BigDecimal amount,
+        @Param("transactionDate") LocalDate transactionDate,
+        @Param("search") String search,
+        Pageable pageable
+    );
+
+    /** Candidate variant: the source leg has not been posted yet, so there is no source transaction id to exclude. */
+    @Query(
+        value = "select financialTransaction from FinancialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account account left join fetch account.user " +
+        "left join fetch financialTransaction.category category " +
+        "where account.user.login = :ownerLogin " +
+        "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
+        "and account.currency = :currency " +
+        "and financialTransaction.flow = :flow " +
+        "and financialTransaction.amount = :amount " +
+        "and financialTransaction.transactionDate = :transactionDate " +
+        "and lower(financialTransaction.description) like lower(concat('%', :search, '%')) " +
+        "and not exists (select transfer from InternalTransfer transfer where transfer.outgoingTransaction.id = financialTransaction.id or transfer.incomingTransaction.id = financialTransaction.id)",
+        countQuery = "select count(financialTransaction) from FinancialTransaction financialTransaction " +
+        "join financialTransaction.account account " +
+        "where account.user.login = :ownerLogin " +
+        "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
+        "and account.currency = :currency " +
+        "and financialTransaction.flow = :flow " +
+        "and financialTransaction.amount = :amount " +
+        "and financialTransaction.transactionDate = :transactionDate " +
+        "and lower(financialTransaction.description) like lower(concat('%', :search, '%')) " +
+        "and not exists (select transfer from InternalTransfer transfer where transfer.outgoingTransaction.id = financialTransaction.id or transfer.incomingTransaction.id = financialTransaction.id)"
+    )
+    Page<FinancialTransaction> findEligibleInternalTransferCounterpartsForCandidate(
+        @Param("ownerLogin") String ownerLogin,
         @Param("sourceAccountId") Long sourceAccountId,
         @Param("currency") CurrencyCode currency,
         @Param("flow") TransactionFlow flow,

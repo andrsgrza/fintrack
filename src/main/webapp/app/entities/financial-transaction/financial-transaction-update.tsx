@@ -19,6 +19,8 @@ import { ProductValidatedField, ProductValidatedForm } from 'app/shared/ui/produ
 import { ProductTagSelector } from 'app/shared/ui/product-tag-selector';
 
 import { getEntity, partialUpdateEntity } from './financial-transaction.reducer';
+import { FinancialTransactionInternalTransfer } from './financial-transaction-internal-transfer';
+import { InternalTransferRead } from 'app/entities/internal-transfer/internal-transfer-product.service';
 import { TransactionAccountLabel, TransactionCategory } from './transaction-presentation';
 
 const toOptionalNumber = (value: unknown) => (value === undefined || value === null || value === '' ? undefined : Number(value));
@@ -58,6 +60,13 @@ const getDefaultValues = financialTransactionEntity => ({
   notes: financialTransactionEntity.notes ?? '',
 });
 
+const StructuralValue = ({ label, children }: { label: React.ReactNode; children: React.ReactNode }) => (
+  <div>
+    <div className="form-label mb-1">{label}</div>
+    <div className="form-control bg-body-secondary text-muted">{children}</div>
+  </div>
+);
+
 export const FinancialTransactionUpdate = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -75,6 +84,8 @@ export const FinancialTransactionUpdate = () => {
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagsLoadError, setTagsLoadError] = useState(false);
   const [optionalDetailsOpen, setOptionalDetailsOpen] = useState(false);
+  const [transferRelation, setTransferRelation] = useState<InternalTransferRead | null>(null);
+  const [transferRelationLoaded, setTransferRelationLoaded] = useState(false);
 
   useEffect(() => {
     dispatch(getEntity(id));
@@ -87,6 +98,11 @@ export const FinancialTransactionUpdate = () => {
     setSelectedFlow((financialTransactionEntity.flow as keyof typeof TransactionFlow) ?? 'OUT');
     setSelectedCategoryId(financialTransactionEntity.category?.id?.toString() ?? '');
     setSelectedTagIds(financialTransactionEntity.tags?.map(tag => tag.id?.toString()).filter((tagId): tagId is string => !!tagId) ?? []);
+  }, [financialTransactionEntity.id]);
+
+  useEffect(() => {
+    setTransferRelation(null);
+    setTransferRelationLoaded(false);
   }, [financialTransactionEntity.id]);
 
   useEffect(() => {
@@ -169,19 +185,27 @@ export const FinancialTransactionUpdate = () => {
       return;
     }
 
+    const safeUpdate = {
+      id: financialTransactionEntity.id,
+      postingDate: values.postingDate ? dayjs(values.postingDate) : null,
+      description: values.description,
+      category: selectedCategoryId ? { id: Number(selectedCategoryId) } : null,
+      tags: mapIdList(selectedTagIds),
+      externalReference: values.externalReference || null,
+      notes: values.notes || null,
+    };
+
     dispatch(
-      partialUpdateEntity({
-        id: financialTransactionEntity.id,
-        transactionDate: values.transactionDate ? dayjs(values.transactionDate) : undefined,
-        postingDate: values.postingDate ? dayjs(values.postingDate) : null,
-        description: values.description,
-        amount: toOptionalNumber(values.amount),
-        flow: selectedFlow,
-        category: selectedCategoryId ? { id: Number(selectedCategoryId) } : null,
-        tags: mapIdList(selectedTagIds),
-        externalReference: values.externalReference || null,
-        notes: values.notes || null,
-      }),
+      partialUpdateEntity(
+        transferRelation
+          ? safeUpdate
+          : {
+              ...safeUpdate,
+              transactionDate: values.transactionDate ? dayjs(values.transactionDate) : undefined,
+              amount: toOptionalNumber(values.amount),
+              flow: selectedFlow,
+            },
+      ),
     );
   };
 
@@ -215,6 +239,20 @@ export const FinancialTransactionUpdate = () => {
         />
 
         <div className="vstack gap-3">
+          <FinancialTransactionInternalTransfer
+            transaction={financialTransactionEntity}
+            onRelationChange={setTransferRelation}
+            onRelationLoaded={() => setTransferRelationLoaded(true)}
+          />
+
+          {transferRelation ? (
+            <div className="alert alert-info mb-0" role="status" data-cy="financialTransactionTransferStructuralGuard">
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.structuralReadOnly">
+                These structural details are part of an internal transfer. Edit them from the transfer.
+              </Translate>
+            </div>
+          ) : null}
+
           <ProductSection
             title={<Translate contentKey="fintrackApp.financialTransaction.product.transaction">Transaction</Translate>}
             dataCy="financialTransactionEditTransactionSection"
@@ -241,60 +279,82 @@ export const FinancialTransactionUpdate = () => {
                 />
               </Col>
               <Col md="5">
-                <div className="form-label mb-2">
-                  <Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>
-                </div>
-                <ButtonGroup
-                  role="group"
-                  aria-label={translate('fintrackApp.financialTransaction.flow')}
-                  data-cy="financialTransactionFlowControl"
-                >
-                  <Button
-                    type="button"
-                    color={selectedFlow === 'OUT' ? 'primary' : 'secondary'}
-                    outline={selectedFlow !== 'OUT'}
-                    aria-pressed={selectedFlow === 'OUT'}
-                    data-cy="financialTransactionFlowOut"
-                    onClick={() => changeFlow('OUT')}
-                  >
-                    <Translate contentKey="fintrackApp.TransactionFlow.OUT">Expense</Translate>
-                  </Button>
-                  <Button
-                    type="button"
-                    color={selectedFlow === 'IN' ? 'primary' : 'secondary'}
-                    outline={selectedFlow !== 'IN'}
-                    aria-pressed={selectedFlow === 'IN'}
-                    data-cy="financialTransactionFlowIn"
-                    onClick={() => changeFlow('IN')}
-                  >
-                    <Translate contentKey="fintrackApp.TransactionFlow.IN">Income</Translate>
-                  </Button>
-                </ButtonGroup>
+                {transferRelation ? (
+                  <StructuralValue label={<Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>}>
+                    <Translate contentKey={`fintrackApp.TransactionFlow.${financialTransactionEntity.flow}`} />
+                  </StructuralValue>
+                ) : (
+                  <>
+                    <div className="form-label mb-2">
+                      <Translate contentKey="fintrackApp.financialTransaction.flow">Type</Translate>
+                    </div>
+                    <ButtonGroup
+                      role="group"
+                      aria-label={translate('fintrackApp.financialTransaction.flow')}
+                      data-cy="financialTransactionFlowControl"
+                    >
+                      <Button
+                        type="button"
+                        color={selectedFlow === 'OUT' ? 'primary' : 'secondary'}
+                        outline={selectedFlow !== 'OUT'}
+                        aria-pressed={selectedFlow === 'OUT'}
+                        data-cy="financialTransactionFlowOut"
+                        onClick={() => changeFlow('OUT')}
+                      >
+                        <Translate contentKey="fintrackApp.TransactionFlow.OUT">Expense</Translate>
+                      </Button>
+                      <Button
+                        type="button"
+                        color={selectedFlow === 'IN' ? 'primary' : 'secondary'}
+                        outline={selectedFlow !== 'IN'}
+                        aria-pressed={selectedFlow === 'IN'}
+                        data-cy="financialTransactionFlowIn"
+                        onClick={() => changeFlow('IN')}
+                      >
+                        <Translate contentKey="fintrackApp.TransactionFlow.IN">Income</Translate>
+                      </Button>
+                    </ButtonGroup>
+                  </>
+                )}
               </Col>
               <Col md="7">
-                <ProductValidatedField
-                  label={translate('fintrackApp.financialTransaction.amount')}
-                  id="financial-transaction-amount"
-                  name="amount"
-                  data-cy="amount"
-                  type="number"
-                  step="0.01"
-                  validate={{
-                    required: { value: true, message: translate('entity.validation.required') },
-                    min: { value: 0.01, message: translate('entity.validation.min', { min: 0.01 }) },
-                    validate: value => (isNumber(value) && Number(value) > 0) || translate('entity.validation.min', { min: 0.01 }),
-                  }}
-                />
+                {transferRelation ? (
+                  <StructuralValue label={<Translate contentKey="fintrackApp.financialTransaction.amount">Amount</Translate>}>
+                    {financialTransactionEntity.amount}
+                  </StructuralValue>
+                ) : (
+                  <ProductValidatedField
+                    label={translate('fintrackApp.financialTransaction.amount')}
+                    id="financial-transaction-amount"
+                    name="amount"
+                    data-cy="amount"
+                    type="number"
+                    step="0.01"
+                    validate={{
+                      required: { value: true, message: translate('entity.validation.required') },
+                      min: { value: 0.01, message: translate('entity.validation.min', { min: 0.01 }) },
+                      validate: value => (isNumber(value) && Number(value) > 0) || translate('entity.validation.min', { min: 0.01 }),
+                    }}
+                  />
+                )}
               </Col>
               <Col md="6">
-                <ProductValidatedField
-                  label={translate('fintrackApp.financialTransaction.transactionDate')}
-                  id="financial-transaction-transactionDate"
-                  name="transactionDate"
-                  data-cy="transactionDate"
-                  type="date"
-                  validate={{ required: { value: true, message: translate('entity.validation.required') } }}
-                />
+                {transferRelation ? (
+                  <StructuralValue
+                    label={<Translate contentKey="fintrackApp.financialTransaction.transactionDate">Transaction date</Translate>}
+                  >
+                    {financialTransactionEntity.transactionDate}
+                  </StructuralValue>
+                ) : (
+                  <ProductValidatedField
+                    label={translate('fintrackApp.financialTransaction.transactionDate')}
+                    id="financial-transaction-transactionDate"
+                    name="transactionDate"
+                    data-cy="transactionDate"
+                    type="date"
+                    validate={{ required: { value: true, message: translate('entity.validation.required') } }}
+                  />
+                )}
               </Col>
               <Col md="6">
                 <ProductValidatedField
@@ -400,7 +460,13 @@ export const FinancialTransactionUpdate = () => {
             >
               <Translate contentKey="entity.action.cancel">Cancel</Translate>
             </Button>
-            <Button color="primary" id="save-entity" data-cy="entityCreateSaveButton" type="submit" disabled={updating}>
+            <Button
+              color="primary"
+              id="save-entity"
+              data-cy="entityCreateSaveButton"
+              type="submit"
+              disabled={updating || !transferRelationLoaded}
+            >
               <FontAwesomeIcon icon="save" />{' '}
               <Translate contentKey="fintrackApp.financialTransaction.product.saveChanges">Save changes</Translate>
             </Button>

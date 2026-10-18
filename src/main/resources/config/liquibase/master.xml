@@ -64,5 +64,6 @@
     <include file="config/liquibase/changelog/20261016180000_retire_legacy_file_ingestion.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261017120000_internal_transfer_command_foundation.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261018100000_internal_transfer_aggregate_revision.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261018113000_manual_candidate_internal_transfer_intent.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

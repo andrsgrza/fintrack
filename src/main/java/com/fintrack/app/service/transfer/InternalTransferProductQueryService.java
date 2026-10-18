@@ -48,4 +48,18 @@ public class InternalTransferProductQueryService {
                 new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_NOT_FOUND)
             );
     }
+
+    /** Returns the aggregate containing an accessible financial transaction, without exposing a raw association. */
+    public InternalTransferReadDTO findByTransactionId(Long transactionId) {
+        return (
+            currentUserService.isAdmin()
+                ? internalTransferRepository.findProductDetailByTransactionId(transactionId)
+                : internalTransferRepository.findProductDetailByTransactionIdAndAccountUserLogin(
+                    transactionId,
+                    currentUserService.getCurrentUserLogin()
+                )
+        ).map(InternalTransferReadModelMapper::toRead).orElseThrow(() ->
+                new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_NOT_FOUND)
+            );
+    }
 }

@@ -114,6 +114,38 @@
       "fieldValidateRulesMaxlength": "1000"
     },
     {
+      "fieldName": "internalTransferEnabled",
+      "fieldType": "Boolean",
+      "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "internalTransferMode",
+      "fieldType": "TransactionCandidateInternalTransferMode",
+      "fieldValues": "CREATE_COUNTERPART,LINK_EXISTING"
+    },
+    {
+      "fieldName": "internalTransferCounterpartPostingDate",
+      "fieldType": "LocalDate"
+    },
+    {
+      "fieldName": "internalTransferCounterpartDescription",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "500"
+    },
+    {
+      "fieldName": "internalTransferCounterpartReference",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "150"
+    },
+    {
+      "fieldName": "internalTransferCounterpartNotes",
+      "fieldType": "String",
+      "fieldValidateRules": ["maxlength"],
+      "fieldValidateRulesMaxlength": "1000"
+    },
+    {
       "fieldName": "failureReason",
       "fieldType": "String",
       "fieldValidateRules": ["maxlength"],
@@ -172,6 +204,20 @@
       "otherEntityField": "name",
       "otherEntityName": "category",
       "relationshipName": "category",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "financialAccount",
+      "relationshipName": "internalTransferCounterpartAccount",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    },
+    {
+      "otherEntityField": "description",
+      "otherEntityName": "financialTransaction",
+      "relationshipName": "internalTransferCounterpartTransaction",
       "relationshipSide": "left",
       "relationshipType": "many-to-one"
     },

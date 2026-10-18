@@ -212,4 +212,36 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
         "and outgoingAccount.user.login = :login and incomingAccount.user.login = :login"
     )
     Optional<InternalTransfer> findProductDetailByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select distinct internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch outgoingTransaction.category " +
+        "left join fetch outgoingTransaction.tags " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "left join fetch incomingTransaction.category " +
+        "left join fetch incomingTransaction.tags " +
+        "where outgoingTransaction.id = :transactionId or incomingTransaction.id = :transactionId"
+    )
+    Optional<InternalTransfer> findProductDetailByTransactionId(@Param("transactionId") Long transactionId);
+
+    @Query(
+        "select distinct internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch outgoingTransaction.category " +
+        "left join fetch outgoingTransaction.tags " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "left join fetch incomingTransaction.category " +
+        "left join fetch incomingTransaction.tags " +
+        "where (outgoingTransaction.id = :transactionId or incomingTransaction.id = :transactionId) " +
+        "and outgoingAccount.user.login = :login and incomingAccount.user.login = :login"
+    )
+    Optional<InternalTransfer> findProductDetailByTransactionIdAndAccountUserLogin(
+        @Param("transactionId") Long transactionId,
+        @Param("login") String login
+    );
 }

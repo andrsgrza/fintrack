@@ -9,6 +9,7 @@ import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { ProductActionsMenu, ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
 import { getEntity } from './financial-transaction.reducer';
+import { FinancialTransactionInternalTransfer } from './financial-transaction-internal-transfer';
 import { TransactionAccountLabel, TransactionAmount, TransactionClassification } from './transaction-presentation';
 
 const DetailValue = ({ label, children }: { label: React.ReactNode; children: React.ReactNode }) => (
@@ -121,6 +122,8 @@ export const FinancialTransactionDetail = () => {
       />
 
       <div className="vstack gap-3">
+        <FinancialTransactionInternalTransfer transaction={financialTransactionEntity} />
+
         <ProductSection
           title={<Translate contentKey="fintrackApp.financialTransaction.product.classification">Classification</Translate>}
           dataCy="financialTransactionDetailClassification"

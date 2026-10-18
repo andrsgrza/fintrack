@@ -422,3 +422,7 @@ _Last updated: 2026-07-13 — validation catalog aligned with FinancialAccount b
 ### Category product validation feedback (CAT-UX-2)
 
 The Category product UI does not duplicate backend business validation. It explains immutable parent hierarchy in advance and maps the existing duplicate-name, parent-type, immutable-parent, and in-use type-change `400` responses to product copy. The delete dialog pre-detects direct children through the existing count endpoint and maps a protected `TransactionCandidate` reference rejection without exposing the backend exception. The backend remains the source of truth for every validation and cleanup decision.
+
+### Manual draft internal-transfer validation
+
+Internal-transfer intent belongs only to a `MANUAL` draft. `CREATE_COUNTERPART` requires a different active same-owner counterpart account with the same currency and complete counterpart posting date/description. `LINK_EXISTING` requires a server-selected transaction belonging to the same owner, on another active account with the same currency, opposite flow, equal amount and transaction date, and no existing transfer link. The server locks and repeats those checks at post time; a stale draft or previously eligible selection cannot be posted merely because the client had displayed it. The ordinary draft-post endpoint rejects enabled transfer intent, ensuring all enabled drafts pass through the atomic transfer command.

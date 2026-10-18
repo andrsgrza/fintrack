@@ -1,6 +1,7 @@
 package com.fintrack.app.service.transfer;
 
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
@@ -54,6 +55,45 @@ public class InternalTransferCounterpartQueryService {
                 counterpartFlow,
                 normalizedAmount(source),
                 source.getTransactionDate(),
+                search == null ? "" : search.trim(),
+                pageable
+            )
+            .map(InternalTransferReadModelMapper::toCounterpart);
+    }
+
+    /**
+     * Equivalent server-authoritative lookup while the current transfer leg is
+     * still a MANUAL candidate. The candidate is never materialised as a
+     * FinancialTransaction merely to populate a picker.
+     */
+    public Page<InternalTransferCounterpartDTO> findEligibleCounterpartsForManualCandidate(
+        TransactionCandidate candidate,
+        String search,
+        Pageable pageable
+    ) {
+        if (
+            candidate == null ||
+            candidate.getAccount() == null ||
+            candidate.getAccount().getId() == null ||
+            candidate.getAccount().getUser() == null ||
+            candidate.getAccount().getUser().getLogin() == null ||
+            candidate.getFlow() == null ||
+            candidate.getTransactionDate() == null
+        ) {
+            throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
+        }
+        if (candidate.getFlow() != TransactionFlow.OUT && candidate.getFlow() != TransactionFlow.IN) {
+            throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_FLOW_MISMATCH);
+        }
+        TransactionFlow counterpartFlow = candidate.getFlow() == TransactionFlow.OUT ? TransactionFlow.IN : TransactionFlow.OUT;
+        return financialTransactionRepository
+            .findEligibleInternalTransferCounterpartsForCandidate(
+                candidate.getAccount().getUser().getLogin(),
+                candidate.getAccount().getId(),
+                candidate.getAccount().getCurrency(),
+                counterpartFlow,
+                invariantService.normalizeAmount(candidate.getAmount()),
+                candidate.getTransactionDate(),
                 search == null ? "" : search.trim(),
                 pageable
             )

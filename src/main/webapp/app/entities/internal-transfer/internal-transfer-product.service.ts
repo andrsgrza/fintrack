@@ -53,6 +53,33 @@ export type InternalTransferCreateCommand = {
   transferNotes?: string;
 };
 
+export type InternalTransferCounterpartCommand = {
+  targetAccountId: number;
+  postingDate?: string;
+  description: string;
+  externalReference?: string;
+  notes?: string;
+};
+
+export type InternalTransferCounterpart = {
+  transactionId: number;
+  accountId: number;
+  accountName: string;
+  transactionDate?: string | null;
+  postingDate?: string | null;
+  description?: string | null;
+  amount?: number | null;
+  flow?: string | null;
+  currency?: string | null;
+  origin?: string | null;
+};
+
+export type InternalTransferCounterpartPage = {
+  content: InternalTransferCounterpart[];
+  totalElements: number;
+  totalPages: number;
+};
+
 export type InternalTransferUpdateCommand = {
   expectedVersion: number;
   amount: number;
@@ -85,8 +112,33 @@ export const getInternalTransfer = async (id: string | number) => {
   return response.data;
 };
 
+export const getInternalTransferForTransaction = async (transactionId: string | number) => {
+  const response = await axios.get<InternalTransferRead>(`${apiUrl}/transactions/${transactionId}/product`);
+  return response.data;
+};
+
 export const createInternalTransfer = async (command: InternalTransferCreateCommand) => {
   const response = await axios.post<InternalTransferRead>(`${apiUrl}/commands/create`, command);
+  return response.data;
+};
+
+export const createCounterpartForTransaction = async (transactionId: number, command: InternalTransferCounterpartCommand) => {
+  const response = await axios.post<InternalTransferRead>(`${apiUrl}/transactions/${transactionId}/counterpart`, command);
+  return response.data;
+};
+
+export const linkExistingTransactions = async (outgoingTransactionId: number, incomingTransactionId: number) => {
+  const response = await axios.post<InternalTransferRead>(`${apiUrl}/commands/link-existing`, {
+    outgoingTransactionId,
+    incomingTransactionId,
+  });
+  return response.data;
+};
+
+export const findEligibleCounterparts = async (transactionId: number, search = '') => {
+  const response = await axios.get<InternalTransferCounterpartPage>(`${apiUrl}/counterparts/${transactionId}`, {
+    params: { search, page: 0, size: 12, sort: 'transactionDate,DESC' },
+  });
   return response.data;
 };
 

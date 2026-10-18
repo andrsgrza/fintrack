@@ -145,6 +145,12 @@ public class InternalTransferResource {
         return invoke(() -> internalTransferProductQueryService.findOne(id));
     }
 
+    /** Compact relationship read model used by a posted FinancialTransaction page. */
+    @GetMapping("/transactions/{transactionId}/product")
+    public InternalTransferReadDTO getProductTransferForTransaction(@PathVariable Long transactionId) {
+        return invoke(() -> internalTransferProductQueryService.findByTransactionId(transactionId));
+    }
+
     /**
      * {@code POST  /internal-transfers} : Create a new internalTransfer.
      *

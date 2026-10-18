@@ -6,6 +6,7 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationRev
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionSource;
+import com.fintrack.app.domain.enumeration.TransactionCandidateInternalTransferMode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -138,6 +139,43 @@ public class TransactionCandidate implements Serializable {
     @Size(max = 1000)
     @Column(name = "notes", length = 1000)
     private String notes;
+
+    /**
+     * Minimal, resumable intent for posting this manual candidate as an
+     * InternalTransfer.  No duplicate current-leg amount, flow, currency, or
+     * transaction date is retained: those values remain authoritative on this
+     * candidate until the atomic post command executes.
+     */
+    @NotNull
+    @Column(name = "internal_transfer_enabled", nullable = false)
+    private Boolean internalTransferEnabled = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "internal_transfer_mode")
+    private TransactionCandidateInternalTransferMode internalTransferMode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "internal_transfer_counterpart_account_id")
+    private FinancialAccount internalTransferCounterpartAccount;
+
+    @Column(name = "internal_transfer_counterpart_posting_date")
+    private LocalDate internalTransferCounterpartPostingDate;
+
+    @Size(max = 500)
+    @Column(name = "internal_transfer_counterpart_description", length = 500)
+    private String internalTransferCounterpartDescription;
+
+    @Size(max = 150)
+    @Column(name = "internal_transfer_counterpart_reference", length = 150)
+    private String internalTransferCounterpartReference;
+
+    @Size(max = 1000)
+    @Column(name = "internal_transfer_counterpart_notes", length = 1000)
+    private String internalTransferCounterpartNotes;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "internal_transfer_counterpart_transaction_id")
+    private FinancialTransaction internalTransferCounterpartTransaction;
 
     @Size(max = 1000)
     @Column(name = "failure_reason", length = 1000)
@@ -465,6 +503,84 @@ public class TransactionCandidate implements Serializable {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public Boolean getInternalTransferEnabled() {
+        return Boolean.TRUE.equals(internalTransferEnabled);
+    }
+
+    public void setInternalTransferEnabled(Boolean internalTransferEnabled) {
+        this.internalTransferEnabled = Boolean.TRUE.equals(internalTransferEnabled);
+        if (!this.internalTransferEnabled) {
+            clearInternalTransferIntent();
+        }
+    }
+
+    public TransactionCandidateInternalTransferMode getInternalTransferMode() {
+        return internalTransferMode;
+    }
+
+    public void setInternalTransferMode(TransactionCandidateInternalTransferMode internalTransferMode) {
+        this.internalTransferMode = internalTransferMode;
+    }
+
+    public FinancialAccount getInternalTransferCounterpartAccount() {
+        return internalTransferCounterpartAccount;
+    }
+
+    public void setInternalTransferCounterpartAccount(FinancialAccount internalTransferCounterpartAccount) {
+        this.internalTransferCounterpartAccount = internalTransferCounterpartAccount;
+    }
+
+    public LocalDate getInternalTransferCounterpartPostingDate() {
+        return internalTransferCounterpartPostingDate;
+    }
+
+    public void setInternalTransferCounterpartPostingDate(LocalDate internalTransferCounterpartPostingDate) {
+        this.internalTransferCounterpartPostingDate = internalTransferCounterpartPostingDate;
+    }
+
+    public String getInternalTransferCounterpartDescription() {
+        return internalTransferCounterpartDescription;
+    }
+
+    public void setInternalTransferCounterpartDescription(String internalTransferCounterpartDescription) {
+        this.internalTransferCounterpartDescription = internalTransferCounterpartDescription;
+    }
+
+    public String getInternalTransferCounterpartReference() {
+        return internalTransferCounterpartReference;
+    }
+
+    public void setInternalTransferCounterpartReference(String internalTransferCounterpartReference) {
+        this.internalTransferCounterpartReference = internalTransferCounterpartReference;
+    }
+
+    public String getInternalTransferCounterpartNotes() {
+        return internalTransferCounterpartNotes;
+    }
+
+    public void setInternalTransferCounterpartNotes(String internalTransferCounterpartNotes) {
+        this.internalTransferCounterpartNotes = internalTransferCounterpartNotes;
+    }
+
+    public FinancialTransaction getInternalTransferCounterpartTransaction() {
+        return internalTransferCounterpartTransaction;
+    }
+
+    public void setInternalTransferCounterpartTransaction(FinancialTransaction internalTransferCounterpartTransaction) {
+        this.internalTransferCounterpartTransaction = internalTransferCounterpartTransaction;
+    }
+
+    /** Clears only transfer-specific draft state; normal draft/classification state is untouched. */
+    public void clearInternalTransferIntent() {
+        this.internalTransferMode = null;
+        this.internalTransferCounterpartAccount = null;
+        this.internalTransferCounterpartPostingDate = null;
+        this.internalTransferCounterpartDescription = null;
+        this.internalTransferCounterpartReference = null;
+        this.internalTransferCounterpartNotes = null;
+        this.internalTransferCounterpartTransaction = null;
     }
 
     public String getFailureReason() {

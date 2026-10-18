@@ -24,6 +24,10 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartAccount",
+            "internalTransferCounterpartAccount.user",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
             "category",
             "category.user",
             "tagAssociations",
@@ -39,6 +43,10 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartAccount",
+            "internalTransferCounterpartAccount.user",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
             "category",
             "category.user",
             "tagAssociations",
@@ -206,6 +214,21 @@ public interface TransactionCandidateRepository
     Optional<TransactionCandidate> findOneWithRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(
+        attributePaths = {
+            "user",
+            "account",
+            "account.user",
+            "category",
+            "category.user",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "internalTransferCounterpartAccount",
+            "internalTransferCounterpartAccount.user",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
+        }
+    )
     @Query(
         "select transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.id = :id and transactionCandidate.user.login = :login"
     )

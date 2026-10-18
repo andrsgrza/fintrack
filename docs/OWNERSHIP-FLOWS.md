@@ -526,3 +526,7 @@ Validación de negocio (cualquier rol):
 ---
 
 _Última actualización: 2026-07-09 — incluye IngestionRecord (pattern C + optional FT + same-owner). 17/17 complete._
+
+## Manual internal-transfer draft flow
+
+The draft, selected counterpart account, and linked-existing selection are owner-scoped `TransactionCandidate` state. Counterpart lookup never trusts a browser identifier as authorization: it evaluates the owning candidate and returns only same-owner, different-account, same-currency, opposite-flow, same-amount/date, unlinked transactions. Posting rechecks ownership and eligibility while locked. The resulting `InternalTransfer` and both final legs stay under the existing transfer aggregate ownership rules; link, unlink, and update commands continue to reject cross-owner resources.

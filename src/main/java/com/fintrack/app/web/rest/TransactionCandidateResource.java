@@ -4,10 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.service.TransactionCandidateService;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.InternalTransferCounterpartDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
+import com.fintrack.app.service.dto.ManualTransactionTransferPostCommand;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRuleApplyResponseDTO;
 import com.fintrack.app.service.dto.TransactionCandidateRulePreviewResponseDTO;
+import com.fintrack.app.service.transfer.InternalTransferCommandException;
+import com.fintrack.app.service.transfer.InternalTransferErrorCode;
 import com.fintrack.app.web.rest.errors.BadRequestAlertException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -22,6 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import tech.jhipster.web.util.HeaderUtil;
 import tech.jhipster.web.util.PaginationUtil;
@@ -247,10 +252,46 @@ public class TransactionCandidateResource {
         Optional<FinancialTransactionDTO> result;
         try {
             result = transactionCandidateService.postManualDraft(id);
+        } catch (InternalTransferCommandException e) {
+            throw transferFailure(e);
         } catch (IllegalArgumentException e) {
             throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
         }
         return ResponseUtil.wrapOrNotFound(result);
+    }
+
+    /**
+     * Atomically turns a configured manual candidate into its current ledger
+     * leg and an InternalTransfer. It intentionally does not call normal post
+     * followed by a second transfer request.
+     */
+    @PostMapping("/{id}/post-internal-transfer")
+    public ResponseEntity<FinancialTransactionDTO> postManualTransactionCandidateAsInternalTransfer(
+        @PathVariable("id") Long id,
+        @Valid @RequestBody ManualTransactionTransferPostCommand command
+    ) {
+        LOG.debug("REST request to post manual TransactionCandidate {} as InternalTransfer", id);
+        try {
+            return ResponseUtil.wrapOrNotFound(transactionCandidateService.postManualDraftAsInternalTransfer(id, command));
+        } catch (InternalTransferCommandException exception) {
+            throw transferFailure(exception);
+        } catch (IllegalArgumentException exception) {
+            throw new BadRequestAlertException(exception.getMessage(), ENTITY_NAME, "invalid");
+        }
+    }
+
+    /** Paginated, owner-scoped lookup while the candidate's current leg is still a draft. */
+    @GetMapping("/{id}/transfer-counterparts")
+    public org.springframework.data.domain.Page<InternalTransferCounterpartDTO> findEligibleManualTransferCounterparts(
+        @PathVariable("id") Long id,
+        @RequestParam(required = false) String search,
+        @org.springdoc.core.annotations.ParameterObject Pageable pageable
+    ) {
+        try {
+            return transactionCandidateService.findEligibleTransferCounterparts(id, search, pageable);
+        } catch (InternalTransferCommandException exception) {
+            throw transferFailure(exception);
+        }
     }
 
     /**
@@ -367,5 +408,18 @@ public class TransactionCandidateResource {
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();
+    }
+
+    private ResponseStatusException transferFailure(InternalTransferCommandException exception) {
+        InternalTransferErrorCode code = exception.getCode();
+        org.springframework.http.HttpStatus status =
+            switch (code) {
+                case TRANSFER_NOT_FOUND -> org.springframework.http.HttpStatus.NOT_FOUND;
+                case TRANSFER_LEG_ALREADY_LINKED,
+                    TRANSFER_COUNTERPART_STALE,
+                    TRANSFER_VERSION_CONFLICT -> org.springframework.http.HttpStatus.CONFLICT;
+                default -> org.springframework.http.HttpStatus.BAD_REQUEST;
+            };
+        return new ResponseStatusException(status, code.name(), exception);
     }
 }

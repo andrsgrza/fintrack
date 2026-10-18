@@ -14,8 +14,10 @@ import {
   applyManualDraftRules,
   cancelManualDraft,
   createManualDraft,
+  findManualTransferCounterparts,
   getManualDraft,
   postManualDraft,
+  postManualDraftAsInternalTransfer,
   previewManualDraftRules,
   updateManualDraft,
 } from './services/manual-transaction-candidate.service';
@@ -69,6 +71,8 @@ const mockGetManualDraft = getManualDraft as jest.Mock;
 const mockUpdateManualDraft = updateManualDraft as jest.Mock;
 const mockCancelManualDraft = cancelManualDraft as jest.Mock;
 const mockPostManualDraft = postManualDraft as jest.Mock;
+const mockPostManualDraftAsInternalTransfer = postManualDraftAsInternalTransfer as jest.Mock;
+const mockFindManualTransferCounterparts = findManualTransferCounterparts as jest.Mock;
 const mockPreviewManualDraftRules = previewManualDraftRules as jest.Mock;
 const mockApplyManualDraftRules = applyManualDraftRules as jest.Mock;
 const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
@@ -237,6 +241,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     mockUpdateManualDraft.mockReset();
     mockCancelManualDraft.mockReset();
     mockPostManualDraft.mockReset();
+    mockPostManualDraftAsInternalTransfer.mockReset();
+    mockFindManualTransferCounterparts.mockReset();
     mockPreviewManualDraftRules.mockReset();
     mockApplyManualDraftRules.mockReset();
     mockGetSelectableFinancialAccounts.mockReset();
@@ -247,6 +253,8 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     mockUpdateManualDraft.mockResolvedValue({ data: readyCandidate });
     mockCancelManualDraft.mockResolvedValue({ data: { ...candidate, status: 'CANCELLED' } });
     mockPostManualDraft.mockResolvedValue({ data: { id: 9001 } });
+    mockPostManualDraftAsInternalTransfer.mockResolvedValue({ data: { id: 9002 } });
+    mockFindManualTransferCounterparts.mockResolvedValue({ data: { content: [] } });
     mockPreviewManualDraftRules.mockResolvedValue({ data: suggestionsPreview });
     mockApplyManualDraftRules.mockResolvedValue({
       data: {
@@ -290,6 +298,127 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     expect(screen.queryByText('Start entering details to create a recoverable draft.')).toBeNull();
     expect(screen.queryByText('Saving…')).toBeNull();
     expect(screen.getByText('Saved automatically.')).toBeTruthy();
+  });
+
+  it('keeps internal transfer off by default and clears only its intent when disabled', async () => {
+    mockGetManualDraft.mockResolvedValue({ data: readyCandidate });
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    await screen.findByDisplayValue('Coffee');
+    const toggle = screen.getByLabelText('Internal transfer');
+    expect(toggle.checked).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(document.querySelector('[data-cy="manualDraftCreateCounterpartFields"]')).toBeTruthy();
+    expect(screen.getByLabelText('Counterpart account')).toBeTruthy();
+    expect(screen.getByLabelText('Counterpart posting date')).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(document.querySelector('[data-cy="manualDraftCreateCounterpartFields"]')).toBeNull();
+    expect(screen.getByDisplayValue('Coffee')).toBeTruthy();
+    act(() => {
+      jest.advanceTimersByTime(700);
+    });
+    await waitFor(() =>
+      expect(mockUpdateManualDraft).toHaveBeenLastCalledWith(
+        77,
+        expect.objectContaining({
+          internalTransferEnabled: false,
+          internalTransferMode: null,
+          internalTransferCounterpartAccount: null,
+          internalTransferCounterpartTransaction: null,
+        }),
+      ),
+    );
+  });
+
+  it('restores configured create-counterpart intent when a manual draft is resumed', async () => {
+    mockGetManualDraft.mockResolvedValue({
+      data: {
+        ...readyCandidate,
+        version: 4,
+        internalTransferEnabled: true,
+        internalTransferMode: 'CREATE_COUNTERPART',
+        internalTransferCounterpartAccount: accounts[1],
+        internalTransferCounterpartPostingDate: '2026-07-14',
+        internalTransferCounterpartDescription: 'Move to savings',
+        internalTransferCounterpartReference: 'xfer-1',
+        internalTransferCounterpartNotes: 'monthly move',
+      },
+    });
+    mockGetSelectableFinancialAccounts.mockResolvedValue(accounts);
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    expect((await screen.findByLabelText('Internal transfer')).checked).toBe(true);
+    expect(document.querySelector('[data-cy="manualDraftCreateCounterpartFields"]')).toBeTruthy();
+    expect(screen.getByLabelText('Counterpart account').value).toBe('2');
+    expect(screen.getByLabelText('Counterpart posting date').value).toBe('2026-07-14');
+    expect(screen.getByLabelText('Counterpart description').value).toBe('Move to savings');
+    expect(screen.getByLabelText('Counterpart reference').value).toBe('xfer-1');
+    expect(screen.getByLabelText('Counterpart notes').value).toBe('monthly move');
+  });
+
+  it('uses the atomic transfer post endpoint instead of ordinary manual post', async () => {
+    mockGetManualDraft.mockResolvedValue({
+      data: {
+        ...readyCandidate,
+        version: 4,
+        internalTransferEnabled: true,
+        internalTransferMode: 'CREATE_COUNTERPART',
+        internalTransferCounterpartAccount: accounts[1],
+        internalTransferCounterpartPostingDate: '2026-07-14',
+        internalTransferCounterpartDescription: 'Move to savings',
+      },
+    });
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    await screen.findByDisplayValue('Move to savings');
+    fireEvent.click(screen.getByRole('button', { name: /post transaction/i }));
+
+    await waitFor(() => expect(mockPostManualDraftAsInternalTransfer).toHaveBeenCalledWith(77, 4));
+    expect(mockPostManualDraft).not.toHaveBeenCalled();
+    expect(screen.getByTestId('location').textContent).toBe('/financial-transaction/9002');
+  });
+
+  it('uses the server-scoped counterpart search and persists the selected existing counterpart', async () => {
+    mockGetManualDraft.mockResolvedValue({
+      data: { ...readyCandidate, version: 4, internalTransferEnabled: true, internalTransferMode: 'LINK_EXISTING' },
+    });
+    mockFindManualTransferCounterparts.mockResolvedValue({
+      data: {
+        content: [
+          {
+            transactionId: 88,
+            accountId: 2,
+            accountName: 'Savings',
+            transactionDate: '2026-07-13',
+            postingDate: '2026-07-13',
+            description: 'Matching income',
+            amount: 12,
+            flow: 'IN',
+            currency: 'MXN',
+          },
+        ],
+      },
+    });
+    renderManualDraft('/financial-transaction/drafts/77');
+
+    await screen.findByDisplayValue('Coffee');
+    fireEvent.change(screen.getByLabelText('Search counterpart'), { target: { value: 'matching' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search counterpart' }));
+
+    expect(await screen.findByText('Matching income')).toBeTruthy();
+    expect(mockFindManualTransferCounterparts).toHaveBeenCalledWith(77, 'matching');
+    fireEvent.click(screen.getByText('Matching income'));
+    act(() => {
+      jest.advanceTimersByTime(700);
+    });
+    await waitFor(() =>
+      expect(mockUpdateManualDraft).toHaveBeenLastCalledWith(
+        77,
+        expect.objectContaining({ internalTransferCounterpartTransaction: { id: 88 } }),
+      ),
+    );
   });
 
   it('composes a resumed draft into product sections with rich account and classification presentation', async () => {

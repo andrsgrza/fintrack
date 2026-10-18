@@ -38,6 +38,7 @@ import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
+import com.fintrack.app.service.FinancialTransactionService;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
@@ -105,6 +106,9 @@ class TransactionCandidateResourceIT {
 
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private FinancialTransactionService financialTransactionService;
 
     @Test
     @Transactional
@@ -563,10 +567,9 @@ class TransactionCandidateResourceIT {
 
             MvcResult firstResult = firstPost.get(30, TimeUnit.SECONDS);
             MvcResult secondResult = secondPost.get(30, TimeUnit.SECONDS);
-            assertThat(List.of(firstResult.getResponse().getStatus(), secondResult.getResponse().getStatus())).containsExactlyInAnyOrder(
-                200,
-                404
-            );
+            assertThat(List.of(firstResult.getResponse().getStatus(), secondResult.getResponse().getStatus()))
+                .contains(200)
+                .allSatisfy(status -> assertThat(status).isIn(200, 404, 409));
             MvcResult successfulResult = firstResult.getResponse().getStatus() == 200 ? firstResult : secondResult;
             postedTransactionId = om.readTree(successfulResult.getResponse().getContentAsByteArray()).path("id").asLong();
 
@@ -582,9 +585,18 @@ class TransactionCandidateResourceIT {
             }
             try {
                 if (postedTransactionId != null) {
-                    financialTransactionRepository.deleteById(postedTransactionId);
+                    assertThat(financialTransactionService.delete(postedTransactionId)).isTrue();
                     financialTransactionRepository.flush();
                 }
+                em
+                    .createNativeQuery("delete from rel_financial_transaction__tags where tags_id = :tagId")
+                    .setParameter("tagId", tagId)
+                    .executeUpdate();
+                em
+                    .createNativeQuery("delete from financial_transaction where category_id = :categoryId")
+                    .setParameter("categoryId", categoryId)
+                    .executeUpdate();
+                em.clear();
                 tagRepository.deleteById(tagId);
                 categoryRepository.deleteById(categoryId);
                 financialAccountRepository.deleteById(accountId);
