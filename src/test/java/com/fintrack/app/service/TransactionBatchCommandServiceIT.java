@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.User;
@@ -43,6 +44,9 @@ class TransactionBatchCommandServiceIT {
 
     @Autowired
     private FinancialAccountRepository accountRepository;
+
+    @Autowired
+    private FinancialTransactionRepository financialTransactionRepository;
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -328,6 +332,45 @@ class TransactionBatchCommandServiceIT {
         assertThat(candidateRepository.findById(created.getCandidate().getId())).isEmpty();
     }
 
+    @Test
+    @Transactional
+    void persistsAndClearsOnlyTheBatchTransferIntentWhileAdvancingBothRevisions() {
+        FinancialAccount sourceAccount = account();
+        FinancialAccount counterpartAccount = account();
+        TransactionBatchWorkspaceDTO batch = service.createOpenBatch(sourceAccount.getId());
+        TransactionBatchDraftCommand draft = completeDraft(batch.getVersion(), "Batch transfer", "-125.00");
+        TransactionBatchRowMutationDTO created = service.addManualDraft(batch.getId(), draft);
+        FinancialTransaction counterpart = publishedTransaction(counterpartAccount, TransactionFlow.IN, "125.00", "Existing income");
+
+        TransactionBatchInternalTransferCommand command = new TransactionBatchInternalTransferCommand();
+        command.setExpectedCandidateVersion(created.getCandidate().getVersion());
+        command.setCounterpartTransactionId(counterpart.getId());
+        TransactionBatchRowMutationDTO selected = service.setInternalTransfer(batch.getId(), created.getCandidate().getId(), command);
+
+        assertThat(selected.getCandidate().getInternalTransfer()).isNotNull();
+        assertThat(selected.getCandidate().getInternalTransfer().isEnabled()).isTrue();
+        assertThat(selected.getCandidate().getInternalTransfer().isStale()).isFalse();
+        assertThat(selected.getCandidate().getInternalTransfer().getCounterpart().getTransactionId()).isEqualTo(counterpart.getId());
+        assertThat(selected.getCandidate().getVersion()).isGreaterThan(created.getCandidate().getVersion());
+        assertThat(selected.getBatchVersion()).isGreaterThan(created.getBatchVersion());
+
+        TransactionBatchCandidateViewDTO reloaded = service.findOpenBatch(batch.getId()).orElseThrow().getCandidates().get(0);
+        assertThat(reloaded.getInternalTransfer().isEnabled()).isTrue();
+        assertThat(reloaded.getInternalTransfer().getCounterpart().getDescription()).isEqualTo("Existing income");
+
+        TransactionBatchRowMutationDTO cleared = service.clearInternalTransfer(
+            batch.getId(),
+            created.getCandidate().getId(),
+            selected.getCandidate().getVersion()
+        );
+        assertThat(cleared.getCandidate().getInternalTransfer().isEnabled()).isFalse();
+        assertThat(cleared.getCandidate().getDescription()).isEqualTo("Batch transfer");
+        assertThat(cleared.getCandidate().getSignedAmount()).isEqualByComparingTo("-125.00");
+        assertThat(cleared.getCandidate().getVersion()).isGreaterThan(selected.getCandidate().getVersion());
+        assertThat(cleared.getBatchVersion()).isGreaterThan(selected.getBatchVersion());
+        assertThat(financialTransactionRepository.findById(counterpart.getId())).isPresent();
+    }
+
     private User currentUser() {
         return TestUtil.findAll(em, User.class).stream().filter(user -> "user".equals(user.getLogin())).findFirst().orElseThrow();
     }
@@ -336,6 +379,27 @@ class TransactionBatchCommandServiceIT {
         TransactionBatchDraftCommand command = new TransactionBatchDraftCommand();
         command.setExpectedBatchVersion(expectedBatchVersion);
         return command;
+    }
+
+    private TransactionBatchDraftCommand completeDraft(Long expectedBatchVersion, String description, String signedAmount) {
+        TransactionBatchDraftCommand command = draftFor(expectedBatchVersion);
+        command.setTransactionDate(LocalDate.of(2026, 10, 18));
+        command.setDescription(description);
+        command.setSignedAmount(new BigDecimal(signedAmount));
+        return command;
+    }
+
+    private FinancialTransaction publishedTransaction(FinancialAccount account, TransactionFlow flow, String amount, String description) {
+        FinancialTransaction transaction = new FinancialTransaction()
+            .transactionDate(LocalDate.of(2026, 10, 18))
+            .description(description)
+            .amount(new BigDecimal(amount))
+            .flow(flow)
+            .origin(TransactionOrigin.MANUAL)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .account(account);
+        return financialTransactionRepository.saveAndFlush(transaction);
     }
 
     private FinancialAccount account() {

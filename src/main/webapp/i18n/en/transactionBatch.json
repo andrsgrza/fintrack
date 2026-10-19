@@ -37,6 +37,21 @@
         "amount": "Amount",
         "description": "Description",
         "category": "Category"
+      },
+      "transfer": {
+        "title": "Internal transfer",
+        "counterpart": "Counterpart",
+        "changeCounterpart": "Change counterpart",
+        "remove": "Remove transfer",
+        "offHelp": "This movement will publish as a normal transaction.",
+        "incomplete": "Complete date, type, and amount to find a compatible published transaction.",
+        "searchPlaceholder": "Search existing transaction",
+        "search": "Search",
+        "searchResults": "Eligible counterpart results",
+        "stale": "The selected counterpart is no longer available. Find and select another one before publishing.",
+        "searchFailure": "Could not search counterparts. Save the row data and try again.",
+        "selectFailure": "Could not save the counterpart. Your edit is still available to correct.",
+        "clearFailure": "Could not remove the transfer. Try again."
       }
     }
   }

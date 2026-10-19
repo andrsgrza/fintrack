@@ -33,6 +33,28 @@ export type BatchCandidate = {
   categoryAppliedByRule?: AppliedRuleAttribution | null;
   tags: BatchTag[];
   inputIssues: { field: string; reasonCode: string; submittedValue?: string | null }[];
+  internalTransfer?: BatchInternalTransferIntent | null;
+};
+
+export type BatchTransferCounterpart = {
+  transactionId: number;
+  accountId?: number;
+  accountName?: string | null;
+  transactionDate?: string | null;
+  postingDate?: string | null;
+  description?: string | null;
+  amount?: number | null;
+  flow?: 'IN' | 'OUT' | null;
+  currency?: string | null;
+  origin?: string | null;
+  categoryName?: string | null;
+  tagNames?: string[];
+};
+
+export type BatchInternalTransferIntent = {
+  enabled: boolean;
+  stale: boolean;
+  counterpart?: BatchTransferCounterpart | null;
 };
 
 export type BatchRulePreview = {
@@ -92,6 +114,12 @@ export type BatchAppendResult = {
   replayed: boolean;
 };
 
+/** A completed settings or reevaluation command always returns the next aggregate version. */
+export type BatchEvaluationRun = {
+  batchId: number;
+  batchVersion: number;
+};
+
 /** Every row command returns the server-authoritative row and workspace versions. */
 export type BatchRowMutation = {
   candidate: BatchCandidate;
@@ -116,6 +144,30 @@ export const replaceRowTags = (batchId: number, candidateId: number, expectedCan
   axios
     .put<BatchRowMutation>(`${apiUrl}/${batchId}/candidates/${candidateId}/tags`, { expectedCandidateVersion, tagIds })
     .then(response => response.data);
+export const setRowInternalTransfer = (
+  batchId: number,
+  candidateId: number,
+  expectedCandidateVersion: number,
+  counterpartTransactionId: number,
+) =>
+  axios
+    .put<BatchRowMutation>(`${apiUrl}/${batchId}/candidates/${candidateId}/internal-transfer`, {
+      expectedCandidateVersion,
+      counterpartTransactionId,
+    })
+    .then(response => response.data);
+export const clearRowInternalTransfer = (batchId: number, candidateId: number, expectedCandidateVersion: number) =>
+  axios
+    .delete<BatchRowMutation>(`${apiUrl}/${batchId}/candidates/${candidateId}/internal-transfer`, {
+      data: { expectedCandidateVersion },
+    })
+    .then(response => response.data);
+export const searchRowTransferCounterparts = (batchId: number, candidateId: number, search = '') =>
+  axios
+    .get<{ content: BatchTransferCounterpart[] }>(`${apiUrl}/${batchId}/candidates/${candidateId}/transfer-counterparts`, {
+      params: { search, page: 0, size: 8, sort: 'transactionDate,desc' },
+    })
+    .then(response => response.data.content);
 export const appendCsv = (batchId: number, expectedBatchVersion: number, operationKey: string, file: File) => {
   const body = new FormData();
   body.append('expectedBatchVersion', String(expectedBatchVersion));
@@ -124,7 +176,7 @@ export const appendCsv = (batchId: number, expectedBatchVersion: number, operati
   return axios.post<BatchAppendResult>(`${apiUrl}/${batchId}/append-csv`, body).then(response => response.data);
 };
 export const saveSettings = (batchId: number, settings: object) =>
-  axios.put(`${apiUrl}/${batchId}/settings`, settings).then(response => response.data);
+  axios.put<BatchEvaluationRun>(`${apiUrl}/${batchId}/settings`, settings).then(response => response.data);
 export const previewRules = (batchId: number) =>
   axios.get<BatchRulePreview[]>(`${apiUrl}/${batchId}/rule-preview`).then(response => response.data);
 export const applyRules = (batchId: number, candidateId: number, command: object) =>

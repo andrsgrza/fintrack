@@ -2,6 +2,7 @@ package com.fintrack.app.service.transfer;
 
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.repository.InternalTransferRepository;
@@ -55,12 +56,55 @@ public class InternalTransferInvariantService {
         }
     }
 
+    /**
+     * Validates a pre-post candidate against an already-published counterpart.
+     * The candidate is not a financial leg yet, so this deliberately performs
+     * the same business checks without requiring an id for it. Callers still
+     * re-run this check after obtaining write locks during publication.
+     */
+    public void validateCandidateAgainstExistingCounterpart(TransactionCandidate candidate, FinancialTransaction counterpart) {
+        if (
+            candidate == null ||
+            counterpart == null ||
+            counterpart.getId() == null ||
+            candidate.getAccount() == null ||
+            candidate.getFlow() == null ||
+            candidate.getTransactionDate() == null
+        ) {
+            throw failure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+        }
+        validateNewAccounts(candidate.getAccount(), counterpart.getAccount());
+        if (
+            (candidate.getFlow() == TransactionFlow.OUT && counterpart.getFlow() != TransactionFlow.IN) ||
+            (candidate.getFlow() == TransactionFlow.IN && counterpart.getFlow() != TransactionFlow.OUT) ||
+            (candidate.getFlow() != TransactionFlow.OUT && candidate.getFlow() != TransactionFlow.IN)
+        ) {
+            throw failure(InternalTransferErrorCode.TRANSFER_FLOW_MISMATCH);
+        }
+        if (!sameCanonicalAmount(candidate.getAmount(), counterpart.getAmount())) {
+            throw failure(InternalTransferErrorCode.TRANSFER_AMOUNT_MISMATCH);
+        }
+        if (!Objects.equals(candidate.getTransactionDate(), counterpart.getTransactionDate())) {
+            throw failure(InternalTransferErrorCode.TRANSFER_DATE_MISMATCH);
+        }
+    }
+
     /** Must be called after the legs have been deterministically locked. */
     public void requireUnlinked(FinancialTransaction outgoing, FinancialTransaction incoming) {
-        if (
-            internalTransferRepository.existsByTransactionIdInEitherRole(outgoing.getId()) ||
-            internalTransferRepository.existsByTransactionIdInEitherRole(incoming.getId())
-        ) {
+        requireUnlinked(outgoing);
+        requireUnlinked(incoming);
+    }
+
+    /**
+     * Verifies one already-persisted leg before it is selected as a counterpart.
+     * Keeping this as a one-leg operation avoids callers manufacturing a fake
+     * pair solely to use the preflight guard.
+     */
+    public void requireUnlinked(FinancialTransaction transaction) {
+        if (transaction == null || transaction.getId() == null) {
+            throw failure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+        }
+        if (internalTransferRepository.existsByTransactionIdInEitherRole(transaction.getId())) {
             throw failure(InternalTransferErrorCode.TRANSFER_LEG_ALREADY_LINKED);
         }
     }

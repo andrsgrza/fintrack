@@ -71,6 +71,15 @@ public class InternalTransferCounterpartQueryService {
         String search,
         Pageable pageable
     ) {
+        return findEligibleCounterpartsForCandidate(candidate, search, pageable);
+    }
+
+    /** Shared candidate matcher used by both standalone MANUAL drafts and Batch rows. */
+    public Page<InternalTransferCounterpartDTO> findEligibleCounterpartsForCandidate(
+        TransactionCandidate candidate,
+        String search,
+        Pageable pageable
+    ) {
         if (
             candidate == null ||
             candidate.getAccount() == null ||
@@ -85,6 +94,9 @@ public class InternalTransferCounterpartQueryService {
         if (candidate.getFlow() != TransactionFlow.OUT && candidate.getFlow() != TransactionFlow.IN) {
             throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_FLOW_MISMATCH);
         }
+        if (!Boolean.TRUE.equals(candidate.getAccount().getActive())) {
+            throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_ACCOUNT_INACTIVE);
+        }
         TransactionFlow counterpartFlow = candidate.getFlow() == TransactionFlow.OUT ? TransactionFlow.IN : TransactionFlow.OUT;
         return financialTransactionRepository
             .findEligibleInternalTransferCounterpartsForCandidate(
@@ -98,6 +110,17 @@ public class InternalTransferCounterpartQueryService {
                 pageable
             )
             .map(InternalTransferReadModelMapper::toCounterpart);
+    }
+
+    /**
+     * Resolves and validates a selected counterpart without creating a relation.
+     * Publication must call the invariant again after it has acquired write locks.
+     */
+    public FinancialTransaction requireEligibleCounterpartForCandidate(TransactionCandidate candidate, Long counterpartTransactionId) {
+        FinancialTransaction counterpart = findAccessible(counterpartTransactionId);
+        invariantService.validateCandidateAgainstExistingCounterpart(candidate, counterpart);
+        invariantService.requireUnlinked(counterpart);
+        return counterpart;
     }
 
     private FinancialTransaction findAccessible(Long id) {

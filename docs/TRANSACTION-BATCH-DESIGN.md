@@ -1,6 +1,6 @@
 # Transaction Batch — approved V1 design
 
-**Status:** approved contract; Batch-4 authenticated HTTP and product workspace integration implemented
+**Status:** approved contract; Batch-4 authenticated HTTP/product workspace and Batch V1 existing-counterpart internal-transfer integration implemented
 **Working base:** `96d12027d815e1569df17ab7daf2f5f57269950f`  
 **Scope:** replaces the product FILE-import workflow. It does not migrate or preserve old FILE-ingestion history.
 
@@ -49,6 +49,7 @@ The FILE-only `transactionIngestion` and `ingestionRecord` relationships are rem
 | Removed-tag intent          | `TransactionCandidateTagSuppression(candidate, tag)`                                                                  | Deleted with candidate or when resolved    |
 | Append idempotency          | `TransactionBatchAppendOperation` with key, immutable digest, accepted count, optional filename, time                 | Batch lifetime                             |
 | Publish replay              | limited fields on batch root                                                                                          | 24-hour receipt                            |
+| Batch internal transfer     | enabled flag + `LINK_EXISTING` FinancialTransaction FK; no counterpart snapshot                                       | Candidate lifetime                         |
 
 There is no CSV binary, full raw row JSON, parser-result snapshot, rule-evaluation archive, final classification snapshot, or final transaction-ID list.
 
@@ -134,6 +135,12 @@ Publish has an operation key/digest; the digest covers immutable submitted publi
 | Expired/root deleted                        | Not found/expired                                 | None                                                               | None                               |
 
 First publication locks root and candidates in stable order, rejects unresolved issues and invalid/incomplete data, creates final transactions with normal FILE-import origin, removes only pre-post children/candidates, and transitions root in one transaction. Rollback leaves OPEN state unchanged. Receipt expiry is checked on every read/replay; scheduled cleanup is hygiene only. Cleanup locks/rechecks root and cannot reach final transactions, categories, or tags.
+
+### 5.1 Batch V1 internal transfers
+
+Batch V1 permits one candidate to link only to one **existing published** eligible financial transaction. It deliberately excludes candidate-to-candidate links, Batch-row links, counterpart creation, cross-currency transfers, and transfer auto-rules. Selection saves intent only; it neither changes the counterpart nor creates an `InternalTransfer`. The read model returns a lightweight counterpart projection, or a stale enabled state if the `ON DELETE SET NULL` reference is gone or no longer satisfies the current invariant.
+
+Publication validates every transfer candidate before creating any final ledger row. It rejects duplicate counterpart claims inside one Batch, locks counterpart accounts and final legs in ascending id order, rechecks all transfer conditions and unlinked state, writes all final rows, then writes `InternalTransfer` roots. Any failure rolls back finals, roots, cleanup, and receipt together; the OPEN candidates and their selection remain for correction. Discard/delete clears only temporary intent and never touches the existing final counterpart.
 
 ## 6. Candidate version versus batch revision
 

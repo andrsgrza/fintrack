@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { translate } from 'react-jhipster';
 import {
   Button,
   Col,
@@ -22,7 +23,7 @@ import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
 import { AppliedRuleIndicator } from 'app/shared/ui/applied-rule-indicator';
 import { FinancialFlowSelector } from 'app/shared/ui/financial-flow-selector';
-import { BatchCandidate, BatchRulePreview } from './transaction-batch-api';
+import { BatchCandidate, BatchRulePreview, BatchTransferCounterpart } from './transaction-batch-api';
 import { amountMagnitude } from './transaction-batch-presentation';
 
 export type BatchEditorValues = {
@@ -432,6 +433,203 @@ const OptionalDetailsSection = ({ values, update, saving }: { values: BatchEdito
   </section>
 );
 
+const counterpartLabel = (counterpart: BatchTransferCounterpart) =>
+  [counterpart.accountName, counterpart.description, counterpart.transactionDate, counterpart.amount, counterpart.currency]
+    .filter(value => value !== null && value !== undefined && value !== '')
+    .join(' · ');
+
+const transferTranslation = (key: string) => translate(`fintrackApp.transactionBatch.transfer.${key}`);
+
+const InternalTransferSection = ({
+  candidate,
+  values,
+  saving,
+  onSearch,
+  onSelect,
+  onClear,
+}: {
+  candidate?: BatchCandidate;
+  values: BatchEditorValues;
+  saving: boolean;
+  onSearch?: (search: string) => Promise<BatchTransferCounterpart[]>;
+  onSelect?: (counterpart: BatchTransferCounterpart) => Promise<BatchCandidate | undefined>;
+  onClear?: () => Promise<BatchCandidate | undefined>;
+}) => {
+  const [enabled, setEnabled] = useState(Boolean(candidate?.internalTransfer?.enabled));
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<BatchTransferCounterpart[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const counterpart = candidate?.internalTransfer?.counterpart ?? null;
+  const canSearch = Boolean(candidate && values.transactionDate && values.amount && values.flow);
+
+  useEffect(() => {
+    setEnabled(Boolean(candidate?.internalTransfer?.enabled));
+    setSearch('');
+    setResults([]);
+    setError('');
+  }, [candidate?.id, candidate?.version]);
+
+  const searchCounterparts = async () => {
+    if (!onSearch || !canSearch) return;
+    setSearching(true);
+    setError('');
+    try {
+      setResults(await onSearch(search));
+    } catch {
+      setError(transferTranslation('searchFailure'));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const selectCounterpart = async (next: BatchTransferCounterpart) => {
+    if (!onSelect) return;
+    setBusy(true);
+    setError('');
+    try {
+      const updated = await onSelect(next);
+      if (!updated) setError(transferTranslation('selectFailure'));
+      else {
+        setEnabled(true);
+        setResults([]);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    if (!onClear) return;
+    setBusy(true);
+    setError('');
+    try {
+      const updated = await onClear();
+      if (!updated) setError(transferTranslation('clearFailure'));
+      else {
+        setEnabled(false);
+        setResults([]);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="transaction-batch-editor-section mt-4" data-cy="transactionBatchTransferSection">
+      <h3 className="transaction-batch-editor-heading">{transferTranslation('title')}</h3>
+      <FormGroup switch className="mb-3">
+        <Input
+          id="batch-editor-internal-transfer"
+          type="switch"
+          role="switch"
+          checked={enabled}
+          disabled={saving || busy}
+          onChange={event => {
+            if (event.target.checked) {
+              setEnabled(true);
+              setError('');
+            } else if (candidate?.internalTransfer?.enabled) {
+              void clear();
+            } else {
+              setEnabled(false);
+            }
+          }}
+          data-cy="transactionBatchInternalTransferToggle"
+        />
+        <Label check for="batch-editor-internal-transfer">
+          {transferTranslation('title')}
+        </Label>
+      </FormGroup>
+      {!enabled ? <p className="small text-muted mb-0">{transferTranslation('offHelp')}</p> : null}
+      {enabled ? (
+        <div className="transaction-batch-transfer-counterpart border rounded-3 p-3">
+          <Label className="fw-semibold d-block" for="batch-editor-counterpart-search">
+            {counterpart ? transferTranslation('changeCounterpart') : transferTranslation('counterpart')}
+          </Label>
+          {candidate?.internalTransfer?.stale ? (
+            <div className="alert alert-warning py-2" role="alert" data-cy="transactionBatchTransferStale">
+              {transferTranslation('stale')}
+            </div>
+          ) : null}
+          {counterpart ? (
+            <div
+              className="d-flex flex-wrap align-items-center justify-content-between gap-2"
+              data-cy="transactionBatchSelectedCounterpart"
+              aria-live="polite"
+            >
+              <div>
+                <div className="fw-semibold">{counterpart.accountName}</div>
+                <div className="small text-muted">{counterpartLabel(counterpart)}</div>
+              </div>
+              <Button type="button" color="secondary" outline size="sm" onClick={() => void clear()} disabled={saving || busy}>
+                {transferTranslation('remove')}
+              </Button>
+            </div>
+          ) : null}
+          {!canSearch ? (
+            <p className="small text-muted mb-0">{transferTranslation('incomplete')}</p>
+          ) : (
+            <>
+              <div className="d-flex gap-2">
+                <Input
+                  id="batch-editor-counterpart-search"
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder={transferTranslation('searchPlaceholder')}
+                  disabled={saving || busy || searching}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void searchCounterparts();
+                    }
+                  }}
+                  data-cy="transactionBatchCounterpartSearch"
+                />
+                <Button
+                  type="button"
+                  color="secondary"
+                  outline
+                  onClick={() => void searchCounterparts()}
+                  disabled={saving || busy || searching}
+                >
+                  {searching ? <Spinner size="sm" /> : transferTranslation('search')}
+                </Button>
+              </div>
+              {results.length ? (
+                <div
+                  className="d-flex flex-column gap-2 mt-3"
+                  data-cy="transactionBatchCounterpartResults"
+                  aria-label={transferTranslation('searchResults')}
+                >
+                  {results.map(result => (
+                    <button
+                      type="button"
+                      key={result.transactionId}
+                      className="btn btn-light text-start border"
+                      onClick={() => void selectCounterpart(result)}
+                      disabled={saving || busy}
+                    >
+                      <strong>{result.accountName}</strong> · {result.description}
+                      <span className="d-block small text-muted">{counterpartLabel(result)}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+          {error ? (
+            <div className="small text-danger mt-2" role="alert">
+              {error}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
 /**
  * The Batch editor deliberately shares the entry composition of the manual
  * transaction form while keeping Batch persistence at its own product boundary.
@@ -452,6 +650,9 @@ const TransactionBatchEditorModal = ({
   onSave,
   onMaterialChange,
   onApplySuggestion,
+  onSearchTransferCounterparts,
+  onSelectTransferCounterpart,
+  onClearTransfer,
 }: {
   open: boolean;
   sessionId: string;
@@ -468,6 +669,9 @@ const TransactionBatchEditorModal = ({
   onSave: (values: BatchEditorValues) => void;
   onMaterialChange?: (values: BatchEditorValues) => Promise<BatchCandidate | undefined>;
   onApplySuggestion?: (domain: BatchSuggestionDomain, values: BatchEditorValues) => Promise<BatchCandidate | undefined>;
+  onSearchTransferCounterparts?: (search: string) => Promise<BatchTransferCounterpart[]>;
+  onSelectTransferCounterpart?: (counterpart: BatchTransferCounterpart) => Promise<BatchCandidate | undefined>;
+  onClearTransfer?: () => Promise<BatchCandidate | undefined>;
 }) => {
   const [values, setValues] = useState<BatchEditorValues>(() => valuesFor(candidate));
   const [suggestionApplying, setSuggestionApplying] = useState(false);
@@ -544,6 +748,14 @@ const TransactionBatchEditorModal = ({
             saving={busy}
             fieldError={fieldError ?? null}
             onApplySuggestion={onApplySuggestion ? applySuggestion : undefined}
+          />
+          <InternalTransferSection
+            candidate={candidate}
+            values={values}
+            saving={busy}
+            onSearch={onSearchTransferCounterparts}
+            onSelect={onSelectTransferCounterpart}
+            onClear={onClearTransfer}
           />
           <OptionalDetailsSection values={values} update={update} saving={busy} />
         </ModalBody>

@@ -7,6 +7,7 @@ import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionBatch;
 import com.fintrack.app.domain.User;
@@ -14,14 +15,17 @@ import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionBatchStatus;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.TransactionBatchDraftCommand;
+import com.fintrack.app.service.dto.TransactionBatchInternalTransferCommand;
 import com.fintrack.app.service.dto.TransactionBatchPublicationReceiptDTO;
 import com.fintrack.app.service.dto.TransactionBatchPublishCommand;
 import com.fintrack.app.service.dto.TransactionBatchRowMutationDTO;
@@ -62,6 +66,9 @@ class TransactionBatchPublishServiceIT {
 
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private InternalTransferRepository internalTransferRepository;
 
     @Autowired
     private FinancialAccountRepository accountRepository;
@@ -208,10 +215,167 @@ class TransactionBatchPublishServiceIT {
             .hasSize(1);
     }
 
+    @Test
+    @Transactional
+    void publishesTheNewBatchLegAndExistingCounterpartAsOneInternalTransferOnlyAfterPreflight() {
+        FinancialAccount source = account();
+        FinancialAccount counterpartAccount = account();
+        FinancialTransaction counterpart = publishedTransaction(counterpartAccount, TransactionFlow.IN, "91.50", "Existing incoming leg");
+        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+        TransactionBatchRowMutationDTO draft = commandService.addManualDraft(
+            batch.getId(),
+            completeDraft(batch.getVersion(), "Batch outgoing leg", "-91.50")
+        );
+        TransactionBatchInternalTransferCommand transfer = new TransactionBatchInternalTransferCommand();
+        transfer.setExpectedCandidateVersion(draft.getCandidate().getVersion());
+        transfer.setCounterpartTransactionId(counterpart.getId());
+        TransactionBatchRowMutationDTO selected = commandService.setInternalTransfer(batch.getId(), draft.getCandidate().getId(), transfer);
+
+        TransactionBatchPublicationReceiptDTO receipt = publishService.publish(
+            batch.getId(),
+            publishCommand(selected.getBatchVersion(), "publish-transfer")
+        );
+
+        assertThat(receipt.getPublishedTransactionCount()).isOne();
+        assertThat(candidateRepository.existsByTransactionBatchId(batch.getId())).isFalse();
+        List<InternalTransfer> transfers = internalTransferRepository.findAll();
+        assertThat(transfers).hasSize(1);
+        InternalTransfer persistedTransfer = transfers.get(0);
+        assertThat(persistedTransfer.getIncomingTransaction().getId()).isEqualTo(counterpart.getId());
+        assertThat(persistedTransfer.getOutgoingTransaction().getDescription()).isEqualTo("Batch outgoing leg");
+        assertThat(persistedTransfer.getOutgoingTransaction().getAccount().getId()).isEqualTo(source.getId());
+    }
+
+    @Test
+    @Transactional
+    void publishesMultipleTransferRowsWhenEveryRowClaimsADistinctExistingCounterpart() {
+        FinancialAccount source = account();
+        FinancialTransaction firstCounterpart = publishedTransaction(account(), TransactionFlow.IN, "42.00", "First incoming leg");
+        FinancialTransaction secondCounterpart = publishedTransaction(account(), TransactionFlow.IN, "63.00", "Second incoming leg");
+        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+
+        TransactionBatchRowMutationDTO firstDraft = commandService.addManualDraft(
+            batch.getId(),
+            completeDraft(batch.getVersion(), "First batch transfer", "-42.00")
+        );
+        TransactionBatchRowMutationDTO firstSelected = commandService.setInternalTransfer(
+            batch.getId(),
+            firstDraft.getCandidate().getId(),
+            transferCommand(firstDraft.getCandidate().getVersion(), firstCounterpart.getId())
+        );
+        TransactionBatchRowMutationDTO secondDraft = commandService.addManualDraft(
+            batch.getId(),
+            completeDraft(firstSelected.getBatchVersion(), "Second batch transfer", "-63.00")
+        );
+        TransactionBatchRowMutationDTO secondSelected = commandService.setInternalTransfer(
+            batch.getId(),
+            secondDraft.getCandidate().getId(),
+            transferCommand(secondDraft.getCandidate().getVersion(), secondCounterpart.getId())
+        );
+
+        TransactionBatchPublicationReceiptDTO receipt = publishService.publish(
+            batch.getId(),
+            publishCommand(secondSelected.getBatchVersion(), "publish-distinct-transfers")
+        );
+
+        assertThat(receipt.getPublishedTransactionCount()).isEqualTo(2);
+        assertThat(candidateRepository.existsByTransactionBatchId(batch.getId())).isFalse();
+        assertThat(internalTransferRepository.findAll()).hasSize(2);
+    }
+
+    @Test
+    @Transactional
+    void rejectsTwoRowsClaimingTheSameCounterpartBeforeWritingAnyBatchLeg() {
+        FinancialAccount source = account();
+        FinancialTransaction counterpart = publishedTransaction(account(), TransactionFlow.IN, "27.00", "One incoming leg");
+        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+
+        TransactionBatchRowMutationDTO firstDraft = commandService.addManualDraft(
+            batch.getId(),
+            completeDraft(batch.getVersion(), "First duplicate claim", "-27.00")
+        );
+        TransactionBatchRowMutationDTO firstSelected = commandService.setInternalTransfer(
+            batch.getId(),
+            firstDraft.getCandidate().getId(),
+            transferCommand(firstDraft.getCandidate().getVersion(), counterpart.getId())
+        );
+        TransactionBatchRowMutationDTO secondDraft = commandService.addManualDraft(
+            batch.getId(),
+            completeDraft(firstSelected.getBatchVersion(), "Second duplicate claim", "-27.00")
+        );
+        TransactionBatchRowMutationDTO secondSelected = commandService.setInternalTransfer(
+            batch.getId(),
+            secondDraft.getCandidate().getId(),
+            transferCommand(secondDraft.getCandidate().getVersion(), counterpart.getId())
+        );
+
+        assertThatThrownBy(() ->
+            publishService.publish(batch.getId(), publishCommand(secondSelected.getBatchVersion(), "publish-duplicate-claim"))
+        )
+            .isInstanceOf(com.fintrack.app.service.transfer.InternalTransferCommandException.class)
+            .hasMessageContaining("TRANSFER_LEG_ALREADY_LINKED");
+        assertThat(batchRepository.findById(batch.getId()).orElseThrow().getStatus()).isEqualTo(TransactionBatchStatus.OPEN);
+        assertThat(candidateRepository.findAllBatchCandidatesWithRelationships(batch.getId(), "user")).hasSize(2);
+        assertThat(financialTransactionRepository.findAllWithToOneRelationshipsByAccountUserLogin("user"))
+            .filteredOn(
+                transaction ->
+                    "First duplicate claim".equals(transaction.getDescription()) ||
+                    "Second duplicate claim".equals(transaction.getDescription())
+            )
+            .isEmpty();
+        assertThat(internalTransferRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void rejectsAStaleCounterpartWithoutPublishingAnyOtherBatchRow() {
+        FinancialAccount source = account();
+        FinancialAccount counterpartAccount = account();
+        FinancialTransaction counterpart = publishedTransaction(counterpartAccount, TransactionFlow.IN, "35.00", "Existing incoming leg");
+        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+        TransactionBatchRowMutationDTO transferDraft = commandService.addManualDraft(
+            batch.getId(),
+            completeDraft(batch.getVersion(), "Transfer that becomes stale", "-35.00")
+        );
+        TransactionBatchInternalTransferCommand transfer = new TransactionBatchInternalTransferCommand();
+        transfer.setExpectedCandidateVersion(transferDraft.getCandidate().getVersion());
+        transfer.setCounterpartTransactionId(counterpart.getId());
+        TransactionBatchRowMutationDTO selected = commandService.setInternalTransfer(
+            batch.getId(),
+            transferDraft.getCandidate().getId(),
+            transfer
+        );
+        TransactionBatchRowMutationDTO ordinary = commandService.addManualDraft(
+            batch.getId(),
+            completeDraft(selected.getBatchVersion(), "Normal row must not publish", "-12.00")
+        );
+
+        counterpart.setAmount(new BigDecimal("36.00"));
+        financialTransactionRepository.saveAndFlush(counterpart);
+
+        assertThatThrownBy(() -> publishService.publish(batch.getId(), publishCommand(ordinary.getBatchVersion(), "publish-stale-transfer"))
+        )
+            .isInstanceOf(com.fintrack.app.service.transfer.InternalTransferCommandException.class)
+            .hasMessageContaining("TRANSFER_AMOUNT_MISMATCH");
+        assertThat(batchRepository.findById(batch.getId()).orElseThrow().getStatus()).isEqualTo(TransactionBatchStatus.OPEN);
+        assertThat(candidateRepository.existsByTransactionBatchId(batch.getId())).isTrue();
+        assertThat(financialTransactionRepository.findAllWithToOneRelationshipsByAccountUserLogin("user"))
+            .filteredOn(transaction -> "Normal row must not publish".equals(transaction.getDescription()))
+            .isEmpty();
+        assertThat(internalTransferRepository.findAll()).isEmpty();
+    }
+
     private TransactionBatchPublishCommand publishCommand(Long expectedBatchVersion, String operationKey) {
         TransactionBatchPublishCommand command = new TransactionBatchPublishCommand();
         command.setExpectedBatchVersion(expectedBatchVersion);
         command.setOperationKey(operationKey);
+        return command;
+    }
+
+    private TransactionBatchInternalTransferCommand transferCommand(Long expectedCandidateVersion, Long counterpartTransactionId) {
+        TransactionBatchInternalTransferCommand command = new TransactionBatchInternalTransferCommand();
+        command.setExpectedCandidateVersion(expectedCandidateVersion);
+        command.setCounterpartTransactionId(counterpartTransactionId);
         return command;
     }
 
@@ -222,6 +386,24 @@ class TransactionBatchPublishServiceIT {
         command.setDescription(description);
         command.setSignedAmount(new BigDecimal(signedAmount));
         return command;
+    }
+
+    private FinancialTransaction publishedTransaction(
+        FinancialAccount account,
+        com.fintrack.app.domain.enumeration.TransactionFlow flow,
+        String amount,
+        String description
+    ) {
+        FinancialTransaction transaction = new FinancialTransaction()
+            .transactionDate(LocalDate.of(2026, 10, 16))
+            .description(description)
+            .amount(new BigDecimal(amount))
+            .flow(flow)
+            .origin(TransactionOrigin.MANUAL)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .account(account);
+        return financialTransactionRepository.saveAndFlush(transaction);
     }
 
     private FinancialAccount account() {

@@ -65,5 +65,6 @@
     <include file="config/liquibase/changelog/20261017120000_internal_transfer_command_foundation.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261018100000_internal_transfer_aggregate_revision.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261018113000_manual_candidate_internal_transfer_intent.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261018120000_batch_transfer_counterpart_delete_policy.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

@@ -3,10 +3,12 @@ package com.fintrack.app.service;
 import com.fintrack.app.config.ApplicationProperties;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.InternalTransfer;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionBatch;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.enumeration.TransactionBatchStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateInternalTransferMode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -14,12 +16,16 @@ import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
+import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TransactionBatchAppendOperationRepository;
 import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.TransactionBatchPublicationReceiptDTO;
 import com.fintrack.app.service.dto.TransactionBatchPublishCommand;
 import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionMapper;
+import com.fintrack.app.service.transfer.InternalTransferCommandException;
+import com.fintrack.app.service.transfer.InternalTransferErrorCode;
+import com.fintrack.app.service.transfer.InternalTransferInvariantService;
 import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -29,8 +35,13 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,7 +62,9 @@ public class TransactionBatchPublishService {
     private final TransactionBatchAppendOperationRepository appendOperationRepository;
     private final FinancialAccountRepository accountRepository;
     private final FinancialTransactionRepository financialTransactionRepository;
+    private final InternalTransferRepository internalTransferRepository;
     private final TransactionCandidateFinancialTransactionMapper candidateFinancialTransactionMapper;
+    private final InternalTransferInvariantService internalTransferInvariantService;
     private final CurrentUserService currentUserService;
     private final Clock clock;
     private final ApplicationProperties applicationProperties;
@@ -62,7 +75,9 @@ public class TransactionBatchPublishService {
         TransactionBatchAppendOperationRepository appendOperationRepository,
         FinancialAccountRepository accountRepository,
         FinancialTransactionRepository financialTransactionRepository,
+        InternalTransferRepository internalTransferRepository,
         TransactionCandidateFinancialTransactionMapper candidateFinancialTransactionMapper,
+        InternalTransferInvariantService internalTransferInvariantService,
         CurrentUserService currentUserService,
         Clock clock,
         ApplicationProperties applicationProperties
@@ -72,7 +87,9 @@ public class TransactionBatchPublishService {
         this.appendOperationRepository = appendOperationRepository;
         this.accountRepository = accountRepository;
         this.financialTransactionRepository = financialTransactionRepository;
+        this.internalTransferRepository = internalTransferRepository;
         this.candidateFinancialTransactionMapper = candidateFinancialTransactionMapper;
+        this.internalTransferInvariantService = internalTransferInvariantService;
         this.currentUserService = currentUserService;
         this.clock = clock;
         this.applicationProperties = applicationProperties;
@@ -119,12 +136,19 @@ public class TransactionBatchPublishService {
         List<TransactionCandidate> candidates = candidateRepository.findAllBatchCandidatesForPublication(batch.getId(), login);
         validatePublicationAggregate(batch, account, candidates);
 
+        // Current Batch protocol locks its account, then the root, then rows.
+        // Transfer rows next lock every persisted counterpart account and leg by
+        // ascending id before validation. A counterpart is never materialised
+        // or linked before all rows have passed this preflight.
+        Map<Long, FinancialTransaction> counterpartsByCandidateId = lockAndValidateTransferCounterparts(batch, candidates, login);
+
         List<FinancialTransaction> finalTransactions = candidates
             .stream()
             .map(candidate -> candidateFinancialTransactionMapper.toFinancialTransaction(candidate, originFor(candidate), now))
             .toList();
         // One batched persistence boundary: any later FK/constraint or cleanup failure rolls every new final back.
-        financialTransactionRepository.saveAllAndFlush(finalTransactions);
+        finalTransactions = financialTransactionRepository.saveAllAndFlush(finalTransactions);
+        persistTransferRelations(candidates, finalTransactions, counterpartsByCandidateId, now);
 
         // The original association table predates candidate-owned tag entities, so remove it explicitly before the
         // bulk candidate delete. Candidate issues and suppressions are protected by their FK cascade.
@@ -171,6 +195,111 @@ public class TransactionBatchPublishService {
         for (TransactionCandidate candidate : candidates) {
             validateCandidate(batch, account, candidate);
         }
+    }
+
+    /**
+     * Locks and rechecks every selected published counterpart before any Batch
+     * final transaction is written. Duplicate claims are rejected up front so
+     * a failure rolls back the whole Batch with no receipt or partial legs.
+     */
+    private Map<Long, FinancialTransaction> lockAndValidateTransferCounterparts(
+        TransactionBatch batch,
+        List<TransactionCandidate> candidates,
+        String login
+    ) {
+        List<TransactionCandidate> transferCandidates = candidates
+            .stream()
+            .filter(TransactionCandidate::getInternalTransferEnabled)
+            .toList();
+        if (transferCandidates.isEmpty()) return Map.of();
+
+        Set<Long> counterpartIds = new HashSet<>();
+        Set<Long> counterpartAccountIds = new HashSet<>();
+        for (TransactionCandidate candidate : transferCandidates) {
+            if (
+                candidate.getInternalTransferMode() != TransactionCandidateInternalTransferMode.LINK_EXISTING ||
+                candidate.getInternalTransferCounterpartTransaction() == null ||
+                candidate.getInternalTransferCounterpartTransaction().getId() == null
+            ) {
+                throw transferFailure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+            }
+            Long counterpartId = candidate.getInternalTransferCounterpartTransaction().getId();
+            if (!counterpartIds.add(counterpartId)) {
+                // This is a deterministic conflict inside one publish request,
+                // not a missing/changed counterpart.  Surface the same stable
+                // conflict that callers receive when a persisted leg has
+                // already been claimed by another transfer.
+                throw transferFailure(InternalTransferErrorCode.TRANSFER_LEG_ALREADY_LINKED);
+            }
+            if (
+                candidate.getInternalTransferCounterpartTransaction().getAccount() == null ||
+                candidate.getInternalTransferCounterpartTransaction().getAccount().getId() == null
+            ) {
+                throw transferFailure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+            }
+            counterpartAccountIds.add(candidate.getInternalTransferCounterpartTransaction().getAccount().getId());
+        }
+
+        // Account locks precede FinancialTransaction locks, as in the existing
+        // transfer command service. The Batch account is already write-locked.
+        List<FinancialAccount> lockedCounterpartAccounts = accountRepository.findAllForInternalTransferMutationByIdInAndUserLogin(
+            counterpartAccountIds.stream().sorted().toList(),
+            login
+        );
+        if (lockedCounterpartAccounts.size() != counterpartAccountIds.size()) {
+            throw transferFailure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+        }
+        List<FinancialTransaction> lockedCounterparts =
+            financialTransactionRepository.findAllForInternalTransferMutationByIdInAndAccountUserLogin(
+                counterpartIds.stream().sorted().toList(),
+                login
+            );
+        if (lockedCounterparts.size() != counterpartIds.size()) {
+            throw transferFailure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+        }
+        Map<Long, FinancialTransaction> byId = new HashMap<>();
+        lockedCounterparts.forEach(counterpart -> byId.put(counterpart.getId(), counterpart));
+        Map<Long, FinancialTransaction> byCandidateId = new HashMap<>();
+        for (TransactionCandidate candidate : transferCandidates) {
+            FinancialTransaction counterpart = byId.get(candidate.getInternalTransferCounterpartTransaction().getId());
+            if (counterpart == null) throw transferFailure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+            internalTransferInvariantService.validateCandidateAgainstExistingCounterpart(candidate, counterpart);
+            internalTransferInvariantService.requireUnlinked(counterpart);
+            byCandidateId.put(candidate.getId(), counterpart);
+        }
+        return byCandidateId;
+    }
+
+    /** Creates roots only after every candidate/counterpart pair has passed locked preflight. */
+    private void persistTransferRelations(
+        List<TransactionCandidate> candidates,
+        List<FinancialTransaction> finalTransactions,
+        Map<Long, FinancialTransaction> counterpartsByCandidateId,
+        Instant now
+    ) {
+        if (counterpartsByCandidateId.isEmpty()) return;
+        List<InternalTransfer> transfers = new ArrayList<>();
+        for (int index = 0; index < candidates.size(); index++) {
+            TransactionCandidate candidate = candidates.get(index);
+            FinancialTransaction counterpart = counterpartsByCandidateId.get(candidate.getId());
+            if (counterpart == null) continue;
+            FinancialTransaction currentLeg = finalTransactions.get(index);
+            FinancialTransaction outgoing = currentLeg.getFlow() == TransactionFlow.OUT ? currentLeg : counterpart;
+            FinancialTransaction incoming = currentLeg.getFlow() == TransactionFlow.IN ? currentLeg : counterpart;
+            internalTransferInvariantService.validateExistingPair(outgoing, incoming);
+            internalTransferInvariantService.requireUnlinked(outgoing, incoming);
+            InternalTransfer transfer = new InternalTransfer();
+            transfer.setOutgoingTransaction(outgoing);
+            transfer.setIncomingTransaction(incoming);
+            transfer.setCreatedAt(now);
+            transfer.setUpdatedAt(now);
+            transfers.add(transfer);
+        }
+        internalTransferRepository.saveAllAndFlush(transfers);
+    }
+
+    private InternalTransferCommandException transferFailure(InternalTransferErrorCode code) {
+        return new InternalTransferCommandException(code);
     }
 
     private void validateCandidate(TransactionBatch batch, FinancialAccount account, TransactionCandidate candidate) {

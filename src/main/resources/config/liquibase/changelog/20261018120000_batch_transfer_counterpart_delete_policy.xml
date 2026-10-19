@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- A deleted published counterpart leaves its OPEN Batch row intact and visibly stale. -->
+    <changeSet id="20261018120000-1" author="fintrack">
+        <dropForeignKeyConstraint baseTableName="transaction_candidate" constraintName="fk_candidate_transfer_counterpart_transaction"/>
+        <addForeignKeyConstraint baseTableName="transaction_candidate" baseColumnNames="internal_transfer_counterpart_transaction_id"
+                                 constraintName="fk_candidate_transfer_counterpart_transaction" referencedTableName="financial_transaction"
+                                 referencedColumnNames="id" onDelete="SET NULL"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="transaction_candidate" constraintName="fk_candidate_transfer_counterpart_transaction"/>
+            <addForeignKeyConstraint baseTableName="transaction_candidate" baseColumnNames="internal_transfer_counterpart_transaction_id"
+                                     constraintName="fk_candidate_transfer_counterpart_transaction" referencedTableName="financial_transaction"
+                                     referencedColumnNames="id"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

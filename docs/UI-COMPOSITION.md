@@ -741,6 +741,8 @@ The unified FILE-ingestion review opens the existing full configured rule editor
 
 The review workspace keeps add-manual and append-CSV actions separate from the review queue. Its desktop queue uses six compact review columns; narrow layouts become labelled cards without changing candidate controls or command scope. Categories are an editable, color-accented selector and tags reuse `ProductTagSelector`; neither gets a redundant read-only identity above it. Rule previews are secondary and only receive an Apply action when a saved value would actually change. Local filters only affect presentation of the fully loaded workspace.
 
+Batch row editing also offers an **Internal transfer** switch, off by default, for both manual and CSV candidates. Batch V1 offers only a server-scoped search and selection of one already-published compatible transaction in another owned account; it does not create a counterpart and never offers candidate-to-candidate or Batch-row pairing. A selected counterpart is shown as a compact account/description summary and the queue adds a compact transfer indicator, never a raw id. A no-longer-eligible selection stays visibly stale, is not silently cleared, and blocks publication until the user changes or removes it. The same controls remain inside expanded mobile cards.
+
 Publishing uses a confirmation dialog, refuses locally known invalid rows, and routes a successful bounded receipt to the normal transaction list. If the browser loses the first publish response, reopening the batch attempts the bounded receipt read rather than creating a second publication. CSV append preserves its operation key after a failed request so retrying the same intent remains idempotent.
 
 TR-3 clarifies the TransactionRule UI split:

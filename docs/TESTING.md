@@ -3259,6 +3259,10 @@ The browser spec `transaction-batch.cy.ts` uses Chrome against a disposable Post
 
 `FinancialTransactionResourceIT.updatePostedFinancialTransactionDoesNotCreateCandidateOrApplyRules` is the direct posted-transaction edit regression: it updates an existing final transaction to match a rule, then verifies category/tags remain direct-edit values and `TransactionCandidate` count is unchanged. This is distinct from batch publication, which already has no evaluator dependency.
 
+### Transaction Batch internal-transfer integration
+
+`TransactionBatchCommandServiceIT` covers persisted Batch transfer intent, reload projection, exact candidate/batch revision advancement, and clearing the intent without changing normal row values. `TransactionBatchPublishServiceIT` uses isolated PostgreSQL to cover successful creation of one final Batch leg plus its `InternalTransfer`, and a stale amount mismatch that rolls back an otherwise mixed Batch without a receipt, final rows, or transfer root. `transaction-batch.spec.tsx` covers editor toggle/search/select/clear behavior, the absence of counterpart creation, no raw id in the selected summary, the compact stale indicator, and local publication blocking for a stale persisted selection. The remaining real-browser concurrency and mobile screenshots stay acceptance work for the dedicated Batch E2E environment.
+
 The browser acceptance intentionally does not simulate server clocks or lock races. Those are deterministic Java integration tests with isolated PostgreSQL, not timing-sensitive browser assertions. Native discard confirmation is asserted through the browser confirmation callback; it has no DOM surface to capture as a screenshot.
 
 ## Internal transfer from a single manual transaction

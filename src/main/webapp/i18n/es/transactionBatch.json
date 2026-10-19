@@ -37,6 +37,21 @@
         "amount": "Importe",
         "description": "Descripción",
         "category": "Categoría"
+      },
+      "transfer": {
+        "title": "Transferencia interna",
+        "counterpart": "Contraparte",
+        "changeCounterpart": "Cambiar contraparte",
+        "remove": "Quitar transferencia",
+        "offHelp": "Este movimiento se publicará como una transacción normal.",
+        "incomplete": "Completa fecha, tipo y monto para buscar una transacción publicada compatible.",
+        "searchPlaceholder": "Buscar transacción existente",
+        "search": "Buscar",
+        "searchResults": "Resultados de contrapartes elegibles",
+        "stale": "La contraparte seleccionada ya no está disponible. Busca y selecciona otra antes de publicar.",
+        "searchFailure": "No se pudieron buscar contrapartes. Guarda los datos de la fila y vuelve a intentarlo.",
+        "selectFailure": "No se pudo guardar la contraparte. Tu edición sigue disponible para corregirla.",
+        "clearFailure": "No se pudo quitar la transferencia. Inténtalo de nuevo."
       }
     }
   }

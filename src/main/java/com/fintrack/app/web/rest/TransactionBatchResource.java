@@ -7,11 +7,14 @@ import com.fintrack.app.service.TransactionBatchReceiptService;
 import com.fintrack.app.service.TransactionBatchRuleEvaluationService;
 import com.fintrack.app.service.TransactionBatchRuleOrchestrationService;
 import com.fintrack.app.service.dto.*;
+import com.fintrack.app.service.transfer.InternalTransferCommandException;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -110,6 +113,37 @@ public class TransactionBatchResource {
         return invoke(() -> commandService.replaceTags(batchId, candidateId, command.getExpectedCandidateVersion(), command.getTagIds()));
     }
 
+    /** Stores a pre-publication link intent only; no transfer exists until Batch publication succeeds. */
+    @PutMapping("/{batchId}/candidates/{candidateId}/internal-transfer")
+    public TransactionBatchRowMutationDTO setInternalTransfer(
+        @PathVariable Long batchId,
+        @PathVariable Long candidateId,
+        @Valid @RequestBody TransactionBatchInternalTransferCommand command
+    ) {
+        return invoke(() -> commandService.setInternalTransfer(batchId, candidateId, command));
+    }
+
+    /** Removes only the temporary link intent, leaving every normal row field unchanged. */
+    @DeleteMapping("/{batchId}/candidates/{candidateId}/internal-transfer")
+    public TransactionBatchRowMutationDTO clearInternalTransfer(
+        @PathVariable Long batchId,
+        @PathVariable Long candidateId,
+        @Valid @RequestBody TransactionBatchInternalTransferClearCommand command
+    ) {
+        return invoke(() -> commandService.clearInternalTransfer(batchId, candidateId, command.getExpectedCandidateVersion()));
+    }
+
+    /** Server-scoped counterpart search; browser clients never enumerate all transactions locally. */
+    @GetMapping("/{batchId}/candidates/{candidateId}/transfer-counterparts")
+    public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(
+        @PathVariable Long batchId,
+        @PathVariable Long candidateId,
+        @RequestParam(required = false) String search,
+        Pageable pageable
+    ) {
+        return invoke(() -> commandService.findEligibleTransferCounterparts(batchId, candidateId, search, pageable));
+    }
+
     @DeleteMapping("/{batchId}/candidates/{candidateId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteCandidate(@PathVariable Long batchId, @PathVariable Long candidateId, @RequestParam Long expectedCandidateVersion) {
@@ -192,6 +226,12 @@ public class TransactionBatchResource {
     private <T> T invoke(ThrowingSupplier<T> action) {
         try {
             return action.get();
+        } catch (InternalTransferCommandException exception) {
+            String code = exception.getCode().name();
+            HttpStatus status = code.contains("STALE") || code.contains("LINKED") || code.contains("VERSION")
+                ? HttpStatus.CONFLICT
+                : HttpStatus.BAD_REQUEST;
+            throw new ResponseStatusException(status, code, exception);
         } catch (IllegalArgumentException exception) {
             HttpStatus status = exception.getMessage() != null && exception.getMessage().contains("accessible")
                 ? HttpStatus.NOT_FOUND

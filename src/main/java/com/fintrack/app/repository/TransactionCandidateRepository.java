@@ -65,6 +65,9 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
+            "internalTransferCounterpartTransaction.account.user",
             "category",
             "category.user",
             "tagAssociations",
@@ -108,6 +111,9 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
+            "internalTransferCounterpartTransaction.account.user",
             "category",
             "category.user",
             "transactionBatch",
@@ -137,6 +143,9 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
+            "internalTransferCounterpartTransaction.account.user",
             "category",
             "category.user",
             "transactionBatch",
@@ -162,7 +171,15 @@ public interface TransactionCandidateRepository
 
     @EntityGraph(
         attributePaths = {
-            "account", "category", "tagAssociations", "tagAssociations.tag", "tagSuppressions", "tagSuppressions.tag", "inputIssues",
+            "account",
+            "category",
+            "tagAssociations",
+            "tagAssociations.tag",
+            "tagSuppressions",
+            "tagSuppressions.tag",
+            "inputIssues",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
         }
     )
     @Query(
@@ -177,6 +194,9 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartTransaction",
+            "internalTransferCounterpartTransaction.account",
+            "internalTransferCounterpartTransaction.account.user",
             "category",
             "category.user",
             "tagAssociations",
