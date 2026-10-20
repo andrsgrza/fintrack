@@ -92,9 +92,10 @@ public class InternalTransferResource {
     public Page<InternalTransferCounterpartDTO> findEligibleCounterparts(
         @PathVariable Long transactionId,
         @RequestParam(required = false) String search,
+        @RequestParam(required = false) Long accountId,
         Pageable pageable
     ) {
-        return invoke(() -> internalTransferCounterpartQueryService.findEligibleCounterparts(transactionId, search, pageable));
+        return invoke(() -> internalTransferCounterpartQueryService.findEligibleCounterparts(transactionId, search, accountId, pageable));
     }
 
     @GetMapping("/product")

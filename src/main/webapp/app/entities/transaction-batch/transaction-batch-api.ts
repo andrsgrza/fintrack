@@ -51,6 +51,19 @@ export type BatchTransferCounterpart = {
   tagNames?: string[];
 };
 
+export type BatchTransferCounterpartPage = {
+  content: BatchTransferCounterpart[];
+  totalElements: number;
+  totalPages: number;
+};
+
+export type BatchTransferCounterpartSearch = {
+  search?: string;
+  accountId?: number;
+  page?: number;
+  size?: number;
+};
+
 export type BatchInternalTransferIntent = {
   enabled: boolean;
   stale: boolean;
@@ -162,12 +175,21 @@ export const clearRowInternalTransfer = (batchId: number, candidateId: number, e
       data: { expectedCandidateVersion },
     })
     .then(response => response.data);
-export const searchRowTransferCounterparts = (batchId: number, candidateId: number, search = '') =>
-  axios
-    .get<{ content: BatchTransferCounterpart[] }>(`${apiUrl}/${batchId}/candidates/${candidateId}/transfer-counterparts`, {
-      params: { search, page: 0, size: 8, sort: 'transactionDate,desc' },
+export const searchRowTransferCounterparts = (
+  batchId: number,
+  candidateId: number,
+  options: BatchTransferCounterpartSearch | string = {},
+) => {
+  const search = typeof options === 'string' ? options : (options.search ?? '');
+  const accountId = typeof options === 'string' ? undefined : options.accountId;
+  const page = typeof options === 'string' ? 0 : (options.page ?? 0);
+  const size = typeof options === 'string' ? 8 : (options.size ?? 8);
+  return axios
+    .get<BatchTransferCounterpartPage>(`${apiUrl}/${batchId}/candidates/${candidateId}/transfer-counterparts`, {
+      params: { search, accountId, page, size, sort: 'transactionDate,desc' },
     })
-    .then(response => response.data.content);
+    .then(response => response.data);
+};
 export const appendCsv = (batchId: number, expectedBatchVersion: number, operationKey: string, file: File) => {
   const body = new FormData();
   body.append('expectedBatchVersion', String(expectedBatchVersion));

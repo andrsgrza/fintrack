@@ -9,6 +9,7 @@ import enAccountType from 'app/../i18n/en/accountType.json';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import {
   createCounterpartForTransaction,
+  findEligibleCounterparts,
   getInternalTransferForTransaction,
 } from 'app/entities/internal-transfer/internal-transfer-product.service';
 import { FinancialTransactionInternalTransfer } from './financial-transaction-internal-transfer';
@@ -32,6 +33,7 @@ jest.mock('app/entities/internal-transfer/internal-transfer-unlink-modal', () =>
 const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockGetInternalTransferForTransaction = getInternalTransferForTransaction as jest.Mock;
 const mockCreateCounterpartForTransaction = createCounterpartForTransaction as jest.Mock;
+const mockFindEligibleCounterparts = findEligibleCounterparts as jest.Mock;
 
 const transaction = {
   id: 12,
@@ -39,6 +41,8 @@ const transaction = {
   transactionDate: '2026-10-18',
   postingDate: '2026-10-19',
   description: 'Transfer out',
+  externalReference: 'ref-12',
+  notes: 'month end',
   amount: 100,
   flow: 'OUT' as const,
 };
@@ -64,10 +68,10 @@ const linkedTransfer = {
   },
 };
 
-const renderComponent = () =>
+const renderComponent = (nextTransaction = transaction) =>
   render(
     <MemoryRouter>
-      <FinancialTransactionInternalTransfer transaction={transaction} />
+      <FinancialTransactionInternalTransfer transaction={nextTransaction} />
     </MemoryRouter>,
   );
 
@@ -83,6 +87,7 @@ describe('FinancialTransactionInternalTransfer', () => {
     mockGetSelectableFinancialAccounts.mockReset();
     mockGetInternalTransferForTransaction.mockReset();
     mockCreateCounterpartForTransaction.mockReset();
+    mockFindEligibleCounterparts.mockReset();
   });
 
   it('shows a compact linked state with navigation to the aggregate and counterpart, without exposing an id as product text', async () => {
@@ -94,8 +99,8 @@ describe('FinancialTransactionInternalTransfer', () => {
         'Savings · Transfer in',
       ),
     );
-    expect(screen.getByRole('link', { name: 'View transfer' }).getAttribute('href')).toBe('/internal-transfers/30');
-    expect(screen.getByRole('link', { name: 'View counterpart' }).getAttribute('href')).toBe('/financial-transaction/13');
+    expect(screen.getByRole('link', { name: 'View internal transfer' }).getAttribute('href')).toBe('/internal-transfers/30');
+    expect(screen.getByRole('link', { name: 'View counterpart transaction' }).getAttribute('href')).toBe('/financial-transaction/13');
     expect(document.querySelector('[data-cy="financialTransactionInternalTransferCounterpart"]')?.textContent).not.toContain('13');
   });
 
@@ -109,18 +114,22 @@ describe('FinancialTransactionInternalTransfer', () => {
     renderComponent();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Mark as internal transfer' }));
+    expect(screen.getByLabelText('Counterpart posting date').value).toBe('2026-10-19');
+    expect(screen.getByLabelText('Counterpart description').value).toBe('Transfer out');
+    expect(screen.getByLabelText('Counterpart reference').value).toBe('ref-12');
+    expect(screen.getByLabelText('Counterpart notes').value).toBe('month end');
     fireEvent.change(await screen.findByLabelText('Counterpart account'), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText('Counterpart posting date'), { target: { value: '2026-10-19' } });
     fireEvent.change(screen.getByLabelText('Counterpart description'), { target: { value: 'Transfer in' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create transfer' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create counterpart' }).at(-1));
 
     await waitFor(() =>
       expect(mockCreateCounterpartForTransaction).toHaveBeenCalledWith(12, {
         targetAccountId: 2,
         postingDate: '2026-10-19',
         description: 'Transfer in',
-        externalReference: undefined,
-        notes: undefined,
+        externalReference: 'ref-12',
+        notes: 'month end',
       }),
     );
     await waitFor(() =>
@@ -128,5 +137,43 @@ describe('FinancialTransactionInternalTransfer', () => {
         'Savings · Transfer in',
       ),
     );
+  });
+
+  it('loads eligible existing counterparts on entry, filters them server-side, and renders a readable selected state', async () => {
+    mockGetInternalTransferForTransaction.mockRejectedValue({ response: { status: 404 } });
+    mockGetSelectableFinancialAccounts.mockResolvedValue([
+      transaction.account,
+      { id: 2, name: 'Savings', accountType: 'DEBIT', currency: 'MXN', lastFourDigits: '9876', active: true },
+    ]);
+    mockFindEligibleCounterparts.mockResolvedValue({
+      content: [
+        {
+          transactionId: 13,
+          accountId: 2,
+          accountName: 'Savings',
+          transactionDate: '2026-10-18',
+          postingDate: '2026-10-19',
+          description: 'Transfer in',
+          amount: 100,
+          currency: 'MXN',
+          flow: 'IN',
+        },
+      ],
+      totalElements: 1,
+      totalPages: 1,
+    });
+    renderComponent();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark as internal transfer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Link existing counterpart' }));
+
+    await waitFor(() => expect(mockFindEligibleCounterparts).toHaveBeenCalledWith(12, { search: '', accountId: undefined, page: 0 }));
+    const result = await screen.findByRole('option', { name: /transfer in.*savings.*2026-10-18.*100 mxn/i });
+    fireEvent.click(result);
+    expect(result.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[data-cy="postedTransferSelectedCounterpart"]')?.textContent).toContain('Transfer in · Savings');
+
+    fireEvent.change(screen.getByLabelText('Counterpart account filter'), { target: { value: '2' } });
+    await waitFor(() => expect(mockFindEligibleCounterparts).toHaveBeenLastCalledWith(12, { search: '', accountId: 2, page: 0 }));
   });
 });

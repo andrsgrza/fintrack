@@ -37,6 +37,20 @@ public class InternalTransferCounterpartQueryService {
     }
 
     public Page<InternalTransferCounterpartDTO> findEligibleCounterparts(Long sourceTransactionId, String search, Pageable pageable) {
+        return findEligibleCounterparts(sourceTransactionId, search, null, pageable);
+    }
+
+    /**
+     * Owner-scoped counterpart lookup with an optional account narrowing. The
+     * repository still enforces every eligibility invariant; accountId only
+     * narrows that already-safe set.
+     */
+    public Page<InternalTransferCounterpartDTO> findEligibleCounterparts(
+        Long sourceTransactionId,
+        String search,
+        Long accountId,
+        Pageable pageable
+    ) {
         FinancialTransaction source = findAccessible(sourceTransactionId);
         if (internalTransferRepository.existsByTransactionIdInEitherRole(source.getId())) {
             throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_LEG_ALREADY_LINKED);
@@ -52,6 +66,7 @@ public class InternalTransferCounterpartQueryService {
                 source.getId(),
                 source.getAccount().getId(),
                 source.getAccount().getCurrency(),
+                accountId,
                 counterpartFlow,
                 normalizedAmount(source),
                 source.getTransactionDate(),
@@ -71,13 +86,31 @@ public class InternalTransferCounterpartQueryService {
         String search,
         Pageable pageable
     ) {
-        return findEligibleCounterpartsForCandidate(candidate, search, pageable);
+        return findEligibleCounterpartsForManualCandidate(candidate, search, null, pageable);
+    }
+
+    public Page<InternalTransferCounterpartDTO> findEligibleCounterpartsForManualCandidate(
+        TransactionCandidate candidate,
+        String search,
+        Long accountId,
+        Pageable pageable
+    ) {
+        return findEligibleCounterpartsForCandidate(candidate, search, accountId, pageable);
     }
 
     /** Shared candidate matcher used by both standalone MANUAL drafts and Batch rows. */
     public Page<InternalTransferCounterpartDTO> findEligibleCounterpartsForCandidate(
         TransactionCandidate candidate,
         String search,
+        Pageable pageable
+    ) {
+        return findEligibleCounterpartsForCandidate(candidate, search, null, pageable);
+    }
+
+    public Page<InternalTransferCounterpartDTO> findEligibleCounterpartsForCandidate(
+        TransactionCandidate candidate,
+        String search,
+        Long accountId,
         Pageable pageable
     ) {
         if (
@@ -103,6 +136,7 @@ public class InternalTransferCounterpartQueryService {
                 candidate.getAccount().getUser().getLogin(),
                 candidate.getAccount().getId(),
                 candidate.getAccount().getCurrency(),
+                accountId,
                 counterpartFlow,
                 invariantService.normalizeAmount(candidate.getAmount()),
                 candidate.getTransactionDate(),

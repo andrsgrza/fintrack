@@ -285,10 +285,11 @@ public class TransactionCandidateResource {
     public org.springframework.data.domain.Page<InternalTransferCounterpartDTO> findEligibleManualTransferCounterparts(
         @PathVariable("id") Long id,
         @RequestParam(required = false) String search,
+        @RequestParam(required = false) Long accountId,
         @org.springdoc.core.annotations.ParameterObject Pageable pageable
     ) {
         try {
-            return transactionCandidateService.findEligibleTransferCounterparts(id, search, pageable);
+            return transactionCandidateService.findEligibleTransferCounterparts(id, search, accountId, pageable);
         } catch (InternalTransferCommandException exception) {
             throw transferFailure(exception);
         }

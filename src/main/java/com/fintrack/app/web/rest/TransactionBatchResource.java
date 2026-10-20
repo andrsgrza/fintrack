@@ -139,9 +139,10 @@ public class TransactionBatchResource {
         @PathVariable Long batchId,
         @PathVariable Long candidateId,
         @RequestParam(required = false) String search,
+        @RequestParam(required = false) Long accountId,
         Pageable pageable
     ) {
-        return invoke(() -> commandService.findEligibleTransferCounterparts(batchId, candidateId, search, pageable));
+        return invoke(() -> commandService.findEligibleTransferCounterparts(batchId, candidateId, search, accountId, pageable));
     }
 
     @DeleteMapping("/{batchId}/candidates/{candidateId}")

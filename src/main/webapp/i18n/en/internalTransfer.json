@@ -4,9 +4,10 @@
       "product": {
         "title": "Internal Transfers",
         "listSubtitle": "Move money between your own accounts without creating income or expense.",
-        "new": "New transfer",
-        "create": "Create transfer",
-        "edit": "Edit transfer",
+        "new": "New internal transfer",
+        "create": "Create internal transfer",
+        "edit": "Edit internal transfer",
+        "view": "View internal transfer",
         "detailTitle": "Internal transfer",
         "formSubtitle": "The two movements are saved together as one internal transfer.",
         "filters": "Filters",
@@ -59,9 +60,9 @@
           "body": "Internal transfers move money between your own accounts."
         },
         "unlink": {
-          "title": "Unlink transfer",
+          "title": "Unlink internal transfer",
           "body": "The two transactions will be kept and will no longer be linked as an internal transfer.",
-          "action": "Unlink"
+          "action": "Unlink internal transfer"
         },
         "errors": {
           "load": "We could not load internal transfers. Try again.",

@@ -94,12 +94,12 @@ const TransferListItem = ({
             data-cy="internalTransferEdit"
           >
             <FontAwesomeIcon icon="pencil-alt" className="me-1" />
-            <Translate contentKey="entity.action.edit">Edit</Translate>
+            <Translate contentKey="fintrackApp.internalTransfer.product.edit">Edit internal transfer</Translate>
           </Button>
           <ProductActionsMenu label={translate('fintrackApp.internalTransfer.product.moreActions')} dataCy="internalTransferActions">
             <DropdownItem tag={Link} to={`/internal-transfers/${transfer.transferId}`}>
               <FontAwesomeIcon icon="eye" className="me-2" />
-              <Translate contentKey="entity.action.view">View</Translate>
+              <Translate contentKey="fintrackApp.internalTransfer.product.view">View internal transfer</Translate>
             </DropdownItem>
             <DropdownItem divider />
             <DropdownItem className="text-danger" onClick={() => onUnlink(transfer)} data-cy="internalTransferUnlink">

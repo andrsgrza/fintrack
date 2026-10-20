@@ -373,7 +373,7 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     renderManualDraft('/financial-transaction/drafts/77');
 
     await screen.findByDisplayValue('Move to savings');
-    fireEvent.click(screen.getByRole('button', { name: /post transaction/i }));
+    fireEvent.click(screen.getByRole('button', { name: /create internal transfer/i }));
 
     await waitFor(() => expect(mockPostManualDraftAsInternalTransfer).toHaveBeenCalledWith(77, 4));
     expect(mockPostManualDraft).not.toHaveBeenCalled();
@@ -404,11 +404,14 @@ describe('FinancialTransaction manual candidate draft autosave', () => {
     renderManualDraft('/financial-transaction/drafts/77');
 
     await screen.findByDisplayValue('Coffee');
+    await waitFor(() => expect(mockFindManualTransferCounterparts).toHaveBeenCalledWith(77, { search: '', accountId: undefined, page: 0 }));
     fireEvent.change(screen.getByLabelText('Search counterpart'), { target: { value: 'matching' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search counterpart' }));
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
 
     expect(await screen.findByText('Matching income')).toBeTruthy();
-    expect(mockFindManualTransferCounterparts).toHaveBeenCalledWith(77, 'matching');
+    expect(mockFindManualTransferCounterparts).toHaveBeenCalledWith(77, { search: 'matching', accountId: undefined, page: 0 });
     fireEvent.click(screen.getByText('Matching income'));
     act(() => {
       jest.advanceTimersByTime(700);

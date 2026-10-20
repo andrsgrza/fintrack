@@ -44,10 +44,22 @@ export interface IManualTransferCounterpartPage {
   totalPages: number;
 }
 
-export const findManualTransferCounterparts = (id: string | number, search = '') =>
-  axios.get<IManualTransferCounterpartPage>(`${apiUrl}/${id}/transfer-counterparts`, {
-    params: { search, page: 0, size: 12, sort: 'transactionDate,DESC' },
+export interface IManualTransferCounterpartSearch {
+  search?: string;
+  accountId?: number;
+  page?: number;
+  size?: number;
+}
+
+export const findManualTransferCounterparts = (id: string | number, options: IManualTransferCounterpartSearch | string = {}) => {
+  const search = typeof options === 'string' ? options : (options.search ?? '');
+  const accountId = typeof options === 'string' ? undefined : options.accountId;
+  const page = typeof options === 'string' ? 0 : (options.page ?? 0);
+  const size = typeof options === 'string' ? 12 : (options.size ?? 12);
+  return axios.get<IManualTransferCounterpartPage>(`${apiUrl}/${id}/transfer-counterparts`, {
+    params: { search, accountId, page, size, sort: 'transactionDate,DESC' },
   });
+};
 
 export interface IManualTransactionDraftSummary {
   id?: number;

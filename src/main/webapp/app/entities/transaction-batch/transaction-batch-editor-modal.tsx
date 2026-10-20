@@ -19,11 +19,14 @@ import {
 } from 'reactstrap';
 
 import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
+import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
+import { formatFinancialAccountLabel } from 'app/entities/financial-account/financial-account-labels';
+import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { ProductTagSelector, ProductTagSelectorTag } from 'app/shared/ui/product-tag-selector';
 import { AppliedRuleIndicator } from 'app/shared/ui/applied-rule-indicator';
 import { FinancialFlowSelector } from 'app/shared/ui/financial-flow-selector';
-import { BatchCandidate, BatchRulePreview, BatchTransferCounterpart } from './transaction-batch-api';
+import { BatchCandidate, BatchRulePreview, BatchTransferCounterpart, BatchTransferCounterpartPage } from './transaction-batch-api';
 import { amountMagnitude } from './transaction-batch-presentation';
 
 export type BatchEditorValues = {
@@ -438,11 +441,14 @@ const counterpartLabel = (counterpart: BatchTransferCounterpart) =>
     .filter(value => value !== null && value !== undefined && value !== '')
     .join(' · ');
 
-const transferTranslation = (key: string) => translate(`fintrackApp.transactionBatch.transfer.${key}`);
+const transferTranslation = (key: string, interpolate?: Record<string, string | number>) =>
+  translate(`fintrackApp.transactionBatch.transfer.${key}`, interpolate);
 
 const InternalTransferSection = ({
   candidate,
   values,
+  sourceAccountId,
+  currency,
   saving,
   onSearch,
   onSelect,
@@ -450,39 +456,93 @@ const InternalTransferSection = ({
 }: {
   candidate?: BatchCandidate;
   values: BatchEditorValues;
+  sourceAccountId?: number;
+  currency?: string | null;
   saving: boolean;
-  onSearch?: (search: string) => Promise<BatchTransferCounterpart[]>;
+  onSearch?: (options: { search?: string; accountId?: number; page?: number }) => Promise<BatchTransferCounterpartPage>;
   onSelect?: (counterpart: BatchTransferCounterpart) => Promise<BatchCandidate | undefined>;
   onClear?: () => Promise<BatchCandidate | undefined>;
 }) => {
   const [enabled, setEnabled] = useState(Boolean(candidate?.internalTransfer?.enabled));
   const [search, setSearch] = useState('');
+  const [accountFilterId, setAccountFilterId] = useState('');
+  const [accounts, setAccounts] = useState<IFinancialAccountSelectable[]>([]);
+  const [page, setPage] = useState(0);
   const [results, setResults] = useState<BatchTransferCounterpart[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const latestSearchRequest = useRef(0);
   const counterpart = candidate?.internalTransfer?.counterpart ?? null;
-  const canSearch = Boolean(candidate && values.transactionDate && values.amount && values.flow);
+  const canSearch = Boolean(candidate && sourceAccountId && values.transactionDate && values.amount && values.flow);
+  const counterpartAccounts = accounts.filter(account => account.id !== sourceAccountId && (!currency || account.currency === currency));
 
   useEffect(() => {
     setEnabled(Boolean(candidate?.internalTransfer?.enabled));
     setSearch('');
+    setAccountFilterId('');
+    setPage(0);
     setResults([]);
+    setTotalElements(0);
+    setTotalPages(0);
     setError('');
   }, [candidate?.id, candidate?.version]);
 
-  const searchCounterparts = async () => {
-    if (!onSearch || !canSearch) return;
-    setSearching(true);
-    setError('');
-    try {
-      setResults(await onSearch(search));
-    } catch {
-      setError(transferTranslation('searchFailure'));
-    } finally {
-      setSearching(false);
+  useEffect(() => {
+    if (!enabled || !sourceAccountId) return;
+    let mounted = true;
+    getSelectableFinancialAccounts(sourceAccountId)
+      .then(nextAccounts => {
+        if (mounted) setAccounts(nextAccounts);
+      })
+      .catch(() => {
+        if (mounted) setAccounts([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [enabled, sourceAccountId]);
+
+  useEffect(() => {
+    if (!enabled || !onSearch || !canSearch) {
+      latestSearchRequest.current += 1;
+      if (enabled && !canSearch) {
+        setResults([]);
+        setTotalElements(0);
+        setTotalPages(0);
+      }
+      return;
     }
-  };
+    const requestId = latestSearchRequest.current + 1;
+    latestSearchRequest.current = requestId;
+    const load = async () => {
+      setSearching(true);
+      setError('');
+      try {
+        const response = await onSearch({ search, accountId: accountFilterId ? Number(accountFilterId) : undefined, page });
+        if (requestId !== latestSearchRequest.current) return;
+        setResults(response.content ?? []);
+        setTotalElements(response.totalElements ?? response.content?.length ?? 0);
+        setTotalPages(response.totalPages ?? 0);
+      } catch {
+        if (requestId !== latestSearchRequest.current) return;
+        setResults([]);
+        setTotalElements(0);
+        setTotalPages(0);
+        setError(transferTranslation('searchFailure'));
+      } finally {
+        if (requestId === latestSearchRequest.current) setSearching(false);
+      }
+    };
+    const delay = search.trim() ? window.setTimeout(() => void load(), 250) : undefined;
+    if (!delay) void load();
+    return () => {
+      latestSearchRequest.current += 1;
+      if (delay) window.clearTimeout(delay);
+    };
+  }, [accountFilterId, canSearch, enabled, onSearch, page, search]);
 
   const selectCounterpart = async (next: BatchTransferCounterpart) => {
     if (!onSelect) return;
@@ -572,49 +632,114 @@ const InternalTransferSection = ({
             <p className="small text-muted mb-0">{transferTranslation('incomplete')}</p>
           ) : (
             <>
-              <div className="d-flex gap-2">
-                <Input
-                  id="batch-editor-counterpart-search"
-                  value={search}
-                  onChange={event => setSearch(event.target.value)}
-                  placeholder={transferTranslation('searchPlaceholder')}
-                  disabled={saving || busy || searching}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      void searchCounterparts();
-                    }
-                  }}
-                  data-cy="transactionBatchCounterpartSearch"
-                />
-                <Button
-                  type="button"
-                  color="secondary"
-                  outline
-                  onClick={() => void searchCounterparts()}
-                  disabled={saving || busy || searching}
-                >
-                  {searching ? <Spinner size="sm" /> : transferTranslation('search')}
-                </Button>
+              <Row className="g-2">
+                <Col md="6">
+                  <FormGroup className="mb-0">
+                    <Label for="batch-editor-counterpart-account-filter">{transferTranslation('filterAccount')}</Label>
+                    <Input
+                      id="batch-editor-counterpart-account-filter"
+                      type="select"
+                      value={accountFilterId}
+                      onChange={event => {
+                        setAccountFilterId(event.target.value);
+                        setPage(0);
+                      }}
+                      disabled={saving || busy}
+                      data-cy="transactionBatchCounterpartAccountFilter"
+                    >
+                      <option value="">{transferTranslation('allEligibleAccounts')}</option>
+                      {counterpartAccounts.map(account => (
+                        <option value={account.id} key={account.id}>
+                          {formatFinancialAccountLabel(account)}
+                        </option>
+                      ))}
+                    </Input>
+                  </FormGroup>
+                </Col>
+                <Col md="6">
+                  <FormGroup className="mb-0">
+                    <Label for="batch-editor-counterpart-search">{transferTranslation('search')}</Label>
+                    <Input
+                      id="batch-editor-counterpart-search"
+                      value={search}
+                      onChange={event => {
+                        setSearch(event.target.value);
+                        setPage(0);
+                      }}
+                      placeholder={transferTranslation('searchPlaceholder')}
+                      disabled={saving || busy}
+                      data-cy="transactionBatchCounterpartSearch"
+                    />
+                  </FormGroup>
+                </Col>
+              </Row>
+              <div className="small text-muted mt-3" aria-live="polite" data-cy="transactionBatchCounterpartCount">
+                {searching ? (
+                  <>
+                    <Spinner size="sm" className="me-2" />
+                    {transferTranslation('loading')}
+                  </>
+                ) : (
+                  transferTranslation('resultCount', { count: totalElements })
+                )}
               </div>
+              {!searching && !results.length && !error ? (
+                <p className="small text-muted mt-2 mb-0">{transferTranslation('noResults')}</p>
+              ) : null}
               {results.length ? (
                 <div
                   className="d-flex flex-column gap-2 mt-3"
                   data-cy="transactionBatchCounterpartResults"
                   aria-label={transferTranslation('searchResults')}
+                  role="listbox"
                 >
-                  {results.map(result => (
-                    <button
-                      type="button"
-                      key={result.transactionId}
-                      className="btn btn-light text-start border"
-                      onClick={() => void selectCounterpart(result)}
-                      disabled={saving || busy}
-                    >
-                      <strong>{result.accountName}</strong> · {result.description}
-                      <span className="d-block small text-muted">{counterpartLabel(result)}</span>
-                    </button>
-                  ))}
+                  {results.map(result => {
+                    const isSelected = counterpart?.transactionId === result.transactionId;
+                    return (
+                      <button
+                        type="button"
+                        key={result.transactionId}
+                        className={`btn ${isSelected ? 'btn-primary' : 'btn-light'} counterpart-result text-start border`}
+                        onClick={() => void selectCounterpart(result)}
+                        disabled={saving || busy}
+                        aria-selected={isSelected}
+                        role="option"
+                      >
+                        <span className="d-flex justify-content-between gap-2">
+                          <strong>{result.description}</strong>
+                          {isSelected ? '✓' : null}
+                        </span>
+                        <span className="d-block small">{counterpartLabel(result)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {totalPages > 1 ? (
+                <div className="d-flex justify-content-end align-items-center gap-2 mt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    color="secondary"
+                    outline
+                    disabled={searching || page === 0}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    {transferTranslation('previous')}
+                  </Button>
+                  <span className="small text-muted">
+                    {page + 1} / {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    color="secondary"
+                    outline
+                    disabled={searching || page + 1 >= totalPages}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    {transferTranslation('next')}
+                  </Button>
                 </div>
               ) : null}
             </>
@@ -642,6 +767,7 @@ const TransactionBatchEditorModal = ({
   categories,
   tags,
   currency,
+  sourceAccountId,
   saving,
   error,
   fieldError,
@@ -661,6 +787,7 @@ const TransactionBatchEditorModal = ({
   categories: ICategorySelectable[];
   tags: ITagSelectable[];
   currency?: string | null;
+  sourceAccountId?: number;
   saving: boolean;
   error?: string;
   fieldError?: 'category' | 'amount' | 'transactionDate' | 'postingDate' | null;
@@ -669,7 +796,7 @@ const TransactionBatchEditorModal = ({
   onSave: (values: BatchEditorValues) => void;
   onMaterialChange?: (values: BatchEditorValues) => Promise<BatchCandidate | undefined>;
   onApplySuggestion?: (domain: BatchSuggestionDomain, values: BatchEditorValues) => Promise<BatchCandidate | undefined>;
-  onSearchTransferCounterparts?: (search: string) => Promise<BatchTransferCounterpart[]>;
+  onSearchTransferCounterparts?: (options: { search?: string; accountId?: number; page?: number }) => Promise<BatchTransferCounterpartPage>;
   onSelectTransferCounterpart?: (counterpart: BatchTransferCounterpart) => Promise<BatchCandidate | undefined>;
   onClearTransfer?: () => Promise<BatchCandidate | undefined>;
 }) => {
@@ -752,6 +879,8 @@ const TransactionBatchEditorModal = ({
           <InternalTransferSection
             candidate={candidate}
             values={values}
+            sourceAccountId={sourceAccountId}
+            currency={currency}
             saving={busy}
             onSearch={onSearchTransferCounterparts}
             onSelect={onSelectTransferCounterpart}
@@ -764,7 +893,13 @@ const TransactionBatchEditorModal = ({
             Cancelar
           </Button>
           <Button color="primary" disabled={busy} data-cy="transactionBatchEditorSave">
-            {busy ? <Spinner size="sm" /> : 'Guardar movimiento'}
+            {busy ? (
+              <Spinner size="sm" />
+            ) : candidate?.internalTransfer?.enabled ? (
+              transferTranslation('savePendingLink')
+            ) : (
+              'Guardar movimiento'
+            )}
           </Button>
         </ModalFooter>
       </Form>

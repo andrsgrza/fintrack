@@ -323,11 +323,21 @@ public class TransactionCandidateService {
 
     @Transactional(readOnly = true)
     public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(Long id, String search, Pageable pageable) {
+        return findEligibleTransferCounterparts(id, search, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(
+        Long id,
+        String search,
+        Long accountId,
+        Pageable pageable
+    ) {
         TransactionCandidate candidate = findAccessibleEntity(id).orElseThrow(() ->
             new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_NOT_FOUND)
         );
         rejectManualPostMutation(candidate);
-        return internalTransferCounterpartQueryService.findEligibleCounterpartsForManualCandidate(candidate, search, pageable);
+        return internalTransferCounterpartQueryService.findEligibleCounterpartsForManualCandidate(candidate, search, accountId, pageable);
     }
 
     /**

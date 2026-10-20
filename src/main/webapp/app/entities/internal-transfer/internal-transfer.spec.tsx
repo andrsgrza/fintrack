@@ -99,7 +99,7 @@ describe('InternalTransfer product UI', () => {
     render(<InternalTransfer />, { wrapper: MemoryRouter });
 
     await waitFor(() => expect(screen.getByText('No internal transfers')).toBeTruthy());
-    expect(screen.getAllByRole('link', { name: 'New transfer' })[0].getAttribute('href')).toBe('/internal-transfers/new');
+    expect(screen.getAllByRole('link', { name: 'New internal transfer' })[0].getAttribute('href')).toBe('/internal-transfers/new');
   });
 
   it('creates through the atomic command with shared transaction date', async () => {

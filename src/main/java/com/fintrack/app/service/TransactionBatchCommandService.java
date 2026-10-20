@@ -321,6 +321,17 @@ public class TransactionBatchCommandService {
         String search,
         Pageable pageable
     ) {
+        return findEligibleTransferCounterparts(batchId, candidateId, search, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(
+        Long batchId,
+        Long candidateId,
+        String search,
+        Long accountId,
+        Pageable pageable
+    ) {
         TransactionBatch batch = transactionBatchRepository
             .findOneWithRelationshipsByIdAndUserLogin(batchId, currentUserService.getCurrentUserLogin())
             .filter(current -> current.getStatus() == TransactionBatchStatus.OPEN)
@@ -328,7 +339,7 @@ public class TransactionBatchCommandService {
         TransactionCandidate candidate = transactionCandidateRepository
             .findOneBatchCandidateWithRelationships(batch.getId(), candidateId, currentUserService.getCurrentUserLogin())
             .orElseThrow(() -> new IllegalArgumentException("Transaction candidate is not accessible"));
-        return internalTransferCounterpartQueryService.findEligibleCounterpartsForCandidate(candidate, search, pageable);
+        return internalTransferCounterpartQueryService.findEligibleCounterpartsForCandidate(candidate, search, accountId, pageable);
     }
 
     /** Internal future-parser hook for bounded repair evidence; not a CSV parser or public API. */

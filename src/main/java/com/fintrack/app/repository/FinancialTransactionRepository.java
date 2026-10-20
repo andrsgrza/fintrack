@@ -138,6 +138,7 @@ public interface FinancialTransactionRepository
         "and account.id <> :sourceAccountId " +
         "and account.active = true " +
         "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
         "and financialTransaction.flow = :flow " +
         "and financialTransaction.amount = :amount " +
         "and financialTransaction.transactionDate = :transactionDate " +
@@ -150,6 +151,7 @@ public interface FinancialTransactionRepository
         "and account.id <> :sourceAccountId " +
         "and account.active = true " +
         "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
         "and financialTransaction.flow = :flow " +
         "and financialTransaction.amount = :amount " +
         "and financialTransaction.transactionDate = :transactionDate " +
@@ -161,6 +163,7 @@ public interface FinancialTransactionRepository
         @Param("sourceTransactionId") Long sourceTransactionId,
         @Param("sourceAccountId") Long sourceAccountId,
         @Param("currency") CurrencyCode currency,
+        @Param("accountId") Long accountId,
         @Param("flow") TransactionFlow flow,
         @Param("amount") BigDecimal amount,
         @Param("transactionDate") LocalDate transactionDate,
@@ -177,6 +180,7 @@ public interface FinancialTransactionRepository
         "and account.id <> :sourceAccountId " +
         "and account.active = true " +
         "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
         "and financialTransaction.flow = :flow " +
         "and financialTransaction.amount = :amount " +
         "and financialTransaction.transactionDate = :transactionDate " +
@@ -188,6 +192,7 @@ public interface FinancialTransactionRepository
         "and account.id <> :sourceAccountId " +
         "and account.active = true " +
         "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
         "and financialTransaction.flow = :flow " +
         "and financialTransaction.amount = :amount " +
         "and financialTransaction.transactionDate = :transactionDate " +
@@ -198,6 +203,7 @@ public interface FinancialTransactionRepository
         @Param("ownerLogin") String ownerLogin,
         @Param("sourceAccountId") Long sourceAccountId,
         @Param("currency") CurrencyCode currency,
+        @Param("accountId") Long accountId,
         @Param("flow") TransactionFlow flow,
         @Param("amount") BigDecimal amount,
         @Param("transactionDate") LocalDate transactionDate,

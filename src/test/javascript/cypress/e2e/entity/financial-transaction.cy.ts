@@ -35,6 +35,8 @@ describe('FinancialTransaction e2e test', () => {
     internalTransferCounterpartAccount?: { id?: number | string } | null;
     internalTransferCounterpartPostingDate?: string | null;
     internalTransferCounterpartDescription?: string | null;
+    internalTransferCounterpartReference?: string | null;
+    internalTransferCounterpartNotes?: string | null;
   }
 
   interface RulePreviewResponse {
@@ -928,6 +930,10 @@ describe('FinancialTransaction e2e test', () => {
     it('resumes a create-counterpart transfer draft and posts both legs atomically', () => {
       const draftDescription = manualCandidateDescription;
       const counterpartDescription = uniqueName('internal-transfer-counterpart');
+      const externalReference = uniqueName('internal-transfer-reference');
+      const notes = uniqueName('internal-transfer-notes');
+      const counterpartReference = uniqueName('internal-transfer-counterpart-reference');
+      const counterpartNotes = uniqueName('internal-transfer-counterpart-notes');
 
       cy.authenticatedRequest<E2EEntity>({
         method: 'POST',
@@ -951,13 +957,29 @@ describe('FinancialTransaction e2e test', () => {
         cy.get('[data-cy="amount"]').clear();
         cy.get('[data-cy="amount"]').type('100.5');
         cy.get('[data-cy="flow-OUT"]').click();
+        cy.get('[data-cy="manualDraftOptionalDetails"] summary').click();
+        cy.get('[data-cy="externalReference"]').type(externalReference);
+        cy.get('[data-cy="notes"]').type(notes);
 
         cy.get('[data-cy="manualDraftInternalTransferToggle"]').should('not.be.checked');
         cy.get('[data-cy="manualDraftInternalTransferToggle"]').check();
         cy.get('[data-cy="manualDraftCreateCounterpart"]').should('have.attr', 'aria-pressed', 'true');
         cy.get('[data-cy="manualDraftCounterpartAccount"]').select(String(counterpartAccountId));
         cy.get('[data-cy="manualDraftCounterpartPostingDate"]').should('have.value', '2026-07-08');
+        cy.get('[data-cy="manualDraftCounterpartDescription"]').should('have.value', draftDescription);
+        cy.get('#manual-draft-counterpart-reference').should('have.value', externalReference);
+        cy.get('#manual-draft-counterpart-notes').should('have.value', notes);
+        cy.screenshot('financial-transaction/internal-transfer-counterpart-prefilled');
+        cy.get('[data-cy="manualDraftCounterpartDescription"]').clear();
         cy.get('[data-cy="manualDraftCounterpartDescription"]').type(counterpartDescription);
+        cy.get('#manual-draft-counterpart-reference').clear();
+        cy.get('#manual-draft-counterpart-reference').type(counterpartReference);
+        cy.get('#manual-draft-counterpart-notes').clear();
+        cy.get('#manual-draft-counterpart-notes').type(counterpartNotes);
+        cy.get('[data-cy="description"]').should('have.value', draftDescription);
+        cy.get('[data-cy="externalReference"]').should('have.value', externalReference);
+        cy.get('[data-cy="notes"]').should('have.value', notes);
+        cy.screenshot('financial-transaction/internal-transfer-counterpart-customized');
 
         waitForManualCandidate(
           candidate =>
@@ -965,7 +987,9 @@ describe('FinancialTransaction e2e test', () => {
             candidate.internalTransferMode === 'CREATE_COUNTERPART' &&
             String(candidate.internalTransferCounterpartAccount?.id) === String(counterpartAccountId) &&
             candidate.internalTransferCounterpartPostingDate === '2026-07-08' &&
-            candidate.internalTransferCounterpartDescription === counterpartDescription,
+            candidate.internalTransferCounterpartDescription === counterpartDescription &&
+            candidate.internalTransferCounterpartReference === counterpartReference &&
+            candidate.internalTransferCounterpartNotes === counterpartNotes,
         );
 
         cy.reload();
@@ -975,6 +999,8 @@ describe('FinancialTransaction e2e test', () => {
         cy.get('[data-cy="manualDraftCounterpartAccount"]').should('have.value', String(counterpartAccountId));
         cy.get('[data-cy="manualDraftCounterpartPostingDate"]').should('have.value', '2026-07-08');
         cy.get('[data-cy="manualDraftCounterpartDescription"]').should('have.value', counterpartDescription);
+        cy.get('#manual-draft-counterpart-reference').should('have.value', counterpartReference);
+        cy.get('#manual-draft-counterpart-notes').should('have.value', counterpartNotes);
 
         cy.get('[data-cy="manualDraftApplyRulesButton"]').click();
         cy.wait('@candidateApplyRulesRequest').its('response.statusCode').should('eq', 200);

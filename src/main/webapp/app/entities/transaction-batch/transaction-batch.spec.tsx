@@ -157,14 +157,18 @@ describe('TransactionBatch product workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
     expect(screen.queryByText(/crear contraparte/i)).toBeNull();
     fireEvent.click(screen.getByLabelText('Transferencia interna'));
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
-    expect(await screen.findByText('Cuenta de ahorro')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /cuenta de ahorro.*ingreso existente/i }));
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(
+        'api/transaction-batches/7/candidates/81/transfer-counterparts',
+        expect.objectContaining({ params: expect.objectContaining({ search: '', page: 0 }) }),
+      ),
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /cuenta de ahorro.*ingreso existente/i }));
 
     await waitFor(() => expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')).toBeTruthy());
     expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')?.textContent).toContain('Cuenta de ahorro');
     expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')?.textContent).not.toContain('91');
-    fireEvent.click(screen.getByRole('button', { name: 'Quitar transferencia' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Desvincular transferencia interna' }));
     await waitFor(() => expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')).toBeNull());
     expect(screen.getByLabelText('Transferencia interna').checked).toBe(false);
   });

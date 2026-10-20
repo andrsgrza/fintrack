@@ -80,6 +80,13 @@ export type InternalTransferCounterpartPage = {
   totalPages: number;
 };
 
+export type InternalTransferCounterpartSearch = {
+  search?: string;
+  accountId?: number;
+  page?: number;
+  size?: number;
+};
+
 export type InternalTransferUpdateCommand = {
   expectedVersion: number;
   amount: number;
@@ -135,9 +142,13 @@ export const linkExistingTransactions = async (outgoingTransactionId: number, in
   return response.data;
 };
 
-export const findEligibleCounterparts = async (transactionId: number, search = '') => {
+export const findEligibleCounterparts = async (transactionId: number, options: InternalTransferCounterpartSearch | string = {}) => {
+  const search = typeof options === 'string' ? options : (options.search ?? '');
+  const accountId = typeof options === 'string' ? undefined : options.accountId;
+  const page = typeof options === 'string' ? 0 : (options.page ?? 0);
+  const size = typeof options === 'string' ? 12 : (options.size ?? 12);
   const response = await axios.get<InternalTransferCounterpartPage>(`${apiUrl}/counterparts/${transactionId}`, {
-    params: { search, page: 0, size: 12, sort: 'transactionDate,DESC' },
+    params: { search, accountId, page, size, sort: 'transactionDate,DESC' },
   });
   return response.data;
 };

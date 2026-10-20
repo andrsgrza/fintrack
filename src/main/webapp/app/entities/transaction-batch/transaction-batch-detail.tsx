@@ -556,11 +556,11 @@ const TransactionBatchDetail = () => {
       setError('No se pudieron actualizar las etiquetas; la versión de la fila puede haber cambiado.');
     }
   };
-  const searchEditorTransferCounterparts = async (search: string) => {
+  const searchEditorTransferCounterparts = async (options: { search?: string; accountId?: number; page?: number }) => {
     const workspace = batchRef.current;
     const candidateId = editor?.candidate?.id;
-    if (!workspace || !candidateId) return [];
-    return searchRowTransferCounterparts(workspace.id, candidateId, search);
+    if (!workspace || !candidateId) return { content: [], totalElements: 0, totalPages: 0 };
+    return searchRowTransferCounterparts(workspace.id, candidateId, options);
   };
   const selectEditorTransferCounterpart = async (counterpart: { transactionId: number }) => {
     const workspace = batchRef.current;
@@ -1201,6 +1201,7 @@ const TransactionBatchDetail = () => {
         categories={categories}
         tags={tags}
         currency={batch.accountCurrency}
+        sourceAccountId={batch.accountId}
         saving={editorSaving}
         error={editorError}
         fieldError={editorFieldError}

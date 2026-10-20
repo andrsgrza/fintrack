@@ -4,9 +4,10 @@
       "product": {
         "title": "Transferencias internas",
         "listSubtitle": "Mueve dinero entre tus propias cuentas sin crear ingreso ni gasto.",
-        "new": "Nueva transferencia",
-        "create": "Crear transferencia",
-        "edit": "Editar transferencia",
+        "new": "Nueva transferencia interna",
+        "create": "Crear transferencia interna",
+        "edit": "Editar transferencia interna",
+        "view": "Ver transferencia interna",
         "detailTitle": "Transferencia interna",
         "formSubtitle": "Los dos movimientos se guardan juntos como una transferencia interna.",
         "filters": "Filtros",
@@ -59,9 +60,9 @@
           "body": "Las transferencias internas mueven dinero entre tus propias cuentas."
         },
         "unlink": {
-          "title": "Desvincular transferencia",
+          "title": "Desvincular transferencia interna",
           "body": "Las dos transacciones se conservarán y dejarán de estar vinculadas como transferencia interna.",
-          "action": "Desvincular"
+          "action": "Desvincular transferencia interna"
         },
         "errors": {
           "load": "No se pudieron cargar las transferencias internas. Inténtalo de nuevo.",
