@@ -328,11 +328,11 @@ Backend-only calculated snapshot exposed at `GET /api/financial-accounts/{id}/ba
 
 **Product overview:** `GET /api/financial-accounts/overview` returns a read-only `FinancialAccountOverviewDTO` for every account visible to the current user. It batches the balance inputs server-side rather than making one browser request per account. The response contains product identity, the persisted account color for visual accenting, calculated balance/debt, and useful card details only; it persists no balance. The Financial Accounts list uses this endpoint and does not expose generated ids, audit fields, raw color text, or relationship columns.
 
-**Product detail/delete UI (ACC-UX-3B / ACC-HARD-DELETE-3):** `/financial-account/:id` is the canonical account view. It fetches the accessible account, its calculated balance snapshot, and a small read-only recent-transaction list; it renders translated account type/status and optional inline credit details, but not audit fields, owner data, technical relationship dumps, or database IDs. `active=false` shows the historical-only explanation without changing the ACC-UX-3A eligibility semantics. The product delete route loads the account and `GET /api/financial-accounts/{id}/deletion-preview` through a dedicated Axios client, then calls only `DELETE /api/financial-accounts/{id}/hard-delete`. The generated `deleteEntity` route remains technical compatibility only and is not used by account product actions. Preview failures and expected `409 ACCOUNT_HARD_DELETE_BLOCKED` responses are caught and rendered inside the modal, avoiding the Redux generic-error toast; a 409 replaces the currently displayed preview with its blockers. The modal offers the existing edit route as an explicit **Deactivate instead** alternative.
+**Product detail/delete UI (ACC-UX-3B / ACC-HARD-DELETE-3):** `/financial-account/:id` is the canonical account view. It fetches the accessible account, its calculated balance snapshot, and a small read-only recent-transaction list; it renders translated account type/status and optional inline credit details, but not audit fields, owner data, technical relationship dumps, or database IDs. `active=false` shows the historical-only explanation without changing the ACC-UX-3A eligibility semantics. The product delete route loads the account and `GET /api/financial-accounts/{id}/deletion-preview` through a dedicated Axios client, then calls `DELETE /api/financial-accounts/{id}/hard-delete`. The compatibility `DELETE /api/financial-accounts/{id}` route delegates to exactly the same hard-delete service and blocker contract; there is no second account-delete semantic. Preview failures and expected `409 ACCOUNT_HARD_DELETE_BLOCKED` responses are caught and rendered inside the modal, avoiding the Redux generic-error toast; a 409 replaces the currently displayed preview with its blockers. The modal offers the existing edit route as an explicit **Deactivate instead** alternative.
 
 **Account activity navigation (ACC-NAV-1):** The account-detail recent query remains `accountId.equals`, `transactionDate,desc`, `id,desc`, and `size=5`. Its description links use the existing FinancialTransaction detail route. Its **View all transactions** link serializes the already-supported list criteria as `/financial-transaction?accountId.equals={id}&page=1&sort=transactionDate%2Cdesc`; no account-specific list endpoint or client-side filtering is introduced. The FinancialTransaction list retains responsibility for URL hydration, the server-side criteria request, pagination/sorting, and inactive historical account inclusion.
 
-**ACC-HARD-DELETE command:** `FinancialAccountHardDeleteService` powers both read-only `GET /api/financial-accounts/{id}/deletion-preview` and `DELETE /api/financial-accounts/{id}/hard-delete`. The command resolves the account with existing owner/admin visibility semantics, acquires a `PESSIMISTIC_WRITE` lock, reruns the exact preview validation under that transaction, and returns `409 ACCOUNT_HARD_DELETE_BLOCKED` before any mutation when a blocker exists. For an approved aggregate, its explicit FK-safe order is File/Api ingestion metadata, fully local internal transfers, candidate tag links/candidates, ingestion records, transaction tag links/transactions, ingestions, approved Budget links, subscription account-nulling, credit details, then account. All cleanup is in the service transaction; a late failure rolls it all back. Category, Tag, Budget, FinancialSubscription, TransactionRule, and other accounts survive. API_IMPORT candidates remain blockers. The old `DELETE /api/financial-accounts/{id}` endpoint remains technical compatibility only; normal account product actions use the preview/hard-delete flow.
+**ACC-HARD-DELETE command:** `FinancialAccountHardDeleteService` powers read-only `GET /api/financial-accounts/{id}/deletion-preview`, `DELETE /api/financial-accounts/{id}/hard-delete`, and the compatibility `DELETE /api/financial-accounts/{id}` route. The command resolves the account with existing owner/admin visibility semantics, acquires a `PESSIMISTIC_WRITE` lock, reruns the exact preview validation under that transaction, and returns `409 ACCOUNT_HARD_DELETE_BLOCKED` before any mutation when a blocker exists. For an approved aggregate, its explicit FK-safe order is File/Api ingestion metadata, fully local internal transfers, candidate tag links/candidates, ingestion records, transaction tag links/transactions, ingestions, approved Budget links, subscription account-nulling, credit details, then account. All cleanup is in the service transaction; a late failure rolls it all back. Category, Tag, Budget, FinancialSubscription, TransactionRule, and other accounts survive. API_IMPORT candidates remain blockers. There is no alternate public account-delete policy.
 
 **CreditAccountDetails UI demotion (ACC-UX-4):** `FinancialAccount` is the only normal account/card product entry and owns the configured atomic card write. Direct `CreditAccountDetails` URLs remain as technical compatibility routes, but are removed from the normal menu, visibly marked technical, and expose no normal child Create/Edit/Delete controls. Direct write URLs resolve to parent-account guidance rather than sending a generic child write request.
 
@@ -832,32 +832,31 @@ See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
 
 Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. Scoped queries exigen que **ambas patas** pertenezcan al login actual. Admin bypass en CRUD.
 
-| Regla                                    | Implementación                                                                                                                   |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| List / get scoped por user (ambas patas) | `findAccessibleEntity()` + repository joins                                                                                      |
-| Create resuelve txs accesibles           | `FinancialTransactionService.findAccessibleTransactionEntity()`                                                                  |
-| Admin bypass                             | `CurrentUserService.isAdmin()`                                                                                                   |
-| PUT/PATCH JsonNode doble                 | `outgoingTransaction` / `incomingTransaction`: ausente preserva; `null`/missing id → `400`; mismo `{id}` OK; otro `{id}` → `400` |
-| UI selectores filtrados                  | candidatos OUT/IN sin transfer en ningún rol; patas read-only en edit                                                            |
+| Regla                               | Implementación                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Reads scoped por user (ambas patas) | `InternalTransferProductQueryService` + repository joins                                           |
+| Commands resuelven txs accesibles   | `InternalTransferCommandService` + `InternalTransferInvariantService`                              |
+| Admin bypass                        | `CurrentUserService.isAdmin()` no permite mezclar owners                                           |
+| No raw entity writes                | `POST /api/internal-transfers` y `PUT/PATCH/DELETE /api/internal-transfers/{id}` no están mapeados |
+| UI selectores filtrados             | candidatos OUT/IN sin transfer en ningún rol; patas read-only en edit                              |
 
-**Archivos:** `InternalTransferRepository`, `InternalTransferService`, `InternalTransferResource`, `InternalTransferMapper`, `InternalTransferDTO`, `FinancialTransactionService` (candidatos + `findAccessibleTransactionEntity`), UI, E2E.
+**Archivos:** `InternalTransferRepository`, `InternalTransferResource`, `InternalTransferCommandService`, `InternalTransferCounterpartQueryService`, `InternalTransferProductQueryService`, `FinancialTransactionService` (candidatos + `findAccessibleTransactionEntity`), UI, E2E.
 
 #### Domain rules ✅ (baseline vínculo)
 
-| Regla                        | Implementación                                                                              |
-| ---------------------------- | ------------------------------------------------------------------------------------------- |
-| Cuentas distintas            | `validateTransferPair()`                                                                    |
-| Misma moneda                 | comparación `account.currency`                                                              |
-| Mismo monto                  | `amount.compareTo`                                                                          |
-| Flows OUT + IN               | `TransactionFlow` guard                                                                     |
-| Origen sin restricción       | `MANUAL`, `FILE_IMPORT` y `API` permitidos en cualquier combinación                         |
-| Mismo owner en ambas patas   | validación en service (incluso admin)                                                       |
-| Tx no participa previamente  | `existsByTransactionIdInEitherRole` (candidatos y create)                                   |
-| Patas inmutables tras create | service preserva en PUT/PATCH                                                               |
-| `notes` normalizado          | trim; blank/null → `null`; max 500 después de trim                                          |
-| Solo `notes` mutable         | service maneja `PATCH notes=null` como clear                                                |
-| `createdAt` server-owned     | create ignora cliente y usa `Instant.now()`; PUT/PATCH preservan; cambio/null patch → `400` |
-| DELETE permitido             | borra solo `InternalTransfer`; txs quedan                                                   |
+| Regla                        | Implementación                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| Cuentas distintas            | `validateTransferPair()`                                                               |
+| Misma moneda                 | comparación `account.currency`                                                         |
+| Mismo monto                  | `amount.compareTo`                                                                     |
+| Flows OUT + IN               | `TransactionFlow` guard                                                                |
+| Origen sin restricción       | `MANUAL`, `FILE_IMPORT` y `API` permitidos en cualquier combinación                    |
+| Mismo owner en ambas patas   | validación en service (incluso admin)                                                  |
+| Tx no participa previamente  | `existsByTransactionIdInEitherRole` (candidatos y create)                              |
+| Patas inmutables tras create | no existe ruta de mutación de entidades; sólo comandos estructurales                   |
+| `notes` normalizado          | comandos crean/actualizan nota dentro de sus límites tipados                           |
+| `createdAt` server-owned     | se crea sólo dentro de comandos                                                        |
+| Unlink permitido             | `POST /{id}/unlink` exige `expectedVersion`; borra sólo `InternalTransfer`; txs quedan |
 
 **Interacción con FinancialTransaction:** `FinancialTransactionService.delete()` borra primero cualquier vínculo `InternalTransfer` de esa transacción y luego borra sólo esa transacción; no borra la contraparte.
 
@@ -865,7 +864,7 @@ Vía `outgoingTransaction` / `incomingTransaction` → accounts del mismo user. 
 
 **Migration:** `20261017120000_internal_transfer_command_foundation.xml` adds `internal_transfer.version` (backfilled as `0`) and `ck_internal_transfer__different_legs`. `20261018100000_internal_transfer_aggregate_revision.xml` adds the nullable server-owned `updated_at` touch column used to make aggregate-leg edits versioned. The command-foundation migration halts instead of silently changing any pre-existing row where both leg IDs are equal.
 
-**Product UI (v1):** `/internal-transfers` uses owner-scoped product projections rather than generic CRUD DTOs. `InternalTransferProductQueryService` returns paginated list summaries without category/tag collection traversal and complete read models for the detail page. The UI creates through `POST /commands/create`, updates through `PUT /{id}/aggregate`, and unlinks through `POST /{id}/unlink`; generated CRUD endpoints remain technical compatibility only. The direct-create screen has a single positive amount and shared transaction date; source and destination flows are derived. Account changes are deliberately outside aggregate update, so the edit UI explains unlink/recreate. New direct legs are still rule-free. Product work does not include Single Transaction or Transaction Batch linking.
+**Product UI (v1):** `/internal-transfers` uses owner-scoped product projections rather than generic CRUD DTOs. `InternalTransferProductQueryService` returns paginated list summaries without category/tag collection traversal and complete read models for the detail page. The UI creates through `POST /commands/create`, updates through `PUT /{id}/aggregate`, and unlinks through `POST /{id}/unlink`; raw CRUD writes are not mapped. The direct-create screen has a single positive amount and shared transaction date; source and destination flows are derived. Account changes are deliberately outside aggregate update, so the edit UI explains unlink/recreate. New direct legs are still rule-free. Product work does not include Single Transaction or Transaction Batch linking.
 
 **Fuera de scope:** balances, cross-currency transfers, Single Transaction linking, and Transaction Batch linking.
 

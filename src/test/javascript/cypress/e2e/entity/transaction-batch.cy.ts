@@ -704,21 +704,44 @@ describe('Transaction Batch product workflow', () => {
           .and('contain', classificationRule.name);
       });
 
-      cy.authenticatedRequest({ method: 'DELETE', url: `/api/description-normalization-rules/${descriptionRule.id}` })
-        .its('status')
-        .should('eq', 204);
-      cy.authenticatedRequest({ method: 'DELETE', url: `/api/transaction-rules/${classificationRule.id}` })
-        .its('status')
-        .should('eq', 204);
+      // Persist an explicit manual category/tag fixture. Auto-application is intentionally
+      // preview state after reload, whereas the following clear must prove durable manual
+      // suppression through the actual row controls.
+      let candidateId: number;
+      let candidateVersion: number;
+      cy.then(() => {
+        expect(batchId).to.be.a('number');
+        return cy.authenticatedRequest<{ candidates: Array<{ id: number; version: number; description: string }> }>({
+          method: 'GET',
+          url: `/api/transaction-batches/${batchId}`,
+        });
+      })
+        .then(({ body }) => {
+          const candidate = body.candidates.find(current => current.description === normalizedDescription);
+          if (!candidate) throw new Error('Normalized CSV candidate was not returned by the batch read model');
+          candidateId = candidate.id;
+          candidateVersion = candidate.version;
+          return cy.authenticatedRequest<{ candidate: { version: number } }>({
+            method: 'PUT',
+            url: `/api/transaction-batches/${batchId}/candidates/${candidateId}/category`,
+            body: { expectedCandidateVersion: candidateVersion, categoryId },
+          });
+        })
+        .then(({ body }) => {
+          candidateVersion = body.candidate.version;
+          return cy.authenticatedRequest<{ candidate: { version: number } }>({
+            method: 'PUT',
+            url: `/api/transaction-batches/${batchId}/candidates/${candidateId}/tags`,
+            body: { expectedCandidateVersion: candidateVersion, tagIds: [tagId] },
+          });
+        })
+        .then(({ body }) => {
+          expect(body.candidate.version).to.be.greaterThan(candidateVersion);
+        });
       cy.reload();
-      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).within(() => {
-        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', descriptionRule.name).find('a').should('not.exist');
-        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', classificationRule.name).find('a').should('not.exist');
-      });
-
-      // A category or tag edit is persisted asynchronously and reloads the workspace. Wait for
-      // the actual command, then verify its endpoint so the test observes a durable manual clear.
-      cy.intercept('PUT', '**').as('persistCategoryClear');
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', String(categoryId));
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('contain', tagName);
+      cy.intercept('PUT', '/api/transaction-batches/*/candidates/*/category').as('persistCategoryClear');
       cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).select('Sin categoría');
       cy.wait('@persistCategoryClear').then(({ request, response }) => {
         expect(request.url).to.include('/category');
@@ -726,7 +749,7 @@ describe('Transaction Batch product workflow', () => {
       });
       cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
       cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('not.be.disabled');
-      cy.intercept('PUT', '**').as('persistTagClear');
+      cy.intercept('PUT', '/api/transaction-batches/*/candidates/*/tags').as('persistTagClear');
       cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Remove"]').click();
       cy.wait('@persistTagClear').then(({ request, response }) => {
         expect(request.url).to.include('/tags');
@@ -742,6 +765,20 @@ describe('Transaction Batch product workflow', () => {
         .should('have.length', 1)
         .and('contain', descriptionRule.name);
       cy.screenshot('transaction-batch/07-rule-protection');
+
+      cy.authenticatedRequest({ method: 'DELETE', url: `/api/description-normalization-rules/${descriptionRule.id}` })
+        .its('status')
+        .should('eq', 204);
+      cy.authenticatedRequest({ method: 'DELETE', url: `/api/transaction-rules/${classificationRule.id}` })
+        .its('status')
+        .should('eq', 204);
+      cy.reload();
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).within(() => {
+        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', descriptionRule.name).find('a').should('not.exist');
+        // The explicit manual clear has already suppressed classification attribution; deleting
+        // its rule cannot make an attribution reappear.
+        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', classificationRule.name).should('not.exist');
+      });
     });
   });
 

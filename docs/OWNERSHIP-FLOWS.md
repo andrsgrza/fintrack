@@ -367,24 +367,21 @@ flowchart TB
 
 ### Usuario normal
 
-| Flujo           | Comportamiento                                                                                                                                                                                                                       |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **List / GET**  | Solo transfers donde **out e in** pertenecen a sus cuentas                                                                                                                                                                           |
-| **Commands**    | `create`, `link-existing`, `counterpart`, aggregate update and unlink derive ownership from persisted accounts/legs. New legs require active accounts; existing historical legs may remain readable/reconcilable after deactivation. |
-| **PUT / PATCH** | Solo propios; patas y `createdAt` **inmutables**; solo `notes` mutable                                                                                                                                                               |
-| **PATCH patas** | Ausente → preserva; `null` → `400`; otro `{id}` → `400`                                                                                                                                                                              |
-| **DELETE**      | Solo propios; **borra solo el transfer**; las dos txs siguen vivas                                                                                                                                                                   |
+| Flujo             | Comportamiento                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Product reads** | Solo transfers donde **out e in** pertenecen a sus cuentas                                                                                                                                                                           |
+| **Commands**      | `create`, `link-existing`, `counterpart`, aggregate update and unlink derive ownership from persisted accounts/legs. New legs require active accounts; existing historical legs may remain readable/reconcilable after deactivation. |
+| **No raw CRUD**   | `POST /api/internal-transfers`, `PUT/PATCH/DELETE /api/internal-transfers/{id}` no están mapeados. No hay una segunda semántica de mutación.                                                                                         |
 
 The product reads at `/api/internal-transfers/product` and `/api/internal-transfers/product/{id}` follow the same pattern-D requirement: a regular user receives a transfer only when both linked accounts belong to the current user. Account/date filtering never relaxes that condition; administrators retain the existing global support view. Product unlink removes only the relation, never either FinancialTransaction.
 | **Counterparts** | Paginated lookup is scoped to the caller's owner and returns only a different-account, same-currency/amount/date, opposite-flow and unlinked leg. Existing-leg provenance is not rewritten. |
 
 ### Admin
 
-| Flujo                                 | Comportamiento                                                                                                   |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **List / GET / PUT / PATCH / DELETE** | Transfers de cualquier user                                                                                      |
-| **POST (excepción)**                  | Puede resolver txs ajenas, pero **create bloquea cross-owner**: ambas patas deben ser del **mismo user** siempre |
-| **Candidatos**                        | Ve txs candidatas de todos los users; la validación de create impide mezclar owners                              |
+| Flujo                        | Comportamiento                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Product reads / commands** | Puede leer y operar aggregates de cualquier user, pero los comandos siguen bloqueando pares cross-owner |
+| **Candidatos**               | Ve txs candidatas de todos los users; la validación de comandos impide mezclar owners                   |
 
 ---
 
@@ -404,7 +401,7 @@ The product reads at `/api/internal-transfers/product` and `/api/internal-transf
 | ApiAccessToken           | ✅                                                 | Hash no expuesto; secretos inmutables                             |
 | ApiAccessTokenPermission | ✅                                                 | Parent/grant/createdAt inmutables                                 |
 | UserDashboardPreference  | ✅                                                 | 1:1 por user en create                                            |
-| InternalTransfer         | ✅ CRUD                                            | **Create: mismo owner en ambas patas**                            |
+| InternalTransfer         | ✅ reads + intent commands                         | **Ambas patas siempre son del mismo owner; no hay CRUD write**    |
 | TransactionIngestion     | ✅ CRUD                                            | `account` / `ingestionType` inmutables; server defaults en create |
 | FileIngestion            | ✅ create/read/update dates; direct delete blocked | Parent `FILE` + 1:1; metadata inmutable; delete via parent        |
 | ApiIngestion             | ✅ create/read/no-op update; direct delete blocked | Parent `API` + 1:1; token snapshots; metadata inmutable           |
