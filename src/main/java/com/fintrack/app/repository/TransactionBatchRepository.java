@@ -18,7 +18,7 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
     Optional<TransactionBatch> findOneWithRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = { "user", "account", "account.user" })
+    /** Locks only the Batch root; publication acquires accounts explicitly in the shared transfer order. */
     @Query("select batch from TransactionBatch batch where batch.id = :id and batch.user.login = :login and batch.status = :status")
     Optional<TransactionBatch> findOneForOwnedStatusMutation(
         @Param("id") Long id,
@@ -28,7 +28,7 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
 
     /** Locks an owned root before a state-aware command rechecks OPEN/PUBLISHED under one coordination boundary. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = { "user", "account", "account.user" })
+    /** Do not fetch-lock account/user here: callers coordinate those resources separately. */
     @Query("select batch from TransactionBatch batch where batch.id = :id and batch.user.login = :login")
     Optional<TransactionBatch> findOneForOwnedMutation(@Param("id") Long id, @Param("login") String login);
 

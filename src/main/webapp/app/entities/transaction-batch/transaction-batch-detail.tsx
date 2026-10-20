@@ -26,6 +26,7 @@ import { ICategorySelectable } from 'app/shared/model/category-selectable.model'
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import {
   BatchCandidate,
+  BatchCreateCounterpartInput,
   BatchRowMutation,
   BatchReceipt,
   BatchRulePreview,
@@ -387,6 +388,10 @@ const TransactionBatchDetail = () => {
   const queuedCandidates = batch?.candidates.filter(row => row.id !== provisionalCandidateId) ?? [];
   const invalidCount = queuedCandidates.filter(row => row.validationStatus !== 'VALID').length;
   const staleTransferCount = queuedCandidates.filter(row => row.internalTransfer?.enabled && row.internalTransfer.stale).length;
+  const createCounterpartCount = queuedCandidates.filter(
+    candidate => candidate.internalTransfer?.enabled && candidate.internalTransfer.mode === 'CREATE_COUNTERPART',
+  ).length;
+  const configuredTransferCount = queuedCandidates.filter(candidate => candidate.internalTransfer?.enabled).length;
   const visibleRows = useMemo(() => {
     if (!batch) return [];
     const rows = batch.candidates.filter(row => {
@@ -570,7 +575,36 @@ const TransactionBatchDetail = () => {
       return await queueRowMutation(candidateId, async () => {
         const current = batchRef.current?.candidates.find(candidate => candidate.id === candidateId);
         if (!current) return undefined;
-        const mutation = await setRowInternalTransfer(workspace.id, candidateId, current.version, counterpart.transactionId);
+        const mutation = await setRowInternalTransfer(workspace.id, candidateId, current.version, {
+          mode: 'LINK_EXISTING',
+          counterpartTransactionId: counterpart.transactionId,
+        });
+        applyRowMutation(mutation);
+        setEditor(session => (session?.candidate?.id === candidateId ? { ...session, candidate: mutation.candidate } : session));
+        return mutation.candidate;
+      });
+    } catch (failure) {
+      const mapped = editorErrorFor(failure);
+      setEditorError(mapped.message);
+      return undefined;
+    }
+  };
+  const configureEditorCreateTransferCounterpart = async (configuration: BatchCreateCounterpartInput) => {
+    const workspace = batchRef.current;
+    const candidateId = editor?.candidate?.id;
+    if (!workspace || !candidateId) return undefined;
+    try {
+      return await queueRowMutation(candidateId, async () => {
+        const current = batchRef.current?.candidates.find(candidate => candidate.id === candidateId);
+        if (!current) return undefined;
+        const mutation = await setRowInternalTransfer(workspace.id, candidateId, current.version, {
+          mode: 'CREATE_COUNTERPART',
+          counterpartAccountId: configuration.accountId,
+          counterpartPostingDate: configuration.postingDate ?? undefined,
+          counterpartDescription: configuration.description,
+          counterpartExternalReference: configuration.externalReference ?? undefined,
+          counterpartNotes: configuration.notes ?? undefined,
+        });
         applyRowMutation(mutation);
         setEditor(session => (session?.candidate?.id === candidateId ? { ...session, candidate: mutation.candidate } : session));
         return mutation.candidate;
@@ -794,9 +828,29 @@ const TransactionBatchDetail = () => {
       <ProductPage>
         <ProductPageHeader title="Transacciones creadas" subtitle="El lote temporal ya se limpió; este receipt técnico caduca." />
         <ProductSection title="Resultado de publicación">
-          <p className="mb-2">
-            Se crearon <strong>{receipt.publishedTransactionCount}</strong> transacciones definitivas.
-          </p>
+          {receipt.createdCounterpartCount > 0 ? (
+            <>
+              <p className="mb-2">
+                Se publicaron <strong>{receipt.publishedTransactionCount}</strong> borradores y se{' '}
+                {receipt.createdCounterpartCount === 1 ? 'creó' : 'crearon'}{' '}
+                <strong>
+                  {receipt.createdCounterpartCount} {receipt.createdCounterpartCount === 1 ? 'contraparte' : 'contrapartes'}
+                </strong>
+                : <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas nuevas.
+              </p>
+              {receipt.createdInternalTransferCount > 0 ? (
+                <p className="mb-2">
+                  Se {receipt.createdInternalTransferCount === 1 ? 'creó' : 'crearon'}{' '}
+                  <strong>{receipt.createdInternalTransferCount}</strong> transferencia
+                  {receipt.createdInternalTransferCount === 1 ? '' : 's'} interna{receipt.createdInternalTransferCount === 1 ? '' : 's'}.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="mb-2">
+              Se crearon <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas.
+            </p>
+          )}
           <p className="small text-muted">Disponible hasta {new Date(receipt.receiptExpiresAt).toLocaleString()}.</p>
           <Button tag={Link} to="/financial-transaction" color="primary">
             Ver transacciones
@@ -1050,13 +1104,19 @@ const TransactionBatchDetail = () => {
                     {row.internalTransfer?.enabled ? (
                       <div className="small mt-2" data-cy={`transactionBatchTransferIndicator-${row.id}`}>
                         <span className={row.internalTransfer.stale ? 'text-warning' : 'text-primary'}>↔ Transferencia interna</span>
-                        {row.internalTransfer.counterpart ? (
+                        {row.internalTransfer.mode === 'CREATE_COUNTERPART' && row.internalTransfer.createCounterpart ? (
+                          <span className="text-muted">
+                            {' '}
+                            · Contraparte nueva: {row.internalTransfer.createCounterpart.accountName} ·{' '}
+                            {row.internalTransfer.createCounterpart.description}
+                          </span>
+                        ) : row.internalTransfer.counterpart ? (
                           <span className="text-muted">
                             {' '}
                             · Contraparte: {row.internalTransfer.counterpart.accountName} · {row.internalTransfer.counterpart.description}
                           </span>
                         ) : null}
-                        {row.internalTransfer.stale ? <span className="text-warning"> · Requiere otra contraparte</span> : null}
+                        {row.internalTransfer.stale ? <span className="text-warning"> · Requiere corregir la contraparte</span> : null}
                       </div>
                     ) : null}
                     <div className="transaction-batch-row-detail">
@@ -1215,6 +1275,7 @@ const TransactionBatchDetail = () => {
         }}
         onSearchTransferCounterparts={searchEditorTransferCounterparts}
         onSelectTransferCounterpart={selectEditorTransferCounterpart}
+        onConfigureCreateTransferCounterpart={configureEditorCreateTransferCounterpart}
         onClearTransfer={clearEditorTransfer}
       />
       <Modal
@@ -1295,6 +1356,16 @@ const TransactionBatchDetail = () => {
           <p>
             <strong>{batch.accountName}</strong> · {queuedCandidates.length} movimientos.
           </p>
+          {createCounterpartCount ? (
+            <p>
+              {createCounterpartCount} contrapart{createCounterpartCount === 1 ? 'e' : 'es'} nueva
+              {createCounterpartCount === 1 ? '' : 's'} · {queuedCandidates.length + createCounterpartCount} transacciones nuevas
+              {configuredTransferCount
+                ? ` · ${configuredTransferCount} ${configuredTransferCount === 1 ? 'transferencia interna' : 'transferencias internas'}`
+                : ''}
+              .
+            </p>
+          ) : null}
           <p className="mb-0">Se usarán los valores guardados. Las sugerencias pendientes no se aplicarán automáticamente.</p>
         </ModalBody>
         <ModalFooter>

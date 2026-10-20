@@ -352,6 +352,8 @@ entity TransactionBatch {
   publicationOperationKey String maxlength(100)
   publicationRequestDigest String maxlength(128)
   publishedTransactionCount Integer
+  createdCounterpartCount Integer
+  createdInternalTransferCount Integer
   receiptExpiresAt Instant
 }
 

@@ -16,6 +16,7 @@ import com.fintrack.app.service.dto.*;
 import com.fintrack.app.web.rest.TestUtil;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -37,6 +38,9 @@ class TransactionBatchCommandServiceIT {
     private TransactionBatchCommandService service;
 
     @Autowired
+    private TransactionBatchCsvAppendService csvAppendService;
+
+    @Autowired
     private TransactionBatchRepository batchRepository;
 
     @Autowired
@@ -47,6 +51,9 @@ class TransactionBatchCommandServiceIT {
 
     @Autowired
     private FinancialTransactionRepository financialTransactionRepository;
+
+    @Autowired
+    private InternalTransferRepository internalTransferRepository;
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -371,6 +378,149 @@ class TransactionBatchCommandServiceIT {
         assertThat(financialTransactionRepository.findById(counterpart.getId())).isPresent();
     }
 
+    @Test
+    @Transactional
+    void persistsCreateCounterpartIntentWithoutCreatingLedgerDataAndClearsIncompatibleLinkState() {
+        FinancialAccount sourceAccount = account();
+        FinancialAccount createCounterpartAccount = account();
+        FinancialAccount linkedCounterpartAccount = account();
+        TransactionBatchWorkspaceDTO batch = service.createOpenBatch(sourceAccount.getId());
+        TransactionBatchRowMutationDTO created = service.addManualDraft(
+            batch.getId(),
+            completeDraft(batch.getVersion(), "Batch transfer source", "-125.00")
+        );
+
+        TransactionBatchInternalTransferCommand create = new TransactionBatchInternalTransferCommand();
+        create.setExpectedCandidateVersion(created.getCandidate().getVersion());
+        create.setMode(TransactionCandidateInternalTransferMode.CREATE_COUNTERPART);
+        create.setCounterpartAccountId(createCounterpartAccount.getId());
+        create.setCounterpartPostingDate(LocalDate.of(2026, 10, 19));
+        create.setCounterpartDescription("  Batch transfer destination  ");
+        create.setCounterpartExternalReference("  destination-ref  ");
+        create.setCounterpartNotes("  destination notes  ");
+
+        TransactionBatchRowMutationDTO configured = service.setInternalTransfer(batch.getId(), created.getCandidate().getId(), create);
+
+        assertThat(configured.getCandidate().getInternalTransfer().isEnabled()).isTrue();
+        assertThat(configured.getCandidate().getInternalTransfer().getMode()).isEqualTo(
+            TransactionCandidateInternalTransferMode.CREATE_COUNTERPART
+        );
+        assertThat(configured.getCandidate().getInternalTransfer().getCreateCounterpart())
+            .extracting(
+                counterpart -> counterpart.getAccountId(),
+                counterpart -> counterpart.getPostingDate(),
+                counterpart -> counterpart.getDescription(),
+                counterpart -> counterpart.getExternalReference(),
+                counterpart -> counterpart.getNotes()
+            )
+            .containsExactly(
+                createCounterpartAccount.getId(),
+                LocalDate.of(2026, 10, 19),
+                "Batch transfer destination",
+                "destination-ref",
+                "destination notes"
+            );
+        assertThat(financialTransactionRepository.findAllWithToOneRelationshipsByAccountUserLogin("user"))
+            .filteredOn(transaction -> "Batch transfer destination".equals(transaction.getDescription()))
+            .isEmpty();
+
+        FinancialTransaction linked = publishedTransaction(linkedCounterpartAccount, TransactionFlow.IN, "125.00", "Existing incoming");
+        TransactionBatchInternalTransferCommand link = new TransactionBatchInternalTransferCommand();
+        link.setExpectedCandidateVersion(configured.getCandidate().getVersion());
+        link.setMode(TransactionCandidateInternalTransferMode.LINK_EXISTING);
+        link.setCounterpartTransactionId(linked.getId());
+        TransactionBatchRowMutationDTO linkedIntent = service.setInternalTransfer(batch.getId(), created.getCandidate().getId(), link);
+
+        assertThat(linkedIntent.getCandidate().getInternalTransfer().getMode()).isEqualTo(
+            TransactionCandidateInternalTransferMode.LINK_EXISTING
+        );
+        assertThat(linkedIntent.getCandidate().getInternalTransfer().getCreateCounterpart()).isNull();
+        TransactionCandidate reloaded = candidateRepository
+            .findOneBatchCandidateWithRelationships(batch.getId(), created.getCandidate().getId(), "user")
+            .orElseThrow();
+        assertThat(reloaded.getInternalTransferCounterpartAccount()).isNull();
+        assertThat(reloaded.getInternalTransferCounterpartDescription()).isNull();
+        assertThat(reloaded.getInternalTransferCounterpartTransaction().getId()).isEqualTo(linked.getId());
+    }
+
+    @Test
+    @Transactional
+    void keepsCreateCounterpartIntentTemporaryForCsvAndManualRowsUntilTheirRowOrWorkspaceIsRemoved() {
+        FinancialAccount sourceAccount = account();
+        FinancialAccount counterpartAccount = account();
+        TransactionBatchWorkspaceDTO batch = service.createOpenBatch(sourceAccount.getId());
+
+        TransactionBatchAppendCsvCommand csv = new TransactionBatchAppendCsvCommand();
+        csv.setExpectedBatchVersion(batch.getVersion());
+        csv.setOperationKey("csv-create-counterpart-" + System.nanoTime());
+        csv.setFileName("create-counterpart.csv");
+        csv.setBytes(
+            ("transactionDate,postingDate,description,signedAmount,currency,externalReference,notes\n" +
+                "2026-10-18,2026-10-19,CSV transfer source,-125.00,MXN,csv-source-ref,csv source notes\n").getBytes(StandardCharsets.UTF_8)
+        );
+        csvAppendService.append(batch.getId(), csv);
+
+        TransactionBatchCandidateViewDTO csvRow = service.findOpenBatch(batch.getId()).orElseThrow().getCandidates().get(0);
+        TransactionBatchInternalTransferCommand createForCsv = createCounterpartCommand(
+            csvRow.getVersion(),
+            counterpartAccount.getId(),
+            LocalDate.of(2026, 10, 20),
+            "CSV transfer destination",
+            "csv-counterpart-ref",
+            "csv counterpart notes"
+        );
+        TransactionBatchRowMutationDTO configuredCsv = service.setInternalTransfer(batch.getId(), csvRow.getId(), createForCsv);
+
+        assertThat(configuredCsv.getCandidate().getSource()).isEqualTo(TransactionCandidateSource.FILE_IMPORT);
+        assertThat(configuredCsv.getCandidate().getInternalTransfer().getMode()).isEqualTo(
+            TransactionCandidateInternalTransferMode.CREATE_COUNTERPART
+        );
+        assertThat(configuredCsv.getCandidate().getInternalTransfer().getCreateCounterpart().getDescription()).isEqualTo(
+            "CSV transfer destination"
+        );
+        assertThat(financialTransactionRepository.findAllWithToOneRelationshipsByAccountUserLogin("user"))
+            .filteredOn(transaction -> "CSV transfer destination".equals(transaction.getDescription()))
+            .isEmpty();
+        assertThat(financialTransactionRepository.findAllWithToOneRelationshipsByAccountUserLogin("user"))
+            .filteredOn(transaction -> "CSV transfer source".equals(transaction.getDescription()))
+            .isEmpty();
+
+        Long afterCsvDelete = service.deleteCandidate(batch.getId(), csvRow.getId(), configuredCsv.getCandidate().getVersion());
+        assertThat(candidateRepository.findById(csvRow.getId())).isEmpty();
+        assertThat(internalTransferRepository.findAll()).isEmpty();
+
+        TransactionBatchRowMutationDTO manualRow = service.addManualDraft(
+            batch.getId(),
+            completeDraft(afterCsvDelete, "Manual transfer source", "-80.00")
+        );
+        TransactionBatchRowMutationDTO configuredManual = service.setInternalTransfer(
+            batch.getId(),
+            manualRow.getCandidate().getId(),
+            createCounterpartCommand(
+                manualRow.getCandidate().getVersion(),
+                counterpartAccount.getId(),
+                LocalDate.of(2026, 10, 21),
+                "Manual transfer destination",
+                "manual-counterpart-ref",
+                "manual counterpart notes"
+            )
+        );
+
+        assertThat(service.discardOpenBatch(batch.getId(), configuredManual.getBatchVersion())).isTrue();
+        em.flush();
+        em.clear();
+        assertThat(batchRepository.findById(batch.getId())).isEmpty();
+        assertThat(candidateRepository.findById(manualRow.getCandidate().getId())).isEmpty();
+        assertThat(financialTransactionRepository.findAllWithToOneRelationshipsByAccountUserLogin("user"))
+            .filteredOn(
+                transaction ->
+                    "CSV transfer destination".equals(transaction.getDescription()) ||
+                    "Manual transfer destination".equals(transaction.getDescription())
+            )
+            .isEmpty();
+        assertThat(internalTransferRepository.findAll()).isEmpty();
+    }
+
     private User currentUser() {
         return TestUtil.findAll(em, User.class).stream().filter(user -> "user".equals(user.getLogin())).findFirst().orElseThrow();
     }
@@ -386,6 +536,25 @@ class TransactionBatchCommandServiceIT {
         command.setTransactionDate(LocalDate.of(2026, 10, 18));
         command.setDescription(description);
         command.setSignedAmount(new BigDecimal(signedAmount));
+        return command;
+    }
+
+    private TransactionBatchInternalTransferCommand createCounterpartCommand(
+        Long expectedCandidateVersion,
+        Long accountId,
+        LocalDate postingDate,
+        String description,
+        String externalReference,
+        String notes
+    ) {
+        TransactionBatchInternalTransferCommand command = new TransactionBatchInternalTransferCommand();
+        command.setExpectedCandidateVersion(expectedCandidateVersion);
+        command.setMode(TransactionCandidateInternalTransferMode.CREATE_COUNTERPART);
+        command.setCounterpartAccountId(accountId);
+        command.setCounterpartPostingDate(postingDate);
+        command.setCounterpartDescription(description);
+        command.setCounterpartExternalReference(externalReference);
+        command.setCounterpartNotes(notes);
         return command;
     }
 

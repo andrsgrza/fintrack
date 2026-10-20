@@ -12,6 +12,7 @@ import enTransactionFlow from 'app/../i18n/en/transactionFlow.json';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
 import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
+import { getInternalTransferForTransaction } from 'app/entities/internal-transfer/internal-transfer-product.service';
 import { FinancialTransaction } from './financial-transaction';
 import { FinancialTransactionDeleteDialog } from './financial-transaction-delete-dialog';
 import { FinancialTransactionDetail } from './financial-transaction-detail';
@@ -28,6 +29,7 @@ const mockDeleteEntity = jest.fn(id => ({ type: 'financialTransaction/deleteEnti
 const mockGetSelectableCategories = getSelectableCategories as jest.Mock;
 const mockGetSelectableTags = getSelectableTags as jest.Mock;
 const mockGetSelectableFinancialAccounts = getSelectableFinancialAccounts as jest.Mock;
+const mockGetInternalTransferForTransaction = getInternalTransferForTransaction as jest.Mock;
 let mockState;
 
 jest.mock('app/config/store', () => ({
@@ -52,6 +54,10 @@ jest.mock('app/entities/financial-account/financial-account-selectable.service',
 
 jest.mock('app/entities/tag/tag-selectable.service', () => ({
   getSelectableTags: jest.fn(),
+}));
+
+jest.mock('app/entities/internal-transfer/internal-transfer-product.service', () => ({
+  getInternalTransferForTransaction: jest.fn(),
 }));
 
 const accounts = [
@@ -190,6 +196,7 @@ describe('FinancialTransaction posted transaction UX', () => {
     mockGetEntity.mockClear();
     mockDeleteEntity.mockClear();
     mockGetSelectableFinancialAccounts.mockClear();
+    mockGetInternalTransferForTransaction.mockResolvedValue(null);
     mockGetSelectableCategories.mockResolvedValue(categories);
     mockGetSelectableTags.mockResolvedValue(tags);
     mockGetSelectableFinancialAccounts.mockResolvedValue(accounts);

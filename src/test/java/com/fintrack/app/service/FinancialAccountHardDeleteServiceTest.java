@@ -276,6 +276,19 @@ class FinancialAccountHardDeleteServiceTest {
     }
 
     @Test
+    void previewBlocksDeletingAnAccountReferencedOnlyAsABatchCounterpartDraft() {
+        FinancialAccount sourceAccount = account(20L, account.getUser());
+        TransactionCandidate candidate = batchCandidate(sourceAccount, TransactionCandidateStatus.READY_TO_POST);
+        candidate.setInternalTransferCounterpartAccount(account);
+        when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of(candidate));
+
+        FinancialAccountDeletionPreviewDTO preview = preview();
+
+        assertThat(preview.getCanHardDelete()).isFalse();
+        assertThat(blockerCodes(preview)).containsExactly(FinancialAccountDeletionBlockerCode.CORRUPT_CANDIDATE);
+    }
+
+    @Test
     void previewBlocksApiImportCandidateWithoutDefiningApiImportDeletion() {
         TransactionCandidate candidate = manualCandidate(TransactionCandidateStatus.DRAFT);
         candidate.setSource(TransactionCandidateSource.API_IMPORT);

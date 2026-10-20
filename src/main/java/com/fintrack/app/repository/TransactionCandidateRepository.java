@@ -65,6 +65,8 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartAccount",
+            "internalTransferCounterpartAccount.user",
             "internalTransferCounterpartTransaction",
             "internalTransferCounterpartTransaction.account",
             "internalTransferCounterpartTransaction.account.user",
@@ -111,6 +113,8 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartAccount",
+            "internalTransferCounterpartAccount.user",
             "internalTransferCounterpartTransaction",
             "internalTransferCounterpartTransaction.account",
             "internalTransferCounterpartTransaction.account.user",
@@ -143,6 +147,8 @@ public interface TransactionCandidateRepository
             "user",
             "account",
             "account.user",
+            "internalTransferCounterpartAccount",
+            "internalTransferCounterpartAccount.user",
             "internalTransferCounterpartTransaction",
             "internalTransferCounterpartTransaction.account",
             "internalTransferCounterpartTransaction.account.user",
@@ -178,6 +184,8 @@ public interface TransactionCandidateRepository
             "tagSuppressions",
             "tagSuppressions.tag",
             "inputIssues",
+            "internalTransferCounterpartAccount",
+            "internalTransferCounterpartAccount.user",
             "internalTransferCounterpartTransaction",
             "internalTransferCounterpartTransaction.account",
         }
@@ -189,24 +197,6 @@ public interface TransactionCandidateRepository
 
     /** Stable locked aggregate read used only by internal batch publication. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(
-        attributePaths = {
-            "user",
-            "account",
-            "account.user",
-            "internalTransferCounterpartTransaction",
-            "internalTransferCounterpartTransaction.account",
-            "internalTransferCounterpartTransaction.account.user",
-            "category",
-            "category.user",
-            "tagAssociations",
-            "tagAssociations.tag",
-            "tagAssociations.tag.user",
-            "tagSuppressions",
-            "tagSuppressions.tag",
-            "inputIssues",
-        }
-    )
     @Query(
         "select distinct candidate from TransactionCandidate candidate " +
         "where candidate.transactionBatch.id = :batchId and candidate.user.login = :login " +
@@ -267,18 +257,24 @@ public interface TransactionCandidateRepository
     boolean existsTagSuppressionByTagId(@Param("tagId") Long tagId);
 
     @Query(
-        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate where transactionCandidate.account.id = :accountId"
+        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
+        "where transactionCandidate.account.id = :accountId or transactionCandidate.internalTransferCounterpartAccount.id = :accountId"
     )
     boolean existsAccountCandidateOutsideWorkflowCleanup(@Param("accountId") Long accountId);
 
-    boolean existsByAccountId(Long accountId);
+    @Query(
+        "select case when count(transactionCandidate) > 0 then true else false end from TransactionCandidate transactionCandidate " +
+        "where transactionCandidate.account.id = :accountId or transactionCandidate.internalTransferCounterpartAccount.id = :accountId"
+    )
+    boolean existsByAccountId(@Param("accountId") Long accountId);
 
     /**
      * Loads every candidate that could be part of an account deletion aggregate.
      */
-    @EntityGraph(attributePaths = { "account", "transactionBatch", "transactionBatch.account" })
+    @EntityGraph(attributePaths = { "account", "transactionBatch", "transactionBatch.account", "internalTransferCounterpartAccount" })
     @Query(
-        "select distinct transactionCandidate from TransactionCandidate transactionCandidate where transactionCandidate.account.id = :accountId"
+        "select distinct transactionCandidate from TransactionCandidate transactionCandidate " +
+        "where transactionCandidate.account.id = :accountId or transactionCandidate.internalTransferCounterpartAccount.id = :accountId"
     )
     List<TransactionCandidate> findAllForAccountDeletionPreview(@Param("accountId") Long accountId);
 

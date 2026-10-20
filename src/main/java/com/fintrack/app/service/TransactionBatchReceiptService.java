@@ -41,6 +41,13 @@ public class TransactionBatchReceiptService {
         result.setOperationKey(batch.getPublicationOperationKey());
         result.setPublishedAt(batch.getPublishedAt());
         result.setPublishedTransactionCount(batch.getPublishedTransactionCount());
+        int publishedCandidateCount = batch.getPublishedTransactionCount() == null ? 0 : batch.getPublishedTransactionCount();
+        int createdCounterpartCount = batch.getCreatedCounterpartCount() == null ? 0 : batch.getCreatedCounterpartCount();
+        result.setCreatedCounterpartCount(createdCounterpartCount);
+        result.setTotalCreatedFinancialTransactionCount(publishedCandidateCount + createdCounterpartCount);
+        result.setCreatedInternalTransferCount(
+            batch.getCreatedInternalTransferCount() == null ? 0 : batch.getCreatedInternalTransferCount()
+        );
         result.setReceiptExpiresAt(batch.getReceiptExpiresAt());
         result.setReplayed(false);
         return result;

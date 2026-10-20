@@ -67,8 +67,40 @@ export type BatchTransferCounterpartSearch = {
 export type BatchInternalTransferIntent = {
   enabled: boolean;
   stale: boolean;
+  mode?: 'CREATE_COUNTERPART' | 'LINK_EXISTING' | null;
   counterpart?: BatchTransferCounterpart | null;
+  createCounterpart?: BatchCreateCounterpartConfiguration | null;
 };
+
+/** Draft-only values for a new opposite leg; no FinancialTransaction exists yet. */
+export type BatchCreateCounterpartConfiguration = {
+  accountId?: number | null;
+  accountName?: string | null;
+  postingDate?: string | null;
+  description?: string | null;
+  externalReference?: string | null;
+  notes?: string | null;
+};
+
+/** Values required to persist the draft-only create-counterpart intent. */
+export type BatchCreateCounterpartInput = {
+  accountId: number;
+  description: string;
+  postingDate?: string | null;
+  externalReference?: string | null;
+  notes?: string | null;
+};
+
+export type BatchInternalTransferCommand =
+  | { mode: 'LINK_EXISTING'; counterpartTransactionId: number }
+  | {
+      mode: 'CREATE_COUNTERPART';
+      counterpartAccountId: number;
+      counterpartPostingDate?: string;
+      counterpartDescription?: string;
+      counterpartExternalReference?: string;
+      counterpartNotes?: string;
+    };
 
 export type BatchRulePreview = {
   candidateId: number;
@@ -113,6 +145,9 @@ export type BatchReceipt = {
   operationKey: string;
   publishedAt: string;
   publishedTransactionCount: number;
+  createdCounterpartCount: number;
+  totalCreatedFinancialTransactionCount: number;
+  createdInternalTransferCount: number;
   receiptExpiresAt: string;
   replayed: boolean;
 };
@@ -161,12 +196,12 @@ export const setRowInternalTransfer = (
   batchId: number,
   candidateId: number,
   expectedCandidateVersion: number,
-  counterpartTransactionId: number,
+  command: BatchInternalTransferCommand,
 ) =>
   axios
     .put<BatchRowMutation>(`${apiUrl}/${batchId}/candidates/${candidateId}/internal-transfer`, {
       expectedCandidateVersion,
-      counterpartTransactionId,
+      ...command,
     })
     .then(response => response.data);
 export const clearRowInternalTransfer = (batchId: number, candidateId: number, expectedCandidateVersion: number) =>

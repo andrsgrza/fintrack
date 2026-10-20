@@ -6,6 +6,7 @@ import com.fintrack.app.repository.*;
 import com.fintrack.app.service.dto.*;
 import com.fintrack.app.service.transfer.InternalTransferCommandException;
 import com.fintrack.app.service.transfer.InternalTransferCounterpartQueryService;
+import com.fintrack.app.service.transfer.InternalTransferInvariantService;
 import com.fintrack.app.service.transfer.InternalTransferReadModelMapper;
 import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
@@ -35,6 +36,7 @@ public class TransactionBatchCommandService {
     private final TagRepository tagRepository;
     private final CurrentUserService currentUserService;
     private final InternalTransferCounterpartQueryService internalTransferCounterpartQueryService;
+    private final InternalTransferInvariantService internalTransferInvariantService;
 
     public TransactionBatchCommandService(
         TransactionBatchRepository transactionBatchRepository,
@@ -43,7 +45,8 @@ public class TransactionBatchCommandService {
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
         CurrentUserService currentUserService,
-        InternalTransferCounterpartQueryService internalTransferCounterpartQueryService
+        InternalTransferCounterpartQueryService internalTransferCounterpartQueryService,
+        InternalTransferInvariantService internalTransferInvariantService
     ) {
         this.transactionBatchRepository = transactionBatchRepository;
         this.transactionCandidateRepository = transactionCandidateRepository;
@@ -52,6 +55,7 @@ public class TransactionBatchCommandService {
         this.tagRepository = tagRepository;
         this.currentUserService = currentUserService;
         this.internalTransferCounterpartQueryService = internalTransferCounterpartQueryService;
+        this.internalTransferInvariantService = internalTransferInvariantService;
     }
 
     /** Creates another owned OPEN workspace for an active accessible account. */
@@ -266,8 +270,9 @@ public class TransactionBatchCommandService {
     }
 
     /**
-     * Persists only the intent to link this temporary row to a published
-     * opposite leg. It deliberately does not create an InternalTransfer yet.
+     * Persists only transfer intent for this temporary row. Neither mode
+     * creates an InternalTransfer or a second FinancialTransaction before
+     * batch publication.
      */
     public TransactionBatchRowMutationDTO setInternalTransfer(
         Long batchId,
@@ -277,6 +282,21 @@ public class TransactionBatchCommandService {
         if (command == null) throw new IllegalArgumentException("Batch transfer command is required");
         TransactionBatch batch = lockOpenBatch(batchId);
         TransactionCandidate candidate = lockBatchCandidate(batch, candidateId, command.getExpectedCandidateVersion());
+        TransactionCandidateInternalTransferMode mode = requestedTransferMode(command);
+        if (mode == TransactionCandidateInternalTransferMode.LINK_EXISTING) {
+            return setLinkExistingTransferIntent(batch, candidate, command);
+        }
+        if (mode == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+            return setCreateCounterpartTransferIntent(batch, candidate, command);
+        }
+        throw new IllegalArgumentException("A transfer counterpart mode is required");
+    }
+
+    private TransactionBatchRowMutationDTO setLinkExistingTransferIntent(
+        TransactionBatch batch,
+        TransactionCandidate candidate,
+        TransactionBatchInternalTransferCommand command
+    ) {
         FinancialTransaction counterpart = internalTransferCounterpartQueryService.requireEligibleCounterpartForCandidate(
             candidate,
             command.getCounterpartTransactionId()
@@ -291,8 +311,6 @@ public class TransactionBatchCommandService {
             candidate.setInternalTransferEnabled(true);
             candidate.setInternalTransferMode(TransactionCandidateInternalTransferMode.LINK_EXISTING);
             candidate.setInternalTransferCounterpartTransaction(counterpart);
-            // Batch V1 always links an already-published leg. No duplicate
-            // counterpart account/data or create-counterpart mode is retained.
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
             batch = persistMaterialBatchChange(batch);
@@ -300,11 +318,57 @@ public class TransactionBatchCommandService {
         return rowMutation(candidate, batch);
     }
 
+    private TransactionBatchRowMutationDTO setCreateCounterpartTransferIntent(
+        TransactionBatch batch,
+        TransactionCandidate candidate,
+        TransactionBatchInternalTransferCommand command
+    ) {
+        FinancialAccount counterpartAccount = requireAccessibleActiveAccount(command.getCounterpartAccountId());
+        internalTransferInvariantService.validateExistingAccountAndNewCounterpart(candidate.getAccount(), counterpartAccount);
+        String description = normalizeRequiredText(command.getCounterpartDescription(), 500, "Counterpart description");
+        String externalReference = normalizeText(command.getCounterpartExternalReference(), 150, "Counterpart external reference");
+        String notes = normalizeText(command.getCounterpartNotes(), 1000, "Counterpart notes");
+        boolean unchanged =
+            candidate.getInternalTransferEnabled() &&
+            candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART &&
+            candidate.getInternalTransferCounterpartAccount() != null &&
+            Objects.equals(candidate.getInternalTransferCounterpartAccount().getId(), counterpartAccount.getId()) &&
+            Objects.equals(candidate.getInternalTransferCounterpartPostingDate(), command.getCounterpartPostingDate()) &&
+            Objects.equals(candidate.getInternalTransferCounterpartDescription(), description) &&
+            Objects.equals(candidate.getInternalTransferCounterpartReference(), externalReference) &&
+            Objects.equals(candidate.getInternalTransferCounterpartNotes(), notes);
+        if (!unchanged) {
+            candidate.clearInternalTransferIntent();
+            candidate.setInternalTransferEnabled(true);
+            candidate.setInternalTransferMode(TransactionCandidateInternalTransferMode.CREATE_COUNTERPART);
+            candidate.setInternalTransferCounterpartAccount(counterpartAccount);
+            candidate.setInternalTransferCounterpartPostingDate(command.getCounterpartPostingDate());
+            candidate.setInternalTransferCounterpartDescription(description);
+            candidate.setInternalTransferCounterpartReference(externalReference);
+            candidate.setInternalTransferCounterpartNotes(notes);
+            touch(candidate);
+            candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
+        }
+        return rowMutation(candidate, batch);
+    }
+
+    /** Accept the legacy link-only payload while clients move to explicit modes. */
+    private TransactionCandidateInternalTransferMode requestedTransferMode(TransactionBatchInternalTransferCommand command) {
+        if (command.getMode() != null) return command.getMode();
+        return command.getCounterpartTransactionId() == null ? null : TransactionCandidateInternalTransferMode.LINK_EXISTING;
+    }
+
     /** Clears transfer-only draft state while preserving the row and its classification untouched. */
     public TransactionBatchRowMutationDTO clearInternalTransfer(Long batchId, Long candidateId, Long expectedCandidateVersion) {
         TransactionBatch batch = lockOpenBatch(batchId);
         TransactionCandidate candidate = lockBatchCandidate(batch, candidateId, expectedCandidateVersion);
-        if (candidate.getInternalTransferEnabled() || candidate.getInternalTransferCounterpartTransaction() != null) {
+        if (
+            candidate.getInternalTransferEnabled() ||
+            candidate.getInternalTransferMode() != null ||
+            candidate.getInternalTransferCounterpartAccount() != null ||
+            candidate.getInternalTransferCounterpartTransaction() != null
+        ) {
             candidate.setInternalTransferEnabled(false);
             touch(candidate);
             candidate = transactionCandidateRepository.saveAndFlush(candidate);
@@ -660,6 +724,12 @@ public class TransactionBatchCommandService {
         return normalized;
     }
 
+    private String normalizeRequiredText(String value, int maximumLength, String field) {
+        String normalized = normalizeText(value, maximumLength, field);
+        if (normalized == null) throw new IllegalArgumentException(field + " is required");
+        return normalized;
+    }
+
     private void resolveIssuesForAppliedPatch(TransactionCandidate candidate, TransactionBatchCandidatePatchCommand command) {
         if (command.getTransactionDate() != null) candidate.removeInputIssue(TransactionCandidateInputIssueField.TRANSACTION_DATE);
         if (command.getPostingDate() != null) candidate.removeInputIssue(TransactionCandidateInputIssueField.POSTING_DATE);
@@ -856,6 +926,29 @@ public class TransactionBatchCommandService {
         TransactionBatchInternalTransferViewDTO result = new TransactionBatchInternalTransferViewDTO();
         result.setEnabled(candidate.getInternalTransferEnabled());
         if (!candidate.getInternalTransferEnabled()) return result;
+        result.setMode(candidate.getInternalTransferMode());
+        if (candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+            if (candidate.getInternalTransferCounterpartAccount() == null) {
+                result.setStale(true);
+                return result;
+            }
+            TransactionBatchCreateCounterpartViewDTO configuration = new TransactionBatchCreateCounterpartViewDTO();
+            configuration.setAccountId(candidate.getInternalTransferCounterpartAccount().getId());
+            configuration.setAccountName(candidate.getInternalTransferCounterpartAccount().getName());
+            configuration.setPostingDate(candidate.getInternalTransferCounterpartPostingDate());
+            configuration.setDescription(candidate.getInternalTransferCounterpartDescription());
+            configuration.setExternalReference(candidate.getInternalTransferCounterpartReference());
+            configuration.setNotes(candidate.getInternalTransferCounterpartNotes());
+            result.setCreateCounterpart(configuration);
+            if (
+                !Boolean.TRUE.equals(candidate.getInternalTransferCounterpartAccount().getActive()) ||
+                candidate.getInternalTransferCounterpartDescription() == null ||
+                candidate.getInternalTransferCounterpartDescription().isBlank()
+            ) {
+                result.setStale(true);
+            }
+            return result;
+        }
         if (
             candidate.getInternalTransferMode() != TransactionCandidateInternalTransferMode.LINK_EXISTING ||
             candidate.getInternalTransferCounterpartTransaction() == null ||

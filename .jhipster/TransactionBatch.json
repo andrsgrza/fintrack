@@ -27,6 +27,8 @@
       "fieldValidateRulesMaxlength": "128"
     },
     { "fieldName": "publishedTransactionCount", "fieldType": "Integer" },
+    { "fieldName": "createdCounterpartCount", "fieldType": "Integer" },
+    { "fieldName": "createdInternalTransferCount", "fieldType": "Integer" },
     { "fieldName": "receiptExpiresAt", "fieldType": "Instant" }
   ],
   "incrementalChangelog": false,
