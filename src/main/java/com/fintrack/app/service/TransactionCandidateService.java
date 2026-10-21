@@ -11,6 +11,7 @@ import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateInternalTransferMode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -25,8 +26,12 @@ import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.InternalTransferCounterpartCommand;
+import com.fintrack.app.service.dto.InternalTransferCounterpartDTO;
+import com.fintrack.app.service.dto.InternalTransferLinkCommand;
 import com.fintrack.app.service.dto.ManualTransactionDraftSummaryDTO;
 import com.fintrack.app.service.dto.ManualTransactionDraftTagSummaryDTO;
+import com.fintrack.app.service.dto.ManualTransactionTransferPostCommand;
 import com.fintrack.app.service.dto.RuleMatchResultDTO;
 import com.fintrack.app.service.dto.RuleOutputConflictDTO;
 import com.fintrack.app.service.dto.SkippedRuleOutputDTO;
@@ -48,6 +53,10 @@ import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationService
 import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
+import com.fintrack.app.service.transfer.InternalTransferCommandException;
+import com.fintrack.app.service.transfer.InternalTransferCommandService;
+import com.fintrack.app.service.transfer.InternalTransferCounterpartQueryService;
+import com.fintrack.app.service.transfer.InternalTransferErrorCode;
 import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -104,6 +113,10 @@ public class TransactionCandidateService {
 
     private final TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService;
 
+    private final InternalTransferCommandService internalTransferCommandService;
+
+    private final InternalTransferCounterpartQueryService internalTransferCounterpartQueryService;
+
     public TransactionCandidateService(
         TransactionCandidateRepository transactionCandidateRepository,
         TransactionCandidateMapper transactionCandidateMapper,
@@ -115,7 +128,9 @@ public class TransactionCandidateService {
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
         TransactionRuleEvaluationService transactionRuleEvaluationService,
-        TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService
+        TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService,
+        InternalTransferCommandService internalTransferCommandService,
+        InternalTransferCounterpartQueryService internalTransferCounterpartQueryService
     ) {
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.transactionCandidateMapper = transactionCandidateMapper;
@@ -128,6 +143,8 @@ public class TransactionCandidateService {
         this.tagRepository = tagRepository;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
         this.transactionCandidateRuleApplicationService = transactionCandidateRuleApplicationService;
+        this.internalTransferCommandService = internalTransferCommandService;
+        this.internalTransferCounterpartQueryService = internalTransferCounterpartQueryService;
     }
 
     /**
@@ -178,7 +195,12 @@ public class TransactionCandidateService {
                 return existing;
             })
             .map(transactionCandidateRepository::save)
-            .map(transactionCandidateMapper::toDto);
+            .map(saved -> {
+                // A transfer post carries the candidate's optimistic version. Flush before mapping so an autosave response
+                // never hands the browser the pre-increment token that PostgreSQL will reject on the next command.
+                transactionCandidateRepository.flush();
+                return transactionCandidateMapper.toDto(saved);
+            });
     }
 
     /**
@@ -211,6 +233,9 @@ public class TransactionCandidateService {
         LOG.debug("Request to post manual TransactionCandidate draft : {}", id);
         return findAccessibleEntityForPosting(id).map(existing -> {
             rejectManualPostMutation(existing);
+            if (existing.getInternalTransferEnabled()) {
+                throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
+            }
             normalizeFields(existing);
             deriveAmountAndFlow(existing);
             recalculateManualDraftStatus(existing);
@@ -227,14 +252,92 @@ public class TransactionCandidateService {
                 now
             );
             financialTransaction = financialTransactionRepository.save(financialTransaction);
-            // Explicitly flush orphan removal before deleting the candidate. If either delete fails, the
-            // enclosing transaction rolls back the newly-created FinancialTransaction as well.
-            existing.setTagAssociations(Set.of());
-            transactionCandidateRepository.saveAndFlush(existing);
-            transactionCandidateRepository.delete(existing);
-            transactionCandidateRepository.flush();
+            deletePostedManualCandidate(existing);
             return financialTransactionMapper.toDto(financialTransaction);
         });
+    }
+
+    /**
+     * Posts a MANUAL candidate and creates its transfer aggregate in the same
+     * database transaction. Any rejected counterpart or link leaves the draft
+     * intact and rolls back the provisional current FinancialTransaction.
+     */
+    public Optional<FinancialTransactionDTO> postManualDraftAsInternalTransfer(Long id, ManualTransactionTransferPostCommand command) {
+        LOG.debug("Request to post manual TransactionCandidate draft {} as an internal transfer", id);
+        if (command == null || command.getExpectedCandidateVersion() == null) {
+            throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_VERSION_CONFLICT);
+        }
+        return findAccessibleEntityForPosting(id).map(existing -> {
+            rejectManualPostMutation(existing);
+            if (!Objects.equals(existing.getVersion(), command.getExpectedCandidateVersion())) {
+                throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_VERSION_CONFLICT);
+            }
+            normalizeFields(existing);
+            deriveAmountAndFlow(existing);
+            recalculateManualDraftStatus(existing);
+            rejectStaleReviewStateForPosting(existing);
+            if (existing.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
+                throw new IllegalArgumentException("Manual transaction candidate is not ready to post");
+            }
+            validateCandidate(existing, existing);
+            validateInternalTransferIntent(existing);
+
+            Instant now = Instant.now();
+            FinancialTransaction currentLeg = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
+                existing,
+                TransactionOrigin.MANUAL,
+                now
+            );
+            // Make the current leg addressable by the neutral transfer command.
+            // The enclosing service transaction guarantees that a later error
+            // removes this row too.
+            currentLeg = financialTransactionRepository.saveAndFlush(currentLeg);
+
+            if (existing.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+                InternalTransferCounterpartCommand counterpart = new InternalTransferCounterpartCommand();
+                counterpart.setTargetAccountId(existing.getInternalTransferCounterpartAccount().getId());
+                counterpart.setPostingDate(existing.getInternalTransferCounterpartPostingDate());
+                counterpart.setDescription(existing.getInternalTransferCounterpartDescription());
+                counterpart.setExternalReference(existing.getInternalTransferCounterpartReference());
+                counterpart.setNotes(existing.getInternalTransferCounterpartNotes());
+                // Leave classification empty. Transfer counterparts deliberately
+                // do not run DNR or TransactionRules.
+                internalTransferCommandService.createCounterpartForTransaction(currentLeg.getId(), counterpart);
+            } else {
+                InternalTransferLinkCommand link = new InternalTransferLinkCommand();
+                Long counterpartId = existing.getInternalTransferCounterpartTransaction().getId();
+                if (currentLeg.getFlow() == TransactionFlow.OUT) {
+                    link.setOutgoingTransactionId(currentLeg.getId());
+                    link.setIncomingTransactionId(counterpartId);
+                } else {
+                    link.setOutgoingTransactionId(counterpartId);
+                    link.setIncomingTransactionId(currentLeg.getId());
+                }
+                internalTransferCommandService.linkExistingTransactions(link);
+            }
+
+            deletePostedManualCandidate(existing);
+            return financialTransactionMapper.toDto(currentLeg);
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(Long id, String search, Pageable pageable) {
+        return findEligibleTransferCounterparts(id, search, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(
+        Long id,
+        String search,
+        Long accountId,
+        Pageable pageable
+    ) {
+        TransactionCandidate candidate = findAccessibleEntity(id).orElseThrow(() ->
+            new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_NOT_FOUND)
+        );
+        rejectManualPostMutation(candidate);
+        return internalTransferCounterpartQueryService.findEligibleCounterpartsForManualCandidate(candidate, search, accountId, pageable);
     }
 
     /**
@@ -293,6 +396,8 @@ public class TransactionCandidateService {
             candidate.setUpdatedAt(Instant.now());
             validateCandidate(candidate, candidate);
             TransactionCandidate saved = transactionCandidateRepository.save(candidate);
+            // See updateManualDraft: this response is immediately usable as the expected version for an atomic transfer post.
+            transactionCandidateRepository.flush();
 
             TransactionCandidateRuleApplyResponseDTO response = new TransactionCandidateRuleApplyResponseDTO();
             response.setCandidate(transactionCandidateMapper.toDto(saved));
@@ -592,6 +697,9 @@ public class TransactionCandidateService {
         Set<Tag> requestedTags = resolveTags(dto.getTags(), ownerLogin);
         validateNewTagReferences(existingReference, requestedTags);
         candidate.replaceTags(requestedTags, TransactionCandidateClassificationSource.MANUAL);
+        if (candidate.getSource() == TransactionCandidateSource.MANUAL) {
+            applyInternalTransferIntent(candidate, dto, null);
+        }
     }
 
     private void applyRelationshipPatches(TransactionCandidate candidate, TransactionCandidateDTO dto, JsonNode patchNode) {
@@ -612,6 +720,60 @@ public class TransactionCandidateService {
             validateNewTagReferences(candidate, requestedTags);
             candidate.replaceTags(requestedTags, TransactionCandidateClassificationSource.MANUAL);
         }
+        if (candidate.getSource() == TransactionCandidateSource.MANUAL) {
+            applyInternalTransferIntent(candidate, dto, patchNode);
+        }
+    }
+
+    /** Resolves transfer-only draft state server-side without affecting ordinary candidate fields. */
+    private void applyInternalTransferIntent(TransactionCandidate candidate, TransactionCandidateDTO dto, JsonNode patchNode) {
+        String ownerLogin = currentUserService.getCurrentUserLogin();
+        if (fieldPresent(patchNode, "internalTransferEnabled")) {
+            candidate.setInternalTransferEnabled(dto.getInternalTransferEnabled());
+        }
+        if (!candidate.getInternalTransferEnabled()) {
+            return;
+        }
+        if (fieldPresent(patchNode, "internalTransferMode")) {
+            candidate.setInternalTransferMode(dto.getInternalTransferMode());
+        }
+        if (fieldPresent(patchNode, "internalTransferCounterpartAccount")) {
+            FinancialAccount requested = resolveOptionalAccount(dto.getInternalTransferCounterpartAccount(), ownerLogin);
+            if (
+                requested != null &&
+                (candidate.getInternalTransferCounterpartAccount() == null ||
+                    !Objects.equals(candidate.getInternalTransferCounterpartAccount().getId(), requested.getId()))
+            ) {
+                FinancialAccountReferenceValidator.validateActiveForNewReference(requested);
+            }
+            candidate.setInternalTransferCounterpartAccount(requested);
+        }
+        if (fieldPresent(patchNode, "internalTransferCounterpartPostingDate")) {
+            candidate.setInternalTransferCounterpartPostingDate(dto.getInternalTransferCounterpartPostingDate());
+        }
+        if (fieldPresent(patchNode, "internalTransferCounterpartDescription")) {
+            candidate.setInternalTransferCounterpartDescription(dto.getInternalTransferCounterpartDescription());
+        }
+        if (fieldPresent(patchNode, "internalTransferCounterpartReference")) {
+            candidate.setInternalTransferCounterpartReference(dto.getInternalTransferCounterpartReference());
+        }
+        if (fieldPresent(patchNode, "internalTransferCounterpartNotes")) {
+            candidate.setInternalTransferCounterpartNotes(dto.getInternalTransferCounterpartNotes());
+        }
+        if (fieldPresent(patchNode, "internalTransferCounterpartTransaction")) {
+            candidate.setInternalTransferCounterpartTransaction(
+                resolveOptionalCounterpartTransaction(dto.getInternalTransferCounterpartTransaction(), ownerLogin)
+            );
+        }
+        if (candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+            candidate.setInternalTransferCounterpartTransaction(null);
+        } else if (candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.LINK_EXISTING) {
+            candidate.setInternalTransferCounterpartAccount(null);
+            candidate.setInternalTransferCounterpartPostingDate(null);
+            candidate.setInternalTransferCounterpartDescription(null);
+            candidate.setInternalTransferCounterpartReference(null);
+            candidate.setInternalTransferCounterpartNotes(null);
+        }
     }
 
     private FinancialAccount resolveOptionalAccount(FinancialAccountDTO accountDTO, String ownerLogin) {
@@ -624,6 +786,18 @@ public class TransactionCandidateService {
         return financialAccountRepository
             .findOneWithToOneRelationshipsByIdAndUserLogin(accountDTO.getId(), ownerLogin)
             .orElseThrow(() -> new IllegalArgumentException("Financial account is not accessible"));
+    }
+
+    private FinancialTransaction resolveOptionalCounterpartTransaction(FinancialTransactionDTO transactionDTO, String ownerLogin) {
+        if (transactionDTO == null) {
+            return null;
+        }
+        if (transactionDTO.getId() == null) {
+            throw new IllegalArgumentException("Counterpart transaction id is required");
+        }
+        return financialTransactionRepository
+            .findOneAccessibleByIdAndAccountUserLogin(transactionDTO.getId(), ownerLogin)
+            .orElseThrow(() -> new IllegalArgumentException("Counterpart transaction is not accessible"));
     }
 
     private void validateActiveAccountForNewManualReference(FinancialAccountDTO accountDTO) {
@@ -710,6 +884,17 @@ public class TransactionCandidateService {
         candidate.setFailureReason(normalizeOptionalText(candidate.getFailureReason(), 1000, "Failure reason"));
         if (candidate.getSignedAmount() != null) {
             candidate.setSignedAmount(normalizeScale(candidate.getSignedAmount(), "Signed amount"));
+        }
+        if (candidate.getInternalTransferEnabled()) {
+            candidate.setInternalTransferCounterpartDescription(
+                normalizeOptionalText(candidate.getInternalTransferCounterpartDescription(), 500, "Counterpart description")
+            );
+            candidate.setInternalTransferCounterpartReference(
+                normalizeOptionalText(candidate.getInternalTransferCounterpartReference(), 150, "Counterpart reference")
+            );
+            candidate.setInternalTransferCounterpartNotes(
+                normalizeOptionalText(candidate.getInternalTransferCounterpartNotes(), 1000, "Counterpart notes")
+            );
         }
     }
 
@@ -907,6 +1092,35 @@ public class TransactionCandidateService {
         if (candidate.getStatus() == TransactionCandidateStatus.READY_TO_POST) {
             validateReadyToPost(candidate);
         }
+    }
+
+    private void validateInternalTransferIntent(TransactionCandidate candidate) {
+        if (!candidate.getInternalTransferEnabled() || candidate.getInternalTransferMode() == null) {
+            throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
+        }
+        if (candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+            if (
+                candidate.getInternalTransferCounterpartAccount() == null ||
+                candidate.getInternalTransferCounterpartPostingDate() == null ||
+                candidate.getInternalTransferCounterpartDescription() == null ||
+                candidate.getInternalTransferCounterpartDescription().isBlank()
+            ) {
+                throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
+            }
+            return;
+        }
+        if (candidate.getInternalTransferCounterpartTransaction() == null) {
+            throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+        }
+    }
+
+    private void deletePostedManualCandidate(TransactionCandidate candidate) {
+        // Explicitly flush orphan removal before deleting the candidate. Any
+        // failure rolls back the enclosing normal or transfer post command.
+        candidate.setTagAssociations(Set.of());
+        transactionCandidateRepository.saveAndFlush(candidate);
+        transactionCandidateRepository.delete(candidate);
+        transactionCandidateRepository.flush();
     }
 
     private void validateSameOwner(TransactionCandidate candidate) {

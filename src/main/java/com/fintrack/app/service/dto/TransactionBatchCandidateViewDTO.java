@@ -41,6 +41,7 @@ public class TransactionBatchCandidateViewDTO {
     private List<TransactionBatchTagViewDTO> tags = List.of();
     private List<Long> suppressedTagIds = List.of();
     private List<TransactionBatchInputIssueViewDTO> inputIssues = List.of();
+    private TransactionBatchInternalTransferViewDTO internalTransfer;
 
     public Long getId() {
         return id;
@@ -264,5 +265,13 @@ public class TransactionBatchCandidateViewDTO {
 
     public void setInputIssues(List<TransactionBatchInputIssueViewDTO> inputIssues) {
         this.inputIssues = inputIssues;
+    }
+
+    public TransactionBatchInternalTransferViewDTO getInternalTransfer() {
+        return internalTransfer;
+    }
+
+    public void setInternalTransfer(TransactionBatchInternalTransferViewDTO internalTransfer) {
+        this.internalTransfer = internalTransfer;
     }
 }

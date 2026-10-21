@@ -510,6 +510,39 @@ a {
   text-transform: uppercase;
 }
 
+/* Counterpart choices are readable before hover and share one restrained
+ * selected treatment across single-transaction and Batch editors. */
+.counterpart-result {
+  min-width: 0;
+  white-space: normal;
+}
+
+.counterpart-result.btn-light {
+  background-color: var(--bs-body-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+
+.counterpart-result.btn-light:hover,
+.counterpart-result.btn-light:focus-visible {
+  background-color: color-mix(in srgb, var(--bs-primary) 8%, var(--bs-body-bg));
+  border-color: color-mix(in srgb, var(--bs-primary) 42%, var(--bs-border-color));
+  color: var(--bs-body-color);
+}
+
+.counterpart-selection-summary {
+  background-color: color-mix(in srgb, var(--bs-primary) 7%, var(--bs-body-bg));
+  border: 1px solid color-mix(in srgb, var(--bs-primary) 30%, var(--bs-border-color));
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-body-color);
+  padding: 0.5rem 0.75rem;
+}
+
+.counterpart-selection-summary.is-stale {
+  background-color: color-mix(in srgb, var(--bs-warning) 10%, var(--bs-body-bg));
+  border-color: color-mix(in srgb, var(--bs-warning) 48%, var(--bs-border-color));
+}
+
 @media (max-width: 991.98px) {
   .manual-draft-date-grid {
     grid-template-columns: minmax(0, 1fr);

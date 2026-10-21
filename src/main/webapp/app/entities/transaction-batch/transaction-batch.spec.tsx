@@ -23,6 +23,15 @@ jest.mock('app/entities/tag/tag-selectable.service', () => ({
   getSelectableTags: jest.fn(() => Promise.resolve([{ id: 31, name: 'Work', color: '#3B82F6', active: true }])),
 }));
 
+jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
+  getSelectableFinancialAccounts: jest.fn(() =>
+    Promise.resolve([
+      { id: 2, name: 'Cuenta principal', accountType: 'DEBIT', currency: 'MXN', active: true },
+      { id: 3, name: 'Cuenta de ahorro', accountType: 'DEBIT', currency: 'MXN', active: true },
+    ]),
+  ),
+}));
+
 const mockGet = axios.get as jest.Mock;
 const mockPost = axios.post as jest.Mock;
 const mockPatch = axios.patch as jest.Mock;
@@ -108,6 +117,220 @@ describe('TransactionBatch product workspace', () => {
     expect(selector.style.borderInlineStart).toBe('0.3rem solid #2463A5');
     expect(screen.queryAllByText('Transport')).toHaveLength(1);
     expect(screen.getByText('Work')).toBeTruthy();
+  });
+
+  it('configures an existing published counterpart from the editor and clears only the transfer intent', async () => {
+    const counterpart = {
+      transactionId: 91,
+      accountId: 3,
+      accountName: 'Cuenta de ahorro',
+      transactionDate: '2026-10-16',
+      description: 'Ingreso existente',
+      amount: 250,
+      flow: 'IN',
+      currency: 'MXN',
+      origin: 'MANUAL',
+    };
+    let row = { ...workspace.candidates[0] };
+    mockGet.mockImplementation(url => {
+      if (url === 'api/transaction-batches/7') return Promise.resolve({ data: { ...workspace, candidates: [row] } });
+      if (url === 'api/transaction-batches/7/rule-preview') return Promise.resolve({ data: [] });
+      if (url === 'api/transaction-batches/7/candidates/81/transfer-counterparts') {
+        return Promise.resolve({ data: { content: [counterpart] } });
+      }
+      return Promise.resolve({ data: [] });
+    });
+    mockPut.mockImplementation((url, body) => {
+      if (url === 'api/transaction-batches/7/candidates/81/internal-transfer') {
+        row = {
+          ...row,
+          version: 7,
+          internalTransfer: { enabled: true, stale: false, mode: 'LINK_EXISTING', counterpart },
+        };
+        expect(body).toEqual({ expectedCandidateVersion: 6, mode: 'LINK_EXISTING', counterpartTransactionId: 91 });
+        return Promise.resolve({ data: { candidate: row, batchVersion: 5 } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    mockDelete.mockImplementation((url, config) => {
+      if (url === 'api/transaction-batches/7/candidates/81/internal-transfer') {
+        expect(config).toEqual({ data: { expectedCandidateVersion: 7 } });
+        row = { ...row, version: 8, internalTransfer: { enabled: false, stale: false } };
+        return Promise.resolve({ data: { candidate: row, batchVersion: 6 } });
+      }
+      return Promise.resolve({});
+    });
+    renderDetail();
+
+    await screen.findByText('Taxi airport');
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    fireEvent.click(screen.getByLabelText('Transferencia interna'));
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular transacción existente' }));
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(
+        'api/transaction-batches/7/candidates/81/transfer-counterparts',
+        expect.objectContaining({ params: expect.objectContaining({ search: '', page: 0 }) }),
+      ),
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /cuenta de ahorro.*ingreso existente/i }));
+
+    await waitFor(() => expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')).toBeTruthy());
+    expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')?.textContent).toContain('Cuenta de ahorro');
+    expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')?.textContent).not.toContain('91');
+    fireEvent.click(screen.getByRole('button', { name: 'Desvincular transferencia interna' }));
+    await waitFor(() => expect(document.querySelector('[data-cy="transactionBatchSelectedCounterpart"]')).toBeNull());
+    expect(screen.getByLabelText('Transferencia interna').checked).toBe(false);
+  });
+
+  it('persists a temporary create-counterpart configuration without creating a second transaction in the editor', async () => {
+    let row = {
+      ...workspace.candidates[0],
+      postingDate: '2026-10-17',
+      externalReference: 'source-reference',
+      notes: 'source notes',
+    };
+    mockGet.mockImplementation(url => {
+      if (url === 'api/transaction-batches/7') return Promise.resolve({ data: { ...workspace, candidates: [row] } });
+      if (url === 'api/transaction-batches/7/rule-preview') return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+    mockPut.mockImplementation((url, body) => {
+      if (url === 'api/transaction-batches/7/candidates/81/internal-transfer') {
+        expect(body).toEqual({
+          expectedCandidateVersion: 6,
+          mode: 'CREATE_COUNTERPART',
+          counterpartAccountId: 3,
+          counterpartPostingDate: '2026-10-17',
+          counterpartDescription: 'Taxi airport',
+          counterpartExternalReference: 'source-reference',
+          counterpartNotes: 'source notes',
+        });
+        row = {
+          ...row,
+          version: 7,
+          internalTransfer: {
+            enabled: true,
+            stale: false,
+            mode: 'CREATE_COUNTERPART',
+            createCounterpart: {
+              accountId: 3,
+              accountName: 'Cuenta de ahorro',
+              postingDate: '2026-10-17',
+              description: 'Taxi airport',
+              externalReference: 'source-reference',
+              notes: 'source notes',
+            },
+          },
+        };
+        return Promise.resolve({ data: { candidate: row, batchVersion: 5 } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderDetail();
+
+    await screen.findByText('Taxi airport');
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    fireEvent.click(screen.getByLabelText('Transferencia interna'));
+    expect(screen.getByLabelText('Fecha de posteo de contraparte').value).toBe('2026-10-17');
+    expect(screen.getByLabelText('Descripción de contraparte').value).toBe('Taxi airport');
+    await screen.findByRole('option', { name: /cuenta de ahorro/i });
+    fireEvent.change(screen.getByLabelText('Cuenta de contraparte'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar contraparte temporal' }));
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Contraparte nueva configurada para Cuenta de ahorro.')).toBeTruthy();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes draft rows, new counterparts, totals, and transfers before and after publication', async () => {
+    const createRow = {
+      ...workspace.candidates[0],
+      internalTransfer: {
+        enabled: true,
+        stale: false,
+        mode: 'CREATE_COUNTERPART',
+        createCounterpart: { accountId: 3, accountName: 'Cuenta de ahorro', description: 'Taxi counterpart' },
+      },
+    };
+    const ordinaryRow = { ...workspace.candidates[0], id: 82, rowPosition: 2, description: 'Salary' };
+    const publishingWorkspace = { ...workspace, candidates: [createRow, ordinaryRow] };
+    mockGet.mockImplementation(url => {
+      if (url === 'api/transaction-batches/7') return Promise.resolve({ data: publishingWorkspace });
+      if (url === 'api/transaction-batches/7/rule-preview') return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+    mockPost.mockImplementation(url => {
+      if (url === 'api/transaction-batches/7/publish') {
+        return Promise.resolve({
+          data: {
+            batchId: 7,
+            status: 'PUBLISHED',
+            operationKey: 'publish-counts',
+            publishedAt: '2026-10-20T12:00:00Z',
+            publishedTransactionCount: 2,
+            createdCounterpartCount: 1,
+            totalCreatedFinancialTransactionCount: 3,
+            createdInternalTransferCount: 1,
+            receiptExpiresAt: '2026-10-21T12:00:00Z',
+            replayed: false,
+          },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Publicar' }));
+    expect(await screen.findByText(/2 movimientos/)).toBeTruthy();
+    expect(screen.getByText(/1 contraparte nueva · 3 transacciones nuevas · 1 transferencia interna/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Crear transacciones' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('api/transaction-batches/7/publish', expect.any(Object)));
+    await screen.findByRole('heading', { name: 'Transacciones creadas' });
+    expect(document.body.textContent).toContain('Se publicaron 2 borradores y se creó 1 contraparte: 3 transacciones definitivas nuevas.');
+    expect(document.body.textContent).toContain('Se creó 1 transferencia interna.');
+  });
+
+  it('shows a stale persisted transfer honestly and blocks publication without clearing the row', async () => {
+    mockGet.mockImplementation(url => {
+      if (url === 'api/transaction-batches/7') {
+        return Promise.resolve({
+          data: {
+            ...workspace,
+            candidates: [
+              { ...workspace.candidates[0], internalTransfer: { enabled: true, stale: true, mode: 'LINK_EXISTING', counterpart: null } },
+            ],
+          },
+        });
+      }
+      if (url === 'api/transaction-batches/7/rule-preview') return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+    mockDelete.mockImplementation((url, config) => {
+      if (url === 'api/transaction-batches/7/candidates/81/internal-transfer') {
+        expect(config).toEqual({ data: { expectedCandidateVersion: 6 } });
+        return Promise.resolve({
+          data: {
+            candidate: { ...workspace.candidates[0], version: 7, internalTransfer: { enabled: false, stale: false } },
+            batchVersion: 5,
+          },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderDetail();
+
+    expect(await screen.findByText('Corrige las contrapartes de transferencia antes de publicar.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Publicar' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await waitFor(() => expect(document.querySelector('[data-cy="transactionBatchTransferStale"]')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText('Transferencia interna'));
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith('api/transaction-batches/7/candidates/81/internal-transfer', {
+        data: { expectedCandidateVersion: 6 },
+      }),
+    );
+    expect(screen.getByLabelText('Transferencia interna').checked).toBe(false);
   });
 
   it('renders persisted applied attribution separately from a pending suggestion and safely keeps a deleted rule snapshot', async () => {

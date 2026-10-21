@@ -38,6 +38,7 @@ import com.fintrack.app.service.rules.TagSuggestion;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationInput;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationResult;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
+import com.fintrack.app.service.transfer.InternalTransferCommandService;
 import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -88,6 +89,8 @@ public class FinancialTransactionService {
 
     private final TransactionRuleEvaluationService transactionRuleEvaluationService;
 
+    private final InternalTransferCommandService internalTransferCommandService;
+
     public FinancialTransactionService(
         FinancialTransactionRepository financialTransactionRepository,
         FinancialTransactionMapper financialTransactionMapper,
@@ -98,7 +101,8 @@ public class FinancialTransactionService {
         TransactionIngestionRepository transactionIngestionRepository,
         InternalTransferRepository internalTransferRepository,
         CurrentUserService currentUserService,
-        TransactionRuleEvaluationService transactionRuleEvaluationService
+        TransactionRuleEvaluationService transactionRuleEvaluationService,
+        InternalTransferCommandService internalTransferCommandService
     ) {
         this.financialTransactionRepository = financialTransactionRepository;
         this.financialTransactionMapper = financialTransactionMapper;
@@ -110,6 +114,7 @@ public class FinancialTransactionService {
         this.internalTransferRepository = internalTransferRepository;
         this.currentUserService = currentUserService;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
+        this.internalTransferCommandService = internalTransferCommandService;
     }
 
     /**
@@ -364,7 +369,7 @@ public class FinancialTransactionService {
         if (financialTransaction.isEmpty()) {
             return false;
         }
-        internalTransferRepository.deleteByTransactionIdInEitherRole(id);
+        internalTransferCommandService.unlinkForFinancialTransactionDeletion(id);
         financialTransactionRepository.deleteTagLinksByFinancialTransactionId(id);
         financialTransactionRepository.deleteById(id);
         return true;
@@ -436,6 +441,11 @@ public class FinancialTransactionService {
         if (fieldPresent(updateNode, "transactionDate")) {
             if (dto.getTransactionDate() == null) {
                 throw new IllegalArgumentException("Transaction date is required");
+            }
+            if (linkedToInternalTransfer && !Objects.equals(existing.getTransactionDate(), dto.getTransactionDate())) {
+                throw new IllegalArgumentException(
+                    "Transaction date cannot be changed while transaction is linked to an internal transfer"
+                );
             }
             existing.setTransactionDate(dto.getTransactionDate());
         }

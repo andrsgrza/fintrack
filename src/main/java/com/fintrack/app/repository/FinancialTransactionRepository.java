@@ -1,6 +1,10 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.FinancialTransaction;
+import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.domain.enumeration.TransactionFlow;
+import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -97,6 +101,115 @@ public interface FinancialTransactionRepository
         "select financialTransaction from FinancialTransaction financialTransaction left join fetch financialTransaction.account account left join fetch account.user left join fetch financialTransaction.category category left join fetch category.parentCategory left join fetch financialTransaction.financialSubscription left join fetch financialTransaction.transactionIngestion transactionIngestion left join fetch transactionIngestion.account transactionIngestionAccount where financialTransaction.id = :id and financialTransaction.account.user.login = :login"
     )
     Optional<FinancialTransaction> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    /**
+     * Acquired only after the transfer command locked all involved accounts.
+     * Results are ordered so two commands cannot acquire their leg locks in
+     * opposite orders.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select financialTransaction from FinancialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account account left join fetch account.user " +
+        "left join fetch financialTransaction.category category " +
+        "where financialTransaction.id in :ids and account.user.login = :login order by financialTransaction.id asc"
+    )
+    List<FinancialTransaction> findAllForInternalTransferMutationByIdInAndAccountUserLogin(
+        @Param("ids") List<Long> ids,
+        @Param("login") String login
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select financialTransaction from FinancialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account account left join fetch account.user " +
+        "left join fetch financialTransaction.category category " +
+        "where financialTransaction.id in :ids order by financialTransaction.id asc"
+    )
+    List<FinancialTransaction> findAllForInternalTransferMutationByIdIn(@Param("ids") List<Long> ids);
+
+    /** Scoped, paginated counterpart lookup. It deliberately returns only unlinked transactions. */
+    @Query(
+        value = "select financialTransaction from FinancialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account account left join fetch account.user " +
+        "left join fetch financialTransaction.category category " +
+        "where account.user.login = :ownerLogin " +
+        "and financialTransaction.id <> :sourceTransactionId " +
+        "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
+        "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
+        "and financialTransaction.flow = :flow " +
+        "and financialTransaction.amount = :amount " +
+        "and financialTransaction.transactionDate = :transactionDate " +
+        "and lower(financialTransaction.description) like lower(concat('%', :search, '%')) " +
+        "and not exists (select transfer from InternalTransfer transfer where transfer.outgoingTransaction.id = financialTransaction.id or transfer.incomingTransaction.id = financialTransaction.id)",
+        countQuery = "select count(financialTransaction) from FinancialTransaction financialTransaction " +
+        "join financialTransaction.account account " +
+        "where account.user.login = :ownerLogin " +
+        "and financialTransaction.id <> :sourceTransactionId " +
+        "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
+        "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
+        "and financialTransaction.flow = :flow " +
+        "and financialTransaction.amount = :amount " +
+        "and financialTransaction.transactionDate = :transactionDate " +
+        "and lower(financialTransaction.description) like lower(concat('%', :search, '%')) " +
+        "and not exists (select transfer from InternalTransfer transfer where transfer.outgoingTransaction.id = financialTransaction.id or transfer.incomingTransaction.id = financialTransaction.id)"
+    )
+    Page<FinancialTransaction> findEligibleInternalTransferCounterparts(
+        @Param("ownerLogin") String ownerLogin,
+        @Param("sourceTransactionId") Long sourceTransactionId,
+        @Param("sourceAccountId") Long sourceAccountId,
+        @Param("currency") CurrencyCode currency,
+        @Param("accountId") Long accountId,
+        @Param("flow") TransactionFlow flow,
+        @Param("amount") BigDecimal amount,
+        @Param("transactionDate") LocalDate transactionDate,
+        @Param("search") String search,
+        Pageable pageable
+    );
+
+    /** Candidate variant: the source leg has not been posted yet, so there is no source transaction id to exclude. */
+    @Query(
+        value = "select financialTransaction from FinancialTransaction financialTransaction " +
+        "left join fetch financialTransaction.account account left join fetch account.user " +
+        "left join fetch financialTransaction.category category " +
+        "where account.user.login = :ownerLogin " +
+        "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
+        "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
+        "and financialTransaction.flow = :flow " +
+        "and financialTransaction.amount = :amount " +
+        "and financialTransaction.transactionDate = :transactionDate " +
+        "and lower(financialTransaction.description) like lower(concat('%', :search, '%')) " +
+        "and not exists (select transfer from InternalTransfer transfer where transfer.outgoingTransaction.id = financialTransaction.id or transfer.incomingTransaction.id = financialTransaction.id)",
+        countQuery = "select count(financialTransaction) from FinancialTransaction financialTransaction " +
+        "join financialTransaction.account account " +
+        "where account.user.login = :ownerLogin " +
+        "and account.id <> :sourceAccountId " +
+        "and account.active = true " +
+        "and account.currency = :currency " +
+        "and (:accountId is null or account.id = :accountId) " +
+        "and financialTransaction.flow = :flow " +
+        "and financialTransaction.amount = :amount " +
+        "and financialTransaction.transactionDate = :transactionDate " +
+        "and lower(financialTransaction.description) like lower(concat('%', :search, '%')) " +
+        "and not exists (select transfer from InternalTransfer transfer where transfer.outgoingTransaction.id = financialTransaction.id or transfer.incomingTransaction.id = financialTransaction.id)"
+    )
+    Page<FinancialTransaction> findEligibleInternalTransferCounterpartsForCandidate(
+        @Param("ownerLogin") String ownerLogin,
+        @Param("sourceAccountId") Long sourceAccountId,
+        @Param("currency") CurrencyCode currency,
+        @Param("accountId") Long accountId,
+        @Param("flow") TransactionFlow flow,
+        @Param("amount") BigDecimal amount,
+        @Param("transactionDate") LocalDate transactionDate,
+        @Param("search") String search,
+        Pageable pageable
+    );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(

@@ -347,23 +347,20 @@ public class FinancialAccountResource {
     }
 
     /**
-     * {@code DELETE  /financial-accounts/:id} : delete the "id" financialAccount.
-     *
-     * @param id the id of the financialAccountDTO to delete.
-     * @return the {@link ResponseEntity} with status {@code 204 (NO_CONTENT)}.
+     * Compatibility route for clients that still use the generated account URL.
+     * It delegates to the one hard-delete policy instead of retaining a second,
+     * less restrictive deletion behavior.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteFinancialAccount(@PathVariable("id") Long id) {
-        LOG.debug("REST request to delete FinancialAccount : {}", id);
+    public ResponseEntity<FinancialAccountHardDeleteBlockedDTO> deleteFinancialAccount(@PathVariable("id") Long id) {
+        LOG.debug("REST request to delete FinancialAccount through the compatibility hard-delete route : {}", id);
         try {
-            if (!financialAccountService.delete(id)) {
+            if (!financialAccountHardDeleteService.hardDelete(id)) {
                 return ResponseEntity.notFound().build();
             }
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestAlertException(e.getMessage(), ENTITY_NAME, "invalid");
+            return ResponseEntity.noContent().build();
+        } catch (FinancialAccountHardDeleteBlockedException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(new FinancialAccountHardDeleteBlockedDTO(e.getBlockers()));
         }
-        return ResponseEntity.noContent()
-            .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
-            .build();
     }
 }

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- A resumable MANUAL candidate retains only the information that cannot be derived from its current leg. -->
+    <changeSet id="20261018113000-1" author="fintrack">
+        <addColumn tableName="transaction_candidate">
+            <column name="internal_transfer_enabled" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="internal_transfer_mode" type="varchar(255)"/>
+            <column name="internal_transfer_counterpart_account_id" type="bigint"/>
+            <column name="internal_transfer_counterpart_posting_date" type="date"/>
+            <column name="internal_transfer_counterpart_description" type="varchar(500)"/>
+            <column name="internal_transfer_counterpart_reference" type="varchar(150)"/>
+            <column name="internal_transfer_counterpart_notes" type="varchar(1000)"/>
+            <column name="internal_transfer_counterpart_transaction_id" type="bigint"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="transaction_candidate" baseColumnNames="internal_transfer_counterpart_account_id"
+                                 constraintName="fk_candidate_transfer_counterpart_account" referencedTableName="financial_account" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="transaction_candidate" baseColumnNames="internal_transfer_counterpart_transaction_id"
+                                 constraintName="fk_candidate_transfer_counterpart_transaction" referencedTableName="financial_transaction" referencedColumnNames="id"/>
+        <createIndex tableName="transaction_candidate" indexName="ix_candidate_transfer_counterpart_transaction">
+            <column name="internal_transfer_counterpart_transaction_id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="transaction_candidate" indexName="ix_candidate_transfer_counterpart_transaction"/>
+            <dropForeignKeyConstraint baseTableName="transaction_candidate" constraintName="fk_candidate_transfer_counterpart_transaction"/>
+            <dropForeignKeyConstraint baseTableName="transaction_candidate" constraintName="fk_candidate_transfer_counterpart_account"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_enabled"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_mode"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_counterpart_account_id"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_counterpart_posting_date"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_counterpart_description"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_counterpart_reference"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_counterpart_notes"/>
+            <dropColumn tableName="transaction_candidate" columnName="internal_transfer_counterpart_transaction_id"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

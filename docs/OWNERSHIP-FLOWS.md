@@ -367,22 +367,21 @@ flowchart TB
 
 ### Usuario normal
 
-| Flujo           | Comportamiento                                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **List / GET**  | Solo transfers donde **out e in** pertenecen a sus cuentas                                                                                        |
-| **POST**        | Enlaza txs existentes accesibles; valida: distintas cuentas, misma moneda/monto, OUT+IN, MANUAL, mismo owner, sin link previo; `createdAt` server |
-| **PUT / PATCH** | Solo propios; patas y `createdAt` **inmutables**; solo `notes` mutable                                                                            |
-| **PATCH patas** | Ausente → preserva; `null` → `400`; otro `{id}` → `400`                                                                                           |
-| **DELETE**      | Solo propios; **borra solo el transfer**; las dos txs siguen vivas                                                                                |
-| **UI create**   | Selectores desde candidatos OUT/IN (propios, MANUAL, sin link)                                                                                    |
+| Flujo             | Comportamiento                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Product reads** | Solo transfers donde **out e in** pertenecen a sus cuentas                                                                                                                                                                           |
+| **Commands**      | `create`, `link-existing`, `counterpart`, aggregate update and unlink derive ownership from persisted accounts/legs. New legs require active accounts; existing historical legs may remain readable/reconcilable after deactivation. |
+| **No raw CRUD**   | `POST /api/internal-transfers`, `PUT/PATCH/DELETE /api/internal-transfers/{id}` no están mapeados. No hay una segunda semántica de mutación.                                                                                         |
+
+The product reads at `/api/internal-transfers/product` and `/api/internal-transfers/product/{id}` follow the same pattern-D requirement: a regular user receives a transfer only when both linked accounts belong to the current user. Account/date filtering never relaxes that condition; administrators retain the existing global support view. Product unlink removes only the relation, never either FinancialTransaction.
+| **Counterparts** | Paginated lookup is scoped to the caller's owner and returns only a different-account, same-currency/amount/date, opposite-flow and unlinked leg. Existing-leg provenance is not rewritten. |
 
 ### Admin
 
-| Flujo                                 | Comportamiento                                                                                                   |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **List / GET / PUT / PATCH / DELETE** | Transfers de cualquier user                                                                                      |
-| **POST (excepción)**                  | Puede resolver txs ajenas, pero **create bloquea cross-owner**: ambas patas deben ser del **mismo user** siempre |
-| **Candidatos**                        | Ve txs candidatas de todos los users; la validación de create impide mezclar owners                              |
+| Flujo                        | Comportamiento                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Product reads / commands** | Puede leer y operar aggregates de cualquier user, pero los comandos siguen bloqueando pares cross-owner |
+| **Candidatos**               | Ve txs candidatas de todos los users; la validación de comandos impide mezclar owners                   |
 
 ---
 
@@ -402,7 +401,7 @@ flowchart TB
 | ApiAccessToken           | ✅                                                 | Hash no expuesto; secretos inmutables                             |
 | ApiAccessTokenPermission | ✅                                                 | Parent/grant/createdAt inmutables                                 |
 | UserDashboardPreference  | ✅                                                 | 1:1 por user en create                                            |
-| InternalTransfer         | ✅ CRUD                                            | **Create: mismo owner en ambas patas**                            |
+| InternalTransfer         | ✅ reads + intent commands                         | **Ambas patas siempre son del mismo owner; no hay CRUD write**    |
 | TransactionIngestion     | ✅ CRUD                                            | `account` / `ingestionType` inmutables; server defaults en create |
 | FileIngestion            | ✅ create/read/update dates; direct delete blocked | Parent `FILE` + 1:1; metadata inmutable; delete via parent        |
 | ApiIngestion             | ✅ create/read/no-op update; direct delete blocked | Parent `API` + 1:1; token snapshots; metadata inmutable           |
@@ -524,3 +523,11 @@ Validación de negocio (cualquier rol):
 ---
 
 _Última actualización: 2026-07-09 — incluye IngestionRecord (pattern C + optional FT + same-owner). 17/17 complete._
+
+## Manual internal-transfer draft flow
+
+The draft, selected counterpart account, and linked-existing selection are owner-scoped `TransactionCandidate` state. Counterpart lookup never trusts a browser identifier as authorization: it evaluates the owning candidate and returns only same-owner, different-account, same-currency, opposite-flow, same-amount/date, unlinked transactions. Posting rechecks ownership and eligibility while locked. The resulting `InternalTransfer` and both final legs stay under the existing transfer aggregate ownership rules; link, unlink, and update commands continue to reject cross-owner resources.
+
+## Transaction Batch internal-transfer intent
+
+An OPEN Batch candidate can persist only `LINK_EXISTING` intent to one same-owner published `FinancialTransaction`; Batch V1 cannot create a counterpart or link two candidates. Counterpart lookup, intent selection, and every revalidation are scoped by the Batch candidate's owner/account. The FK uses `ON DELETE SET NULL`, so deleting the selected final transaction never deletes a temporary candidate; the enabled candidate instead reads as stale and requires an explicit replacement or removal. Publishing locks the Batch account, root and candidates, then counterpart accounts and financial transactions in ascending id order. It rechecks ownership and all transfer invariants before it writes any Batch final, and a failure rolls back the Batch as a whole. Discarding/deleting a candidate removes only its intent; it never mutates the existing counterpart.

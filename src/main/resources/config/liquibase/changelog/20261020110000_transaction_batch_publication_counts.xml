@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+      The original receipt count is deliberately left unchanged: it is the
+      number of source candidate rows that became final transactions. These
+      optional fields add only the later CREATE_COUNTERPART result counts;
+      NULL keeps existing published receipts readable with their old meaning.
+    -->
+    <changeSet id="20261020110000-1" author="fintrack">
+        <addColumn tableName="transaction_batch">
+            <column name="created_counterpart_count" type="integer"/>
+            <column name="created_internal_transfer_count" type="integer"/>
+        </addColumn>
+        <sql>
+            alter table transaction_batch add constraint ck_transaction_batch_publication_counts check (
+                (status = 'OPEN' and created_counterpart_count is null and created_internal_transfer_count is null)
+                or
+                (
+                    status = 'PUBLISHED'
+                    and
+                    (
+                        (created_counterpart_count is null and created_internal_transfer_count is null)
+                        or
+                        (created_counterpart_count &gt;= 0 and created_internal_transfer_count &gt;= 0)
+                    )
+                )
+            )
+        </sql>
+        <rollback>
+            <dropColumn tableName="transaction_batch" columnName="created_counterpart_count"/>
+            <dropColumn tableName="transaction_batch" columnName="created_internal_transfer_count"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

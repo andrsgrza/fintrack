@@ -72,6 +72,17 @@ public class TransactionBatch implements Serializable {
     @Column(name = "published_transaction_count")
     private Integer publishedTransactionCount;
 
+    /**
+     * PUBLISHED-only receipt counters introduced after the original batch receipt.
+     * The legacy publishedTransactionCount remains the number of candidate rows
+     * published so existing receipts retain their original meaning.
+     */
+    @Column(name = "created_counterpart_count")
+    private Integer createdCounterpartCount;
+
+    @Column(name = "created_internal_transfer_count")
+    private Integer createdInternalTransferCount;
+
     @Column(name = "receipt_expires_at")
     private Instant receiptExpiresAt;
 
@@ -191,6 +202,22 @@ public class TransactionBatch implements Serializable {
 
     public void setPublishedTransactionCount(Integer publishedTransactionCount) {
         this.publishedTransactionCount = publishedTransactionCount;
+    }
+
+    public Integer getCreatedCounterpartCount() {
+        return createdCounterpartCount;
+    }
+
+    public void setCreatedCounterpartCount(Integer createdCounterpartCount) {
+        this.createdCounterpartCount = createdCounterpartCount;
+    }
+
+    public Integer getCreatedInternalTransferCount() {
+        return createdInternalTransferCount;
+    }
+
+    public void setCreatedInternalTransferCount(Integer createdInternalTransferCount) {
+        this.createdInternalTransferCount = createdInternalTransferCount;
     }
 
     public Instant getReceiptExpiresAt() {

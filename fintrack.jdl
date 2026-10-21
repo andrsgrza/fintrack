@@ -352,6 +352,8 @@ entity TransactionBatch {
   publicationOperationKey String maxlength(100)
   publicationRequestDigest String maxlength(128)
   publishedTransactionCount Integer
+  createdCounterpartCount Integer
+  createdInternalTransferCount Integer
   receiptExpiresAt Instant
 }
 
@@ -481,8 +483,10 @@ entity Budget {
  * accounts owned by the same user and using the same currency.
  */
 entity InternalTransfer {
+  version Long required
   notes String maxlength(500)
   createdAt Instant required
+  updatedAt Instant
 }
 
 /**

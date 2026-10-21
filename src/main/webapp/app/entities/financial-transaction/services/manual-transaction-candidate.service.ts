@@ -20,6 +20,47 @@ export const cancelManualDraft = (id: string | number) => axios.post<ITransactio
 
 export const postManualDraft = (id: string | number) => axios.post<IFinancialTransaction>(`${apiUrl}/${id}/post`);
 
+export const postManualDraftAsInternalTransfer = (id: string | number, expectedCandidateVersion: number) =>
+  axios.post<IFinancialTransaction>(`${apiUrl}/${id}/post-internal-transfer`, { expectedCandidateVersion });
+
+export interface IManualTransferCounterpart {
+  transactionId: number;
+  accountId: number;
+  accountName: string;
+  transactionDate?: string | null;
+  postingDate?: string | null;
+  description?: string | null;
+  amount?: number | null;
+  flow?: 'IN' | 'OUT' | null;
+  currency?: string | null;
+  origin?: string | null;
+  categoryName?: string | null;
+  tagNames?: string[] | null;
+}
+
+export interface IManualTransferCounterpartPage {
+  content: IManualTransferCounterpart[];
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface IManualTransferCounterpartSearch {
+  search?: string;
+  accountId?: number;
+  page?: number;
+  size?: number;
+}
+
+export const findManualTransferCounterparts = (id: string | number, options: IManualTransferCounterpartSearch | string = {}) => {
+  const search = typeof options === 'string' ? options : (options.search ?? '');
+  const accountId = typeof options === 'string' ? undefined : options.accountId;
+  const page = typeof options === 'string' ? 0 : (options.page ?? 0);
+  const size = typeof options === 'string' ? 12 : (options.size ?? 12);
+  return axios.get<IManualTransferCounterpartPage>(`${apiUrl}/${id}/transfer-counterparts`, {
+    params: { search, accountId, page, size, sort: 'transactionDate,DESC' },
+  });
+};
+
 export interface IManualTransactionDraftSummary {
   id?: number;
   status?: string;

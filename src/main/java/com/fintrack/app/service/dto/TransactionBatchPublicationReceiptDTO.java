@@ -10,7 +10,14 @@ public class TransactionBatchPublicationReceiptDTO {
     private TransactionBatchStatus status;
     private String operationKey;
     private Instant publishedAt;
+    /** Legacy count: source Batch candidate rows converted to final transactions. */
     private Integer publishedTransactionCount;
+    /** Additional final legs created by CREATE_COUNTERPART rows. */
+    private Integer createdCounterpartCount;
+    /** Total new FinancialTransactions: publishedTransactionCount + createdCounterpartCount. */
+    private Integer totalCreatedFinancialTransactionCount;
+    /** New InternalTransfer aggregates materialised during publication. */
+    private Integer createdInternalTransferCount;
     private Instant receiptExpiresAt;
     private boolean replayed;
 
@@ -52,6 +59,30 @@ public class TransactionBatchPublicationReceiptDTO {
 
     public void setPublishedTransactionCount(Integer publishedTransactionCount) {
         this.publishedTransactionCount = publishedTransactionCount;
+    }
+
+    public Integer getCreatedCounterpartCount() {
+        return createdCounterpartCount;
+    }
+
+    public void setCreatedCounterpartCount(Integer createdCounterpartCount) {
+        this.createdCounterpartCount = createdCounterpartCount;
+    }
+
+    public Integer getTotalCreatedFinancialTransactionCount() {
+        return totalCreatedFinancialTransactionCount;
+    }
+
+    public void setTotalCreatedFinancialTransactionCount(Integer totalCreatedFinancialTransactionCount) {
+        this.totalCreatedFinancialTransactionCount = totalCreatedFinancialTransactionCount;
+    }
+
+    public Integer getCreatedInternalTransferCount() {
+        return createdInternalTransferCount;
+    }
+
+    public void setCreatedInternalTransferCount(Integer createdInternalTransferCount) {
+        this.createdInternalTransferCount = createdInternalTransferCount;
     }
 
     public Instant getReceiptExpiresAt() {

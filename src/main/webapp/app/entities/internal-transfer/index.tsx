@@ -6,7 +6,6 @@ import ErrorBoundaryRoutes from 'app/shared/error/error-boundary-routes';
 import InternalTransfer from './internal-transfer';
 import InternalTransferDetail from './internal-transfer-detail';
 import InternalTransferUpdate from './internal-transfer-update';
-import InternalTransferDeleteDialog from './internal-transfer-delete-dialog';
 
 const InternalTransferRoutes = () => (
   <ErrorBoundaryRoutes>
@@ -15,7 +14,6 @@ const InternalTransferRoutes = () => (
     <Route path=":id">
       <Route index element={<InternalTransferDetail />} />
       <Route path="edit" element={<InternalTransferUpdate />} />
-      <Route path="delete" element={<InternalTransferDeleteDialog />} />
     </Route>
   </ErrorBoundaryRoutes>
 );

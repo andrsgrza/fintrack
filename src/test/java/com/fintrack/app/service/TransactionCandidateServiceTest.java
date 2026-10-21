@@ -23,6 +23,7 @@ import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateInternalTransferMode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -36,6 +37,7 @@ import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
+import com.fintrack.app.service.dto.ManualTransactionTransferPostCommand;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
@@ -43,6 +45,10 @@ import com.fintrack.app.service.mapper.TransactionCandidateFinancialTransactionM
 import com.fintrack.app.service.mapper.TransactionCandidateMapper;
 import com.fintrack.app.service.rules.TransactionCandidateRuleApplicationService;
 import com.fintrack.app.service.rules.TransactionRuleEvaluationService;
+import com.fintrack.app.service.transfer.InternalTransferCommandException;
+import com.fintrack.app.service.transfer.InternalTransferCommandService;
+import com.fintrack.app.service.transfer.InternalTransferCounterpartQueryService;
+import com.fintrack.app.service.transfer.InternalTransferErrorCode;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -55,6 +61,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionCandidateServiceTest {
@@ -86,6 +93,12 @@ class TransactionCandidateServiceTest {
     @Mock
     private TransactionRuleEvaluationService transactionRuleEvaluationService;
 
+    @Mock
+    private InternalTransferCommandService internalTransferCommandService;
+
+    @Mock
+    private InternalTransferCounterpartQueryService internalTransferCounterpartQueryService;
+
     private TransactionCandidateService transactionCandidateService;
 
     private User user;
@@ -103,7 +116,9 @@ class TransactionCandidateServiceTest {
             categoryRepository,
             tagRepository,
             transactionRuleEvaluationService,
-            new TransactionCandidateRuleApplicationService()
+            new TransactionCandidateRuleApplicationService(),
+            internalTransferCommandService,
+            internalTransferCounterpartQueryService
         );
         user = new User();
         user.setId(1L);
@@ -423,6 +438,75 @@ class TransactionCandidateServiceTest {
         verify(transactionCandidateRepository).saveAndFlush(existing);
         verify(transactionCandidateRepository).delete(existing);
         verify(transactionCandidateRepository).flush();
+        verifyNoInteractions(transactionRuleEvaluationService);
+    }
+
+    @Test
+    void transferIntentCannotUseTheOrdinaryManualPostEndpoint() {
+        TransactionCandidate existing = completeReadyCandidate()
+            .id(1L)
+            .user(user)
+            .signedAmount(new BigDecimal("-12.00"))
+            .amount(new BigDecimal("12.00"))
+            .flow(TransactionFlow.OUT)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        existing.setInternalTransferEnabled(true);
+        existing.setInternalTransferMode(TransactionCandidateInternalTransferMode.CREATE_COUNTERPART);
+
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> transactionCandidateService.postManualDraft(1L))
+            .isInstanceOf(InternalTransferCommandException.class)
+            .extracting(error -> ((InternalTransferCommandException) error).getCode())
+            .isEqualTo(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
+
+        verifyNoInteractions(financialTransactionRepository);
+    }
+
+    @Test
+    void transferPostCreatesCounterpartAndDeletesCandidateOnlyAfterTheAggregateCommandSucceeds() {
+        FinancialAccount targetAccount = account(user);
+        targetAccount.setId(2L);
+        targetAccount.setName("Savings");
+        TransactionCandidate existing = completeReadyCandidate()
+            .id(1L)
+            .user(user)
+            .postingDate(LocalDate.of(2026, 1, 2))
+            .signedAmount(new BigDecimal("-12.00"))
+            .amount(new BigDecimal("12.00"))
+            .flow(TransactionFlow.OUT)
+            .validationStatus(TransactionCandidateValidationStatus.VALID)
+            .classificationReviewStatus(TransactionCandidateClassificationReviewStatus.USER_SELECTED);
+        ReflectionTestUtils.setField(existing, "version", 4L);
+        existing.setInternalTransferEnabled(true);
+        existing.setInternalTransferMode(TransactionCandidateInternalTransferMode.CREATE_COUNTERPART);
+        existing.setInternalTransferCounterpartAccount(targetAccount);
+        existing.setInternalTransferCounterpartPostingDate(LocalDate.of(2026, 1, 3));
+        existing.setInternalTransferCounterpartDescription("Transfer in");
+
+        ManualTransactionTransferPostCommand command = new ManualTransactionTransferPostCommand();
+        command.setExpectedCandidateVersion(4L);
+        when(transactionCandidateRepository.findOneByIdAndUserLoginForPosting(1L, "user")).thenReturn(Optional.of(existing));
+        when(financialTransactionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            FinancialTransaction transaction = invocation.getArgument(0);
+            transaction.setId(99L);
+            return transaction;
+        });
+
+        FinancialTransactionDTO result = transactionCandidateService.postManualDraftAsInternalTransfer(1L, command).orElseThrow();
+
+        assertThat(result.getId()).isEqualTo(99L);
+        verify(internalTransferCommandService).createCounterpartForTransaction(
+            org.mockito.ArgumentMatchers.eq(99L),
+            org.mockito.ArgumentMatchers.argThat(
+                counterpart ->
+                    counterpart.getTargetAccountId().equals(2L) &&
+                    counterpart.getPostingDate().equals(LocalDate.of(2026, 1, 3)) &&
+                    counterpart.getDescription().equals("Transfer in")
+            )
+        );
+        verify(transactionCandidateRepository).delete(existing);
         verifyNoInteractions(transactionRuleEvaluationService);
     }
 

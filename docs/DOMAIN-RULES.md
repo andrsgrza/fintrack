@@ -1183,12 +1183,18 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### Product rules
 
-| Rule                             | Decision           | Status   |
-| -------------------------------- | ------------------ | -------- |
-| Atomic create (out+in+transfer)  |                    | **Open** |
-| Balance effects                  |                    | **Open** |
-| Posting date alignment           |                    | **Open** |
-| Date window/alignment validation | Not required in v1 | **Done** |
+| Rule                             | Decision                                                                                                                                                                             | Status   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Aggregate root                   | `InternalTransfer` is the canonical link between exactly one outgoing (`OUT`) and one incoming (`IN`) transaction. Both legs always have the same owner, currency, amount, and date. | **Done** |
+| Atomic create (out+in+transfer)  | The transfer command creates both `MANUAL` legs and the root in one transaction. It bypasses description normalization and transaction-rule evaluation.                              | **Done** |
+| Existing-leg link                | Linking preserves both persisted legs, including category/tag choices and all provenance; it never copies classifications between them.                                              | **Done** |
+| Counterpart search               | Owner-scoped, paginated candidates require a different account, same currency/amount/date and opposite flow; already-linked legs are excluded.                                       | **Done** |
+| Inactive accounts                | New transfer/counterpart legs require active accounts. Existing historical legs on inactive accounts remain linkable for reconciliation.                                             | **Done** |
+| Concurrent mutation              | Commands lock accounts ascending, legs ascending, then the root; root `@Version` rejects stale aggregate update/unlink.                                                              | **Done** |
+| Delete / unlink                  | Unlink removes only the root. Deleting one linked transaction removes the root first and preserves the other leg.                                                                    | **Done** |
+| Balance effects                  | No persisted balance projection in this slice.                                                                                                                                       | **Open** |
+| Posting date alignment           | Each leg may retain its own posting date.                                                                                                                                            | **Done** |
+| Date window/alignment validation | Shared transaction date must match exactly; no additional date-window rule in v1.                                                                                                    | **Done** |
 
 ---
 
@@ -1206,19 +1212,19 @@ Origin policy remains open for future API/import/ingestion runtime. Current beha
 
 ### UPDATE / PATCH
 
-| Rule                                                                                                  | Decision                                                                                                                                             | Status   |
-| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Create accepts valid `origin`; if `transactionIngestion` is present, origin must match ingestion type | FILE → `FILE_IMPORT`; API → `API`                                                                                                                    | **Done** |
-| `account` required and immutable                                                                      | Create requires accessible account; PUT/PATCH same id only; null/different id invalid                                                                | **Done** |
-| Server-owned timestamps                                                                               | Create ignores client timestamps; PUT/PATCH preserves `createdAt`, rejects explicit timestamp null/change, sets `updatedAt=now` on successful update | **Done** |
-| Text normalization                                                                                    | Trim `description`/`externalReference`/`notes`; blank optional text becomes null; description blank invalid                                          | **Done** |
-| `amount > 0`, scale 2                                                                                 | Amount must be positive and have at most 2 decimals                                                                                                  | **Done** |
-| InternalTransfer guard                                                                                | If linked as either transfer leg, changing amount/flow is invalid; delete still allowed and removes only the transfer link                           | **Done** |
-| Owner-scoped links                                                                                    | Category, tags, subscription validated against transaction account owner; admin editing foreign tx validates links against tx owner, not admin       | **Done** |
-| Category compatibility                                                                                | OUT → EXPENSE/BOTH; IN → INCOME/BOTH; final merged state validated                                                                                   | **Done** |
-| Subscription compatibility                                                                            | Same owner, currency matches account, and subscription account (if set) matches tx account                                                           | **Done** |
-| PATCH relationship semantics                                                                          | Absent preserves; null clears optional links/sets; object/list ids replace after owner validation; missing/null ids invalid                          | **Done** |
-| `transactionIngestion` immutable once set                                                             | Create may set valid ingestion; update/patch absent/same preserves, null/different invalid once set                                                  | **Done** |
+| Rule                                                                                                  | Decision                                                                                                                                                         | Status   |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Create accepts valid `origin`; if `transactionIngestion` is present, origin must match ingestion type | FILE → `FILE_IMPORT`; API → `API`                                                                                                                                | **Done** |
+| `account` required and immutable                                                                      | Create requires accessible account; PUT/PATCH same id only; null/different id invalid                                                                            | **Done** |
+| Server-owned timestamps                                                                               | Create ignores client timestamps; PUT/PATCH preserves `createdAt`, rejects explicit timestamp null/change, sets `updatedAt=now` on successful update             | **Done** |
+| Text normalization                                                                                    | Trim `description`/`externalReference`/`notes`; blank optional text becomes null; description blank invalid                                                      | **Done** |
+| `amount > 0`, scale 2                                                                                 | Amount must be positive and have at most 2 decimals                                                                                                              | **Done** |
+| InternalTransfer guard                                                                                | If linked as either transfer leg, changing account/amount/flow/**transaction date** directly is invalid; delete still allowed and removes only the transfer link | **Done** |
+| Owner-scoped links                                                                                    | Category, tags, subscription validated against transaction account owner; admin editing foreign tx validates links against tx owner, not admin                   | **Done** |
+| Category compatibility                                                                                | OUT → EXPENSE/BOTH; IN → INCOME/BOTH; final merged state validated                                                                                               | **Done** |
+| Subscription compatibility                                                                            | Same owner, currency matches account, and subscription account (if set) matches tx account                                                                       | **Done** |
+| PATCH relationship semantics                                                                          | Absent preserves; null clears optional links/sets; object/list ids replace after owner validation; missing/null ids invalid                                      | **Done** |
+| `transactionIngestion` immutable once set                                                             | Create may set valid ingestion; update/patch absent/same preserves, null/different invalid once set                                                              | **Done** |
 
 ### Product rules
 

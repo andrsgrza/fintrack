@@ -1834,7 +1834,7 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void deleteFinancialAccount() throws Exception {
+    void compatibilityDeleteUsesTheHardDeletePolicyWhenNoBlockersExist() throws Exception {
         // Initialize the database
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
 
@@ -2760,7 +2760,7 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void deleteFinancialAccountLinkedToBudgetRemovesLinkAndPreservesBudget() throws Exception {
+    void compatibilityDeleteBlocksAOneAccountBudgetWithoutRemovingItsLink() throws Exception {
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
         Budget budget = BudgetResourceIT.createEntity(em);
         budget.addAccounts(financialAccount);
@@ -2770,12 +2770,15 @@ class FinancialAccountResourceIT {
 
         restFinancialAccountMockMvc
             .perform(delete(ENTITY_API_URL_ID, financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ACCOUNT_HARD_DELETE_BLOCKED"))
+            .andExpect(jsonPath("$.blockers[*].code", hasItem("BUDGET_SCOPE_WOULD_BROADEN")));
 
         em.clear();
         Budget persistedBudget = em.find(Budget.class, budgetId);
         assertThat(persistedBudget).isNotNull();
-        assertThat(persistedBudget.getAccounts()).isEmpty();
+        assertThat(persistedBudget.getAccounts()).extracting(FinancialAccount::getId).containsExactly(financialAccount.getId());
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
         insertedFinancialAccount = null;
     }
 
@@ -2824,7 +2827,7 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void deleteFinancialAccountReferencedByManualDraftCandidateRejectsAndLeavesCandidateLinked() throws Exception {
+    void compatibilityDeleteRemovesAnEligibleManualDraftThroughTheHardDeletePolicy() throws Exception {
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
         TransactionCandidate candidate = createCandidate(
             financialAccount,
@@ -2836,21 +2839,18 @@ class FinancialAccountResourceIT {
 
         restFinancialAccountMockMvc
             .perform(delete(ENTITY_API_URL_ID, accountId).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.message").value("error.invalid"))
-            .andExpect(jsonPath("$.params").value("financialAccount"));
+            .andExpect(status().isNoContent());
 
+        em.flush();
         em.clear();
-        assertThat(financialAccountRepository.existsById(accountId)).isTrue();
-        TransactionCandidate persistedCandidate = transactionCandidateRepository.findOneWithRelationships(candidateId).orElseThrow();
-        assertThat(persistedCandidate.getAccount()).isNotNull();
-        assertThat(persistedCandidate.getAccount().getId()).isEqualTo(accountId);
+        assertThat(financialAccountRepository.existsById(accountId)).isFalse();
+        assertThat(transactionCandidateRepository.findOneWithRelationships(candidateId)).isEmpty();
         insertedFinancialAccount = null;
     }
 
     @Test
     @Transactional
-    void deleteFinancialAccountWithInternalTransferPreservesOppositeTransaction() throws Exception {
+    void compatibilityDeleteBlocksCrossAccountInternalTransfersWithoutMutatingEitherSide() throws Exception {
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
         FinancialAccount otherAccount = createAccount("OTHER_ACCOUNT");
         FinancialTransaction outgoingTransaction = createTransaction(financialAccount, LocalDate.parse("2026-01-10"));
@@ -2864,11 +2864,14 @@ class FinancialAccountResourceIT {
 
         restFinancialAccountMockMvc
             .perform(delete(ENTITY_API_URL_ID, financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ACCOUNT_HARD_DELETE_BLOCKED"))
+            .andExpect(jsonPath("$.blockers[*].code", hasItem("CROSS_ACCOUNT_TRANSFER")));
 
-        assertThat(TestUtil.findAll(em, InternalTransfer.class).stream().noneMatch(it -> transferId.equals(it.getId()))).isTrue();
+        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
+        assertThat(TestUtil.findAll(em, InternalTransfer.class).stream().anyMatch(it -> transferId.equals(it.getId()))).isTrue();
         assertThat(
-            TestUtil.findAll(em, FinancialTransaction.class).stream().noneMatch(tx -> outgoingTransactionId.equals(tx.getId()))
+            TestUtil.findAll(em, FinancialTransaction.class).stream().anyMatch(tx -> outgoingTransactionId.equals(tx.getId()))
         ).isTrue();
         assertThat(
             TestUtil.findAll(em, FinancialTransaction.class).stream().anyMatch(tx -> incomingTransactionId.equals(tx.getId()))

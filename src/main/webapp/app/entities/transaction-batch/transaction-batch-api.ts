@@ -33,7 +33,74 @@ export type BatchCandidate = {
   categoryAppliedByRule?: AppliedRuleAttribution | null;
   tags: BatchTag[];
   inputIssues: { field: string; reasonCode: string; submittedValue?: string | null }[];
+  internalTransfer?: BatchInternalTransferIntent | null;
 };
+
+export type BatchTransferCounterpart = {
+  transactionId: number;
+  accountId?: number;
+  accountName?: string | null;
+  transactionDate?: string | null;
+  postingDate?: string | null;
+  description?: string | null;
+  amount?: number | null;
+  flow?: 'IN' | 'OUT' | null;
+  currency?: string | null;
+  origin?: string | null;
+  categoryName?: string | null;
+  tagNames?: string[];
+};
+
+export type BatchTransferCounterpartPage = {
+  content: BatchTransferCounterpart[];
+  totalElements: number;
+  totalPages: number;
+};
+
+export type BatchTransferCounterpartSearch = {
+  search?: string;
+  accountId?: number;
+  page?: number;
+  size?: number;
+};
+
+export type BatchInternalTransferIntent = {
+  enabled: boolean;
+  stale: boolean;
+  mode?: 'CREATE_COUNTERPART' | 'LINK_EXISTING' | null;
+  counterpart?: BatchTransferCounterpart | null;
+  createCounterpart?: BatchCreateCounterpartConfiguration | null;
+};
+
+/** Draft-only values for a new opposite leg; no FinancialTransaction exists yet. */
+export type BatchCreateCounterpartConfiguration = {
+  accountId?: number | null;
+  accountName?: string | null;
+  postingDate?: string | null;
+  description?: string | null;
+  externalReference?: string | null;
+  notes?: string | null;
+};
+
+/** Values required to persist the draft-only create-counterpart intent. */
+export type BatchCreateCounterpartInput = {
+  accountId: number;
+  description: string;
+  postingDate?: string | null;
+  externalReference?: string | null;
+  notes?: string | null;
+};
+
+export type BatchInternalTransferCommand =
+  | { mode: 'LINK_EXISTING'; counterpartTransactionId: number }
+  | {
+      mode: 'CREATE_COUNTERPART';
+      counterpartAccountId: number;
+      counterpartPostingDate?: string;
+      counterpartDescription?: string;
+      counterpartExternalReference?: string;
+      counterpartNotes?: string;
+    };
 
 export type BatchRulePreview = {
   candidateId: number;
@@ -78,6 +145,9 @@ export type BatchReceipt = {
   operationKey: string;
   publishedAt: string;
   publishedTransactionCount: number;
+  createdCounterpartCount: number;
+  totalCreatedFinancialTransactionCount: number;
+  createdInternalTransferCount: number;
   receiptExpiresAt: string;
   replayed: boolean;
 };
@@ -90,6 +160,12 @@ export type BatchAppendResult = {
   appendedCandidateIds?: number[];
   evaluationStatus?: string | null;
   replayed: boolean;
+};
+
+/** A completed settings or reevaluation command always returns the next aggregate version. */
+export type BatchEvaluationRun = {
+  batchId: number;
+  batchVersion: number;
 };
 
 /** Every row command returns the server-authoritative row and workspace versions. */
@@ -116,6 +192,39 @@ export const replaceRowTags = (batchId: number, candidateId: number, expectedCan
   axios
     .put<BatchRowMutation>(`${apiUrl}/${batchId}/candidates/${candidateId}/tags`, { expectedCandidateVersion, tagIds })
     .then(response => response.data);
+export const setRowInternalTransfer = (
+  batchId: number,
+  candidateId: number,
+  expectedCandidateVersion: number,
+  command: BatchInternalTransferCommand,
+) =>
+  axios
+    .put<BatchRowMutation>(`${apiUrl}/${batchId}/candidates/${candidateId}/internal-transfer`, {
+      expectedCandidateVersion,
+      ...command,
+    })
+    .then(response => response.data);
+export const clearRowInternalTransfer = (batchId: number, candidateId: number, expectedCandidateVersion: number) =>
+  axios
+    .delete<BatchRowMutation>(`${apiUrl}/${batchId}/candidates/${candidateId}/internal-transfer`, {
+      data: { expectedCandidateVersion },
+    })
+    .then(response => response.data);
+export const searchRowTransferCounterparts = (
+  batchId: number,
+  candidateId: number,
+  options: BatchTransferCounterpartSearch | string = {},
+) => {
+  const search = typeof options === 'string' ? options : (options.search ?? '');
+  const accountId = typeof options === 'string' ? undefined : options.accountId;
+  const page = typeof options === 'string' ? 0 : (options.page ?? 0);
+  const size = typeof options === 'string' ? 8 : (options.size ?? 8);
+  return axios
+    .get<BatchTransferCounterpartPage>(`${apiUrl}/${batchId}/candidates/${candidateId}/transfer-counterparts`, {
+      params: { search, accountId, page, size, sort: 'transactionDate,desc' },
+    })
+    .then(response => response.data);
+};
 export const appendCsv = (batchId: number, expectedBatchVersion: number, operationKey: string, file: File) => {
   const body = new FormData();
   body.append('expectedBatchVersion', String(expectedBatchVersion));
@@ -124,7 +233,7 @@ export const appendCsv = (batchId: number, expectedBatchVersion: number, operati
   return axios.post<BatchAppendResult>(`${apiUrl}/${batchId}/append-csv`, body).then(response => response.data);
 };
 export const saveSettings = (batchId: number, settings: object) =>
-  axios.put(`${apiUrl}/${batchId}/settings`, settings).then(response => response.data);
+  axios.put<BatchEvaluationRun>(`${apiUrl}/${batchId}/settings`, settings).then(response => response.data);
 export const previewRules = (batchId: number) =>
   axios.get<BatchRulePreview[]>(`${apiUrl}/${batchId}/rule-preview`).then(response => response.data);
 export const applyRules = (batchId: number, candidateId: number, command: object) =>

@@ -61,6 +61,12 @@ Run the normal production packaging command when validating the integrated front
 
 This command uses Maven-managed Node 22.15.0 and npm 11.3.0, runs the configured `npm install` and production frontend build, then packages the JAR. It intentionally skips Java tests only; it does not skip frontend work or Modernizer. Do not add a Modernizer skip flag to production packaging.
 
+### Canonical Maven verify gate
+
+`./mvnw -ntp --batch-mode verify` is the canonical full gate and uses Maven-managed Node 22.15.0 with npm 11.3.0. Local Node use is pinned to the same version through `.nvmrc`; `package.json` requires Node 22.15.0 or later.
+
+Webpack keeps its development filesystem cache in `target/webpack/default-development`. If a local build deterministically fails inside Webpack with `HarmonyImportSpecifierDependency` and `buildMeta` undefined, preserve source, lockfiles, and `node_modules`; remove only that generated cache directory and rerun the canonical command. A successful rebuild must be followed by a second canonical verify run to prove the regenerated cache is valid.
+
 ### Backend — ownership suites
 
 **FinancialAccount (pattern A — direct `user`):**
@@ -168,7 +174,7 @@ npm run jest -- tag
 
 ```bash
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
-  -Dtest=InternalTransferResourceIT,InternalTransferServiceTest,CurrentUserServiceTest test
+  -Dtest=InternalTransferResourceIT,CurrentUserServiceTest test
 ```
 
 **TransactionIngestion (pattern B — via `account`):**
@@ -203,7 +209,7 @@ npm run jest -- tag
 
 ```bash
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
-  -Dtest=FinancialAccountResourceIT,FinancialAccountServiceTest,FinancialTransactionResourceIT,FinancialTransactionServiceTest,TagResourceIT,TagServiceTest,CategoryResourceIT,CategoryServiceTest,BudgetResourceIT,BudgetServiceTest,FinancialSubscriptionResourceIT,FinancialSubscriptionServiceTest,TransactionRuleResourceIT,TransactionRuleServiceTest,TransactionRuleConditionResourceIT,TransactionRuleConditionServiceTest,CreditAccountDetailsResourceIT,CreditAccountDetailsServiceTest,ApiAccessTokenResourceIT,ApiAccessTokenServiceTest,ApiAccessTokenPermissionResourceIT,ApiAccessTokenPermissionServiceTest,UserDashboardPreferenceResourceIT,UserDashboardPreferenceServiceTest,InternalTransferResourceIT,InternalTransferServiceTest,TransactionIngestionResourceIT,TransactionIngestionServiceTest,FileIngestionResourceIT,FileIngestionServiceTest,ApiIngestionResourceIT,ApiIngestionServiceTest,IngestionRecordResourceIT,IngestionRecordServiceTest,CurrentUserServiceTest test
+  -Dtest=FinancialAccountResourceIT,FinancialAccountServiceTest,FinancialTransactionResourceIT,FinancialTransactionServiceTest,TagResourceIT,TagServiceTest,CategoryResourceIT,CategoryServiceTest,BudgetResourceIT,BudgetServiceTest,FinancialSubscriptionResourceIT,FinancialSubscriptionServiceTest,TransactionRuleResourceIT,TransactionRuleServiceTest,TransactionRuleConditionResourceIT,TransactionRuleConditionServiceTest,CreditAccountDetailsResourceIT,CreditAccountDetailsServiceTest,ApiAccessTokenResourceIT,ApiAccessTokenServiceTest,ApiAccessTokenPermissionResourceIT,ApiAccessTokenPermissionServiceTest,UserDashboardPreferenceResourceIT,UserDashboardPreferenceServiceTest,InternalTransferResourceIT,TransactionIngestionResourceIT,TransactionIngestionServiceTest,FileIngestionResourceIT,FileIngestionServiceTest,ApiIngestionResourceIT,ApiIngestionServiceTest,IngestionRecordResourceIT,IngestionRecordServiceTest,CurrentUserServiceTest test
 ```
 
 ### Backend — all tests
@@ -343,20 +349,20 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 
 ### Summary counts
 
-| Type                       | File                                                    | Tests   | Custom vs generated                                                                                                                                                                                                                                                                                                                  |
-| -------------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Integration IT             | `FinancialAccountResourceIT`                            | **174** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + transitional delete orchestration + aggregate hard-delete command/rollback + candidate account-reference guards + date-floor + balance/overview endpoint tests + configured account/card atomic-command coverage, plus JHipster CRUD/filters |
-| Unit — service             | `FinancialAccountServiceTest`                           | **26**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor guard)                                                                                                                                                             |
-| Unit — balance service     | `FinancialAccountBalanceServiceTest`                    | **10**  | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading, batch overview reads)                                                                                                                                                                                                               |
-| Unit — overview service    | `FinancialAccountOverviewServiceTest`                   | **2**   | Product summary mapping, inactive/missing-card handling, and read-only behavior                                                                                                                                                                                                                                                      |
-| Unit — hard-delete service | `FinancialAccountHardDeleteServiceTest`                 | **26**  | Read-only preview counts; MANUAL/FILE_IMPORT topology; API_IMPORT, transfer, budget, and ACCOUNT-rule blockers; command lock lookup, zero-mutation blocker guard, and FK-safe cleanup ordering                                                                                                                                       |
-| Unit — calculators         | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                                                                                                                                                                            |
-| Unit — foundation          | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                                                                                                                                                                          |
-| Unit — domain              | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                                                                                                                                                                            |
-| Unit — mapper              | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                                                                                                                                                                            |
-| Unit — DTO                 | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                                                                                                                                                                            |
-| Unit — criteria            | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                                                                                                                                                                            |
-| E2E                        | `financial-account.cy.ts`                               | **14**  | Product overview/detail/navigation, configured debit/card create and atomic card edit, invalid-card rollback, inactive explanation, delete, and 3 ownership checks                                                                                                                                                                   |
+| Type                       | File                                                    | Tests   | Custom vs generated                                                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Integration IT             | `FinancialAccountResourceIT`                            | **174** | Custom ownership + immutability + timestamp hardening + initialBalance monetary scale + unified account-delete policy/rollback + candidate account-reference guards + date-floor + balance/overview endpoint tests + configured account/card atomic-command coverage, plus JHipster CRUD/filters |
+| Unit — service             | `FinancialAccountServiceTest`                           | **26**  | All custom (ownership + immutables + timestamp hardening + initialBalance monetary scale + delete orchestration + candidate account-reference guards + date-floor guard)                                                                                                                         |
+| Unit — balance service     | `FinancialAccountBalanceServiceTest`                    | **10**  | All custom (access, transaction range, inactive/no-transaction behavior, credit details loading, batch overview reads)                                                                                                                                                                           |
+| Unit — overview service    | `FinancialAccountOverviewServiceTest`                   | **2**   | Product summary mapping, inactive/missing-card handling, and read-only behavior                                                                                                                                                                                                                  |
+| Unit — hard-delete service | `FinancialAccountHardDeleteServiceTest`                 | **26**  | Read-only preview counts; MANUAL/FILE_IMPORT topology; API_IMPORT, transfer, budget, and ACCOUNT-rule blockers; command lock lookup, zero-mutation blocker guard, and FK-safe cleanup ordering                                                                                                   |
+| Unit — calculators         | `Debit/Cash/CreditCard/InvestmentBalanceCalculatorTest` | **18**  | Formula coverage by account type, including credit-card saldo a favor and missing details                                                                                                                                                                                                        |
+| Unit — foundation          | `CurrentUserServiceTest`                                | **5**   | Shared; used by FA, FT, and future entities                                                                                                                                                                                                                                                      |
+| Unit — domain              | `FinancialAccountTest`                                  | **6**   | Generated (JPA relations)                                                                                                                                                                                                                                                                        |
+| Unit — mapper              | `FinancialAccountMapperTest`                            | **1**   | Generated                                                                                                                                                                                                                                                                                        |
+| Unit — DTO                 | `FinancialAccountDTOTest`                               | **1**   | Generated                                                                                                                                                                                                                                                                                        |
+| Unit — criteria            | `FinancialAccountCriteriaTest`                          | **5**   | Generated                                                                                                                                                                                                                                                                                        |
+| E2E                        | `financial-account.cy.ts`                               | **14**  | Product overview/detail/navigation, configured debit/card create and atomic card edit, invalid-card rollback, inactive explanation, delete, and 3 ownership checks                                                                                                                               |
 
 ### Configured account/card product command
 
@@ -432,18 +438,18 @@ The FinancialAccount Jest/Cypress product tests assert one configured request pe
 
 #### 1.3 Delete orchestration & domain guards (10) — ✅ custom
 
-| Test                                                                              | What it checks                                                            |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `deleteFinancialAccountWithCreditAccountDetailsDeletesDetails`                    | CAD row is removed through account orchestration                          |
-| `deleteFinancialAccountLinkedToBudgetRemovesLinkAndPreservesBudget`               | Budget survives; account M2M link removed                                 |
-| `deleteFinancialAccountLinkedToSubscriptionClearsAccountAndPreservesSubscription` | Subscription survives; `account = null`                                   |
-| `deleteFinancialAccountWithManualTransactionDeletesTransactionAndPreservesTags`   | Remaining tx deleted; tags survive                                        |
-| `deleteFinancialAccountWithInternalTransferPreservesOppositeTransaction`          | Transfer row deleted; tx on deleted account removed; opposite tx survives |
-| `deleteFinancialAccountWithTransactionIngestionTreeDeletesTree`                   | File/API metadata, records, ingestion-linked txs, and parents removed     |
-| `patchFinancialAccountActiveHasNoSideEffects`                                     | `active` update does not delete txs or unlink budgets/subscriptions       |
-| `putInitialBalanceDateAfterEarliestTransactionDateFails`                          | PUT date floor violation → `400`                                          |
-| `putInitialBalanceDateEqualOrBeforeEarliestTransactionDateSucceeds`               | Equal/before earliest transaction date accepted                           |
-| `patchInitialBalanceDateAfterEarliestTransactionDateFails`                        | PATCH date floor violation → `400`                                        |
+| Test                                                                              | What it checks                                                        |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `deleteFinancialAccountWithCreditAccountDetailsDeletesDetails`                    | CAD row is removed through account orchestration                      |
+| `deleteFinancialAccountLinkedToBudgetRemovesLinkAndPreservesBudget`               | Budget survives; account M2M link removed                             |
+| `deleteFinancialAccountLinkedToSubscriptionClearsAccountAndPreservesSubscription` | Subscription survives; `account = null`                               |
+| `deleteFinancialAccountWithManualTransactionDeletesTransactionAndPreservesTags`   | Remaining tx deleted; tags survive                                    |
+| `compatibilityDeleteBlocksCrossAccountInternalTransfersWithoutMutatingEitherSide` | Compatibility DELETE returns the same typed hard-delete blocker       |
+| `deleteFinancialAccountWithTransactionIngestionTreeDeletesTree`                   | File/API metadata, records, ingestion-linked txs, and parents removed |
+| `patchFinancialAccountActiveHasNoSideEffects`                                     | `active` update does not delete txs or unlink budgets/subscriptions   |
+| `putInitialBalanceDateAfterEarliestTransactionDateFails`                          | PUT date floor violation → `400`                                      |
+| `putInitialBalanceDateEqualOrBeforeEarliestTransactionDateSucceeds`               | Equal/before earliest transaction date accepted                       |
+| `patchInitialBalanceDateAfterEarliestTransactionDateFails`                        | PATCH date floor violation → `400`                                    |
 
 #### 1.3A Account aggregate hard-delete — ✅ backend command
 
@@ -708,7 +714,7 @@ Key TC-1/TC-2A assertions:
 - deleting a candidate clears candidate tag join rows.
 - candidates do not affect `FinancialAccountBalanceService`, which reads only posted `FinancialTransaction` rows.
 - TransactionBatch foundation keeps standalone manual creation/recovery/posting batchless; generic/manual candidate routes reject a batch member, while the internal batch commands own membership, position, category/tags, candidate version, and discard.
-- `FinancialAccountServiceTest` verifies ordinary account deletion rejects a live batch before legacy ingestion or ledger cleanup; hard delete removes batch candidates before their roots, preserving unrelated catalog and final-ledger data.
+- `FinancialAccountServiceTest` verifies internal account cleanup ordering; both public DELETE routes now enter `FinancialAccountHardDeleteService`, which removes batch candidates before their roots and preserves unrelated catalog and final-ledger data.
 - `POST /api/transaction-candidates/manual` creates current-user MANUAL DRAFT candidates and rejects client-controlled status/server fields.
 - `PATCH /api/transaction-candidates/{id}/manual-draft` updates editable draft fields, derives amount/flow from signedAmount, and recalculates DRAFT vs READY_TO_POST.
 - `POST /api/transaction-candidates/{id}/cancel` marks non-final manual drafts CANCELLED and sets `cancelledAt`.
@@ -2428,58 +2434,42 @@ Create rehabilitated; no user selector on form.
 
 ### Summary counts
 
-| Type           | File                          | Tests  | Custom vs generated                                      |
-| -------------- | ----------------------------- | ------ | -------------------------------------------------------- |
-| Integration IT | `InternalTransferResourceIT`  | **47** | 32 custom (ownership + domain guards) + 15 JHipster CRUD |
-| Unit — service | `InternalTransferServiceTest` | **13** | All custom                                               |
-| Unit — mapper  | `InternalTransferMapperTest`  | **1**  | Generated                                                |
-| Unit — domain  | `InternalTransferTest`        | **6**  | Generated                                                |
-| Unit — DTO     | `InternalTransferDTOTest`     | **1**  | Generated                                                |
-| E2E            | `internal-transfer.cy.ts`     | **8**  | Rehabilitated create/edit/delete                         |
+| Type           | File                         | Tests | Custom vs generated                                                       |
+| -------------- | ---------------------------- | ----- | ------------------------------------------------------------------------- |
+| Integration IT | `InternalTransferResourceIT` | **5** | Product reads, retired-route rejection, command invariants and versioning |
+| Unit — domain  | `InternalTransferTest`       | **6** | Generated entity equality coverage                                        |
+| E2E            | `internal-transfer.cy.ts`    | **7** | Product create/edit/unlink, navigation + responsive acceptance            |
 
 **Quick run:**
 
 ```bash
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
-  -Dtest=InternalTransferResourceIT,InternalTransferServiceTest test
+  -Dtest=InternalTransferResourceIT test
+```
+
+### Command foundation — `INTERNAL-TRANSFER-1`
+
+The command boundary is covered separately from retired raw CRUD writes:
+
+- `InternalTransferInvariantServiceTest`: canonical pair, same account/owner/currency/amount/date/flow failures, inactive-account policy and any-role duplicate detection.
+- `InternalTransferCommandServiceTest`: atomic two-leg MANUAL creation, existing-leg provenance/classification preservation, counterpart derivation, and stale-version rejection before either leg is changed.
+- `InternalTransferResourceIT`: runs against PostgreSQL and proves the raw `POST`, `PUT`, `PATCH`, and `DELETE` entity routes are unavailable while product reads and versioned commands remain available. It covers same-account/amount/date/flow/cross-owner/duplicate-link rejection, stale update/unlink rejection, and unlink preserving both legs.
+
+The command-specific PostgreSQL run is:
+
+```bash
+./mvnw -ntp --batch-mode -Dskip.npm=true -Dtest=InternalTransferResourceIT test
 ```
 
 ### Integration tests — `InternalTransferResourceIT`
 
-| Test                                                                    | Expectation                                     |
-| ----------------------------------------------------------------------- | ----------------------------------------------- |
-| `getInternalTransferOwnedByAnotherUserIsNotFound`                       | Cross-user GET → `404`                          |
-| `getAllInternalTransfersDoesNotIncludeAnotherUsersTransfers`            | List scoped                                     |
-| `putInternalTransferOwnedByAnotherUserIsNotFound`                       | Cross-user PUT → `400`                          |
-| `patchInternalTransferOwnedByAnotherUserIsNotFound`                     | Cross-user PATCH → `400`                        |
-| `deleteInternalTransferOwnedByAnotherUserIsNotFound`                    | Cross-user DELETE → `404`                       |
-| `adminCanGetInternalTransferOwnedByAnotherUser`                         | Admin GET bypass                                |
-| `adminCanListAllInternalTransfersIncludingOtherUsers`                   | Admin list bypass                               |
-| `adminCanUpdateInternalTransferOwnedByAnotherUser`                      | Admin PUT bypass                                |
-| `adminCanDeleteInternalTransferOwnedByAnotherUser`                      | Admin DELETE bypass                             |
-| `createInternalTransferWithOutgoingTransactionOwnedByAnotherUserFails`  | Foreign tx → `400`                              |
-| `createInternalTransferWithSameTransactionFails`                        | Same tx both sides → `400`                      |
-| `createInternalTransferWithDifferentCurrencyFails`                      | Currency mismatch → `400`                       |
-| `createInternalTransferWithDifferentAmountFails`                        | Amount mismatch → `400`                         |
-| `createInternalTransferWithWrongFlowsFails`                             | Non OUT/IN → `400`                              |
-| `createInternalTransferWithSameAccountFails`                            | Same account → `400`                            |
-| `createInternalTransferWithNonManualOriginSucceeds`                     | `FILE_IMPORT` / `API` origin allowed            |
-| `createInternalTransferWithAlreadyLinkedTransactionFails`               | Duplicate link → `400`                          |
-| `createInternalTransferWithTransactionAlreadyLinkedInOppositeRoleFails` | Reusing a linked tx in either role → `400`      |
-| `createInternalTransferWithoutCreatedAtSucceeds`                        | Server `createdAt`                              |
-| `createInternalTransferIgnoresClientProvidedCreatedAt`                  | Client `createdAt` ignored on create            |
-| `createInternalTransferTrimsNotesAndConvertsBlankToNull`                | Notes normalized before persist                 |
-| `putInternalTransferWithAbsentLinksPreservesLinks`                      | PUT missing link fields preserves existing legs |
-| `putInternalTransferWithNullOutgoingTransactionFails`                   | PUT explicit `null` link → `400`                |
-| `updateInternalTransferWithDifferentOutgoingTransactionFails`           | Immutable leg PUT → `400`                       |
-| `patchInternalTransferWithNullOutgoingTransactionFails`                 | `"outgoingTransaction": null` → `400`           |
-| `patchInternalTransferWithMissingOutgoingTransactionIdFails`            | Link object without id → `400`                  |
-| `patchInternalTransferWithNullCreatedAtFails`                           | `createdAt: null` → `400`                       |
-| `patchInternalTransferWithChangedCreatedAtFails`                        | Changed `createdAt` → `400`                     |
-| `patchInternalTransferWithNullNotesClearsNotes`                         | `notes: null` clears notes                      |
-| `createInternalTransferWithIncomingTransactionOwnedByAnotherUserFails`  | Foreign incoming tx → `400`                     |
-| `adminCannotCreateInternalTransferWithCrossOwnerLegs`                   | Admin POST cross-owner → `400`                  |
-| `deleteInternalTransferLeavesTransactionsIntact`                        | DELETE solo transfer; txs viven                 |
+| Test                                                                | Expectation                                                                                           |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `productReadModelsRemainAvailableWhileLegacyCrudWritesAreNotMapped` | Product read succeeds; raw entity `POST`, `PUT`, `PATCH`, and `DELETE` return `404` without mutation. |
+| `linkExistingCommandRejectsInvalidPairsAndLeavesNoTransfer`         | Same-account, amount/date mismatch, and wrong-flow pairs return `400`.                                |
+| `linkExistingCommandRejectsCrossOwnerAndAlreadyLinkedLegs`          | Cross-owner pairs return `400`; a reused leg returns `409`.                                           |
+| `aggregateCommandsRequireVersionAndPreserveBothLegsOnUnlink`        | Stale update/unlink return `409`; current-version unlink preserves both legs.                         |
+| `independentClientsCannotOverwriteOrUnlinkWithAStaleVersion`        | Separate transactions prove `expectedVersion` is authoritative.                                       |
 
 ### Candidate endpoints — `FinancialTransactionResourceIT`
 
@@ -2491,28 +2481,43 @@ Create rehabilitated; no user selector on form.
 | `getIncomingInternalTransferCandidatesIncludeOnlyInUnlinked`                  | IN + sin link en ningún rol; origin no filtra        |
 | `adminOutgoingInternalTransferCandidatesCanIncludeAnotherUsersTransactions`   | Admin ve ajenos; create sigue bloqueando cross-owner |
 
-### Unit — `InternalTransferServiceTest` (13) — ✅ custom
-
-Resolve legs, validate pair, reject duplicate link, immutable legs on update/PATCH, delete accessibility.
+The retired `InternalTransferServiceTest`, mapper test, DTO test, Redux reducer test, and generated delete dialog covered the removed raw CRUD path. Their behavior is intentionally not preserved; command service and resource coverage replace it.
 
 ### E2E — `internal-transfer.cy.ts`
 
-Seeds two accounts + OUT/IN txs via API; create form uses candidate endpoints; legs read-only on edit; delete rehabilitated.
+The product acceptance seeds isolated same-owner accounts and uses the direct-transfer command flow. It covers the empty state, product list labels (not raw IDs), create with shared/per-leg posting dates, account/currency validation, read-only account identities in edit, aggregate update/version-conflict feedback without erasing local form data, detail leg presentation, and unlink confirmation that keeps both transactions. It also verifies the entity-menu entry, singular-to-plural canonical-route redirect, and list, create, edit, and detail at a mobile width.
+
+### Product page — `INTERNAL-TRANSFER-2`
+
+- Jest: `src/main/webapp/app/entities/internal-transfer/internal-transfer.spec.tsx` tests product list identity/amount/sort, empty state, atomic create payload, and source/destination exclusion.
+- REST: `InternalTransferResourceIT` verifies `/api/internal-transfers/product` returns summary legs without raw DTO shapes and `/product/{id}` returns both persisted legs through the owner-scoped read boundary.
+- The focused PostgreSQL command remains:
+
+```bash
+./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
+  -Dtest=InternalTransferResourceIT test
+```
+
+The browser product spec is:
+
+```bash
+npm run e2e -- --spec src/test/javascript/cypress/e2e/entity/internal-transfer.cy.ts
+```
 
 ### Gaps / deuda
 
-| Priority | Layer  | Tema                                                            | Status                                                                           |
-| -------- | ------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Low      | IT     | PATCH `incomingTransaction: null` explícito                     | ⏳ service cubierto                                                              |
-| Low      | IT     | PATCH otro outgoing `{id}`                                      | ⏳ PUT cubierto                                                                  |
-| Low      | IT     | Incoming ya enlazada (simétrico)                                | ⏳                                                                               |
-| Low      | IT     | Outgoing wrong flow / non-MANUAL (simétrico)                    | ⏳                                                                               |
-| Low      | E2E    | UI ownership smoke (user vs admin list)                         | ⏳                                                                               |
-| —        | Domain | Balances no se recalculan en create/delete                      | ⏳ fuera de scope                                                                |
-| —        | Domain | Create atómico out+in+transfer                                  | ⏳ fuera de scope                                                                |
-| —        | Domain | Validación posting dates entre patas                            | ⏳ fuera de scope                                                                |
-| —        | Domain | FinancialTransaction delete cleanup for linked InternalTransfer | ✅ covered by FinancialTransactionResourceIT                                     |
-| —        | Domain | Origin unrestricted for existing transaction legs               | ✅ covered; ingestion-created transfer pairing remains a future product decision |
+| Priority | Layer  | Tema                                                            | Status                                                                                             |
+| -------- | ------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Low      | IT     | PATCH `incomingTransaction: null` explícito                     | ⏳ service cubierto                                                                                |
+| Low      | IT     | PATCH otro outgoing `{id}`                                      | ⏳ PUT cubierto                                                                                    |
+| Low      | IT     | Incoming ya enlazada (simétrico)                                | ⏳                                                                                                 |
+| Low      | IT     | Outgoing wrong flow / non-MANUAL (simétrico)                    | ⏳                                                                                                 |
+| Low      | E2E    | UI ownership smoke (user vs admin list)                         | ⏳                                                                                                 |
+| —        | Domain | Balances no se recalculan en create/delete                      | ⏳ fuera de scope                                                                                  |
+| —        | Domain | Create atómico out+in+transfer                                  | ✅ `InternalTransferCommandServiceTest` verifica ambas patas `MANUAL` y el root en una transacción |
+| —        | Domain | Posting dates entre patas                                       | ✅ fecha de transacción compartida; `postingDate` independiente por pata                           |
+| —        | Domain | FinancialTransaction delete cleanup for linked InternalTransfer | ✅ covered by FinancialTransactionResourceIT                                                       |
+| —        | Domain | Origin unrestricted for existing transaction legs               | ✅ covered; ingestion-created transfer pairing remains a future product decision                   |
 
 ---
 
@@ -3222,4 +3227,12 @@ The browser spec `transaction-batch.cy.ts` uses Chrome against a disposable Post
 
 `FinancialTransactionResourceIT.updatePostedFinancialTransactionDoesNotCreateCandidateOrApplyRules` is the direct posted-transaction edit regression: it updates an existing final transaction to match a rule, then verifies category/tags remain direct-edit values and `TransactionCandidate` count is unchanged. This is distinct from batch publication, which already has no evaluator dependency.
 
+### Transaction Batch internal-transfer integration
+
+`TransactionBatchCommandServiceIT` covers persisted Batch transfer intent, reload projection, exact candidate/batch revision advancement, and clearing the intent without changing normal row values. It also covers the temporary `CREATE_COUNTERPART` intent: only account and independently editable posting-date/text fields persist on the candidate, no ledger row is created before publishing, and switching to an existing link clears that draft-only configuration. `TransactionBatchPublishServiceIT` uses isolated PostgreSQL to cover successful creation of one final Batch leg plus its `InternalTransfer`, deferred atomic materialization of a configured new counterpart, and a stale amount mismatch that rolls back an otherwise mixed Batch without a receipt, final rows, or transfer root. `transaction-batch.spec.tsx` covers automatic first-page discovery, server-scoped account/description filtering, existing-link selection/clear behavior, batch-only new-counterpart configuration with no pre-publication transaction, no raw id in the selected summary, the compact stale indicator, and local publication blocking for a stale persisted selection. The remaining real-browser concurrency and mobile screenshots stay acceptance work for the dedicated Batch E2E environment.
+
 The browser acceptance intentionally does not simulate server clocks or lock races. Those are deterministic Java integration tests with isolated PostgreSQL, not timing-sensitive browser assertions. Native discard confirmation is asserted through the browser confirmation callback; it has no DOM surface to capture as a screenshot.
+
+## Internal transfer from a single manual transaction
+
+Focused Jest coverage in `financial-transaction-manual-draft.spec.tsx` verifies that internal transfer is off by default, persisted create-counterpart intent hydrates on draft recovery, enabling counterpart creation pre-fills the source posting date, description, reference, and notes without making them two-way, disabling it clears only transfer intent, and enabled posting chooses the atomic candidate endpoint rather than ordinary post. The manual and posted selectors automatically load the first eligible server page, retain readable selected results, and pass account/description filters to the scoped endpoint. `financial-transaction-internal-transfer.spec.tsx` covers compact linked relation presentation and unlinked final-transaction counterpart creation without a client-side duplicate current leg. `TransactionCandidateServiceTest` covers ordinary-post rejection for enabled intent and verifies that counterpart creation happens before candidate deletion through the atomic service path.

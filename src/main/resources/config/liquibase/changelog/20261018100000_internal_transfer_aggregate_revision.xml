@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        A root aggregate revision must change when a command mutates either
+        FinancialTransaction leg. Existing transfers remain readable; their
+        timestamp is populated by the first effective aggregate mutation.
+    -->
+    <changeSet id="20261018100000-1" author="fintrack">
+        <addColumn tableName="internal_transfer">
+            <column name="updated_at" type="${datetimeType}"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="internal_transfer" columnName="updated_at"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

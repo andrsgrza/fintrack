@@ -15,6 +15,7 @@ import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { IAppliedRuleAttribution, ITransactionCandidate } from 'app/shared/model/transaction-candidate.model';
 import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model/enumerations/transaction-candidate-classification-review-status.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
+import { TransactionCandidateInternalTransferMode } from 'app/shared/model/enumerations/transaction-candidate-internal-transfer-mode.model';
 import { ICategory } from 'app/shared/model/category.model';
 import { ITag } from 'app/shared/model/tag.model';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
@@ -26,7 +27,10 @@ import {
   createManualDraft,
   getManualDraft,
   ITransactionCandidateRulePreviewResponse,
+  findManualTransferCounterparts,
+  IManualTransferCounterpart,
   postManualDraft,
+  postManualDraftAsInternalTransfer,
   previewManualDraftRules,
   updateManualDraft,
 } from './services/manual-transaction-candidate.service';
@@ -49,6 +53,14 @@ interface ManualDraftFormState {
   notes: string;
   category: string;
   tags: string[];
+  internalTransferEnabled: boolean;
+  internalTransferMode: keyof typeof TransactionCandidateInternalTransferMode | '';
+  internalTransferCounterpartAccount: string;
+  internalTransferCounterpartPostingDate: string;
+  internalTransferCounterpartDescription: string;
+  internalTransferCounterpartReference: string;
+  internalTransferCounterpartNotes: string;
+  internalTransferCounterpartTransaction: string;
 }
 
 const emptyDraft: ManualDraftFormState = {
@@ -62,6 +74,14 @@ const emptyDraft: ManualDraftFormState = {
   notes: '',
   category: '',
   tags: [],
+  internalTransferEnabled: false,
+  internalTransferMode: '',
+  internalTransferCounterpartAccount: '',
+  internalTransferCounterpartPostingDate: '',
+  internalTransferCounterpartDescription: '',
+  internalTransferCounterpartReference: '',
+  internalTransferCounterpartNotes: '',
+  internalTransferCounterpartTransaction: '',
 };
 
 const toOptionalNumber = (value: string | number | null | undefined) => {
@@ -85,10 +105,27 @@ const isMeaningfulDraft = (draft: ManualDraftFormState) =>
   !!draft.description.trim() ||
   !!signedAmountFromDraft(draft) ||
   !!draft.category ||
-  draft.tags.length > 0;
+  draft.tags.length > 0 ||
+  draft.internalTransferEnabled;
 
 const isObviouslyComplete = (draft: ManualDraftFormState) =>
   !!draft.account && !!draft.transactionDate && !!draft.description.trim() && !!signedAmountFromDraft(draft);
+
+/** Description is not an eligibility invariant for an already-posted counterpart. */
+const hasCounterpartEligibilityInputs = (draft: ManualDraftFormState) =>
+  !!draft.account && !!draft.transactionDate && !!signedAmountFromDraft(draft) && !!draft.flow;
+
+const isTransferIntentComplete = (draft: ManualDraftFormState) => {
+  if (!draft.internalTransferEnabled) return true;
+  if (draft.internalTransferMode === 'CREATE_COUNTERPART') {
+    return !!(
+      draft.internalTransferCounterpartAccount &&
+      draft.internalTransferCounterpartPostingDate &&
+      draft.internalTransferCounterpartDescription.trim()
+    );
+  }
+  return draft.internalTransferMode === 'LINK_EXISTING' && !!draft.internalTransferCounterpartTransaction;
+};
 
 const ruleInputFields = new Set<keyof ManualDraftFormState>([
   'account',
@@ -136,6 +173,15 @@ const draftFromCandidate = (candidate: ITransactionCandidate): ManualDraftFormSt
     notes: candidate.notes ?? '',
     category: candidate.category?.id?.toString() ?? '',
     tags: candidate.tags?.map(tag => tag.id?.toString()).filter(Boolean) ?? [],
+    internalTransferEnabled: Boolean(candidate.internalTransferEnabled),
+    internalTransferMode: candidate.internalTransferMode ?? '',
+    internalTransferCounterpartAccount: candidate.internalTransferCounterpartAccount?.id?.toString() ?? '',
+    internalTransferCounterpartPostingDate:
+      typeof candidate.internalTransferCounterpartPostingDate === 'string' ? candidate.internalTransferCounterpartPostingDate : '',
+    internalTransferCounterpartDescription: candidate.internalTransferCounterpartDescription ?? '',
+    internalTransferCounterpartReference: candidate.internalTransferCounterpartReference ?? '',
+    internalTransferCounterpartNotes: candidate.internalTransferCounterpartNotes ?? '',
+    internalTransferCounterpartTransaction: candidate.internalTransferCounterpartTransaction?.id?.toString() ?? '',
   };
 };
 
@@ -148,6 +194,32 @@ const payloadFromDraft = (draft: ManualDraftFormState, includeClassification = f
     signedAmount: signedAmountFromDraft(draft),
     externalReference: draft.externalReference || null,
     notes: draft.notes || null,
+    internalTransferEnabled: draft.internalTransferEnabled,
+    internalTransferMode: draft.internalTransferEnabled ? draft.internalTransferMode || null : null,
+    internalTransferCounterpartAccount:
+      draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART' && draft.internalTransferCounterpartAccount
+        ? { id: Number(draft.internalTransferCounterpartAccount) }
+        : null,
+    internalTransferCounterpartPostingDate:
+      draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART'
+        ? draft.internalTransferCounterpartPostingDate || null
+        : null,
+    internalTransferCounterpartDescription:
+      draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART'
+        ? draft.internalTransferCounterpartDescription || null
+        : null,
+    internalTransferCounterpartReference:
+      draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART'
+        ? draft.internalTransferCounterpartReference || null
+        : null,
+    internalTransferCounterpartNotes:
+      draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART'
+        ? draft.internalTransferCounterpartNotes || null
+        : null,
+    internalTransferCounterpartTransaction:
+      draft.internalTransferEnabled && draft.internalTransferMode === 'LINK_EXISTING' && draft.internalTransferCounterpartTransaction
+        ? { id: Number(draft.internalTransferCounterpartTransaction) }
+        : null,
   };
 
   if (includeClassification) {
@@ -597,7 +669,8 @@ const ManualDraftAlerts = ({ errorMessage, isCancelled }: { errorMessage: string
   </>
 );
 
-type DraftFieldChangeHandler = (field: keyof ManualDraftFormState) => (event: React.ChangeEvent<HTMLInputElement>) => void;
+type DraftInputField = Exclude<keyof ManualDraftFormState, 'tags' | 'internalTransferEnabled'>;
+type DraftFieldChangeHandler = (field: DraftInputField) => (event: React.ChangeEvent<HTMLInputElement>) => void;
 
 const ManualTransactionAccountSection = ({
   draft,
@@ -787,6 +860,495 @@ const DraftAppliedBy = ({ attribution }: { attribution?: IAppliedRuleAttribution
   );
 };
 
+const ManualTransactionInternalTransferSection = ({
+  draft,
+  candidate,
+  accounts,
+  readOnly,
+  onEnabledChange,
+  onModeChange,
+  onFieldChange,
+  onSelectCounterpart,
+  onLinkCounterpartValidityChange,
+}: {
+  draft: ManualDraftFormState;
+  candidate: ITransactionCandidate | null;
+  accounts: IFinancialAccountSelectable[];
+  readOnly: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  onModeChange: (mode: keyof typeof TransactionCandidateInternalTransferMode) => void;
+  onFieldChange: DraftFieldChangeHandler;
+  onSelectCounterpart: (counterpart: IManualTransferCounterpart | null) => void;
+  onLinkCounterpartValidityChange: (valid: boolean) => void;
+}) => {
+  const [search, setSearch] = useState('');
+  const [accountFilterId, setAccountFilterId] = useState('');
+  const [page, setPage] = useState(0);
+  const [results, setResults] = useState<IManualTransferCounterpart[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const latestSearchRequest = useRef(0);
+  const currentAccount = accounts.find(account => account.id?.toString() === draft.account);
+  const counterpartAccounts = accounts.filter(
+    account => account.id?.toString() !== draft.account && (!currentAccount?.currency || account.currency === currentAccount.currency),
+  );
+  const selectedCounterpart = candidate?.internalTransferCounterpartTransaction;
+
+  useEffect(() => {
+    if (!draft.internalTransferEnabled || draft.internalTransferMode !== 'LINK_EXISTING') {
+      onLinkCounterpartValidityChange(true);
+      return;
+    }
+    if (
+      !draft.internalTransferCounterpartTransaction ||
+      !candidate?.id ||
+      candidate.internalTransferCounterpartTransaction?.id?.toString() !== draft.internalTransferCounterpartTransaction ||
+      !hasCounterpartEligibilityInputs(draft)
+    ) {
+      onLinkCounterpartValidityChange(false);
+      return;
+    }
+
+    let mounted = true;
+    const selectedId = Number(draft.internalTransferCounterpartTransaction);
+    const selectedDescription = candidate.internalTransferCounterpartTransaction.description ?? '';
+    void findManualTransferCounterparts(candidate.id, { search: selectedDescription })
+      .then(response => {
+        if (!mounted) return;
+        const remainsEligible = (response.data.content ?? []).some(counterpart => counterpart.transactionId === selectedId);
+        onLinkCounterpartValidityChange(remainsEligible);
+        setError(remainsEligible ? '' : translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartUnavailable'));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        onLinkCounterpartValidityChange(false);
+        setError(translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartUnavailable'));
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    candidate?.id,
+    candidate?.internalTransferCounterpartTransaction?.description,
+    candidate?.internalTransferCounterpartTransaction?.id,
+    candidate?.version,
+    draft.account,
+    draft.amount,
+    draft.flow,
+    draft.internalTransferCounterpartTransaction,
+    draft.internalTransferEnabled,
+    draft.internalTransferMode,
+    draft.transactionDate,
+    onLinkCounterpartValidityChange,
+  ]);
+
+  useEffect(() => {
+    if (!draft.internalTransferEnabled || draft.internalTransferMode !== 'LINK_EXISTING') {
+      latestSearchRequest.current += 1;
+      return;
+    }
+    if (!candidate?.id || !hasCounterpartEligibilityInputs(draft)) {
+      setResults([]);
+      setTotalElements(0);
+      setTotalPages(0);
+      setLoading(false);
+      return;
+    }
+
+    const requestId = latestSearchRequest.current + 1;
+    latestSearchRequest.current = requestId;
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const response = await findManualTransferCounterparts(candidate.id, {
+          search,
+          accountId: accountFilterId ? Number(accountFilterId) : undefined,
+          page,
+        });
+        if (requestId !== latestSearchRequest.current) return;
+        setResults(response.data.content ?? []);
+        setTotalElements(response.data.totalElements ?? response.data.content?.length ?? 0);
+        setTotalPages(response.data.totalPages ?? 0);
+      } catch (requestError) {
+        if (requestId !== latestSearchRequest.current) return;
+        const detail = String(requestError?.response?.data?.detail ?? '');
+        setResults([]);
+        setTotalElements(0);
+        setTotalPages(0);
+        setError(
+          detail.includes('TRANSFER_COUNTERPART_STALE')
+            ? translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartUnavailable')
+            : translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.searchFailed'),
+        );
+      } finally {
+        if (requestId === latestSearchRequest.current) setLoading(false);
+      }
+    };
+    const delay = search.trim() ? window.setTimeout(() => void load(), 250) : undefined;
+    if (!delay) void load();
+    return () => {
+      latestSearchRequest.current += 1;
+      if (delay) window.clearTimeout(delay);
+    };
+  }, [
+    accountFilterId,
+    candidate?.id,
+    candidate?.version,
+    draft.account,
+    draft.amount,
+    draft.flow,
+    draft.internalTransferEnabled,
+    draft.internalTransferMode,
+    draft.transactionDate,
+    page,
+    search,
+  ]);
+
+  return (
+    <ProductSection
+      title={<Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.title">Internal transfer</Translate>}
+      dataCy="manualDraftInternalTransferSection"
+      className="mb-3"
+    >
+      <FormGroup check className="mb-0">
+        <Input
+          id="manual-draft-internal-transfer"
+          type="checkbox"
+          checked={draft.internalTransferEnabled}
+          onChange={event => onEnabledChange(event.target.checked)}
+          disabled={readOnly}
+          data-cy="manualDraftInternalTransferToggle"
+        />
+        <Label check for="manual-draft-internal-transfer" className="fw-semibold">
+          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.toggle">Internal transfer</Translate>
+        </Label>
+      </FormGroup>
+      {draft.internalTransferEnabled ? (
+        <div className="border rounded-3 p-3 mt-3" data-cy="manualDraftInternalTransferControls">
+          <p className="small text-muted mb-3">
+            <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.help">
+              Your transaction is one movement; choose how to prepare the other one.
+            </Translate>
+          </p>
+          <div
+            className="d-flex flex-wrap gap-2 mb-3"
+            role="radiogroup"
+            aria-label={translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.mode')}
+          >
+            <Button
+              type="button"
+              color={draft.internalTransferMode === 'CREATE_COUNTERPART' ? 'primary' : 'secondary'}
+              outline={draft.internalTransferMode !== 'CREATE_COUNTERPART'}
+              onClick={() => onModeChange('CREATE_COUNTERPART')}
+              disabled={readOnly}
+              aria-pressed={draft.internalTransferMode === 'CREATE_COUNTERPART'}
+              data-cy="manualDraftCreateCounterpart"
+            >
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.createCounterpart">
+                Create counterpart
+              </Translate>
+            </Button>
+            <Button
+              type="button"
+              color={draft.internalTransferMode === 'LINK_EXISTING' ? 'primary' : 'secondary'}
+              outline={draft.internalTransferMode !== 'LINK_EXISTING'}
+              onClick={() => onModeChange('LINK_EXISTING')}
+              disabled={readOnly}
+              aria-pressed={draft.internalTransferMode === 'LINK_EXISTING'}
+              data-cy="manualDraftLinkExistingCounterpart"
+            >
+              <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.linkExisting">
+                Link existing counterpart
+              </Translate>
+            </Button>
+          </div>
+
+          {draft.internalTransferMode === 'CREATE_COUNTERPART' ? (
+            <Row className="g-3" data-cy="manualDraftCreateCounterpartFields">
+              <Col md="6">
+                <FormGroup className="mb-0">
+                  <Label for="manual-draft-counterpart-account">
+                    <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartAccount">
+                      Counterpart account
+                    </Translate>
+                  </Label>
+                  <Input
+                    id="manual-draft-counterpart-account"
+                    name="internalTransferCounterpartAccount"
+                    type="select"
+                    value={draft.internalTransferCounterpartAccount}
+                    onChange={onFieldChange('internalTransferCounterpartAccount')}
+                    disabled={readOnly}
+                    data-cy="manualDraftCounterpartAccount"
+                  >
+                    <option value="" />
+                    {counterpartAccounts.map(account => (
+                      <option value={account.id} key={account.id}>
+                        {formatFinancialAccountLabel(account)}
+                      </option>
+                    ))}
+                  </Input>
+                  {currentAccount?.currency ? (
+                    <FormText>
+                      <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.derived">
+                        The opposite flow, amount, currency, and transaction date are derived from this transaction.
+                      </Translate>
+                    </FormText>
+                  ) : null}
+                </FormGroup>
+              </Col>
+              <Col md="6">
+                <FormGroup className="mb-0">
+                  <Label for="manual-draft-counterpart-posting-date">
+                    <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartPostingDate">
+                      Counterpart posting date
+                    </Translate>
+                  </Label>
+                  <Input
+                    id="manual-draft-counterpart-posting-date"
+                    name="internalTransferCounterpartPostingDate"
+                    type="date"
+                    value={draft.internalTransferCounterpartPostingDate}
+                    onChange={onFieldChange('internalTransferCounterpartPostingDate')}
+                    disabled={readOnly}
+                    data-cy="manualDraftCounterpartPostingDate"
+                  />
+                </FormGroup>
+              </Col>
+              <Col xs="12">
+                <FormGroup className="mb-0">
+                  <Label for="manual-draft-counterpart-description">
+                    <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartDescription">
+                      Counterpart description
+                    </Translate>
+                  </Label>
+                  <Input
+                    id="manual-draft-counterpart-description"
+                    name="internalTransferCounterpartDescription"
+                    type="text"
+                    value={draft.internalTransferCounterpartDescription}
+                    onChange={onFieldChange('internalTransferCounterpartDescription')}
+                    disabled={readOnly}
+                    data-cy="manualDraftCounterpartDescription"
+                  />
+                </FormGroup>
+              </Col>
+              <Col md="6">
+                <FormGroup className="mb-0">
+                  <Label for="manual-draft-counterpart-reference">
+                    <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartReference">
+                      Counterpart reference
+                    </Translate>
+                  </Label>
+                  <Input
+                    id="manual-draft-counterpart-reference"
+                    name="internalTransferCounterpartReference"
+                    type="text"
+                    value={draft.internalTransferCounterpartReference}
+                    onChange={onFieldChange('internalTransferCounterpartReference')}
+                    disabled={readOnly}
+                  />
+                </FormGroup>
+              </Col>
+              <Col md="6">
+                <FormGroup className="mb-0">
+                  <Label for="manual-draft-counterpart-notes">
+                    <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.counterpartNotes">
+                      Counterpart notes
+                    </Translate>
+                  </Label>
+                  <Input
+                    id="manual-draft-counterpart-notes"
+                    name="internalTransferCounterpartNotes"
+                    type="text"
+                    value={draft.internalTransferCounterpartNotes}
+                    onChange={onFieldChange('internalTransferCounterpartNotes')}
+                    disabled={readOnly}
+                  />
+                </FormGroup>
+              </Col>
+            </Row>
+          ) : null}
+
+          {draft.internalTransferMode === 'LINK_EXISTING' ? (
+            <div data-cy="manualDraftLinkExistingFields">
+              {!candidate?.id || !hasCounterpartEligibilityInputs(draft) ? (
+                <p className="small text-muted mb-0" data-cy="manualDraftCounterpartGuidance">
+                  <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.searchNeedsSource">
+                    Complete the account, date, type, and amount to find an eligible counterpart.
+                  </Translate>
+                </p>
+              ) : (
+                <>
+                  <Row className="g-2 mb-2">
+                    <Col md="6">
+                      <FormGroup className="mb-0">
+                        <Label for="manual-draft-counterpart-account-filter">
+                          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.filterAccount">
+                            Counterpart account filter
+                          </Translate>
+                        </Label>
+                        <Input
+                          id="manual-draft-counterpart-account-filter"
+                          type="select"
+                          value={accountFilterId}
+                          onChange={event => {
+                            setAccountFilterId(event.target.value);
+                            setPage(0);
+                          }}
+                          disabled={readOnly}
+                          data-cy="manualDraftCounterpartAccountFilter"
+                        >
+                          <option value="">
+                            {translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.allEligibleAccounts')}
+                          </option>
+                          {counterpartAccounts.map(account => (
+                            <option value={account.id} key={account.id}>
+                              {formatFinancialAccountLabel(account)}
+                            </option>
+                          ))}
+                        </Input>
+                      </FormGroup>
+                    </Col>
+                    <Col md="6">
+                      <FormGroup className="mb-0">
+                        <Label for="manual-draft-counterpart-search">
+                          <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.search">
+                            Search counterpart
+                          </Translate>
+                        </Label>
+                        <Input
+                          id="manual-draft-counterpart-search"
+                          value={search}
+                          onChange={event => {
+                            setSearch(event.target.value);
+                            setPage(0);
+                          }}
+                          disabled={readOnly}
+                        />
+                      </FormGroup>
+                    </Col>
+                  </Row>
+                  <div className="small text-muted mb-2" aria-live="polite" data-cy="manualDraftCounterpartCount">
+                    {loading ? (
+                      <>
+                        <Spinner size="sm" className="me-2" />
+                        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.loading">
+                          Loading eligible counterparts…
+                        </Translate>
+                      </>
+                    ) : (
+                      translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.resultCount', {
+                        count: totalElements,
+                      })
+                    )}
+                  </div>
+                </>
+              )}
+              {error ? (
+                <Alert color="warning" className="mb-2">
+                  {error}
+                </Alert>
+              ) : null}
+              {selectedCounterpart && draft.internalTransferCounterpartTransaction ? (
+                <div
+                  className="d-flex flex-wrap align-items-center justify-content-between gap-2 border rounded p-2 mb-2"
+                  data-cy="manualDraftSelectedCounterpart"
+                >
+                  <span aria-live="polite">
+                    <strong>
+                      <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.selected">
+                        Selected counterpart
+                      </Translate>
+                      :
+                    </strong>{' '}
+                    {selectedCounterpart.account?.name ? `${selectedCounterpart.account.name} · ` : ''}
+                    {selectedCounterpart.description}
+                  </span>
+                  <Button type="button" size="sm" color="secondary" outline onClick={() => onSelectCounterpart(null)} disabled={readOnly}>
+                    <Translate contentKey="entity.action.clear">Clear</Translate>
+                  </Button>
+                </div>
+              ) : null}
+              {!loading && candidate?.id && hasCounterpartEligibilityInputs(draft) && !results.length && !error ? (
+                <p className="small text-muted mb-0">
+                  <Translate contentKey="fintrackApp.financialTransaction.manualDraft.internalTransfer.noResults">
+                    No eligible counterparts match these filters.
+                  </Translate>
+                </p>
+              ) : null}
+              <div
+                className="vstack gap-2"
+                aria-live="polite"
+                role="listbox"
+                aria-label={translate('fintrackApp.financialTransaction.manualDraft.internalTransfer.searchResults')}
+              >
+                {results.map(counterpart => {
+                  const isSelected = counterpart.transactionId.toString() === draft.internalTransferCounterpartTransaction;
+                  return (
+                    <Button
+                      key={counterpart.transactionId}
+                      type="button"
+                      color={isSelected ? 'primary' : 'light'}
+                      outline={!isSelected}
+                      className="counterpart-result text-start border"
+                      aria-selected={isSelected}
+                      role="option"
+                      onClick={() => onSelectCounterpart(counterpart)}
+                      disabled={readOnly}
+                      data-cy="manualDraftCounterpartResult"
+                    >
+                      <span className="d-flex justify-content-between gap-2">
+                        <span className="fw-semibold">{counterpart.description}</span>
+                        {isSelected ? <FontAwesomeIcon icon="check" aria-label="Selected" /> : null}
+                      </span>
+                      <span className="d-block small">
+                        {counterpart.accountName} · {counterpart.transactionDate}
+                        {counterpart.postingDate ? ` · ${counterpart.postingDate}` : ''} · {counterpart.amount} {counterpart.currency}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+              {totalPages > 1 ? (
+                <div className="d-flex justify-content-end align-items-center gap-2 mt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    color="secondary"
+                    outline
+                    disabled={loading || page === 0}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    <Translate contentKey="entity.action.previous">Previous</Translate>
+                  </Button>
+                  <span className="small text-muted">
+                    {page + 1} / {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    color="secondary"
+                    outline
+                    disabled={loading || page + 1 >= totalPages}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    <Translate contentKey="entity.action.next">Next</Translate>
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </ProductSection>
+  );
+};
+
 const ManualTransactionClassificationSection = ({
   draft,
   candidate,
@@ -941,6 +1503,7 @@ const ManualTransactionActions = ({
   postDisabled,
   cancelDisabled,
   posting,
+  postLabelKey,
   onCancel,
   onPost,
 }: {
@@ -949,6 +1512,7 @@ const ManualTransactionActions = ({
   postDisabled: boolean;
   cancelDisabled: boolean;
   posting: boolean;
+  postLabelKey: string;
   onCancel: () => void;
   onPost: () => void;
 }) => (
@@ -982,7 +1546,7 @@ const ManualTransactionActions = ({
       <Button color="primary" id="post-draft" data-cy="manualDraftPostButton" type="button" disabled={postDisabled} onClick={onPost}>
         {posting ? <Spinner size="sm" /> : <FontAwesomeIcon icon="save" />}
         &nbsp;
-        <Translate contentKey="fintrackApp.financialTransaction.manualDraft.post">Post transaction</Translate>
+        <Translate contentKey={postLabelKey}>Post transaction</Translate>
       </Button>
     </div>
   </ProductSection>
@@ -1011,6 +1575,7 @@ export const FinancialTransactionManualDraft = () => {
   const [ruleErrorMessage, setRuleErrorMessage] = useState('');
   const [loadingCandidate, setLoadingCandidate] = useState(!!draftId);
   const [optionalDetailsOpen, setOptionalDetailsOpen] = useState(false);
+  const [linkCounterpartValid, setLinkCounterpartValid] = useState(false);
   const [samePostingDate, setSamePostingDate] = useState(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creatingRef = useRef(false);
@@ -1036,6 +1601,7 @@ export const FinancialTransactionManualDraft = () => {
     saveState === 'FAILED' ||
     !candidate?.id ||
     !isObviouslyComplete(draft) ||
+    !isTransferIntentComplete(draft) ||
     candidate.status !== 'READY_TO_POST' ||
     !isClassificationReadyToPost(effectiveClassificationReviewStatus);
 
@@ -1317,7 +1883,7 @@ export const FinancialTransactionManualDraft = () => {
     }, AUTOSAVE_DELAY_MS);
   };
 
-  const updateDraftField = (field: keyof ManualDraftFormState) => event => {
+  const updateDraftField: DraftFieldChangeHandler = field => event => {
     const value = event.target.value;
     setDraft(current => {
       const nextDraft = {
@@ -1367,12 +1933,70 @@ export const FinancialTransactionManualDraft = () => {
     if (readOnly || draft.flow === flow) {
       return;
     }
-    const nextDraft = { ...latestDraftRef.current, flow };
+    const nextDraft = {
+      ...latestDraftRef.current,
+      flow,
+    };
     setDraft(nextDraft);
     latestDraftRef.current = nextDraft;
     if (rulePreview) {
       setRulePreviewState('STALE');
     }
+    scheduleAutosave(nextDraft);
+  };
+
+  const updateTransferEnabled = (enabled: boolean) => {
+    if (readOnly) return;
+    const nextDraft: ManualDraftFormState = enabled
+      ? {
+          ...latestDraftRef.current,
+          internalTransferEnabled: true,
+          internalTransferMode: 'CREATE_COUNTERPART',
+          internalTransferCounterpartPostingDate:
+            latestDraftRef.current.internalTransferCounterpartPostingDate || latestDraftRef.current.postingDate,
+          internalTransferCounterpartDescription:
+            latestDraftRef.current.internalTransferCounterpartDescription || latestDraftRef.current.description,
+          internalTransferCounterpartReference:
+            latestDraftRef.current.internalTransferCounterpartReference || latestDraftRef.current.externalReference,
+          internalTransferCounterpartNotes: latestDraftRef.current.internalTransferCounterpartNotes || latestDraftRef.current.notes,
+        }
+      : {
+          ...latestDraftRef.current,
+          internalTransferEnabled: false,
+          internalTransferMode: '',
+          internalTransferCounterpartAccount: '',
+          internalTransferCounterpartPostingDate: '',
+          internalTransferCounterpartDescription: '',
+          internalTransferCounterpartReference: '',
+          internalTransferCounterpartNotes: '',
+          internalTransferCounterpartTransaction: '',
+        };
+    setDraft(nextDraft);
+    latestDraftRef.current = nextDraft;
+    scheduleAutosave(nextDraft);
+  };
+
+  const updateTransferMode = (mode: keyof typeof TransactionCandidateInternalTransferMode) => {
+    if (readOnly || draft.internalTransferMode === mode) return;
+    const nextDraft: ManualDraftFormState = {
+      ...latestDraftRef.current,
+      internalTransferMode: mode,
+      internalTransferCounterpartAccount: '',
+      internalTransferCounterpartPostingDate: mode === 'CREATE_COUNTERPART' ? latestDraftRef.current.postingDate : '',
+      internalTransferCounterpartDescription: mode === 'CREATE_COUNTERPART' ? latestDraftRef.current.description : '',
+      internalTransferCounterpartReference: mode === 'CREATE_COUNTERPART' ? latestDraftRef.current.externalReference : '',
+      internalTransferCounterpartNotes: mode === 'CREATE_COUNTERPART' ? latestDraftRef.current.notes : '',
+      internalTransferCounterpartTransaction: '',
+    };
+    setDraft(nextDraft);
+    latestDraftRef.current = nextDraft;
+    scheduleAutosave(nextDraft);
+  };
+
+  const selectTransferCounterpart = (counterpart: IManualTransferCounterpart | null) => {
+    const nextDraft = { ...latestDraftRef.current, internalTransferCounterpartTransaction: counterpart?.transactionId?.toString() ?? '' };
+    setDraft(nextDraft);
+    latestDraftRef.current = nextDraft;
     scheduleAutosave(nextDraft);
   };
 
@@ -1406,7 +2030,9 @@ export const FinancialTransactionManualDraft = () => {
       return;
     }
     try {
-      const response = await postManualDraft(candidateIdRef.current);
+      const response = currentCandidate.internalTransferEnabled
+        ? await postManualDraftAsInternalTransfer(candidateIdRef.current, currentCandidate.version ?? -1)
+        : await postManualDraft(candidateIdRef.current);
       setSaveState('SAVED');
       if (response.data.id) {
         navigate(`/financial-transaction/${response.data.id}`, { replace: true });
@@ -1539,10 +2165,13 @@ export const FinancialTransactionManualDraft = () => {
   );
   const postReasonKey = !isObviouslyComplete(draft)
     ? 'fintrackApp.financialTransaction.manualDraft.incomplete'
-    : classificationBlockKey ||
-      (!isClassificationReadyToPost(effectiveClassificationReviewStatus)
-        ? 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.notEvaluatedPostBlock'
-        : '');
+    : !isTransferIntentComplete(draft) ||
+        (draft.internalTransferEnabled && draft.internalTransferMode === 'LINK_EXISTING' && !linkCounterpartValid)
+      ? 'fintrackApp.financialTransaction.manualDraft.internalTransfer.incomplete'
+      : classificationBlockKey ||
+        (!isClassificationReadyToPost(effectiveClassificationReviewStatus)
+          ? 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.notEvaluatedPostBlock'
+          : '');
 
   return (
     <ProductPage>
@@ -1572,6 +2201,18 @@ export const FinancialTransactionManualDraft = () => {
           onFieldChange={updateDraftField}
           onSamePostingDateChange={updateSamePostingDate}
           onFlowChange={updateFlow}
+        />
+
+        <ManualTransactionInternalTransferSection
+          draft={draft}
+          candidate={candidate}
+          accounts={selectableAccounts}
+          readOnly={readOnly}
+          onEnabledChange={updateTransferEnabled}
+          onModeChange={updateTransferMode}
+          onFieldChange={updateDraftField}
+          onSelectCounterpart={selectTransferCounterpart}
+          onLinkCounterpartValidityChange={setLinkCounterpartValid}
         />
 
         <ManualTransactionClassificationSection
@@ -1618,6 +2259,13 @@ export const FinancialTransactionManualDraft = () => {
           postDisabled={postDisabled}
           cancelDisabled={readOnly || saveState === 'CREATING' || saveState === 'SAVING' || saveState === 'POSTING'}
           posting={saveState === 'POSTING'}
+          postLabelKey={
+            draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART'
+              ? 'fintrackApp.financialTransaction.manualDraft.internalTransfer.createInternalTransfer'
+              : draft.internalTransferEnabled && draft.internalTransferMode === 'LINK_EXISTING'
+                ? 'fintrackApp.financialTransaction.manualDraft.internalTransfer.createAndLink'
+                : 'fintrackApp.financialTransaction.manualDraft.post'
+          }
           onCancel={handleCancel}
           onPost={handlePost}
         />

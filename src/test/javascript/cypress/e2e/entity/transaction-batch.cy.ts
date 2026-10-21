@@ -351,6 +351,357 @@ describe('Transaction Batch product workflow', () => {
     cy.contains('h2', 'Transacciones creadas').should('be.visible');
   });
 
+  it('persists an existing published counterpart for a manual row and links it only when the batch publishes', () => {
+    const description = uniqueName('batch-transfer-outgoing');
+    const counterpartDescription = uniqueName('batch-transfer-incoming');
+    const additionalCounterpartDescriptions = Array.from({ length: 8 }, (_, index) => uniqueName(`batch-transfer-page-${index}`));
+    let counterpartTransactionId: number;
+    let counterpartAccountId: number;
+
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/financial-accounts',
+      body: {
+        name: uniqueName('batch-transfer-counterpart-account'),
+        institutionName: 'E2E Bank',
+        accountType: 'DEBIT',
+        currency: 'MXN',
+        initialBalance: 1000,
+        initialBalanceDate: '2026-10-16',
+        lastFourDigits: '9876',
+        active: true,
+      },
+    }).then(({ body: counterpartAccount }) => {
+      counterpartAccountId = counterpartAccount.id;
+      return cy
+        .authenticatedRequest<{ id: number }>({
+          method: 'POST',
+          url: '/api/categories',
+          body: {
+            name: uniqueName('batch-transfer-income-category'),
+            categoryType: 'INCOME',
+            color: '#16A34A',
+            active: true,
+          },
+        })
+        .then(({ body: counterpartCategory }) =>
+          cy.authenticatedRequest<{ id: number }>({
+            method: 'POST',
+            url: '/api/financial-transactions',
+            body: {
+              transactionDate: '2026-10-16',
+              description: counterpartDescription,
+              amount: 125.5,
+              flow: 'IN',
+              origin: 'MANUAL',
+              account: { id: counterpartAccount.id },
+              category: { id: counterpartCategory.id },
+            },
+          }),
+        )
+        .then(({ body: counterpart }) => {
+          expect(counterpart.id, 'published counterpart id').to.be.a('number');
+          counterpartTransactionId = counterpart.id;
+          additionalCounterpartDescriptions.forEach(extraDescription => {
+            cy.authenticatedRequest({
+              method: 'POST',
+              url: '/api/financial-transactions',
+              body: {
+                transactionDate: '2026-10-16',
+                description: extraDescription,
+                amount: 125.5,
+                flow: 'IN',
+                origin: 'MANUAL',
+                account: { id: counterpartAccount.id },
+              },
+            });
+          });
+        });
+    });
+
+    createOpenBatch();
+    addCompleteManualRow(description);
+    cy.contains('[data-cy^="transactionBatchRow-"]', description).within(() => {
+      cy.contains('button', 'Editar').click();
+    });
+    cy.intercept('GET', '/api/transaction-batches/*/candidates/*/transfer-counterparts*').as('automaticCounterpartSearch');
+    cy.get('[data-cy="transactionBatchInternalTransferToggle"]').check({ force: true });
+    cy.get('[data-cy="transactionBatchLinkExistingMode"]').click();
+    cy.wait('@automaticCounterpartSearch').then(({ request, response }) => {
+      expect(request.url).to.include('page=0');
+      expect(response?.statusCode).to.equal(200);
+    });
+    cy.screenshot('transaction-batch/internal-transfer-eligible-results');
+    cy.then(() => {
+      expect(counterpartAccountId, 'synthetic counterpart account id').to.be.a('number');
+      cy.get('[data-cy="transactionBatchCounterpartAccountFilter"]').select(String(counterpartAccountId));
+    });
+    cy.get('[data-cy="transactionBatchCounterpartCount"]').should('contain', '9');
+    cy.contains('[data-cy="transactionBatchTransferSection"]', '1 / 2').should('be.visible');
+    cy.screenshot('transaction-batch/internal-transfer-account-filtered-results');
+    cy.contains('[data-cy="transactionBatchTransferSection"] button', 'Siguiente').click();
+    cy.contains('[data-cy="transactionBatchTransferSection"]', '2 / 2').should('be.visible');
+    cy.contains('[data-cy="transactionBatchTransferSection"] button', 'Anterior').click();
+    cy.contains('[data-cy="transactionBatchTransferSection"]', '1 / 2').should('be.visible');
+    cy.intercept('GET', '/api/transaction-batches/*/candidates/*/transfer-counterparts*').as('searchedCounterpart');
+    cy.get('[data-cy="transactionBatchCounterpartSearch"]').type(counterpartDescription);
+    cy.wait('@searchedCounterpart').then(({ request, response }) => {
+      expect(request.url).to.include(`search=${encodeURIComponent(counterpartDescription)}`);
+      expect(response?.statusCode).to.equal(200);
+    });
+    cy.get('[data-cy="transactionBatchCounterpartResults"]').contains('button', counterpartDescription).should('be.visible');
+    cy.get('[data-cy="transactionBatchCounterpartResults"]').contains('button', counterpartDescription).click();
+    cy.get('[data-cy="transactionBatchSelectedCounterpart"]')
+      .should('contain', counterpartDescription)
+      .and('not.contain', String(counterpartTransactionId));
+    cy.screenshot('transaction-batch/internal-transfer-selected-counterpart');
+    cy.viewport(390, 844);
+    cy.get('[data-cy="transactionBatchSelectedCounterpart"]').should('contain', counterpartDescription);
+    cy.screenshot('transaction-batch/internal-transfer-selected-counterpart-mobile');
+    cy.viewport(1280, 720);
+    cy.get('.modal').contains('button', 'Cancelar').click();
+
+    cy.reload();
+    cy.contains('[data-cy^="transactionBatchRow-"]', description)
+      .should('contain', 'Transferencia interna')
+      .and('contain', counterpartDescription);
+
+    cy.intercept('POST', '/api/transaction-batches/*/publish').as('publishTransferBatch');
+    cy.get('[data-cy="transactionBatchPublish"]').click();
+    cy.contains('.modal button', 'Crear transacciones').click();
+    cy.wait('@publishTransferBatch').its('response.statusCode').should('eq', 200);
+    cy.contains('h2', 'Transacciones creadas').should('be.visible');
+    cy.then(() => {
+      expect(counterpartTransactionId, 'published counterpart id').to.be.a('number');
+      return cy.authenticatedRequest<{
+        transferId: number;
+        version: number;
+        source: { transactionId: number };
+        destination: { transactionId: number };
+      }>({
+        method: 'GET',
+        url: `/api/internal-transfers/transactions/${counterpartTransactionId}/product`,
+      });
+    }).then(({ body: transfer }) => {
+      expect(transfer.transferId).to.be.greaterThan(0);
+      expect([transfer.source.transactionId, transfer.destination.transactionId]).to.include(counterpartTransactionId);
+      expect(
+        transfer.source.transactionId === counterpartTransactionId ? transfer.destination.transactionId : transfer.source.transactionId,
+      ).to.be.greaterThan(0);
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: `/api/internal-transfers/${transfer.transferId}/unlink`,
+        body: { expectedVersion: transfer.version },
+      });
+      [transfer.source.transactionId, transfer.destination.transactionId].forEach(transactionId => {
+        cy.authenticatedRequest({ method: 'DELETE', url: `/api/financial-transactions/${transactionId}` });
+      });
+    });
+  });
+
+  it('keeps a new counterpart as batch-only draft configuration and creates it atomically on publish', () => {
+    const sourceDescription = uniqueName('batch-create-counterpart-source');
+    const counterpartDescription = uniqueName('batch-create-counterpart-destination');
+    let counterpartAccountId: number;
+    let counterpartTransactionId: number;
+
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/financial-accounts',
+      body: {
+        name: uniqueName('batch-create-counterpart-account'),
+        institutionName: 'E2E Bank',
+        accountType: 'DEBIT',
+        currency: 'MXN',
+        initialBalance: 1000,
+        initialBalanceDate: '2026-10-16',
+        lastFourDigits: '2468',
+        active: true,
+      },
+    }).then(({ body }) => {
+      counterpartAccountId = body.id;
+    });
+
+    createOpenBatch();
+    addCompleteManualRow(sourceDescription, '125.50');
+    cy.contains('[data-cy^="transactionBatchRow-"]', sourceDescription).within(() => {
+      cy.contains('button', 'Editar').click();
+    });
+    cy.get('[data-cy="transactionBatchInternalTransferToggle"]').check({ force: true });
+    cy.then(() => {
+      expect(counterpartAccountId, 'temporary counterpart account id').to.be.a('number');
+      cy.get('[data-cy="transactionBatchCreateCounterpartAccount"]').select(String(counterpartAccountId));
+    });
+    cy.get('[data-cy="transactionBatchCreateCounterpartPostingDate"]').clear();
+    cy.get('[data-cy="transactionBatchCreateCounterpartPostingDate"]').type('2026-10-18');
+    cy.get('[data-cy="transactionBatchCreateCounterpartDescription"]').clear();
+    cy.get('[data-cy="transactionBatchCreateCounterpartDescription"]').type(counterpartDescription);
+    cy.get('[data-cy="transactionBatchCreateCounterpartReference"]').type('counterpart-reference');
+    cy.get('[data-cy="transactionBatchCreateCounterpartNotes"]').type('counterpart notes');
+    cy.intercept('PUT', '/api/transaction-batches/*/candidates/*/internal-transfer').as('saveCreateCounterpart');
+    cy.get('[data-cy="transactionBatchSaveCreateCounterpart"]').click();
+    cy.wait('@saveCreateCounterpart').then(({ request, response }) => {
+      expect(request.body).to.include({ mode: 'CREATE_COUNTERPART', counterpartAccountId });
+      expect(response?.statusCode).to.equal(200);
+    });
+    cy.get('[data-cy="transactionBatchCreateCounterpartSaved"]').should('contain', 'Contraparte nueva configurada');
+    cy.authenticatedRequest<Array<{ description: string }>>({
+      method: 'GET',
+      url: '/api/financial-transactions',
+      qs: { 'accountId.equals': counterpartAccountId, 'description.equals': counterpartDescription },
+    }).then(({ body }) => {
+      expect(body).to.have.length(0);
+    });
+    cy.get('.modal').contains('button', 'Cancelar').click();
+
+    cy.reload();
+    cy.contains('[data-cy^="transactionBatchRow-"]', sourceDescription).should('contain', 'Contraparte nueva');
+    cy.intercept('POST', '/api/transaction-batches/*/publish').as('publishCreateCounterpartBatch');
+    cy.get('[data-cy="transactionBatchPublish"]').click();
+    cy.get('.modal')
+      .should('contain', '1 contraparte nueva')
+      .and('contain', '2 transacciones nuevas')
+      .and('contain', '1 transferencia interna');
+    cy.contains('.modal button', 'Crear transacciones').click();
+    cy.wait('@publishCreateCounterpartBatch').its('response.statusCode').should('eq', 200);
+    cy.contains('h2', 'Transacciones creadas').should('be.visible');
+    cy.get('body')
+      .should('contain', 'Se publicaron')
+      .and('contain', '1 borradores')
+      .and('contain', '1 contraparte')
+      .and('contain', '2 transacciones definitivas nuevas.');
+    cy.get('body').should('contain', 'Se creó 1 transferencia interna.');
+
+    cy.authenticatedRequest<
+      Array<{ id: number; description: string; amount: number; flow: string; externalReference?: string; notes?: string }>
+    >({
+      method: 'GET',
+      url: '/api/financial-transactions',
+      qs: { 'accountId.equals': counterpartAccountId, 'description.equals': counterpartDescription },
+    })
+      .then(({ body }) => {
+        expect(body).to.have.length(1);
+        counterpartTransactionId = body[0].id;
+        expect(body[0]).to.include({
+          description: counterpartDescription,
+          amount: 125.5,
+          flow: 'IN',
+          externalReference: 'counterpart-reference',
+          notes: 'counterpart notes',
+        });
+        return cy.authenticatedRequest<{
+          transferId: number;
+          version: number;
+          source: { transactionId: number };
+          destination: { transactionId: number };
+        }>({
+          method: 'GET',
+          url: `/api/internal-transfers/transactions/${counterpartTransactionId}/product`,
+        });
+      })
+      .then(({ body: transfer }) => {
+        expect(transfer.transferId).to.be.greaterThan(0);
+        expect(transfer.destination.transactionId).to.equal(counterpartTransactionId);
+      });
+  });
+
+  it('publishes a CSV create-counterpart configuration only at confirmation time', () => {
+    const sourceDescription = uniqueName('batch-csv-create-source');
+    const counterpartDescription = uniqueName('batch-csv-create-destination');
+    let counterpartAccountId: number;
+
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/financial-accounts',
+      body: {
+        name: uniqueName('batch-csv-create-counterpart-account'),
+        institutionName: 'E2E Bank',
+        accountType: 'DEBIT',
+        currency: 'MXN',
+        initialBalance: 1000,
+        initialBalanceDate: '2026-10-16',
+        lastFourDigits: '9753',
+        active: true,
+      },
+    }).then(({ body }) => {
+      counterpartAccountId = body.id;
+    });
+
+    createOpenBatch();
+    const csv = [csvHeader, `2026-10-16,2026-10-17,${sourceDescription},-125.50,MXN,csv-source-ref,csv source notes`].join('\n');
+    cy.get('[data-cy="transactionBatchCsvFile"]').selectFile(
+      {
+        contents: Cypress.Buffer.from(csv),
+        fileName: 'batch-create-counterpart.csv',
+        mimeType: 'text/csv',
+        lastModified: Date.now(),
+      },
+      { force: true },
+    );
+    cy.get('[data-cy="transactionBatchAppendCsv"]').click();
+    cy.contains('[data-cy^="transactionBatchRow-"]', sourceDescription).should('contain', 'CSV');
+    cy.contains('[data-cy^="transactionBatchRow-"]', sourceDescription).within(() => {
+      cy.contains('button', 'Editar').click();
+    });
+    cy.get('[data-cy="transactionBatchInternalTransferToggle"]').check({ force: true });
+    cy.then(() => {
+      expect(counterpartAccountId, 'CSV temporary counterpart account id').to.be.a('number');
+      cy.get('[data-cy="transactionBatchCreateCounterpartAccount"]').select(String(counterpartAccountId));
+    });
+    cy.get('[data-cy="transactionBatchCreateCounterpartPostingDate"]').clear();
+    cy.get('[data-cy="transactionBatchCreateCounterpartPostingDate"]').type('2026-10-18');
+    cy.get('[data-cy="transactionBatchCreateCounterpartDescription"]').clear();
+    cy.get('[data-cy="transactionBatchCreateCounterpartDescription"]').type(counterpartDescription);
+    cy.get('[data-cy="transactionBatchCreateCounterpartReference"]').clear();
+    cy.get('[data-cy="transactionBatchCreateCounterpartReference"]').type('csv-counterpart-ref');
+    cy.get('[data-cy="transactionBatchCreateCounterpartNotes"]').clear();
+    cy.get('[data-cy="transactionBatchCreateCounterpartNotes"]').type('csv counterpart notes');
+    cy.get('[data-cy="transactionBatchSaveCreateCounterpart"]').click();
+    cy.get('[data-cy="transactionBatchCreateCounterpartSaved"]').should('contain', 'Contraparte nueva configurada');
+    cy.authenticatedRequest<Array<{ description: string }>>({
+      method: 'GET',
+      url: '/api/financial-transactions',
+      qs: { 'accountId.equals': counterpartAccountId, 'description.equals': counterpartDescription },
+    }).then(({ body }) => {
+      expect(body).to.have.length(0);
+    });
+    cy.get('.modal').contains('button', 'Cancelar').click();
+
+    cy.reload();
+    cy.contains('[data-cy^="transactionBatchRow-"]', sourceDescription).should('contain', 'Contraparte nueva');
+    cy.intercept('POST', '/api/transaction-batches/*/publish').as('publishCsvCreateCounterpartBatch');
+    cy.get('[data-cy="transactionBatchPublish"]').click();
+    cy.get('.modal')
+      .should('contain', '1 contraparte nueva')
+      .and('contain', '2 transacciones nuevas')
+      .and('contain', '1 transferencia interna');
+    cy.contains('.modal button', 'Crear transacciones').click();
+    cy.wait('@publishCsvCreateCounterpartBatch').its('response.statusCode').should('eq', 200);
+    cy.contains('h2', 'Transacciones creadas').should('be.visible');
+    cy.get('body')
+      .should('contain', 'Se publicaron')
+      .and('contain', '1 borradores')
+      .and('contain', '1 contraparte')
+      .and('contain', '2 transacciones definitivas nuevas.');
+    cy.authenticatedRequest<
+      Array<{ description: string; amount: number; flow: string; postingDate: string; externalReference?: string; notes?: string }>
+    >({
+      method: 'GET',
+      url: '/api/financial-transactions',
+      qs: { 'accountId.equals': counterpartAccountId, 'description.equals': counterpartDescription },
+    }).then(({ body }) => {
+      expect(body).to.have.length(1);
+      expect(body[0]).to.include({
+        description: counterpartDescription,
+        amount: 125.5,
+        flow: 'IN',
+        postingDate: '2026-10-18',
+        externalReference: 'csv-counterpart-ref',
+        notes: 'csv counterpart notes',
+      });
+    });
+  });
+
   it('appends CSV rows to saved manual work, repairs them, filters locally, and deletes a row', () => {
     const manualDescription = `Manual batch ${Date.now()}`;
     const csvDescription = `CSV batch ${Date.now()}`;
@@ -537,7 +888,17 @@ describe('Transaction Batch product workflow', () => {
       cy.get('#batch-setting-autoApplyDescriptions').check();
       cy.get('#batch-setting-autoApplyCategories').check();
       cy.get('#batch-setting-autoApplyTags').check();
+      cy.intercept('PUT', '/api/transaction-batches/*/settings').as('saveAutoApplySettings');
       cy.contains('.modal button', 'Guardar y reevaluar').click();
+      cy.wait('@saveAutoApplySettings').then(({ request, response }) => {
+        expect(request.body).to.include({
+          autoApplyDescriptions: true,
+          autoApplyCategories: true,
+          autoApplyTags: true,
+          protectManualChanges: true,
+        });
+        expect(response?.statusCode, JSON.stringify(response?.body)).to.eq(200);
+      });
       cy.get('.modal').should('not.exist');
 
       const csv = [csvHeader, `2026-10-17,,${token},-75.00,MXN,batch-auto-apply,CSV row`].join('\n');
@@ -590,6 +951,68 @@ describe('Transaction Batch product workflow', () => {
           .and('contain', classificationRule.name);
       });
 
+      // Persist an explicit manual category/tag fixture. Auto-application is intentionally
+      // preview state after reload, whereas the following clear must prove durable manual
+      // suppression through the actual row controls.
+      let candidateId: number;
+      let candidateVersion: number;
+      cy.then(() => {
+        expect(batchId).to.be.a('number');
+        return cy.authenticatedRequest<{ candidates: Array<{ id: number; version: number; description: string }> }>({
+          method: 'GET',
+          url: `/api/transaction-batches/${batchId}`,
+        });
+      })
+        .then(({ body }) => {
+          const candidate = body.candidates.find(current => current.description === normalizedDescription);
+          if (!candidate) throw new Error('Normalized CSV candidate was not returned by the batch read model');
+          candidateId = candidate.id;
+          candidateVersion = candidate.version;
+          return cy.authenticatedRequest<{ candidate: { version: number } }>({
+            method: 'PUT',
+            url: `/api/transaction-batches/${batchId}/candidates/${candidateId}/category`,
+            body: { expectedCandidateVersion: candidateVersion, categoryId },
+          });
+        })
+        .then(({ body }) => {
+          candidateVersion = body.candidate.version;
+          return cy.authenticatedRequest<{ candidate: { version: number } }>({
+            method: 'PUT',
+            url: `/api/transaction-batches/${batchId}/candidates/${candidateId}/tags`,
+            body: { expectedCandidateVersion: candidateVersion, tagIds: [tagId] },
+          });
+        })
+        .then(({ body }) => {
+          expect(body.candidate.version).to.be.greaterThan(candidateVersion);
+        });
+      cy.reload();
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', String(categoryId));
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('contain', tagName);
+      cy.intercept('PUT', '/api/transaction-batches/*/candidates/*/category').as('persistCategoryClear');
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).select('Sin categoría');
+      cy.wait('@persistCategoryClear').then(({ request, response }) => {
+        expect(request.url).to.include('/category');
+        expect(response?.statusCode).to.eq(200);
+      });
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('not.be.disabled');
+      cy.intercept('PUT', '/api/transaction-batches/*/candidates/*/tags').as('persistTagClear');
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Remove"]').click();
+      cy.wait('@persistTagClear').then(({ request, response }) => {
+        expect(request.url).to.include('/tags');
+        expect(response?.statusCode).to.eq(200);
+      });
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('not.be.disabled');
+      cy.get('[data-cy="transactionBatchReevaluate"]').click();
+      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
+      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
+      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription)
+        .find('[data-testid="transactionBatchAppliedRuleAttribution"]')
+        .should('have.length', 1)
+        .and('contain', descriptionRule.name);
+      cy.screenshot('transaction-batch/07-rule-protection');
+
       cy.authenticatedRequest({ method: 'DELETE', url: `/api/description-normalization-rules/${descriptionRule.id}` })
         .its('status')
         .should('eq', 204);
@@ -599,21 +1022,10 @@ describe('Transaction Batch product workflow', () => {
       cy.reload();
       cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription).within(() => {
         cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', descriptionRule.name).find('a').should('not.exist');
-        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', classificationRule.name).find('a').should('not.exist');
+        // The explicit manual clear has already suppressed classification attribution; deleting
+        // its rule cannot make an attribution reappear.
+        cy.contains('[data-testid="transactionBatchAppliedRuleAttribution"]', classificationRule.name).should('not.exist');
       });
-
-      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).select('');
-      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
-      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Remove"]').click();
-      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
-      cy.get('[data-cy="transactionBatchReevaluate"]').click();
-      cy.get(`[aria-label="Categoría para ${normalizedDescription}"]`).should('have.value', '');
-      cy.get('[data-cy^="transactionBatchTags-"][data-cy$="Chip"]').should('not.exist');
-      cy.contains('[data-cy^="transactionBatchRow-"]', normalizedDescription)
-        .find('[data-testid="transactionBatchAppliedRuleAttribution"]')
-        .should('have.length', 1)
-        .and('contain', descriptionRule.name);
-      cy.screenshot('transaction-batch/07-rule-protection');
     });
   });
 
@@ -847,7 +1259,9 @@ describe('Transaction Batch product workflow', () => {
     ).then(({ body }) => {
       expect(body.candidates.filter(candidate => candidate.description === provisionalDescription)).to.have.length(1);
     });
+    cy.intercept('DELETE', '/api/transaction-batches/*/candidates/*').as('removeProvisionalForCancel');
     cy.get('.modal').contains('button', 'Cancelar').click();
+    cy.wait('@removeProvisionalForCancel').its('response.statusCode').should('eq', 204);
     cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');
     cy.reload();
     cy.get('[data-cy^="transactionBatchRow-"]').should('not.exist');

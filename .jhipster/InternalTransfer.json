@@ -7,6 +7,11 @@
   "dto": "mapstruct",
   "fields": [
     {
+      "fieldName": "version",
+      "fieldType": "Long",
+      "fieldValidateRules": ["required"]
+    },
+    {
       "fieldName": "notes",
       "fieldType": "String",
       "fieldValidateRules": ["maxlength"],
@@ -16,6 +21,10 @@
       "fieldName": "createdAt",
       "fieldType": "Instant",
       "fieldValidateRules": ["required"]
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Instant"
     }
   ],
   "incrementalChangelog": false,

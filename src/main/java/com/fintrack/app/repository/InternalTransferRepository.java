@@ -1,8 +1,12 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.InternalTransfer;
+import jakarta.persistence.LockModeType;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -20,6 +24,16 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
         "select count(internalTransfer) > 0 from InternalTransfer internalTransfer where internalTransfer.outgoingTransaction.id = :transactionId or internalTransfer.incomingTransaction.id = :transactionId"
     )
     boolean existsByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
+
+    @Query(
+        "select internalTransfer from InternalTransfer internalTransfer " +
+        "left join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "left join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "left join fetch incomingTransaction.account incomingAccount " +
+        "where outgoingTransaction.id = :transactionId or incomingTransaction.id = :transactionId"
+    )
+    Optional<InternalTransfer> findOneByTransactionIdInEitherRole(@Param("transactionId") Long transactionId);
 
     @Query(
         "select internalTransfer from InternalTransfer internalTransfer " +
@@ -93,8 +107,141 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
     )
     Optional<InternalTransfer> findOneWithToOneRelationshipsByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select internalTransfer from InternalTransfer internalTransfer " +
+        "left join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "left join fetch outgoingTransaction.account outgoingAccount left join fetch outgoingAccount.user " +
+        "left join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "left join fetch incomingTransaction.account incomingAccount left join fetch incomingAccount.user " +
+        "where internalTransfer.id = :id and outgoingAccount.user.login = :login and incomingAccount.user.login = :login"
+    )
+    Optional<InternalTransfer> findOneForInternalTransferMutationByIdAndAccountUserLogin(
+        @Param("id") Long id,
+        @Param("login") String login
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select internalTransfer from InternalTransfer internalTransfer " +
+        "left join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "left join fetch outgoingTransaction.account outgoingAccount left join fetch outgoingAccount.user " +
+        "left join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "left join fetch incomingTransaction.account incomingAccount left join fetch incomingAccount.user " +
+        "where internalTransfer.id = :id"
+    )
+    Optional<InternalTransfer> findOneForInternalTransferMutation(@Param("id") Long id);
+
     @Query(
         "select internalTransfer from InternalTransfer internalTransfer left join fetch internalTransfer.outgoingTransaction outgoingTransaction left join fetch outgoingTransaction.account outgoingAccount left join fetch outgoingAccount.user left join fetch internalTransfer.incomingTransaction incomingTransaction left join fetch incomingTransaction.account incomingAccount left join fetch incomingAccount.user where outgoingAccount.user.login = :login and incomingAccount.user.login = :login"
     )
     List<InternalTransfer> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
+
+    @Query(
+        value = "select internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "where (:accountId is null or outgoingAccount.id = :accountId or incomingAccount.id = :accountId) " +
+        "and (:fromDate is null or outgoingTransaction.transactionDate >= :fromDate) " +
+        "and (:toDate is null or outgoingTransaction.transactionDate <= :toDate)",
+        countQuery = "select count(internalTransfer) from InternalTransfer internalTransfer " +
+        "join internalTransfer.outgoingTransaction outgoingTransaction join outgoingTransaction.account outgoingAccount " +
+        "join internalTransfer.incomingTransaction incomingTransaction join incomingTransaction.account incomingAccount " +
+        "where (:accountId is null or outgoingAccount.id = :accountId or incomingAccount.id = :accountId) " +
+        "and (:fromDate is null or outgoingTransaction.transactionDate >= :fromDate) " +
+        "and (:toDate is null or outgoingTransaction.transactionDate <= :toDate)"
+    )
+    Page<InternalTransfer> findProductPage(
+        @Param("accountId") Long accountId,
+        @Param("fromDate") LocalDate fromDate,
+        @Param("toDate") LocalDate toDate,
+        Pageable pageable
+    );
+
+    @Query(
+        value = "select internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "where outgoingAccount.user.login = :login and incomingAccount.user.login = :login " +
+        "and (:accountId is null or outgoingAccount.id = :accountId or incomingAccount.id = :accountId) " +
+        "and (:fromDate is null or outgoingTransaction.transactionDate >= :fromDate) " +
+        "and (:toDate is null or outgoingTransaction.transactionDate <= :toDate)",
+        countQuery = "select count(internalTransfer) from InternalTransfer internalTransfer " +
+        "join internalTransfer.outgoingTransaction outgoingTransaction join outgoingTransaction.account outgoingAccount " +
+        "join internalTransfer.incomingTransaction incomingTransaction join incomingTransaction.account incomingAccount " +
+        "where outgoingAccount.user.login = :login and incomingAccount.user.login = :login " +
+        "and (:accountId is null or outgoingAccount.id = :accountId or incomingAccount.id = :accountId) " +
+        "and (:fromDate is null or outgoingTransaction.transactionDate >= :fromDate) " +
+        "and (:toDate is null or outgoingTransaction.transactionDate <= :toDate)"
+    )
+    Page<InternalTransfer> findProductPageByAccountUserLogin(
+        @Param("login") String login,
+        @Param("accountId") Long accountId,
+        @Param("fromDate") LocalDate fromDate,
+        @Param("toDate") LocalDate toDate,
+        Pageable pageable
+    );
+
+    @Query(
+        "select distinct internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch outgoingTransaction.category " +
+        "left join fetch outgoingTransaction.tags " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "left join fetch incomingTransaction.category " +
+        "left join fetch incomingTransaction.tags where internalTransfer.id = :id"
+    )
+    Optional<InternalTransfer> findProductDetailById(@Param("id") Long id);
+
+    @Query(
+        "select distinct internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch outgoingTransaction.category " +
+        "left join fetch outgoingTransaction.tags " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "left join fetch incomingTransaction.category " +
+        "left join fetch incomingTransaction.tags where internalTransfer.id = :id " +
+        "and outgoingAccount.user.login = :login and incomingAccount.user.login = :login"
+    )
+    Optional<InternalTransfer> findProductDetailByIdAndAccountUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    @Query(
+        "select distinct internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch outgoingTransaction.category " +
+        "left join fetch outgoingTransaction.tags " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "left join fetch incomingTransaction.category " +
+        "left join fetch incomingTransaction.tags " +
+        "where outgoingTransaction.id = :transactionId or incomingTransaction.id = :transactionId"
+    )
+    Optional<InternalTransfer> findProductDetailByTransactionId(@Param("transactionId") Long transactionId);
+
+    @Query(
+        "select distinct internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "left join fetch outgoingTransaction.category " +
+        "left join fetch outgoingTransaction.tags " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "left join fetch incomingTransaction.category " +
+        "left join fetch incomingTransaction.tags " +
+        "where (outgoingTransaction.id = :transactionId or incomingTransaction.id = :transactionId) " +
+        "and outgoingAccount.user.login = :login and incomingAccount.user.login = :login"
+    )
+    Optional<InternalTransfer> findProductDetailByTransactionIdAndAccountUserLogin(
+        @Param("transactionId") Long transactionId,
+        @Param("login") String login
+    );
 }

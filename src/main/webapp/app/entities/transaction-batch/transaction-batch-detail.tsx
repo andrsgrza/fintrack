@@ -26,6 +26,7 @@ import { ICategorySelectable } from 'app/shared/model/category-selectable.model'
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import {
   BatchCandidate,
+  BatchCreateCounterpartInput,
   BatchRowMutation,
   BatchReceipt,
   BatchRulePreview,
@@ -45,6 +46,9 @@ import {
   reevaluateRow,
   replaceRowTags,
   saveSettings,
+  clearRowInternalTransfer,
+  searchRowTransferCounterparts,
+  setRowInternalTransfer,
   setRowCategory,
 } from './transaction-batch-api';
 import TransactionBatchRuleCreationModal, {
@@ -100,6 +104,18 @@ const editorErrorFor = (failure: unknown): { message: string; field?: 'category'
   if (detail.toLocaleLowerCase().includes('signed amount')) {
     return { field: 'amount', message: 'El monto debe ser positivo y tener como máximo dos decimales.' };
   }
+  if (detail.includes('TRANSFER_LEG_ALREADY_LINKED')) {
+    return { message: 'La contraparte ya pertenece a otra transferencia. Elige otra transacción.' };
+  }
+  if (detail.includes('TRANSFER_COUNTERPART_STALE')) {
+    return { message: 'La contraparte seleccionada ya no está disponible. Selecciona otra antes de publicar.' };
+  }
+  if (detail.includes('TRANSFER_AMOUNT_MISMATCH') || detail.includes('TRANSFER_DATE_MISMATCH')) {
+    return { message: 'La contraparte debe tener el mismo importe y fecha.' };
+  }
+  if (detail.includes('TRANSFER_CURRENCY_MISMATCH') || detail.includes('TRANSFER_SAME_ACCOUNT')) {
+    return { message: 'La contraparte debe pertenecer a otra cuenta con la misma moneda.' };
+  }
   if (detail.toLocaleLowerCase().includes('stale')) {
     return { message: 'Esta fila cambió en otra sesión. Conservamos tu edición local para que la revises antes de reintentar.' };
   }
@@ -136,6 +152,38 @@ const classificationChanged = (candidate: BatchCandidate, values: BatchEditorVal
   tagsChanged:
     values.tags.length !== candidate.tags.length || values.tags.some(tag => !candidate.tags.some(current => current.id === tag.id)),
 });
+
+const settingsForWorkspace = (workspace: TransactionBatchWorkspace): BatchRuleSettings => ({
+  autoApplyDescriptions: workspace.autoApplyDescriptions,
+  autoApplyCategories: workspace.autoApplyCategories,
+  autoApplyTags: workspace.autoApplyTags,
+  protectManualChanges: workspace.protectManualChanges,
+});
+
+/**
+ * Applying a rule suggestion already persists the affected domain. Avoid an
+ * identical PATCH immediately beforehand: it would only advance the candidate
+ * version and can make a second, independent suggestion look stale.
+ */
+const editorValuesMatchCandidate = (candidate: BatchCandidate, values: BatchEditorValues) => {
+  const payload = editorPayload(values);
+  const normalize = <T,>(value: T | null | undefined) => value ?? undefined;
+  const candidateTagIds = candidate.tags.flatMap(tag => (tag.id ? [tag.id] : [])).sort((left, right) => left - right);
+  const selectedTagIds = values.tags.flatMap(tag => (tag.id ? [tag.id] : [])).sort((left, right) => left - right);
+
+  return (
+    normalize(candidate.transactionDate) === payload.transactionDate &&
+    normalize(candidate.postingDate) === payload.postingDate &&
+    normalize(candidate.description) === payload.description &&
+    (candidate.flow ?? 'OUT') === values.flow &&
+    normalize(candidate.signedAmount) === payload.signedAmount &&
+    normalize(candidate.externalReference) === payload.externalReference &&
+    normalize(candidate.notes) === payload.notes &&
+    normalize(candidate.categoryId) === normalize(values.categoryId) &&
+    candidateTagIds.length === selectedTagIds.length &&
+    candidateTagIds.every((tagId, index) => tagId === selectedTagIds[index])
+  );
+};
 
 const DomainSuggestion = ({
   title,
@@ -259,6 +307,7 @@ const TransactionBatchDetail = () => {
   const [ruleCreationContext, setRuleCreationContext] = useState<ITransactionBatchRuleCreationContext | null>(null);
   const [ruleCreationFeedback, setRuleCreationFeedback] = useState<{ color: 'success'; message: string } | null>(null);
   const filePickerRef = useRef<HTMLInputElement>(null);
+  const reloadRequestRef = useRef(0);
 
   const replaceWorkspace = useCallback((workspace?: TransactionBatchWorkspace) => {
     batchRef.current = workspace;
@@ -292,9 +341,12 @@ const TransactionBatchDetail = () => {
 
   const reload = useCallback(async () => {
     if (!id) return;
+    const requestId = ++reloadRequestRef.current;
+    const isCurrentRequest = () => requestId === reloadRequestRef.current;
     setLoading(true);
     try {
       const workspace = await getBatch(id);
+      if (!isCurrentRequest()) return batchRef.current;
       replaceWorkspace(workspace);
       const categoryIds = workspace.candidates.flatMap(row => (row.categoryId ? [row.categoryId] : []));
       const tagIds = workspace.candidates.flatMap(row => row.tags.flatMap(tag => (tag.id ? [tag.id] : [])));
@@ -303,21 +355,20 @@ const TransactionBatchDetail = () => {
         getSelectableTags(tagIds),
         previewRules(workspace.id),
       ]);
+      if (!isCurrentRequest()) return batchRef.current;
       setCategories(nextCategories);
       setTags(nextTags);
       setPreviews(nextPreviews);
-      setSettings({
-        autoApplyDescriptions: workspace.autoApplyDescriptions,
-        autoApplyCategories: workspace.autoApplyCategories,
-        autoApplyTags: workspace.autoApplyTags,
-        protectManualChanges: workspace.protectManualChanges,
-      });
+      setSettings(settingsForWorkspace(workspace));
       setError('');
       return workspace;
     } catch {
+      if (!isCurrentRequest()) return batchRef.current;
       try {
         if (id) {
-          setReceipt(await getReceipt(Number(id)));
+          const nextReceipt = await getReceipt(Number(id));
+          if (!isCurrentRequest()) return batchRef.current;
+          setReceipt(nextReceipt);
           return;
         }
       } catch {
@@ -325,7 +376,7 @@ const TransactionBatchDetail = () => {
       }
       setError('No se pudo cargar este lote abierto. Puede haber sido publicado, descartado o no estar disponible.');
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   }, [id, replaceWorkspace]);
   useEffect(() => {
@@ -336,6 +387,11 @@ const TransactionBatchDetail = () => {
   const provisionalCandidateId = editor?.createMode ? editor.candidate?.id : undefined;
   const queuedCandidates = batch?.candidates.filter(row => row.id !== provisionalCandidateId) ?? [];
   const invalidCount = queuedCandidates.filter(row => row.validationStatus !== 'VALID').length;
+  const staleTransferCount = queuedCandidates.filter(row => row.internalTransfer?.enabled && row.internalTransfer.stale).length;
+  const createCounterpartCount = queuedCandidates.filter(
+    candidate => candidate.internalTransfer?.enabled && candidate.internalTransfer.mode === 'CREATE_COUNTERPART',
+  ).length;
+  const configuredTransferCount = queuedCandidates.filter(candidate => candidate.internalTransfer?.enabled).length;
   const visibleRows = useMemo(() => {
     if (!batch) return [];
     const rows = batch.candidates.filter(row => {
@@ -392,12 +448,13 @@ const TransactionBatchDetail = () => {
     setEditorFieldError(null);
   };
   const upload = async () => {
-    if (!batch || !file) return;
+    const workspace = batchRef.current;
+    if (!workspace || !file) return;
     const key = appendKey ?? operationKey();
     setAppendKey(key);
     setAppendUploading(true);
     try {
-      const result = await appendCsv(batch.id, batch.version, key, file);
+      const result = await appendCsv(workspace.id, workspace.version, key, file);
       setAppendFeedback(
         `${file.name}: se añadieron ${result.acceptedCandidateCount ?? result.appendedCandidateIds?.length ?? 0} fila${
           (result.acceptedCandidateCount ?? result.appendedCandidateIds?.length ?? 0) === 1 ? '' : 's'
@@ -422,6 +479,8 @@ const TransactionBatchDetail = () => {
     setEditorError('');
     setEditorFieldError(null);
     try {
+      if (session.candidate && editorValuesMatchCandidate(session.candidate, values)) return session.candidate;
+
       const mutation = session.candidate
         ? await patchRow(workspace.id, session.candidate.id, {
             ...editorPayload(values),
@@ -500,6 +559,79 @@ const TransactionBatchDetail = () => {
       });
     } catch {
       setError('No se pudieron actualizar las etiquetas; la versión de la fila puede haber cambiado.');
+    }
+  };
+  const searchEditorTransferCounterparts = async (options: { search?: string; accountId?: number; page?: number }) => {
+    const workspace = batchRef.current;
+    const candidateId = editor?.candidate?.id;
+    if (!workspace || !candidateId) return { content: [], totalElements: 0, totalPages: 0 };
+    return searchRowTransferCounterparts(workspace.id, candidateId, options);
+  };
+  const selectEditorTransferCounterpart = async (counterpart: { transactionId: number }) => {
+    const workspace = batchRef.current;
+    const candidateId = editor?.candidate?.id;
+    if (!workspace || !candidateId) return undefined;
+    try {
+      return await queueRowMutation(candidateId, async () => {
+        const current = batchRef.current?.candidates.find(candidate => candidate.id === candidateId);
+        if (!current) return undefined;
+        const mutation = await setRowInternalTransfer(workspace.id, candidateId, current.version, {
+          mode: 'LINK_EXISTING',
+          counterpartTransactionId: counterpart.transactionId,
+        });
+        applyRowMutation(mutation);
+        setEditor(session => (session?.candidate?.id === candidateId ? { ...session, candidate: mutation.candidate } : session));
+        return mutation.candidate;
+      });
+    } catch (failure) {
+      const mapped = editorErrorFor(failure);
+      setEditorError(mapped.message);
+      return undefined;
+    }
+  };
+  const configureEditorCreateTransferCounterpart = async (configuration: BatchCreateCounterpartInput) => {
+    const workspace = batchRef.current;
+    const candidateId = editor?.candidate?.id;
+    if (!workspace || !candidateId) return undefined;
+    try {
+      return await queueRowMutation(candidateId, async () => {
+        const current = batchRef.current?.candidates.find(candidate => candidate.id === candidateId);
+        if (!current) return undefined;
+        const mutation = await setRowInternalTransfer(workspace.id, candidateId, current.version, {
+          mode: 'CREATE_COUNTERPART',
+          counterpartAccountId: configuration.accountId,
+          counterpartPostingDate: configuration.postingDate ?? undefined,
+          counterpartDescription: configuration.description,
+          counterpartExternalReference: configuration.externalReference ?? undefined,
+          counterpartNotes: configuration.notes ?? undefined,
+        });
+        applyRowMutation(mutation);
+        setEditor(session => (session?.candidate?.id === candidateId ? { ...session, candidate: mutation.candidate } : session));
+        return mutation.candidate;
+      });
+    } catch (failure) {
+      const mapped = editorErrorFor(failure);
+      setEditorError(mapped.message);
+      return undefined;
+    }
+  };
+  const clearEditorTransfer = async () => {
+    const workspace = batchRef.current;
+    const candidateId = editor?.candidate?.id;
+    if (!workspace || !candidateId) return undefined;
+    try {
+      return await queueRowMutation(candidateId, async () => {
+        const current = batchRef.current?.candidates.find(candidate => candidate.id === candidateId);
+        if (!current) return undefined;
+        const mutation = await clearRowInternalTransfer(workspace.id, candidateId, current.version);
+        applyRowMutation(mutation);
+        setEditor(session => (session?.candidate?.id === candidateId ? { ...session, candidate: mutation.candidate } : session));
+        return mutation.candidate;
+      });
+    } catch (failure) {
+      const mapped = editorErrorFor(failure);
+      setEditorError(mapped.message);
+      return undefined;
     }
   };
   const removeRow = async (row: BatchCandidate) => {
@@ -631,21 +763,35 @@ const TransactionBatchDetail = () => {
     }
   };
   const persistSettings = async () => {
-    if (!batch || !settings) return;
+    const workspace = batchRef.current;
+    if (!workspace) return;
+    const requestedSettings: BatchRuleSettings = {
+      // A checkbox state can be initialized while the surrounding workspace
+      // is still refreshing. Never let an absent key serialize as `undefined`:
+      // the settings command is deliberately atomic and requires all four
+      // booleans on every write.
+      autoApplyDescriptions: settings?.autoApplyDescriptions ?? workspace.autoApplyDescriptions,
+      autoApplyCategories: settings?.autoApplyCategories ?? workspace.autoApplyCategories,
+      autoApplyTags: settings?.autoApplyTags ?? workspace.autoApplyTags,
+      protectManualChanges: settings?.protectManualChanges ?? workspace.protectManualChanges,
+    };
     try {
-      await saveSettings(batch.id, { expectedBatchVersion: batch.version, ...settings });
+      const evaluation = await saveSettings(workspace.id, { expectedBatchVersion: workspace.version, ...requestedSettings });
+      // Settings can increment the root version before the supporting reads in reload complete. Keep the command's
+      // authoritative version immediately, so a following append cannot send the pre-settings revision.
+      replaceWorkspace({ ...workspace, ...requestedSettings, version: evaluation.batchVersion });
       setSettingsOpen(false);
       await reload();
     } catch {
       // Saving settings and evaluating are deliberately separate durable operations. A response can therefore fail
       // after the settings write committed; read the authoritative workspace before claiming that nothing was saved.
       try {
-        const persisted = await getBatch(batch.id);
+        const persisted = await getBatch(workspace.id);
         const settingsPersisted =
-          persisted.autoApplyDescriptions === settings.autoApplyDescriptions &&
-          persisted.autoApplyCategories === settings.autoApplyCategories &&
-          persisted.autoApplyTags === settings.autoApplyTags &&
-          persisted.protectManualChanges === settings.protectManualChanges;
+          persisted.autoApplyDescriptions === requestedSettings.autoApplyDescriptions &&
+          persisted.autoApplyCategories === requestedSettings.autoApplyCategories &&
+          persisted.autoApplyTags === requestedSettings.autoApplyTags &&
+          persisted.protectManualChanges === requestedSettings.protectManualChanges;
         if (settingsPersisted) {
           replaceWorkspace(persisted);
           setSettings({
@@ -664,6 +810,12 @@ const TransactionBatchDetail = () => {
       setError('No se pudieron guardar las preferencias de reglas.');
     }
   };
+  const openSettings = () => {
+    const workspace = batchRef.current;
+    if (!workspace) return;
+    setSettings(settingsForWorkspace(workspace));
+    setSettingsOpen(true);
+  };
 
   if (loading && !batch)
     return (
@@ -676,9 +828,29 @@ const TransactionBatchDetail = () => {
       <ProductPage>
         <ProductPageHeader title="Transacciones creadas" subtitle="El lote temporal ya se limpió; este receipt técnico caduca." />
         <ProductSection title="Resultado de publicación">
-          <p className="mb-2">
-            Se crearon <strong>{receipt.publishedTransactionCount}</strong> transacciones definitivas.
-          </p>
+          {receipt.createdCounterpartCount > 0 ? (
+            <>
+              <p className="mb-2">
+                Se publicaron <strong>{receipt.publishedTransactionCount}</strong> borradores y se{' '}
+                {receipt.createdCounterpartCount === 1 ? 'creó' : 'crearon'}{' '}
+                <strong>
+                  {receipt.createdCounterpartCount} {receipt.createdCounterpartCount === 1 ? 'contraparte' : 'contrapartes'}
+                </strong>
+                : <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas nuevas.
+              </p>
+              {receipt.createdInternalTransferCount > 0 ? (
+                <p className="mb-2">
+                  Se {receipt.createdInternalTransferCount === 1 ? 'creó' : 'crearon'}{' '}
+                  <strong>{receipt.createdInternalTransferCount}</strong> transferencia
+                  {receipt.createdInternalTransferCount === 1 ? '' : 's'} interna{receipt.createdInternalTransferCount === 1 ? '' : 's'}.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="mb-2">
+              Se crearon <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas.
+            </p>
+          )}
           <p className="small text-muted">Disponible hasta {new Date(receipt.receiptExpiresAt).toLocaleString()}.</p>
           <Button tag={Link} to="/financial-transaction" color="primary">
             Ver transacciones
@@ -753,7 +925,7 @@ const TransactionBatchDetail = () => {
                 <DropdownItem tag={Link} to="/rules" data-cy="transactionBatchRulesLanding">
                   {batchTranslation('toolbar.viewRules')}
                 </DropdownItem>
-                <DropdownItem onClick={() => setSettingsOpen(true)} data-cy="transactionBatchSettings">
+                <DropdownItem onClick={openSettings} data-cy="transactionBatchSettings">
                   {batchTranslation('toolbar.rulePreferences')}
                 </DropdownItem>
                 <DropdownItem divider />
@@ -929,6 +1101,24 @@ const TransactionBatchDetail = () => {
                       />
                     </div>
                     <RowMetadata row={row} />
+                    {row.internalTransfer?.enabled ? (
+                      <div className="small mt-2" data-cy={`transactionBatchTransferIndicator-${row.id}`}>
+                        <span className={row.internalTransfer.stale ? 'text-warning' : 'text-primary'}>↔ Transferencia interna</span>
+                        {row.internalTransfer.mode === 'CREATE_COUNTERPART' && row.internalTransfer.createCounterpart ? (
+                          <span className="text-muted">
+                            {' '}
+                            · Contraparte nueva: {row.internalTransfer.createCounterpart.accountName} ·{' '}
+                            {row.internalTransfer.createCounterpart.description}
+                          </span>
+                        ) : row.internalTransfer.counterpart ? (
+                          <span className="text-muted">
+                            {' '}
+                            · Contraparte: {row.internalTransfer.counterpart.accountName} · {row.internalTransfer.counterpart.description}
+                          </span>
+                        ) : null}
+                        {row.internalTransfer.stale ? <span className="text-warning"> · Requiere corregir la contraparte</span> : null}
+                      </div>
+                    ) : null}
                     <div className="transaction-batch-row-detail">
                       <DomainSuggestion
                         title="Descripción sugerida"
@@ -1051,7 +1241,7 @@ const TransactionBatchDetail = () => {
       <div className="d-flex justify-content-end mt-3">
         <Button
           color="primary"
-          disabled={!queuedCandidates.length || invalidCount > 0 || pendingRowIds.length > 0}
+          disabled={!queuedCandidates.length || invalidCount > 0 || staleTransferCount > 0 || pendingRowIds.length > 0}
           onClick={() => setPublishOpen(true)}
           data-cy="transactionBatchPublish"
         >
@@ -1059,6 +1249,9 @@ const TransactionBatchDetail = () => {
         </Button>
       </div>
       {invalidCount ? <p className="small text-danger text-end mt-2">Corrige las filas pendientes antes de publicar.</p> : null}
+      {staleTransferCount ? (
+        <p className="small text-warning text-end mt-2">Corrige las contrapartes de transferencia antes de publicar.</p>
+      ) : null}
 
       <TransactionBatchEditorModal
         open={!!editor}
@@ -1068,6 +1261,7 @@ const TransactionBatchDetail = () => {
         categories={categories}
         tags={tags}
         currency={batch.accountCurrency}
+        sourceAccountId={batch.accountId}
         saving={editorSaving}
         error={editorError}
         fieldError={editorFieldError}
@@ -1079,6 +1273,10 @@ const TransactionBatchDetail = () => {
           const candidate = await persistEditorValues(values);
           return candidate ? applySuggestion(candidate, domain) : undefined;
         }}
+        onSearchTransferCounterparts={searchEditorTransferCounterparts}
+        onSelectTransferCounterpart={selectEditorTransferCounterpart}
+        onConfigureCreateTransferCounterpart={configureEditorCreateTransferCounterpart}
+        onClearTransfer={clearEditorTransfer}
       />
       <Modal
         isOpen={csvConfirmOpen}
@@ -1158,6 +1356,16 @@ const TransactionBatchDetail = () => {
           <p>
             <strong>{batch.accountName}</strong> · {queuedCandidates.length} movimientos.
           </p>
+          {createCounterpartCount ? (
+            <p>
+              {createCounterpartCount} contrapart{createCounterpartCount === 1 ? 'e' : 'es'} nueva
+              {createCounterpartCount === 1 ? '' : 's'} · {queuedCandidates.length + createCounterpartCount} transacciones nuevas
+              {configuredTransferCount
+                ? ` · ${configuredTransferCount} ${configuredTransferCount === 1 ? 'transferencia interna' : 'transferencias internas'}`
+                : ''}
+              .
+            </p>
+          ) : null}
           <p className="mb-0">Se usarán los valores guardados. Las sugerencias pendientes no se aplicarán automáticamente.</p>
         </ModalBody>
         <ModalFooter>

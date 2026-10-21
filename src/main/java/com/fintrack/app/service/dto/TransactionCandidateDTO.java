@@ -4,6 +4,7 @@ import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationReviewStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateClassificationSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateDescriptionReviewStatus;
+import com.fintrack.app.domain.enumeration.TransactionCandidateInternalTransferMode;
 import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
@@ -26,6 +27,9 @@ import java.util.Set;
 public class TransactionCandidateDTO implements Serializable {
 
     private Long id;
+
+    /** Optimistic token read by the transfer-post command after a draft resume. */
+    private Long version;
 
     @NotNull
     private TransactionCandidateSource source;
@@ -67,6 +71,25 @@ public class TransactionCandidateDTO implements Serializable {
     @Size(max = 1000)
     private String notes;
 
+    private Boolean internalTransferEnabled;
+
+    private TransactionCandidateInternalTransferMode internalTransferMode;
+
+    private FinancialAccountDTO internalTransferCounterpartAccount;
+
+    private LocalDate internalTransferCounterpartPostingDate;
+
+    @Size(max = 500)
+    private String internalTransferCounterpartDescription;
+
+    @Size(max = 150)
+    private String internalTransferCounterpartReference;
+
+    @Size(max = 1000)
+    private String internalTransferCounterpartNotes;
+
+    private FinancialTransactionDTO internalTransferCounterpartTransaction;
+
     @Size(max = 1000)
     private String failureReason;
 
@@ -98,6 +121,14 @@ public class TransactionCandidateDTO implements Serializable {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 
     public TransactionCandidateSource getSource() {
@@ -234,6 +265,70 @@ public class TransactionCandidateDTO implements Serializable {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public Boolean getInternalTransferEnabled() {
+        return internalTransferEnabled;
+    }
+
+    public void setInternalTransferEnabled(Boolean internalTransferEnabled) {
+        this.internalTransferEnabled = internalTransferEnabled;
+    }
+
+    public TransactionCandidateInternalTransferMode getInternalTransferMode() {
+        return internalTransferMode;
+    }
+
+    public void setInternalTransferMode(TransactionCandidateInternalTransferMode internalTransferMode) {
+        this.internalTransferMode = internalTransferMode;
+    }
+
+    public FinancialAccountDTO getInternalTransferCounterpartAccount() {
+        return internalTransferCounterpartAccount;
+    }
+
+    public void setInternalTransferCounterpartAccount(FinancialAccountDTO internalTransferCounterpartAccount) {
+        this.internalTransferCounterpartAccount = internalTransferCounterpartAccount;
+    }
+
+    public LocalDate getInternalTransferCounterpartPostingDate() {
+        return internalTransferCounterpartPostingDate;
+    }
+
+    public void setInternalTransferCounterpartPostingDate(LocalDate internalTransferCounterpartPostingDate) {
+        this.internalTransferCounterpartPostingDate = internalTransferCounterpartPostingDate;
+    }
+
+    public String getInternalTransferCounterpartDescription() {
+        return internalTransferCounterpartDescription;
+    }
+
+    public void setInternalTransferCounterpartDescription(String internalTransferCounterpartDescription) {
+        this.internalTransferCounterpartDescription = internalTransferCounterpartDescription;
+    }
+
+    public String getInternalTransferCounterpartReference() {
+        return internalTransferCounterpartReference;
+    }
+
+    public void setInternalTransferCounterpartReference(String internalTransferCounterpartReference) {
+        this.internalTransferCounterpartReference = internalTransferCounterpartReference;
+    }
+
+    public String getInternalTransferCounterpartNotes() {
+        return internalTransferCounterpartNotes;
+    }
+
+    public void setInternalTransferCounterpartNotes(String internalTransferCounterpartNotes) {
+        this.internalTransferCounterpartNotes = internalTransferCounterpartNotes;
+    }
+
+    public FinancialTransactionDTO getInternalTransferCounterpartTransaction() {
+        return internalTransferCounterpartTransaction;
+    }
+
+    public void setInternalTransferCounterpartTransaction(FinancialTransactionDTO internalTransferCounterpartTransaction) {
+        this.internalTransferCounterpartTransaction = internalTransferCounterpartTransaction;
     }
 
     public String getFailureReason() {

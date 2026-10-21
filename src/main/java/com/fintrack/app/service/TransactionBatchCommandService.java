@@ -4,11 +4,17 @@ import com.fintrack.app.domain.*;
 import com.fintrack.app.domain.enumeration.*;
 import com.fintrack.app.repository.*;
 import com.fintrack.app.service.dto.*;
+import com.fintrack.app.service.transfer.InternalTransferCommandException;
+import com.fintrack.app.service.transfer.InternalTransferCounterpartQueryService;
+import com.fintrack.app.service.transfer.InternalTransferInvariantService;
+import com.fintrack.app.service.transfer.InternalTransferReadModelMapper;
 import com.fintrack.app.service.validation.CategoryFlowCompatibilityValidator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +35,8 @@ public class TransactionBatchCommandService {
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
     private final CurrentUserService currentUserService;
+    private final InternalTransferCounterpartQueryService internalTransferCounterpartQueryService;
+    private final InternalTransferInvariantService internalTransferInvariantService;
 
     public TransactionBatchCommandService(
         TransactionBatchRepository transactionBatchRepository,
@@ -36,7 +44,9 @@ public class TransactionBatchCommandService {
         FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
-        CurrentUserService currentUserService
+        CurrentUserService currentUserService,
+        InternalTransferCounterpartQueryService internalTransferCounterpartQueryService,
+        InternalTransferInvariantService internalTransferInvariantService
     ) {
         this.transactionBatchRepository = transactionBatchRepository;
         this.transactionCandidateRepository = transactionCandidateRepository;
@@ -44,6 +54,8 @@ public class TransactionBatchCommandService {
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
         this.currentUserService = currentUserService;
+        this.internalTransferCounterpartQueryService = internalTransferCounterpartQueryService;
+        this.internalTransferInvariantService = internalTransferInvariantService;
     }
 
     /** Creates another owned OPEN workspace for an active accessible account. */
@@ -255,6 +267,143 @@ public class TransactionBatchCommandService {
             batch = persistMaterialBatchChange(batch);
         }
         return rowMutation(candidate, batch);
+    }
+
+    /**
+     * Persists only transfer intent for this temporary row. Neither mode
+     * creates an InternalTransfer or a second FinancialTransaction before
+     * batch publication.
+     */
+    public TransactionBatchRowMutationDTO setInternalTransfer(
+        Long batchId,
+        Long candidateId,
+        TransactionBatchInternalTransferCommand command
+    ) {
+        if (command == null) throw new IllegalArgumentException("Batch transfer command is required");
+        TransactionBatch batch = lockOpenBatch(batchId);
+        TransactionCandidate candidate = lockBatchCandidate(batch, candidateId, command.getExpectedCandidateVersion());
+        TransactionCandidateInternalTransferMode mode = requestedTransferMode(command);
+        if (mode == TransactionCandidateInternalTransferMode.LINK_EXISTING) {
+            return setLinkExistingTransferIntent(batch, candidate, command);
+        }
+        if (mode == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+            return setCreateCounterpartTransferIntent(batch, candidate, command);
+        }
+        throw new IllegalArgumentException("A transfer counterpart mode is required");
+    }
+
+    private TransactionBatchRowMutationDTO setLinkExistingTransferIntent(
+        TransactionBatch batch,
+        TransactionCandidate candidate,
+        TransactionBatchInternalTransferCommand command
+    ) {
+        FinancialTransaction counterpart = internalTransferCounterpartQueryService.requireEligibleCounterpartForCandidate(
+            candidate,
+            command.getCounterpartTransactionId()
+        );
+        boolean unchanged =
+            candidate.getInternalTransferEnabled() &&
+            candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.LINK_EXISTING &&
+            candidate.getInternalTransferCounterpartTransaction() != null &&
+            Objects.equals(candidate.getInternalTransferCounterpartTransaction().getId(), counterpart.getId());
+        if (!unchanged) {
+            candidate.clearInternalTransferIntent();
+            candidate.setInternalTransferEnabled(true);
+            candidate.setInternalTransferMode(TransactionCandidateInternalTransferMode.LINK_EXISTING);
+            candidate.setInternalTransferCounterpartTransaction(counterpart);
+            touch(candidate);
+            candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
+        }
+        return rowMutation(candidate, batch);
+    }
+
+    private TransactionBatchRowMutationDTO setCreateCounterpartTransferIntent(
+        TransactionBatch batch,
+        TransactionCandidate candidate,
+        TransactionBatchInternalTransferCommand command
+    ) {
+        FinancialAccount counterpartAccount = requireAccessibleActiveAccount(command.getCounterpartAccountId());
+        internalTransferInvariantService.validateExistingAccountAndNewCounterpart(candidate.getAccount(), counterpartAccount);
+        String description = normalizeRequiredText(command.getCounterpartDescription(), 500, "Counterpart description");
+        String externalReference = normalizeText(command.getCounterpartExternalReference(), 150, "Counterpart external reference");
+        String notes = normalizeText(command.getCounterpartNotes(), 1000, "Counterpart notes");
+        boolean unchanged =
+            candidate.getInternalTransferEnabled() &&
+            candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART &&
+            candidate.getInternalTransferCounterpartAccount() != null &&
+            Objects.equals(candidate.getInternalTransferCounterpartAccount().getId(), counterpartAccount.getId()) &&
+            Objects.equals(candidate.getInternalTransferCounterpartPostingDate(), command.getCounterpartPostingDate()) &&
+            Objects.equals(candidate.getInternalTransferCounterpartDescription(), description) &&
+            Objects.equals(candidate.getInternalTransferCounterpartReference(), externalReference) &&
+            Objects.equals(candidate.getInternalTransferCounterpartNotes(), notes);
+        if (!unchanged) {
+            candidate.clearInternalTransferIntent();
+            candidate.setInternalTransferEnabled(true);
+            candidate.setInternalTransferMode(TransactionCandidateInternalTransferMode.CREATE_COUNTERPART);
+            candidate.setInternalTransferCounterpartAccount(counterpartAccount);
+            candidate.setInternalTransferCounterpartPostingDate(command.getCounterpartPostingDate());
+            candidate.setInternalTransferCounterpartDescription(description);
+            candidate.setInternalTransferCounterpartReference(externalReference);
+            candidate.setInternalTransferCounterpartNotes(notes);
+            touch(candidate);
+            candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
+        }
+        return rowMutation(candidate, batch);
+    }
+
+    /** Accept the legacy link-only payload while clients move to explicit modes. */
+    private TransactionCandidateInternalTransferMode requestedTransferMode(TransactionBatchInternalTransferCommand command) {
+        if (command.getMode() != null) return command.getMode();
+        return command.getCounterpartTransactionId() == null ? null : TransactionCandidateInternalTransferMode.LINK_EXISTING;
+    }
+
+    /** Clears transfer-only draft state while preserving the row and its classification untouched. */
+    public TransactionBatchRowMutationDTO clearInternalTransfer(Long batchId, Long candidateId, Long expectedCandidateVersion) {
+        TransactionBatch batch = lockOpenBatch(batchId);
+        TransactionCandidate candidate = lockBatchCandidate(batch, candidateId, expectedCandidateVersion);
+        if (
+            candidate.getInternalTransferEnabled() ||
+            candidate.getInternalTransferMode() != null ||
+            candidate.getInternalTransferCounterpartAccount() != null ||
+            candidate.getInternalTransferCounterpartTransaction() != null
+        ) {
+            candidate.setInternalTransferEnabled(false);
+            touch(candidate);
+            candidate = transactionCandidateRepository.saveAndFlush(candidate);
+            batch = persistMaterialBatchChange(batch);
+        }
+        return rowMutation(candidate, batch);
+    }
+
+    /** Owner-scoped, paginated lookup for a candidate that remains pre-post. */
+    @Transactional(readOnly = true)
+    public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(
+        Long batchId,
+        Long candidateId,
+        String search,
+        Pageable pageable
+    ) {
+        return findEligibleTransferCounterparts(batchId, candidateId, search, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InternalTransferCounterpartDTO> findEligibleTransferCounterparts(
+        Long batchId,
+        Long candidateId,
+        String search,
+        Long accountId,
+        Pageable pageable
+    ) {
+        TransactionBatch batch = transactionBatchRepository
+            .findOneWithRelationshipsByIdAndUserLogin(batchId, currentUserService.getCurrentUserLogin())
+            .filter(current -> current.getStatus() == TransactionBatchStatus.OPEN)
+            .orElseThrow(() -> new IllegalArgumentException("Transaction batch is not accessible"));
+        TransactionCandidate candidate = transactionCandidateRepository
+            .findOneBatchCandidateWithRelationships(batch.getId(), candidateId, currentUserService.getCurrentUserLogin())
+            .orElseThrow(() -> new IllegalArgumentException("Transaction candidate is not accessible"));
+        return internalTransferCounterpartQueryService.findEligibleCounterpartsForCandidate(candidate, search, accountId, pageable);
     }
 
     /** Internal future-parser hook for bounded repair evidence; not a CSV parser or public API. */
@@ -575,6 +724,12 @@ public class TransactionBatchCommandService {
         return normalized;
     }
 
+    private String normalizeRequiredText(String value, int maximumLength, String field) {
+        String normalized = normalizeText(value, maximumLength, field);
+        if (normalized == null) throw new IllegalArgumentException(field + " is required");
+        return normalized;
+    }
+
     private void resolveIssuesForAppliedPatch(TransactionCandidate candidate, TransactionBatchCandidatePatchCommand command) {
         if (command.getTransactionDate() != null) candidate.removeInputIssue(TransactionCandidateInputIssueField.TRANSACTION_DATE);
         if (command.getPostingDate() != null) candidate.removeInputIssue(TransactionCandidateInputIssueField.POSTING_DATE);
@@ -763,7 +918,57 @@ public class TransactionBatchCommandService {
                 })
                 .toList()
         );
+        view.setInternalTransfer(toTransferIntentView(candidate));
         return view;
+    }
+
+    private TransactionBatchInternalTransferViewDTO toTransferIntentView(TransactionCandidate candidate) {
+        TransactionBatchInternalTransferViewDTO result = new TransactionBatchInternalTransferViewDTO();
+        result.setEnabled(candidate.getInternalTransferEnabled());
+        if (!candidate.getInternalTransferEnabled()) return result;
+        result.setMode(candidate.getInternalTransferMode());
+        if (candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+            if (candidate.getInternalTransferCounterpartAccount() == null) {
+                result.setStale(true);
+                return result;
+            }
+            TransactionBatchCreateCounterpartViewDTO configuration = new TransactionBatchCreateCounterpartViewDTO();
+            configuration.setAccountId(candidate.getInternalTransferCounterpartAccount().getId());
+            configuration.setAccountName(candidate.getInternalTransferCounterpartAccount().getName());
+            configuration.setPostingDate(candidate.getInternalTransferCounterpartPostingDate());
+            configuration.setDescription(candidate.getInternalTransferCounterpartDescription());
+            configuration.setExternalReference(candidate.getInternalTransferCounterpartReference());
+            configuration.setNotes(candidate.getInternalTransferCounterpartNotes());
+            result.setCreateCounterpart(configuration);
+            if (
+                !Boolean.TRUE.equals(candidate.getInternalTransferCounterpartAccount().getActive()) ||
+                candidate.getInternalTransferCounterpartDescription() == null ||
+                candidate.getInternalTransferCounterpartDescription().isBlank()
+            ) {
+                result.setStale(true);
+            }
+            return result;
+        }
+        if (
+            candidate.getInternalTransferMode() != TransactionCandidateInternalTransferMode.LINK_EXISTING ||
+            candidate.getInternalTransferCounterpartTransaction() == null ||
+            candidate.getInternalTransferCounterpartTransaction().getId() == null
+        ) {
+            result.setStale(true);
+            return result;
+        }
+        try {
+            FinancialTransaction counterpart = internalTransferCounterpartQueryService.requireEligibleCounterpartForCandidate(
+                candidate,
+                candidate.getInternalTransferCounterpartTransaction().getId()
+            );
+            result.setCounterpart(InternalTransferReadModelMapper.toCounterpart(counterpart));
+        } catch (InternalTransferCommandException exception) {
+            result.setStale(true);
+            // A deleted or now-ineligible counterpart is intentionally not
+            // silently cleared: the user must correct the row explicitly.
+        }
+        return result;
     }
 
     private AppliedRuleAttributionDTO toAppliedRule(Object liveRule, String snapshotName) {

@@ -3,6 +3,7 @@ import { IUser } from 'app/shared/model/user.model';
 import { IFinancialAccount } from 'app/shared/model/financial-account.model';
 import { ICategory } from 'app/shared/model/category.model';
 import { ITag } from 'app/shared/model/tag.model';
+import { IFinancialTransaction } from 'app/shared/model/financial-transaction.model';
 import { TransactionCandidateSource } from 'app/shared/model/enumerations/transaction-candidate-source.model';
 import { TransactionCandidateStatus } from 'app/shared/model/enumerations/transaction-candidate-status.model';
 import { TransactionCandidateValidationStatus } from 'app/shared/model/enumerations/transaction-candidate-validation-status.model';
@@ -11,6 +12,7 @@ import { TransactionCandidateClassificationReviewStatus } from 'app/shared/model
 import { TransactionCandidateClassificationSource } from 'app/shared/model/enumerations/transaction-candidate-classification-source.model';
 import { TransactionFlow } from 'app/shared/model/enumerations/transaction-flow.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
+import { TransactionCandidateInternalTransferMode } from 'app/shared/model/enumerations/transaction-candidate-internal-transfer-mode.model';
 
 export interface IAppliedRuleAttribution {
   id?: number | null;
@@ -26,6 +28,7 @@ export interface ITransactionCandidateTagSelection {
 
 export interface ITransactionCandidate {
   id?: number;
+  version?: number | null;
   source?: keyof typeof TransactionCandidateSource;
   status?: keyof typeof TransactionCandidateStatus;
   validationStatus?: keyof typeof TransactionCandidateValidationStatus;
@@ -43,6 +46,14 @@ export interface ITransactionCandidate {
   currencySnapshot?: keyof typeof CurrencyCode | null;
   externalReference?: string | null;
   notes?: string | null;
+  internalTransferEnabled?: boolean | null;
+  internalTransferMode?: keyof typeof TransactionCandidateInternalTransferMode | null;
+  internalTransferCounterpartAccount?: IFinancialAccount | null;
+  internalTransferCounterpartPostingDate?: dayjs.Dayjs | string | null;
+  internalTransferCounterpartDescription?: string | null;
+  internalTransferCounterpartReference?: string | null;
+  internalTransferCounterpartNotes?: string | null;
+  internalTransferCounterpartTransaction?: IFinancialTransaction | null;
   failureReason?: string | null;
   createdAt?: dayjs.Dayjs | string;
   updatedAt?: dayjs.Dayjs | string;

@@ -30,6 +30,13 @@ describe('FinancialTransaction e2e test', () => {
     classificationReviewStatus?: string | null;
     category?: { id?: number | string } | null;
     tags?: Array<{ id?: number | string }>;
+    internalTransferEnabled?: boolean;
+    internalTransferMode?: 'CREATE_COUNTERPART' | 'LINK_EXISTING' | null;
+    internalTransferCounterpartAccount?: { id?: number | string } | null;
+    internalTransferCounterpartPostingDate?: string | null;
+    internalTransferCounterpartDescription?: string | null;
+    internalTransferCounterpartReference?: string | null;
+    internalTransferCounterpartNotes?: string | null;
   }
 
   interface RulePreviewResponse {
@@ -63,6 +70,7 @@ describe('FinancialTransaction e2e test', () => {
   let manualCandidateDescription;
   let secondaryFinancialTransaction;
   let secondaryCategory;
+  let transferCounterpartAccount: E2EEntity | undefined;
 
   const uniqueName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -213,6 +221,7 @@ describe('FinancialTransaction e2e test', () => {
     cy.intercept('GET', '/api/transaction-candidates/*').as('getManualCandidateRequest');
     cy.intercept('PATCH', '/api/transaction-candidates/*/manual-draft').as('patchManualCandidateRequest');
     cy.intercept('POST', '/api/transaction-candidates/*/post').as('postManualCandidateRequest');
+    cy.intercept('POST', '/api/transaction-candidates/*/post-internal-transfer').as('postManualInternalTransferRequest');
     cy.intercept('POST', '/api/transaction-candidates/*/cancel').as('cancelManualCandidateRequest');
     cy.intercept('POST', '/api/transaction-candidates/*/rule-preview').as('candidateRulePreviewRequest');
     cy.intercept('POST', '/api/transaction-candidates/*/apply-rules').as('candidateApplyRulesRequest');
@@ -289,6 +298,15 @@ describe('FinancialTransaction e2e test', () => {
   });
 
   afterEach(() => {
+    if (transferCounterpartAccount) {
+      cy.authenticatedRequest({
+        method: 'DELETE',
+        url: `/api/financial-accounts/${transferCounterpartAccount.id}`,
+        failOnStatusCode: false,
+      }).then(() => {
+        transferCounterpartAccount = undefined;
+      });
+    }
     if (financialAccount) {
       cy.authenticatedRequest({
         method: 'DELETE',
@@ -907,6 +925,115 @@ describe('FinancialTransaction e2e test', () => {
       cy.on('window:confirm', () => true);
       cy.get('[data-cy="manualDraftCancelButton"]').click();
       cy.wait('@cancelManualCandidateRequest').its('response.statusCode').should('eq', 200);
+    });
+
+    it('resumes a create-counterpart transfer draft and posts both legs atomically', () => {
+      const draftDescription = manualCandidateDescription;
+      const counterpartDescription = uniqueName('internal-transfer-counterpart');
+      const externalReference = uniqueName('internal-transfer-reference');
+      const notes = uniqueName('internal-transfer-notes');
+      const counterpartReference = uniqueName('internal-transfer-counterpart-reference');
+      const counterpartNotes = uniqueName('internal-transfer-counterpart-notes');
+
+      cy.authenticatedRequest<E2EEntity>({
+        method: 'POST',
+        url: '/api/financial-accounts',
+        body: buildFinancialAccountPayload(uniqueName('internal-transfer-counterpart-account')),
+      }).then(({ body }) => {
+        transferCounterpartAccount = body;
+      });
+
+      cy.then(() => {
+        const counterpartAccountId = transferCounterpartAccount?.id;
+        assert.exists(counterpartAccountId, 'synthetic counterpart account id');
+
+        // Reload after creating the synthetic account so it is part of the selectable counterpart list.
+        cy.reload();
+        cy.wait('@selectableAccountsRequest');
+        cy.get('[data-cy="description"]').type(draftDescription);
+        cy.wait('@createManualCandidateRequest').its('response.statusCode').should('eq', 201);
+        cy.get('[data-cy="account"]').select(String(financialAccount.id));
+        cy.get('[data-cy="transactionDate"]').type('2026-07-08');
+        cy.get('[data-cy="amount"]').clear();
+        cy.get('[data-cy="amount"]').type('100.5');
+        cy.get('[data-cy="flow-OUT"]').click();
+        cy.get('[data-cy="manualDraftOptionalDetails"] summary').click();
+        cy.get('[data-cy="externalReference"]').type(externalReference);
+        cy.get('[data-cy="notes"]').type(notes);
+
+        cy.get('[data-cy="manualDraftInternalTransferToggle"]').should('not.be.checked');
+        cy.get('[data-cy="manualDraftInternalTransferToggle"]').check();
+        cy.get('[data-cy="manualDraftCreateCounterpart"]').should('have.attr', 'aria-pressed', 'true');
+        cy.get('[data-cy="manualDraftCounterpartAccount"]').select(String(counterpartAccountId));
+        cy.get('[data-cy="manualDraftCounterpartPostingDate"]').should('have.value', '2026-07-08');
+        cy.get('[data-cy="manualDraftCounterpartDescription"]').should('have.value', draftDescription);
+        cy.get('#manual-draft-counterpart-reference').should('have.value', externalReference);
+        cy.get('#manual-draft-counterpart-notes').should('have.value', notes);
+        cy.screenshot('financial-transaction/internal-transfer-counterpart-prefilled');
+        cy.get('[data-cy="manualDraftCounterpartDescription"]').clear();
+        cy.get('[data-cy="manualDraftCounterpartDescription"]').type(counterpartDescription);
+        cy.get('#manual-draft-counterpart-reference').clear();
+        cy.get('#manual-draft-counterpart-reference').type(counterpartReference);
+        cy.get('#manual-draft-counterpart-notes').clear();
+        cy.get('#manual-draft-counterpart-notes').type(counterpartNotes);
+        cy.get('[data-cy="description"]').should('have.value', draftDescription);
+        cy.get('[data-cy="externalReference"]').should('have.value', externalReference);
+        cy.get('[data-cy="notes"]').should('have.value', notes);
+        cy.screenshot('financial-transaction/internal-transfer-counterpart-customized');
+
+        waitForManualCandidate(
+          candidate =>
+            candidate.internalTransferEnabled === true &&
+            candidate.internalTransferMode === 'CREATE_COUNTERPART' &&
+            String(candidate.internalTransferCounterpartAccount?.id) === String(counterpartAccountId) &&
+            candidate.internalTransferCounterpartPostingDate === '2026-07-08' &&
+            candidate.internalTransferCounterpartDescription === counterpartDescription &&
+            candidate.internalTransferCounterpartReference === counterpartReference &&
+            candidate.internalTransferCounterpartNotes === counterpartNotes,
+        );
+
+        cy.reload();
+        cy.wait('@getManualCandidateRequest');
+        cy.get('[data-cy="manualDraftInternalTransferToggle"]').should('be.checked');
+        cy.get('[data-cy="manualDraftCreateCounterpart"]').should('have.attr', 'aria-pressed', 'true');
+        cy.get('[data-cy="manualDraftCounterpartAccount"]').should('have.value', String(counterpartAccountId));
+        cy.get('[data-cy="manualDraftCounterpartPostingDate"]').should('have.value', '2026-07-08');
+        cy.get('[data-cy="manualDraftCounterpartDescription"]').should('have.value', counterpartDescription);
+        cy.get('#manual-draft-counterpart-reference').should('have.value', counterpartReference);
+        cy.get('#manual-draft-counterpart-notes').should('have.value', counterpartNotes);
+
+        cy.get('[data-cy="manualDraftApplyRulesButton"]').click();
+        cy.wait('@candidateApplyRulesRequest').its('response.statusCode').should('eq', 200);
+        cy.get('[data-cy="manualDraftPostButton"]').should('not.be.disabled').click();
+        cy.wait('@postManualInternalTransferRequest').then(({ request, response }) => {
+          expect(request.body.expectedCandidateVersion).to.be.a('number');
+          expect(response?.statusCode).to.equal(200);
+          const postedTransactionId = response?.body.id;
+          assert.exists(postedTransactionId, 'posted current-leg transaction id');
+
+          cy.get('[data-cy="financialTransactionInternalTransfer"]').should('be.visible');
+          cy.get('[data-cy="financialTransactionInternalTransferCounterpart"]').should('contain', counterpartDescription);
+          cy.authenticatedRequest({
+            method: 'GET',
+            url: `/api/internal-transfers/transactions/${postedTransactionId}/product`,
+          }).then(({ body: transfer }) => {
+            expect(transfer.source.transactionId).to.not.equal(transfer.destination.transactionId);
+            cy.authenticatedRequest({
+              method: 'POST',
+              url: `/api/internal-transfers/${transfer.transferId}/unlink`,
+              body: { expectedVersion: transfer.version },
+            });
+            cy.authenticatedRequest({
+              method: 'DELETE',
+              url: `/api/financial-transactions/${transfer.source.transactionId}`,
+            });
+            cy.authenticatedRequest({
+              method: 'DELETE',
+              url: `/api/financial-transactions/${transfer.destination.transactionId}`,
+            });
+          });
+        });
+      });
     });
 
     it('lists, resumes, and cancels a recoverable manual draft from the draft recovery page', () => {

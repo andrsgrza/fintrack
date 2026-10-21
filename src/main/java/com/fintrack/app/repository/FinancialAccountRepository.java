@@ -19,7 +19,7 @@ public interface FinancialAccountRepository extends JpaRepository<FinancialAccou
     List<FinancialAccount> findByUserIsCurrentUser();
 
     @Query(
-        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.id = :id and financialAccount.user.login = :login"
+        "select financialAccount from FinancialAccount financialAccount where financialAccount.id = :id and financialAccount.user.login = :login"
     )
     Optional<FinancialAccount> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
@@ -32,16 +32,30 @@ public interface FinancialAccountRepository extends JpaRepository<FinancialAccou
     /** Locks the account before the batch root so publication and account removal use the same resource order. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
-        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user " +
-        "where financialAccount.id = :id and financialAccount.user.login = :login"
+        "select financialAccount from FinancialAccount financialAccount where financialAccount.id = :id and financialAccount.user.login = :login"
     )
     Optional<FinancialAccount> findOneForBatchPublicationByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query(
-        "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.id = :id"
-    )
+    @Query("select financialAccount from FinancialAccount financialAccount where financialAccount.id = :id")
     Optional<FinancialAccount> findOneForHardDelete(@Param("id") Long id);
+
+    /**
+     * Transfer commands lock every affected account first, in ascending id order,
+     * before taking transaction or transfer locks.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select financialAccount from FinancialAccount financialAccount " +
+        "where financialAccount.id in :ids and financialAccount.user.login = :login order by financialAccount.id asc"
+    )
+    List<FinancialAccount> findAllForInternalTransferMutationByIdInAndUserLogin(@Param("ids") List<Long> ids, @Param("login") String login);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select financialAccount from FinancialAccount financialAccount where financialAccount.id in :ids order by financialAccount.id asc"
+    )
+    List<FinancialAccount> findAllForInternalTransferMutationByIdIn(@Param("ids") List<Long> ids);
 
     @Query(
         value = "select financialAccount from FinancialAccount financialAccount left join fetch financialAccount.user where financialAccount.user.login = :login",

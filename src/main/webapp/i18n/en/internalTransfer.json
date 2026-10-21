@@ -1,27 +1,80 @@
 {
   "fintrackApp": {
     "internalTransfer": {
-      "home": {
+      "product": {
         "title": "Internal Transfers",
-        "refreshListLabel": "Refresh list",
-        "createLabel": "Create a new Internal Transfer",
-        "createOrEditLabel": "Create or edit a Internal Transfer",
-        "notFound": "No Internal Transfers found"
-      },
-      "created": "A new Internal Transfer is created with identifier {{ param }}",
-      "updated": "A Internal Transfer is updated with identifier {{ param }}",
-      "deleted": "A Internal Transfer is deleted with identifier {{ param }}",
-      "delete": {
-        "question": "Delete Internal Transfer {{ id }}? This removes only the transfer link; the outgoing and incoming transactions will remain."
-      },
-      "detail": {
-        "title": "Internal Transfer"
-      },
-      "id": "ID",
-      "notes": "Notes",
-      "createdAt": "Created At",
-      "outgoingTransaction": "Outgoing Transaction",
-      "incomingTransaction": "Incoming Transaction"
+        "listSubtitle": "Move money between your own accounts without creating income or expense.",
+        "new": "New internal transfer",
+        "create": "Create internal transfer",
+        "edit": "Edit internal transfer",
+        "view": "View internal transfer",
+        "detailTitle": "Internal transfer",
+        "formSubtitle": "The two movements are saved together as one internal transfer.",
+        "filters": "Filters",
+        "account": "Account",
+        "allAccounts": "All accounts",
+        "fromDate": "From date",
+        "toDate": "To date",
+        "sort": "Sort",
+        "sortDateDesc": "Newest transfer date",
+        "sortDateAsc": "Oldest transfer date",
+        "sortAmount": "Amount",
+        "sortSource": "From account",
+        "sortDestination": "To account",
+        "clear": "Clear",
+        "transactionDate": "Transfer date",
+        "source": "From",
+        "destination": "To",
+        "to": "To",
+        "amount": "Amount",
+        "accounts": "Accounts",
+        "selectAccount": "Select an account",
+        "accountsLocked": "To change accounts, unlink this transfer and create a new one.",
+        "transferDetails": "Transfer details",
+        "postingDates": "Posting dates",
+        "postingDate": "Posting date",
+        "sourcePostingDate": "Source posting date",
+        "destinationPostingDate": "Destination posting date",
+        "samePostingDate": "Use the transfer date for both",
+        "descriptions": "Descriptions",
+        "sourceDescription": "Source description",
+        "destinationDescription": "Destination description",
+        "optionalDetails": "Optional details",
+        "sourceReference": "Source external reference",
+        "destinationReference": "Destination external reference",
+        "sourceNotes": "Source notes",
+        "destinationNotes": "Destination notes",
+        "externalReference": "External reference",
+        "legNotes": "Movement notes",
+        "transferNote": "Transfer note",
+        "transferMetadata": "Transfer details",
+        "createdAt": "Created",
+        "moreActions": "More actions",
+        "viewTransaction": "View transaction",
+        "noClassification": "No category or tags",
+        "historicalDateMismatch": "This historical transfer has different dates in its movements.",
+        "deleteLegNote": "If you delete one transaction, the other one remains as a normal transaction.",
+        "reload": "Reload current version",
+        "empty": {
+          "title": "No internal transfers",
+          "body": "Internal transfers move money between your own accounts."
+        },
+        "unlink": {
+          "title": "Unlink internal transfer",
+          "body": "The two transactions will be kept and will no longer be linked as an internal transfer.",
+          "action": "Unlink internal transfer"
+        },
+        "errors": {
+          "load": "We could not load internal transfers. Try again.",
+          "accountRequired": "Select an account.",
+          "accountMismatch": "Choose two different accounts.",
+          "currencyMismatch": "Accounts must use the same currency.",
+          "invalidAmount": "Enter an amount greater than zero.",
+          "versionConflict": "This transfer changed while you were editing it. Your changes are still here; reload the current version to reconcile them.",
+          "notFound": "This transfer does not exist or is no longer available.",
+          "unexpectedError": "We could not save the transfer. Try again."
+        }
+      }
     }
   }
 }

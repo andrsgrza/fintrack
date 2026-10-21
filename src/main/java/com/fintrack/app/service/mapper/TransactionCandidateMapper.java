@@ -3,6 +3,7 @@ package com.fintrack.app.service.mapper;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.DescriptionNormalizationRule;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionCandidate;
 import com.fintrack.app.domain.TransactionCandidateTag;
@@ -11,6 +12,7 @@ import com.fintrack.app.domain.User;
 import com.fintrack.app.service.dto.AppliedRuleAttributionDTO;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.TagDTO;
 import com.fintrack.app.service.dto.TransactionCandidateDTO;
 import com.fintrack.app.service.dto.TransactionCandidateTagSelectionDTO;
@@ -27,6 +29,16 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "user", source = "user", qualifiedByName = "userLogin")
     @Mapping(target = "account", source = "account", qualifiedByName = "financialAccountName")
     @Mapping(target = "category", source = "category", qualifiedByName = "categoryName")
+    @Mapping(
+        target = "internalTransferCounterpartAccount",
+        source = "internalTransferCounterpartAccount",
+        qualifiedByName = "financialAccountName"
+    )
+    @Mapping(
+        target = "internalTransferCounterpartTransaction",
+        source = "internalTransferCounterpartTransaction",
+        qualifiedByName = "financialTransactionSummary"
+    )
     @Mapping(target = "tags", source = "tags", qualifiedByName = "tagNameSet")
     @Mapping(
         target = "descriptionAppliedByRule",
@@ -42,6 +54,14 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "user", ignore = true)
     @Mapping(target = "account", ignore = true)
     @Mapping(target = "category", ignore = true)
+    @Mapping(target = "internalTransferEnabled", ignore = true)
+    @Mapping(target = "internalTransferMode", ignore = true)
+    @Mapping(target = "internalTransferCounterpartPostingDate", ignore = true)
+    @Mapping(target = "internalTransferCounterpartDescription", ignore = true)
+    @Mapping(target = "internalTransferCounterpartReference", ignore = true)
+    @Mapping(target = "internalTransferCounterpartNotes", ignore = true)
+    @Mapping(target = "internalTransferCounterpartAccount", ignore = true)
+    @Mapping(target = "internalTransferCounterpartTransaction", ignore = true)
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "categorySource", ignore = true)
     @Mapping(target = "categoryManualClear", ignore = true)
@@ -64,6 +84,14 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "user", ignore = true)
     @Mapping(target = "account", ignore = true)
     @Mapping(target = "category", ignore = true)
+    @Mapping(target = "internalTransferEnabled", ignore = true)
+    @Mapping(target = "internalTransferMode", ignore = true)
+    @Mapping(target = "internalTransferCounterpartPostingDate", ignore = true)
+    @Mapping(target = "internalTransferCounterpartDescription", ignore = true)
+    @Mapping(target = "internalTransferCounterpartReference", ignore = true)
+    @Mapping(target = "internalTransferCounterpartNotes", ignore = true)
+    @Mapping(target = "internalTransferCounterpartAccount", ignore = true)
+    @Mapping(target = "internalTransferCounterpartTransaction", ignore = true)
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "categorySource", ignore = true)
     @Mapping(target = "categoryManualClear", ignore = true)
@@ -92,6 +120,17 @@ public interface TransactionCandidateMapper extends EntityMapper<TransactionCand
     @Mapping(target = "id", source = "id")
     @Mapping(target = "name", source = "name")
     FinancialAccountDTO toDtoFinancialAccountName(FinancialAccount financialAccount);
+
+    @Named("financialTransactionSummary")
+    @BeanMapping(ignoreByDefault = true)
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "description", source = "description")
+    @Mapping(target = "transactionDate", source = "transactionDate")
+    @Mapping(target = "postingDate", source = "postingDate")
+    @Mapping(target = "amount", source = "amount")
+    @Mapping(target = "flow", source = "flow")
+    @Mapping(target = "account", source = "account", qualifiedByName = "financialAccountName")
+    FinancialTransactionDTO toDtoFinancialTransactionSummary(FinancialTransaction financialTransaction);
 
     @Named("categoryName")
     @BeanMapping(ignoreByDefault = true)
