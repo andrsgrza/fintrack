@@ -1552,6 +1552,40 @@ const ManualTransactionActions = ({
   </ProductSection>
 );
 
+const postReasonForDraft = ({
+  draft,
+  linkCounterpartValid,
+  classificationBlockKey,
+  classificationReviewStatus,
+}: {
+  draft: ManualDraftFormState;
+  linkCounterpartValid: boolean;
+  classificationBlockKey: string;
+  classificationReviewStatus: keyof typeof TransactionCandidateClassificationReviewStatus | null | undefined;
+}) => {
+  if (!isObviouslyComplete(draft)) return 'fintrackApp.financialTransaction.manualDraft.incomplete';
+  if (
+    !isTransferIntentComplete(draft) ||
+    (draft.internalTransferEnabled && draft.internalTransferMode === 'LINK_EXISTING' && !linkCounterpartValid)
+  ) {
+    return 'fintrackApp.financialTransaction.manualDraft.internalTransfer.incomplete';
+  }
+  if (classificationBlockKey) return classificationBlockKey;
+  return isClassificationReadyToPost(classificationReviewStatus)
+    ? ''
+    : 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.notEvaluatedPostBlock';
+};
+
+const postLabelForDraft = (draft: ManualDraftFormState) => {
+  if (draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART') {
+    return 'fintrackApp.financialTransaction.manualDraft.internalTransfer.createInternalTransfer';
+  }
+  if (draft.internalTransferEnabled && draft.internalTransferMode === 'LINK_EXISTING') {
+    return 'fintrackApp.financialTransaction.manualDraft.internalTransfer.createAndLink';
+  }
+  return 'fintrackApp.financialTransaction.manualDraft.post';
+};
+
 export const FinancialTransactionManualDraft = () => {
   const navigate = useNavigate();
   const { draftId } = useParams<'draftId'>();
@@ -2163,15 +2197,12 @@ export const FinancialTransactionManualDraft = () => {
   const compatibleCategories = selectableCategories.filter(
     category => category.id?.toString() === draft.category || categoryCompatibleWithFlow(category, draft.flow),
   );
-  const postReasonKey = !isObviouslyComplete(draft)
-    ? 'fintrackApp.financialTransaction.manualDraft.incomplete'
-    : !isTransferIntentComplete(draft) ||
-        (draft.internalTransferEnabled && draft.internalTransferMode === 'LINK_EXISTING' && !linkCounterpartValid)
-      ? 'fintrackApp.financialTransaction.manualDraft.internalTransfer.incomplete'
-      : classificationBlockKey ||
-        (!isClassificationReadyToPost(effectiveClassificationReviewStatus)
-          ? 'fintrackApp.financialTransaction.manualDraft.ruleSuggestions.notEvaluatedPostBlock'
-          : '');
+  const postReasonKey = postReasonForDraft({
+    draft,
+    linkCounterpartValid,
+    classificationBlockKey,
+    classificationReviewStatus: effectiveClassificationReviewStatus,
+  });
 
   return (
     <ProductPage>
@@ -2259,13 +2290,7 @@ export const FinancialTransactionManualDraft = () => {
           postDisabled={postDisabled}
           cancelDisabled={readOnly || saveState === 'CREATING' || saveState === 'SAVING' || saveState === 'POSTING'}
           posting={saveState === 'POSTING'}
-          postLabelKey={
-            draft.internalTransferEnabled && draft.internalTransferMode === 'CREATE_COUNTERPART'
-              ? 'fintrackApp.financialTransaction.manualDraft.internalTransfer.createInternalTransfer'
-              : draft.internalTransferEnabled && draft.internalTransferMode === 'LINK_EXISTING'
-                ? 'fintrackApp.financialTransaction.manualDraft.internalTransfer.createAndLink'
-                : 'fintrackApp.financialTransaction.manualDraft.post'
-          }
+          postLabelKey={postLabelForDraft(draft)}
           onCancel={handleCancel}
           onPost={handlePost}
         />

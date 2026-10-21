@@ -274,6 +274,95 @@ const RowActions = ({
   </div>
 );
 
+const BatchTransferIndicator = ({ row }: { row: BatchCandidate }) => {
+  const transfer = row.internalTransfer;
+  if (!transfer?.enabled) return null;
+  const counterpart = transfer.mode === 'CREATE_COUNTERPART' ? transfer.createCounterpart : transfer.counterpart;
+  const counterpartLabel = transfer.mode === 'CREATE_COUNTERPART' ? 'Contraparte nueva' : 'Contraparte';
+  return (
+    <div className="small mt-2" data-cy={`transactionBatchTransferIndicator-${row.id}`}>
+      <span className={transfer.stale ? 'text-warning' : 'text-primary'}>↔ Transferencia interna</span>
+      {counterpart ? (
+        <span className="text-muted">
+          {' '}
+          · {counterpartLabel}: {counterpart.accountName} · {counterpart.description}
+        </span>
+      ) : null}
+      {transfer.stale ? <span className="text-warning"> · Requiere corregir la contraparte</span> : null}
+    </div>
+  );
+};
+
+const batchTerminalContent = ({
+  loading,
+  batch,
+  receipt,
+  error,
+}: {
+  loading: boolean;
+  batch?: TransactionBatchWorkspace;
+  receipt?: BatchReceipt;
+  error: string;
+}): React.ReactNode | null => {
+  if (loading && !batch) {
+    return (
+      <ProductPage>
+        <Spinner size="sm" /> Cargando lote…
+      </ProductPage>
+    );
+  }
+  if (receipt) {
+    return (
+      <ProductPage>
+        <ProductPageHeader title="Transacciones creadas" subtitle="El lote temporal ya se limpió; este receipt técnico caduca." />
+        <ProductSection title="Resultado de publicación">
+          {receipt.createdCounterpartCount > 0 ? (
+            <>
+              <p className="mb-2">
+                Se publicaron <strong>{receipt.publishedTransactionCount}</strong> borradores y se{' '}
+                {receipt.createdCounterpartCount === 1 ? 'creó' : 'crearon'}{' '}
+                <strong>
+                  {receipt.createdCounterpartCount} {receipt.createdCounterpartCount === 1 ? 'contraparte' : 'contrapartes'}
+                </strong>
+                : <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas nuevas.
+              </p>
+              {receipt.createdInternalTransferCount > 0 ? (
+                <p className="mb-2">
+                  Se {receipt.createdInternalTransferCount === 1 ? 'creó' : 'crearon'}{' '}
+                  <strong>{receipt.createdInternalTransferCount}</strong> transferencia
+                  {receipt.createdInternalTransferCount === 1 ? '' : 's'} interna{receipt.createdInternalTransferCount === 1 ? '' : 's'}.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="mb-2">
+              Se crearon <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas.
+            </p>
+          )}
+          <p className="small text-muted">Disponible hasta {new Date(receipt.receiptExpiresAt).toLocaleString()}.</p>
+          <Button tag={Link} to="/financial-transaction" color="primary">
+            Ver transacciones
+          </Button>{' '}
+          <Button tag={Link} to="/transaction-batches/new" color="secondary" outline>
+            Crear otro lote
+          </Button>
+        </ProductSection>
+      </ProductPage>
+    );
+  }
+  if (!batch) {
+    return (
+      <ProductPage>
+        <p className="text-danger">{error}</p>
+        <Button tag={Link} to="/transaction-batches">
+          Volver a lotes
+        </Button>
+      </ProductPage>
+    );
+  }
+  return null;
+};
+
 const TransactionBatchDetail = () => {
   const { id } = useParams<'id'>();
   const navigate = useNavigate();
@@ -817,59 +906,8 @@ const TransactionBatchDetail = () => {
     setSettingsOpen(true);
   };
 
-  if (loading && !batch)
-    return (
-      <ProductPage>
-        <Spinner size="sm" /> Cargando lote…
-      </ProductPage>
-    );
-  if (receipt)
-    return (
-      <ProductPage>
-        <ProductPageHeader title="Transacciones creadas" subtitle="El lote temporal ya se limpió; este receipt técnico caduca." />
-        <ProductSection title="Resultado de publicación">
-          {receipt.createdCounterpartCount > 0 ? (
-            <>
-              <p className="mb-2">
-                Se publicaron <strong>{receipt.publishedTransactionCount}</strong> borradores y se{' '}
-                {receipt.createdCounterpartCount === 1 ? 'creó' : 'crearon'}{' '}
-                <strong>
-                  {receipt.createdCounterpartCount} {receipt.createdCounterpartCount === 1 ? 'contraparte' : 'contrapartes'}
-                </strong>
-                : <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas nuevas.
-              </p>
-              {receipt.createdInternalTransferCount > 0 ? (
-                <p className="mb-2">
-                  Se {receipt.createdInternalTransferCount === 1 ? 'creó' : 'crearon'}{' '}
-                  <strong>{receipt.createdInternalTransferCount}</strong> transferencia
-                  {receipt.createdInternalTransferCount === 1 ? '' : 's'} interna{receipt.createdInternalTransferCount === 1 ? '' : 's'}.
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="mb-2">
-              Se crearon <strong>{receipt.totalCreatedFinancialTransactionCount}</strong> transacciones definitivas.
-            </p>
-          )}
-          <p className="small text-muted">Disponible hasta {new Date(receipt.receiptExpiresAt).toLocaleString()}.</p>
-          <Button tag={Link} to="/financial-transaction" color="primary">
-            Ver transacciones
-          </Button>{' '}
-          <Button tag={Link} to="/transaction-batches/new" color="secondary" outline>
-            Crear otro lote
-          </Button>
-        </ProductSection>
-      </ProductPage>
-    );
-  if (!batch)
-    return (
-      <ProductPage>
-        <p className="text-danger">{error}</p>
-        <Button tag={Link} to="/transaction-batches">
-          Volver a lotes
-        </Button>
-      </ProductPage>
-    );
+  const terminalContent = batchTerminalContent({ loading, batch, receipt, error });
+  if (terminalContent) return terminalContent;
   return (
     <ProductPage wide>
       <ProductPageHeader
@@ -1101,24 +1139,7 @@ const TransactionBatchDetail = () => {
                       />
                     </div>
                     <RowMetadata row={row} />
-                    {row.internalTransfer?.enabled ? (
-                      <div className="small mt-2" data-cy={`transactionBatchTransferIndicator-${row.id}`}>
-                        <span className={row.internalTransfer.stale ? 'text-warning' : 'text-primary'}>↔ Transferencia interna</span>
-                        {row.internalTransfer.mode === 'CREATE_COUNTERPART' && row.internalTransfer.createCounterpart ? (
-                          <span className="text-muted">
-                            {' '}
-                            · Contraparte nueva: {row.internalTransfer.createCounterpart.accountName} ·{' '}
-                            {row.internalTransfer.createCounterpart.description}
-                          </span>
-                        ) : row.internalTransfer.counterpart ? (
-                          <span className="text-muted">
-                            {' '}
-                            · Contraparte: {row.internalTransfer.counterpart.accountName} · {row.internalTransfer.counterpart.description}
-                          </span>
-                        ) : null}
-                        {row.internalTransfer.stale ? <span className="text-warning"> · Requiere corregir la contraparte</span> : null}
-                      </div>
-                    ) : null}
+                    <BatchTransferIndicator row={row} />
                     <div className="transaction-batch-row-detail">
                       <DomainSuggestion
                         title="Descripción sugerida"
