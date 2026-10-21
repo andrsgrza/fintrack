@@ -60,6 +60,7 @@ public class TransactionBatchReceiptCleanupService {
 
     /** The test profiles disable scheduling; production runs remain bounded by both time and row count. */
     @Scheduled(fixedDelayString = "${application.transaction-batch-receipt.cleanup-fixed-delay:PT1H}")
+    @Transactional
     public void scheduledCleanupExpiredReceipts() {
         cleanupExpiredReceipts();
     }
