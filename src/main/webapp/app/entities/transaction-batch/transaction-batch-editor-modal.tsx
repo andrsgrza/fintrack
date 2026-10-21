@@ -453,6 +453,327 @@ const transferTranslation = (key: string, interpolate?: Record<string, string | 
 
 type CounterpartMode = 'CREATE_COUNTERPART' | 'LINK_EXISTING';
 
+type InternalTransferSectionProps = {
+  candidate?: BatchCandidate;
+  values: BatchEditorValues;
+  sourceAccountId?: number;
+  currency?: string | null;
+  saving: boolean;
+  onSearch?: (options: { search?: string; accountId?: number; page?: number }) => Promise<BatchTransferCounterpartPage>;
+  onSelect?: (counterpart: BatchTransferCounterpart) => Promise<BatchCandidate | undefined>;
+  onConfigureCreate?: (configuration: BatchCreateCounterpartInput) => Promise<BatchCandidate | undefined>;
+  onClear?: () => Promise<BatchCandidate | undefined>;
+};
+
+type CreateCounterpartConfigurationProps = {
+  candidate?: BatchCandidate;
+  persistedCreate: BatchCreateCounterpartConfiguration | null;
+  counterpartAccounts: IFinancialAccountSelectable[];
+  createAccountId: string;
+  createPostingDate: string;
+  createDescription: string;
+  createExternalReference: string;
+  createNotes: string;
+  disabled: boolean;
+  onAccountChange: (value: string) => void;
+  onPostingDateChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onReferenceChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+  onSave: () => void;
+};
+
+const CreateCounterpartConfiguration = ({
+  candidate,
+  persistedCreate,
+  counterpartAccounts,
+  createAccountId,
+  createPostingDate,
+  createDescription,
+  createExternalReference,
+  createNotes,
+  disabled,
+  onAccountChange,
+  onPostingDateChange,
+  onDescriptionChange,
+  onReferenceChange,
+  onNotesChange,
+  onSave,
+}: CreateCounterpartConfigurationProps) => (
+  <div data-cy="transactionBatchCreateCounterpartConfiguration">
+    <p className="small text-muted mb-3">{transferTranslation('createHelp')}</p>
+    {candidate?.internalTransfer?.stale ? (
+      <div className="alert alert-warning py-2" role="alert" data-cy="transactionBatchTransferStale">
+        {transferTranslation('createStale')}
+      </div>
+    ) : null}
+    <Row className="g-3">
+      <Col md="6">
+        <FormGroup>
+          <Label for="batch-editor-create-counterpart-account">{transferTranslation('counterpartAccount')}</Label>
+          <Input
+            id="batch-editor-create-counterpart-account"
+            type="select"
+            value={createAccountId}
+            onChange={event => onAccountChange(event.target.value)}
+            disabled={disabled}
+            data-cy="transactionBatchCreateCounterpartAccount"
+          >
+            <option value="">{transferTranslation('selectCounterpartAccount')}</option>
+            {counterpartAccounts.map(account => (
+              <option value={account.id} key={account.id}>
+                {formatFinancialAccountLabel(account)}
+              </option>
+            ))}
+          </Input>
+        </FormGroup>
+      </Col>
+      <Col md="6">
+        <FormGroup>
+          <Label for="batch-editor-create-counterpart-posting-date">{transferTranslation('counterpartPostingDate')}</Label>
+          <Input
+            id="batch-editor-create-counterpart-posting-date"
+            type="date"
+            value={createPostingDate}
+            onChange={event => onPostingDateChange(event.target.value)}
+            disabled={disabled}
+            data-cy="transactionBatchCreateCounterpartPostingDate"
+          />
+        </FormGroup>
+      </Col>
+    </Row>
+    <FormGroup>
+      <Label for="batch-editor-create-counterpart-description">{transferTranslation('counterpartDescription')}</Label>
+      <Input
+        id="batch-editor-create-counterpart-description"
+        value={createDescription}
+        onChange={event => onDescriptionChange(event.target.value)}
+        disabled={disabled}
+        data-cy="transactionBatchCreateCounterpartDescription"
+      />
+    </FormGroup>
+    <Row className="g-3">
+      <Col md="6">
+        <FormGroup>
+          <Label for="batch-editor-create-counterpart-reference">{transferTranslation('counterpartReference')}</Label>
+          <Input
+            id="batch-editor-create-counterpart-reference"
+            value={createExternalReference}
+            onChange={event => onReferenceChange(event.target.value)}
+            disabled={disabled}
+            data-cy="transactionBatchCreateCounterpartReference"
+          />
+        </FormGroup>
+      </Col>
+      <Col md="6">
+        <FormGroup>
+          <Label for="batch-editor-create-counterpart-notes">{transferTranslation('counterpartNotes')}</Label>
+          <Input
+            id="batch-editor-create-counterpart-notes"
+            value={createNotes}
+            onChange={event => onNotesChange(event.target.value)}
+            disabled={disabled}
+            data-cy="transactionBatchCreateCounterpartNotes"
+          />
+        </FormGroup>
+      </Col>
+    </Row>
+    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span className="small text-muted" data-cy={persistedCreate ? 'transactionBatchCreateCounterpartSaved' : undefined}>
+        {persistedCreate
+          ? transferTranslation('createSaved', { account: persistedCreate.accountName ?? '' })
+          : transferTranslation('createPending')}
+      </span>
+      <Button
+        type="button"
+        color="primary"
+        size="sm"
+        onClick={onSave}
+        disabled={disabled || !createAccountId || !createDescription.trim()}
+        data-cy="transactionBatchSaveCreateCounterpart"
+      >
+        {transferTranslation('saveCreate')}
+      </Button>
+    </div>
+  </div>
+);
+
+type LinkExistingCounterpartProps = {
+  candidate?: BatchCandidate;
+  counterpart: BatchTransferCounterpart | null;
+  canSearch: boolean;
+  counterpartAccounts: IFinancialAccountSelectable[];
+  accountFilterId: string;
+  search: string;
+  searching: boolean;
+  results: BatchTransferCounterpart[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  error: string;
+  disabled: boolean;
+  onAccountFilterChange: (value: string) => void;
+  onSearchChange: (value: string) => void;
+  onSelect: (counterpart: BatchTransferCounterpart) => void;
+  onRemove: () => void;
+  onPageChange: (page: number) => void;
+};
+
+const LinkExistingCounterpart = ({
+  candidate,
+  counterpart,
+  canSearch,
+  counterpartAccounts,
+  accountFilterId,
+  search,
+  searching,
+  results,
+  totalElements,
+  totalPages,
+  page,
+  error,
+  disabled,
+  onAccountFilterChange,
+  onSearchChange,
+  onSelect,
+  onRemove,
+  onPageChange,
+}: LinkExistingCounterpartProps) => (
+  <>
+    <Label className="fw-semibold d-block" for="batch-editor-counterpart-search">
+      {counterpart ? transferTranslation('changeCounterpart') : transferTranslation('counterpart')}
+    </Label>
+    {candidate?.internalTransfer?.stale ? (
+      <div className="alert alert-warning py-2" role="alert" data-cy="transactionBatchTransferStale">
+        {transferTranslation('stale')}
+      </div>
+    ) : null}
+    {counterpart ? (
+      <div
+        className="d-flex flex-wrap align-items-center justify-content-between gap-2"
+        data-cy="transactionBatchSelectedCounterpart"
+        aria-live="polite"
+      >
+        <div>
+          <div className="fw-semibold">{counterpart.accountName}</div>
+          <div className="small text-muted">{counterpartLabel(counterpart)}</div>
+        </div>
+        <Button type="button" color="secondary" outline size="sm" onClick={onRemove} disabled={disabled}>
+          {transferTranslation('remove')}
+        </Button>
+      </div>
+    ) : null}
+    {!canSearch ? (
+      <p className="small text-muted mb-0">{transferTranslation('incomplete')}</p>
+    ) : (
+      <>
+        <Row className="g-2">
+          <Col md="6">
+            <FormGroup className="mb-0">
+              <Label for="batch-editor-counterpart-account-filter">{transferTranslation('filterAccount')}</Label>
+              <Input
+                id="batch-editor-counterpart-account-filter"
+                type="select"
+                value={accountFilterId}
+                onChange={event => onAccountFilterChange(event.target.value)}
+                disabled={disabled}
+                data-cy="transactionBatchCounterpartAccountFilter"
+              >
+                <option value="">{transferTranslation('allEligibleAccounts')}</option>
+                {counterpartAccounts.map(account => (
+                  <option value={account.id} key={account.id}>
+                    {formatFinancialAccountLabel(account)}
+                  </option>
+                ))}
+              </Input>
+            </FormGroup>
+          </Col>
+          <Col md="6">
+            <FormGroup className="mb-0">
+              <Label for="batch-editor-counterpart-search">{transferTranslation('search')}</Label>
+              <Input
+                id="batch-editor-counterpart-search"
+                value={search}
+                onChange={event => onSearchChange(event.target.value)}
+                placeholder={transferTranslation('searchPlaceholder')}
+                disabled={disabled}
+                data-cy="transactionBatchCounterpartSearch"
+              />
+            </FormGroup>
+          </Col>
+        </Row>
+        <div className="small text-muted mt-3" aria-live="polite" data-cy="transactionBatchCounterpartCount">
+          {searching ? (
+            <>
+              <Spinner size="sm" className="me-2" />
+              {transferTranslation('loading')}
+            </>
+          ) : (
+            transferTranslation('resultCount', { count: totalElements })
+          )}
+        </div>
+        {!searching && !results.length && !error ? <p className="small text-muted mt-2 mb-0">{transferTranslation('noResults')}</p> : null}
+        {results.length ? (
+          <div
+            className="d-flex flex-column gap-2 mt-3"
+            data-cy="transactionBatchCounterpartResults"
+            aria-label={transferTranslation('searchResults')}
+            role="listbox"
+          >
+            {results.map(result => {
+              const isSelected = counterpart?.transactionId === result.transactionId;
+              return (
+                <button
+                  type="button"
+                  key={result.transactionId}
+                  className={`btn ${isSelected ? 'btn-primary' : 'btn-light'} counterpart-result text-start border`}
+                  onClick={() => onSelect(result)}
+                  disabled={disabled}
+                  aria-selected={isSelected}
+                  role="option"
+                >
+                  <span className="d-flex justify-content-between gap-2">
+                    <strong>{result.description}</strong>
+                    {isSelected ? '✓' : null}
+                  </span>
+                  <span className="d-block small">{counterpartLabel(result)}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        {totalPages > 1 ? (
+          <div className="d-flex justify-content-end align-items-center gap-2 mt-3">
+            <Button
+              type="button"
+              size="sm"
+              color="secondary"
+              outline
+              disabled={searching || page === 0}
+              onClick={() => onPageChange(page - 1)}
+            >
+              {transferTranslation('previous')}
+            </Button>
+            <span className="small text-muted">
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              color="secondary"
+              outline
+              disabled={searching || page + 1 >= totalPages}
+              onClick={() => onPageChange(page + 1)}
+            >
+              {transferTranslation('next')}
+            </Button>
+          </div>
+        ) : null}
+      </>
+    )}
+  </>
+);
+
 const InternalTransferSection = ({
   candidate,
   values,
@@ -463,17 +784,7 @@ const InternalTransferSection = ({
   onSelect,
   onConfigureCreate,
   onClear,
-}: {
-  candidate?: BatchCandidate;
-  values: BatchEditorValues;
-  sourceAccountId?: number;
-  currency?: string | null;
-  saving: boolean;
-  onSearch?: (options: { search?: string; accountId?: number; page?: number }) => Promise<BatchTransferCounterpartPage>;
-  onSelect?: (counterpart: BatchTransferCounterpart) => Promise<BatchCandidate | undefined>;
-  onConfigureCreate?: (configuration: BatchCreateCounterpartInput) => Promise<BatchCandidate | undefined>;
-  onClear?: () => Promise<BatchCandidate | undefined>;
-}) => {
+}: InternalTransferSectionProps) => {
   const [enabled, setEnabled] = useState(Boolean(candidate?.internalTransfer?.enabled));
   const [mode, setMode] = useState<CounterpartMode>(
     candidate?.internalTransfer?.mode === 'LINK_EXISTING' ? 'LINK_EXISTING' : 'CREATE_COUNTERPART',
@@ -701,246 +1012,50 @@ const InternalTransferSection = ({
             </Button>
           </div>
           {mode === 'CREATE_COUNTERPART' ? (
-            <div data-cy="transactionBatchCreateCounterpartConfiguration">
-              <p className="small text-muted mb-3">{transferTranslation('createHelp')}</p>
-              {candidate?.internalTransfer?.stale ? (
-                <div className="alert alert-warning py-2" role="alert" data-cy="transactionBatchTransferStale">
-                  {transferTranslation('createStale')}
-                </div>
-              ) : null}
-              <Row className="g-3">
-                <Col md="6">
-                  <FormGroup>
-                    <Label for="batch-editor-create-counterpart-account">{transferTranslation('counterpartAccount')}</Label>
-                    <Input
-                      id="batch-editor-create-counterpart-account"
-                      type="select"
-                      value={createAccountId}
-                      onChange={event => setCreateAccountId(event.target.value)}
-                      disabled={saving || busy}
-                      data-cy="transactionBatchCreateCounterpartAccount"
-                    >
-                      <option value="">{transferTranslation('selectCounterpartAccount')}</option>
-                      {counterpartAccounts.map(account => (
-                        <option value={account.id} key={account.id}>
-                          {formatFinancialAccountLabel(account)}
-                        </option>
-                      ))}
-                    </Input>
-                  </FormGroup>
-                </Col>
-                <Col md="6">
-                  <FormGroup>
-                    <Label for="batch-editor-create-counterpart-posting-date">{transferTranslation('counterpartPostingDate')}</Label>
-                    <Input
-                      id="batch-editor-create-counterpart-posting-date"
-                      type="date"
-                      value={createPostingDate}
-                      onChange={event => setCreatePostingDate(event.target.value)}
-                      disabled={saving || busy}
-                      data-cy="transactionBatchCreateCounterpartPostingDate"
-                    />
-                  </FormGroup>
-                </Col>
-              </Row>
-              <FormGroup>
-                <Label for="batch-editor-create-counterpart-description">{transferTranslation('counterpartDescription')}</Label>
-                <Input
-                  id="batch-editor-create-counterpart-description"
-                  value={createDescription}
-                  onChange={event => setCreateDescription(event.target.value)}
-                  disabled={saving || busy}
-                  data-cy="transactionBatchCreateCounterpartDescription"
-                />
-              </FormGroup>
-              <Row className="g-3">
-                <Col md="6">
-                  <FormGroup>
-                    <Label for="batch-editor-create-counterpart-reference">{transferTranslation('counterpartReference')}</Label>
-                    <Input
-                      id="batch-editor-create-counterpart-reference"
-                      value={createExternalReference}
-                      onChange={event => setCreateExternalReference(event.target.value)}
-                      disabled={saving || busy}
-                      data-cy="transactionBatchCreateCounterpartReference"
-                    />
-                  </FormGroup>
-                </Col>
-                <Col md="6">
-                  <FormGroup>
-                    <Label for="batch-editor-create-counterpart-notes">{transferTranslation('counterpartNotes')}</Label>
-                    <Input
-                      id="batch-editor-create-counterpart-notes"
-                      value={createNotes}
-                      onChange={event => setCreateNotes(event.target.value)}
-                      disabled={saving || busy}
-                      data-cy="transactionBatchCreateCounterpartNotes"
-                    />
-                  </FormGroup>
-                </Col>
-              </Row>
-              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                {persistedCreate ? (
-                  <span className="small text-muted" data-cy="transactionBatchCreateCounterpartSaved">
-                    {transferTranslation('createSaved', { account: persistedCreate.accountName ?? '' })}
-                  </span>
-                ) : (
-                  <span className="small text-muted">{transferTranslation('createPending')}</span>
-                )}
-                <Button
-                  type="button"
-                  color="primary"
-                  size="sm"
-                  onClick={() => void configureCreate()}
-                  disabled={saving || busy || !createAccountId || !createDescription.trim()}
-                  data-cy="transactionBatchSaveCreateCounterpart"
-                >
-                  {transferTranslation('saveCreate')}
-                </Button>
-              </div>
-            </div>
+            <CreateCounterpartConfiguration
+              candidate={candidate}
+              persistedCreate={persistedCreate}
+              counterpartAccounts={counterpartAccounts}
+              createAccountId={createAccountId}
+              createPostingDate={createPostingDate}
+              createDescription={createDescription}
+              createExternalReference={createExternalReference}
+              createNotes={createNotes}
+              disabled={saving || busy}
+              onAccountChange={setCreateAccountId}
+              onPostingDateChange={setCreatePostingDate}
+              onDescriptionChange={setCreateDescription}
+              onReferenceChange={setCreateExternalReference}
+              onNotesChange={setCreateNotes}
+              onSave={() => void configureCreate()}
+            />
           ) : (
-            <>
-              <Label className="fw-semibold d-block" for="batch-editor-counterpart-search">
-                {counterpart ? transferTranslation('changeCounterpart') : transferTranslation('counterpart')}
-              </Label>
-              {candidate?.internalTransfer?.stale ? (
-                <div className="alert alert-warning py-2" role="alert" data-cy="transactionBatchTransferStale">
-                  {transferTranslation('stale')}
-                </div>
-              ) : null}
-              {counterpart ? (
-                <div
-                  className="d-flex flex-wrap align-items-center justify-content-between gap-2"
-                  data-cy="transactionBatchSelectedCounterpart"
-                  aria-live="polite"
-                >
-                  <div>
-                    <div className="fw-semibold">{counterpart.accountName}</div>
-                    <div className="small text-muted">{counterpartLabel(counterpart)}</div>
-                  </div>
-                  <Button type="button" color="secondary" outline size="sm" onClick={() => void clear()} disabled={saving || busy}>
-                    {transferTranslation('remove')}
-                  </Button>
-                </div>
-              ) : null}
-              {!canSearch ? (
-                <p className="small text-muted mb-0">{transferTranslation('incomplete')}</p>
-              ) : (
-                <>
-                  <Row className="g-2">
-                    <Col md="6">
-                      <FormGroup className="mb-0">
-                        <Label for="batch-editor-counterpart-account-filter">{transferTranslation('filterAccount')}</Label>
-                        <Input
-                          id="batch-editor-counterpart-account-filter"
-                          type="select"
-                          value={accountFilterId}
-                          onChange={event => {
-                            setAccountFilterId(event.target.value);
-                            setPage(0);
-                          }}
-                          disabled={saving || busy}
-                          data-cy="transactionBatchCounterpartAccountFilter"
-                        >
-                          <option value="">{transferTranslation('allEligibleAccounts')}</option>
-                          {counterpartAccounts.map(account => (
-                            <option value={account.id} key={account.id}>
-                              {formatFinancialAccountLabel(account)}
-                            </option>
-                          ))}
-                        </Input>
-                      </FormGroup>
-                    </Col>
-                    <Col md="6">
-                      <FormGroup className="mb-0">
-                        <Label for="batch-editor-counterpart-search">{transferTranslation('search')}</Label>
-                        <Input
-                          id="batch-editor-counterpart-search"
-                          value={search}
-                          onChange={event => {
-                            setSearch(event.target.value);
-                            setPage(0);
-                          }}
-                          placeholder={transferTranslation('searchPlaceholder')}
-                          disabled={saving || busy}
-                          data-cy="transactionBatchCounterpartSearch"
-                        />
-                      </FormGroup>
-                    </Col>
-                  </Row>
-                  <div className="small text-muted mt-3" aria-live="polite" data-cy="transactionBatchCounterpartCount">
-                    {searching ? (
-                      <>
-                        <Spinner size="sm" className="me-2" />
-                        {transferTranslation('loading')}
-                      </>
-                    ) : (
-                      transferTranslation('resultCount', { count: totalElements })
-                    )}
-                  </div>
-                  {!searching && !results.length && !error ? (
-                    <p className="small text-muted mt-2 mb-0">{transferTranslation('noResults')}</p>
-                  ) : null}
-                  {results.length ? (
-                    <div
-                      className="d-flex flex-column gap-2 mt-3"
-                      data-cy="transactionBatchCounterpartResults"
-                      aria-label={transferTranslation('searchResults')}
-                      role="listbox"
-                    >
-                      {results.map(result => {
-                        const isSelected = counterpart?.transactionId === result.transactionId;
-                        return (
-                          <button
-                            type="button"
-                            key={result.transactionId}
-                            className={`btn ${isSelected ? 'btn-primary' : 'btn-light'} counterpart-result text-start border`}
-                            onClick={() => void selectCounterpart(result)}
-                            disabled={saving || busy}
-                            aria-selected={isSelected}
-                            role="option"
-                          >
-                            <span className="d-flex justify-content-between gap-2">
-                              <strong>{result.description}</strong>
-                              {isSelected ? '✓' : null}
-                            </span>
-                            <span className="d-block small">{counterpartLabel(result)}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                  {totalPages > 1 ? (
-                    <div className="d-flex justify-content-end align-items-center gap-2 mt-3">
-                      <Button
-                        type="button"
-                        size="sm"
-                        color="secondary"
-                        outline
-                        disabled={searching || page === 0}
-                        onClick={() => setPage(page - 1)}
-                      >
-                        {transferTranslation('previous')}
-                      </Button>
-                      <span className="small text-muted">
-                        {page + 1} / {totalPages}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        color="secondary"
-                        outline
-                        disabled={searching || page + 1 >= totalPages}
-                        onClick={() => setPage(page + 1)}
-                      >
-                        {transferTranslation('next')}
-                      </Button>
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </>
+            <LinkExistingCounterpart
+              candidate={candidate}
+              counterpart={counterpart}
+              canSearch={canSearch}
+              counterpartAccounts={counterpartAccounts}
+              accountFilterId={accountFilterId}
+              search={search}
+              searching={searching}
+              results={results}
+              totalElements={totalElements}
+              totalPages={totalPages}
+              page={page}
+              error={error}
+              disabled={saving || busy}
+              onAccountFilterChange={value => {
+                setAccountFilterId(value);
+                setPage(0);
+              }}
+              onSearchChange={value => {
+                setSearch(value);
+                setPage(0);
+              }}
+              onSelect={next => void selectCounterpart(next)}
+              onRemove={() => void clear()}
+              onPageChange={setPage}
+            />
           )}
           {error ? (
             <div className="small text-danger mt-2" role="alert">
