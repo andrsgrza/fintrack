@@ -29,8 +29,7 @@
       "ApiIngestion",
       "IngestionRecord",
       "ApiAccessToken",
-      "ApiAccessTokenPermission",
-      "UserDashboardPreference"
+      "ApiAccessTokenPermission"
     ],
     "incrementalChangelog": true,
     "jhipsterVersion": "8.11.0",

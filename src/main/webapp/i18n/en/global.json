@@ -24,8 +24,7 @@
         "apiIngestion": "Api Ingestion",
         "technical": "Technical",
         "apiAccessToken": "Api Access Token",
-        "apiAccessTokenPermission": "Api Access Token Permission",
-        "userDashboardPreference": "User Dashboard Preference"
+        "apiAccessTokenPermission": "Api Access Token Permission"
       },
       "account": {
         "main": "Account",

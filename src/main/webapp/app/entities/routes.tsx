@@ -19,7 +19,6 @@ import InternalTransfer from './internal-transfer';
 import ApiIngestion from './api-ingestion';
 import ApiAccessToken from './api-access-token';
 import ApiAccessTokenPermission from './api-access-token-permission';
-import UserDashboardPreference from './user-dashboard-preference';
 import TransactionBatch from './transaction-batch';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
@@ -45,7 +44,6 @@ export default () => {
         <Route path="api-ingestion/*" element={<ApiIngestion />} />
         <Route path="api-access-token/*" element={<ApiAccessToken />} />
         <Route path="api-access-token-permission/*" element={<ApiAccessTokenPermission />} />
-        <Route path="user-dashboard-preference/*" element={<UserDashboardPreference />} />
         {/* jhipster-needle-add-route-path - JHipster will add routes here */}
       </ErrorBoundaryRoutes>
     </div>

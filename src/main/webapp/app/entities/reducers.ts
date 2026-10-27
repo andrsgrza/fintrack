@@ -12,7 +12,6 @@ import budget from 'app/entities/budget/budget.reducer';
 import apiIngestion from 'app/entities/api-ingestion/api-ingestion.reducer';
 import apiAccessToken from 'app/entities/api-access-token/api-access-token.reducer';
 import apiAccessTokenPermission from 'app/entities/api-access-token-permission/api-access-token-permission.reducer';
-import userDashboardPreference from 'app/entities/user-dashboard-preference/user-dashboard-preference.reducer';
 /* jhipster-needle-add-reducer-import - JHipster will add reducer here */
 
 const entitiesReducers = {
@@ -30,7 +29,6 @@ const entitiesReducers = {
   apiIngestion,
   apiAccessToken,
   apiAccessTokenPermission,
-  userDashboardPreference,
   /* jhipster-needle-add-reducer-combine - JHipster will add reducer here */
 };
 

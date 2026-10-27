@@ -53,9 +53,6 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/api-access-token-permission">
         <Translate contentKey="global.menu.entities.apiAccessTokenPermission" />
       </MenuItem>
-      <MenuItem icon="asterisk" to="/user-dashboard-preference">
-        <Translate contentKey="global.menu.entities.userDashboardPreference" />
-      </MenuItem>
       {/* jhipster-needle-add-entity-to-menu - JHipster will add entities to the menu here */}
     </>
   );

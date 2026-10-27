@@ -28,7 +28,6 @@
     <include file="config/liquibase/changelog/20260707174834_added_entity_IngestionRecord.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174835_added_entity_ApiAccessToken.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174836_added_entity_ApiAccessTokenPermission.xml" relativeToChangelogFile="false"/>
-    <include file="config/liquibase/changelog/20260707174837_added_entity_UserDashboardPreference.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-changelog - JHipster will add liquibase changelogs here -->
     <include file="config/liquibase/changelog/20260707174821_added_entity_constraints_FinancialAccount.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174822_added_entity_constraints_CreditAccountDetails.xml" relativeToChangelogFile="false"/>
@@ -46,7 +45,6 @@
     <include file="config/liquibase/changelog/20260707174834_added_entity_constraints_IngestionRecord.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174835_added_entity_constraints_ApiAccessToken.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174836_added_entity_constraints_ApiAccessTokenPermission.xml" relativeToChangelogFile="false"/>
-    <include file="config/liquibase/changelog/20260707174837_added_entity_constraints_UserDashboardPreference.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-constraints-changelog - JHipster will add liquibase constraints changelogs here -->
     <include file="config/liquibase/changelog/20260707201522_updated_entity_ApiAccessToken.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707204535_updated_entity_FinancialAccount.xml" relativeToChangelogFile="false"/>
