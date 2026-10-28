@@ -30,19 +30,24 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Real independent-transaction checks for Batch publication's shared transfer locks and bounded receipt replay. */
 @IntegrationTest
@@ -76,11 +81,64 @@ class TransactionBatchPublishConcurrencyIT {
     @Autowired
     private InternalTransferRepository internalTransferRepository;
 
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
+    /**
+     * These tests intentionally use independent service transactions to exercise real publication locking. Spring's
+     * test-managed rollback therefore cannot contain their fixtures; retain only the identifiers created by this
+     * class and remove that exact aggregate after every test.
+     */
+    private final Set<Long> fixtureAccountIds = new LinkedHashSet<>();
+
+    private final Set<Long> fixtureBatchIds = new LinkedHashSet<>();
+
+    private Long unrelatedControlAccountId;
+
+    @BeforeEach
+    void createUnrelatedControlAccount() {
+        unrelatedControlAccountId = saveAccount("Unrelated concurrent control account ");
+    }
+
+    @AfterEach
+    void removeCommittedFixtures() {
+        transactionTemplate.executeWithoutResult(status -> {
+            // OPEN batches own their candidates; published receipts no longer retain their account, so both sets are
+            // tracked independently.
+            for (Long batchId : fixtureBatchIds) {
+                candidateRepository.deleteTagLinksByTransactionBatchId(batchId);
+                candidateRepository.deleteByTransactionBatchId(batchId);
+                batchRepository.deleteById(batchId);
+            }
+
+            // Delete relationships before their financial legs, then remove only accounts this fixture created.
+            for (Long accountId : fixtureAccountIds) {
+                candidateRepository.deleteTagLinksByAccountId(accountId);
+                candidateRepository.deleteByAccountId(accountId);
+                internalTransferRepository.deleteByAccountIdInEitherRole(accountId);
+                financialTransactionRepository.deleteTagLinksByAccountId(accountId);
+                financialTransactionRepository.deleteByAccountId(accountId);
+            }
+            fixtureAccountIds.forEach(accountRepository::deleteById);
+        });
+
+        transactionTemplate.executeWithoutResult(status -> {
+            assertThat(fixtureBatchIds).allSatisfy(batchId -> assertThat(batchRepository.existsById(batchId)).isFalse());
+            assertThat(fixtureAccountIds).allSatisfy(accountId -> assertThat(accountRepository.existsById(accountId)).isFalse());
+            // Regression guard: cleanup is ID-scoped and cannot erase an account that this fixture did not own.
+            assertThat(accountRepository.existsById(unrelatedControlAccountId)).isTrue();
+            accountRepository.deleteById(unrelatedControlAccountId);
+        });
+
+        fixtureBatchIds.clear();
+        fixtureAccountIds.clear();
+    }
+
     @Test
     void publishesAgainstACounterpartAccountWhileItsHardDeleteIsBlockedByTheTemporaryIntent() throws Exception {
         FinancialAccount source = account();
         FinancialAccount target = account();
-        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+        TransactionBatchWorkspaceDTO batch = createOpenBatch(source.getId());
         TransactionBatchRowMutationDTO row = commandService.addManualDraft(
             batch.getId(),
             draft(batch.getVersion(), "Concurrent hard-delete source", "-40.00")
@@ -145,7 +203,7 @@ class TransactionBatchPublishConcurrencyIT {
     @Test
     void serializesCandidateEditAgainstPublishAsOneSuccessAndOneConflictWithoutPartialRows() throws Exception {
         FinancialAccount account = account();
-        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(account.getId());
+        TransactionBatchWorkspaceDTO batch = createOpenBatch(account.getId());
         TransactionBatchRowMutationDTO row = commandService.addManualDraft(
             batch.getId(),
             draft(batch.getVersion(), "Concurrent edit source", "-25.00")
@@ -226,7 +284,7 @@ class TransactionBatchPublishConcurrencyIT {
     @Test
     void replaysOneCompletedReceiptConcurrentlyWithoutCreatingExtraFinancialTransactions() throws Exception {
         FinancialAccount account = account();
-        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(account.getId());
+        TransactionBatchWorkspaceDTO batch = createOpenBatch(account.getId());
         TransactionBatchRowMutationDTO row = commandService.addManualDraft(
             batch.getId(),
             draft(batch.getVersion(), "Concurrent receipt source", "-31.00")
@@ -259,7 +317,7 @@ class TransactionBatchPublishConcurrencyIT {
     }
 
     private BatchReference linkedBatch(FinancialAccount source, FinancialTransaction counterpart, String description) {
-        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+        TransactionBatchWorkspaceDTO batch = createOpenBatch(source.getId());
         TransactionBatchRowMutationDTO row = commandService.addManualDraft(batch.getId(), draft(batch.getVersion(), description, "-55.00"));
         TransactionBatchInternalTransferCommand link = new TransactionBatchInternalTransferCommand();
         link.setExpectedCandidateVersion(row.getCandidate().getVersion());
@@ -276,7 +334,7 @@ class TransactionBatchPublishConcurrencyIT {
         String counterpartDescription,
         String amount
     ) {
-        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+        TransactionBatchWorkspaceDTO batch = createOpenBatch(source.getId());
         TransactionBatchRowMutationDTO row = commandService.addManualDraft(
             batch.getId(),
             draft(batch.getVersion(), sourceDescription, amount)
@@ -361,9 +419,15 @@ class TransactionBatchPublishConcurrencyIT {
     }
 
     private FinancialAccount account() {
+        Long accountId = saveAccount("Concurrent Batch account ");
+        fixtureAccountIds.add(accountId);
+        return accountRepository.findById(accountId).orElseThrow();
+    }
+
+    private Long saveAccount(String prefix) {
         String suffix = Long.toString(System.nanoTime());
         FinancialAccount account = new FinancialAccount()
-            .name("Concurrent Batch account " + suffix)
+            .name(prefix + suffix)
             .accountType(AccountType.DEBIT)
             .currency(CurrencyCode.MXN)
             .initialBalance(BigDecimal.ZERO)
@@ -372,7 +436,13 @@ class TransactionBatchPublishConcurrencyIT {
             .createdAt(Instant.now())
             .updatedAt(Instant.now());
         account.setUser(currentUser());
-        return accountRepository.saveAndFlush(account);
+        return accountRepository.saveAndFlush(account).getId();
+    }
+
+    private TransactionBatchWorkspaceDTO createOpenBatch(Long accountId) {
+        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(accountId);
+        fixtureBatchIds.add(batch.getId());
+        return batch;
     }
 
     private User currentUser() {
