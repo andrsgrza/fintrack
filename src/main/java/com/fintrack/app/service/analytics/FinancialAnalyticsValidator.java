@@ -64,6 +64,53 @@ public class FinancialAnalyticsValidator {
         return result.normalizedRequest().orElseThrow();
     }
 
+    /**
+     * Validates the context-free part of the canonical contract. This is deliberately shared by execution, the DSL,
+     * and the future visual builder: a definition never needs a fabricated time/account/currency context to be valid.
+     */
+    public AnalyticsDefinitionValidationResult validateDefinition(QueryDefinition definition) {
+        return validateDefinitionForOwner(definition, currentUserService.getCurrentUserLogin());
+    }
+
+    /** Visible for real PostgreSQL tests; administrators deliberately use their own login as the ownership scope. */
+    AnalyticsDefinitionValidationResult validateDefinitionForOwner(QueryDefinition definition, String ownerLogin) {
+        List<AnalyticsDiagnostic> diagnostics = new ArrayList<>();
+        if (definition == null) {
+            diagnostics.add(diagnostic(AnalyticsDiagnosticCode.MALFORMED_REQUEST, "definition", "A query definition is required."));
+            return invalidDefinition(diagnostics);
+        }
+
+        List<String> measures = normalizeIds(definition.measures());
+        List<String> groupings = normalizeIds(definition.groupings());
+        String dateBasis = normalizeIdOrDefault(definition.dateBasis(), FinancialSemanticCatalog.TRANSACTION_DATE);
+        List<FinancialMetricDefinition> metricDefinitions = validateDefinition(definition, measures, groupings, dateBasis, diagnostics);
+        validateCompatibility(metricDefinitions, groupings, dateBasis, diagnostics);
+        List<AnalyticalPredicate> predicates = validatePredicates(
+            definition.analyticalPredicates(),
+            metricDefinitions,
+            ownerLogin,
+            diagnostics
+        );
+        if (!diagnostics.isEmpty()) {
+            return invalidDefinition(diagnostics);
+        }
+        return new AnalyticsDefinitionValidationResult(
+            Optional.of(
+                new QueryDefinition(
+                    AnalyticsSchema.VERSION,
+                    AnalyticsSchema.SEMANTIC_MODEL,
+                    measures,
+                    groupings,
+                    predicates,
+                    dateBasis,
+                    normalizeSort(definition.sort(), groupings),
+                    definition.limit() == null ? AnalyticsSchema.DEFAULT_LIMIT : definition.limit()
+                )
+            ),
+            List.of()
+        );
+    }
+
     /** Visible for real PostgreSQL tests; administrators deliberately use their own login as the ownership scope. */
     AnalyticsValidationResult validateForOwner(FinancialAnalyticsExecutionRequest request, String ownerLogin) {
         List<AnalyticsDiagnostic> diagnostics = new ArrayList<>();
@@ -84,33 +131,13 @@ public class FinancialAnalyticsValidator {
             return invalid(diagnostics);
         }
 
-        List<String> measures = normalizeIds(definition.measures());
-        List<String> groupings = normalizeIds(definition.groupings());
-        String dateBasis = normalizeIdOrDefault(definition.dateBasis(), FinancialSemanticCatalog.TRANSACTION_DATE);
-        List<FinancialMetricDefinition> metricDefinitions = validateDefinition(definition, measures, groupings, dateBasis, diagnostics);
+        AnalyticsDefinitionValidationResult definitionValidation = validateDefinitionForOwner(definition, ownerLogin);
+        diagnostics.addAll(definitionValidation.diagnostics());
         ContextValidation contextValidation = validateContext(context, ownerLogin, diagnostics);
-        validateCompatibility(metricDefinitions, groupings, dateBasis, diagnostics);
-        List<AnalyticalPredicate> predicates = validatePredicates(
-            definition.analyticalPredicates(),
-            metricDefinitions,
-            ownerLogin,
-            diagnostics
-        );
-
         if (!diagnostics.isEmpty()) {
             return invalid(diagnostics);
         }
-        AnalyticsSort normalizedSort = normalizeSort(definition.sort(), groupings);
-        QueryDefinition normalizedDefinition = new QueryDefinition(
-            AnalyticsSchema.VERSION,
-            AnalyticsSchema.SEMANTIC_MODEL,
-            measures,
-            groupings,
-            predicates,
-            dateBasis,
-            normalizedSort,
-            definition.limit() == null ? AnalyticsSchema.DEFAULT_LIMIT : definition.limit()
-        );
+        QueryDefinition normalizedDefinition = definitionValidation.normalizedDefinition().orElseThrow();
         VisualizationContext normalizedContext = new VisualizationContext(
             AnalyticsSchema.VERSION,
             contextValidation.normalizedTime(),
@@ -703,6 +730,10 @@ public class FinancialAnalyticsValidator {
 
     private AnalyticsValidationResult invalid(List<AnalyticsDiagnostic> diagnostics) {
         return new AnalyticsValidationResult(Optional.empty(), List.copyOf(diagnostics));
+    }
+
+    private AnalyticsDefinitionValidationResult invalidDefinition(List<AnalyticsDiagnostic> diagnostics) {
+        return new AnalyticsDefinitionValidationResult(Optional.empty(), List.copyOf(diagnostics));
     }
 
     private record ContextValidation(

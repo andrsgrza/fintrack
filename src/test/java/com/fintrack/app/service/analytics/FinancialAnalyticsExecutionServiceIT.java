@@ -45,6 +45,9 @@ class FinancialAnalyticsExecutionServiceIT {
     private FinancialAnalyticsExecutionService executionService;
 
     @Autowired
+    private FinancialAnalyticsDslService dslService;
+
+    @Autowired
     private FinancialAccountRepository accountRepository;
 
     @Autowired
@@ -117,6 +120,61 @@ class FinancialAnalyticsExecutionServiceIT {
         assertValue(movement, "MXN", "ACCOUNT_INFLOW", "1000");
         assertValue(movement, "MXN", "ACCOUNT_OUTFLOW", "300");
         assertValue(movement, "MXN", "ACCOUNT_NET_MOVEMENT", "700");
+    }
+
+    @Test
+    void executesDefinitionsParsedFromTheDslThroughTheExistingFinancialEngine() {
+        Fixture fixture = fixture();
+
+        FinancialAnalyticsResult category = executeParsed(
+            dslService
+                .parse(
+                    "SELECT EXPENSE_TOTAL BY ROOT_CATEGORY WHERE ROOT_CATEGORY = %d USING TRANSACTION_DATE ORDER BY ROOT_CATEGORY ASC LIMIT 25".formatted(
+                            fixture.root().getId()
+                        )
+                )
+                .definition(),
+            List.of(fixture.debit().getId()),
+            List.of("MXN"),
+            fixture.today().minusDays(5),
+            fixture.today()
+        );
+        assertThat(category.rows())
+            .filteredOn(row ->
+                row
+                    .dimensions()
+                    .contains(new FinancialAnalyticsDimensionValue(FinancialSemanticCatalog.ROOT_CATEGORY, fixture.root().getId()))
+            )
+            .singleElement()
+            .satisfies(row -> assertThat(measure(row, "EXPENSE_TOTAL").value()).isEqualByComparingTo("100"));
+
+        FinancialAnalyticsResult positionSeries = executeParsed(
+            dslService.parse("SELECT ACCOUNT_BALANCE BY DAY WHERE ACCOUNT_TYPE = DEBIT ORDER BY DAY ASC LIMIT 10").definition(),
+            List.of(fixture.debit().getId()),
+            List.of("MXN"),
+            fixture.today().minusDays(1),
+            fixture.today()
+        );
+        assertValueForDay(positionSeries, fixture.today().minusDays(1), "ACCOUNT_BALANCE", "1000");
+        assertValueForDay(positionSeries, fixture.today(), "ACCOUNT_BALANCE", "800");
+
+        FinancialAnalyticsResult debt = executeParsed(
+            dslService.parse("SELECT CREDIT_CARD_DEBT LIMIT 10").definition(),
+            List.of(fixture.credit().getId()),
+            List.of("MXN"),
+            fixture.today(),
+            fixture.today()
+        );
+        assertValue(debt, "MXN", "CREDIT_CARD_DEBT", "100");
+
+        FinancialAnalyticsResult transfers = executeParsed(
+            dslService.parse("SELECT INTERNAL_TRANSFER_COUNT LIMIT 10").definition(),
+            List.of(fixture.debit().getId(), fixture.credit().getId()),
+            List.of("MXN"),
+            fixture.today().minusDays(5),
+            fixture.today()
+        );
+        assertValue(transfers, null, "INTERNAL_TRANSFER_COUNT", "1");
     }
 
     @Test
@@ -488,6 +546,27 @@ class FinancialAnalyticsExecutionServiceIT {
         LocalDate through
     ) {
         return execute(measures, accountIds, groupings, predicates, currencies, from, through, FinancialSemanticCatalog.TRANSACTION_DATE);
+    }
+
+    private FinancialAnalyticsResult executeParsed(
+        QueryDefinition definition,
+        List<Long> accountIds,
+        List<String> currencies,
+        LocalDate from,
+        LocalDate through
+    ) {
+        return executionService.execute(
+            new FinancialAnalyticsExecutionRequest(
+                AnalyticsSchema.VERSION,
+                definition,
+                new VisualizationContext(
+                    AnalyticsSchema.VERSION,
+                    new VisualizationTime("ABSOLUTE_RANGE", null, from, through),
+                    accountIds,
+                    currencies
+                )
+            )
+        );
     }
 
     private FinancialAnalyticsResult execute(

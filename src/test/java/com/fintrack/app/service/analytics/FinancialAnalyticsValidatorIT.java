@@ -35,6 +35,9 @@ class FinancialAnalyticsValidatorIT {
     private FinancialAnalyticsValidator validator;
 
     @Autowired
+    private FinancialAnalyticsDslService dslService;
+
+    @Autowired
     private FinancialAccountRepository accountRepository;
 
     @Autowired
@@ -149,6 +152,53 @@ class FinancialAnalyticsValidatorIT {
 
         assertThat(result.isValid()).isFalse();
         assertThat(result.diagnostics()).extracting(AnalyticsDiagnostic::code).contains(AnalyticsDiagnosticCode.INVALID_REFERENCE_ID);
+    }
+
+    @Test
+    void parserAppliesTheSameOwnedCategoryTagAndHierarchyChecksWithoutMutatingData() {
+        Category root = category("user", false);
+        Category child = categoryRepository.saveAndFlush(
+            new Category()
+                .name("Analytics child " + System.nanoTime())
+                .categoryType(CategoryType.EXPENSE)
+                .color("#224466")
+                .active(false)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .user(user("user"))
+                .parentCategory(root)
+        );
+        Tag tag = tag("user", false);
+        long categoriesBefore = categoryRepository.count();
+        long tagsBefore = tagRepository.count();
+
+        FinancialAnalyticsDslParseResult parsed = dslService.parse(
+            "SELECT EXPENSE_TOTAL BY CATEGORY WHERE CATEGORY = %d AND ROOT_CATEGORY = %d AND TAG IN (%d)".formatted(
+                    child.getId(),
+                    root.getId(),
+                    tag.getId()
+                )
+        );
+
+        assertThat(parsed.definition().analyticalPredicates()).containsExactly(
+            new AnalyticalPredicate(FinancialSemanticCatalog.CATEGORY, FinancialSemanticCatalog.EQUALS, List.of(child.getId().toString())),
+            new AnalyticalPredicate(
+                FinancialSemanticCatalog.ROOT_CATEGORY,
+                FinancialSemanticCatalog.EQUALS,
+                List.of(root.getId().toString())
+            ),
+            new AnalyticalPredicate(FinancialSemanticCatalog.TAG, FinancialSemanticCatalog.IN, List.of(tag.getId().toString()))
+        );
+        assertThat(categoryRepository.count()).isEqualTo(categoriesBefore);
+        assertThat(tagRepository.count()).isEqualTo(tagsBefore);
+
+        FinancialAnalyticsDslException foreign = org.assertj.core.api.Assertions.catchThrowableOfType(
+            () -> dslService.parse("SELECT EXPENSE_TOTAL WHERE CATEGORY = " + category("admin", true).getId()),
+            FinancialAnalyticsDslException.class
+        );
+        assertThat(foreign.getDiagnostics())
+            .extracting(AnalyticsDiagnostic::code)
+            .contains(AnalyticsDiagnosticCode.FOREIGN_CATEGORY_REFERENCE);
     }
 
     private FinancialAnalyticsExecutionRequest request(List<Long> accountIds, List<AnalyticalPredicate> predicates) {
