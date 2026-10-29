@@ -8,4 +8,5 @@ public enum SemanticValueType {
     TEMPORAL_BUCKET,
     DECIMAL,
     INTEGER,
+    TEXT,
 }

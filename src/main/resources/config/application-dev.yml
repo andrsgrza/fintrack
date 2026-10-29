@@ -32,9 +32,9 @@ spring:
       indent-output: true
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
-    url: ${FINTRACK_ANALYTICS_REFACTOR_DB_URL:jdbc:postgresql://localhost:55432/fintrack_analytics_refactor}
-    username: ${FINTRACK_ANALYTICS_REFACTOR_DB_USERNAME:fintrack_analytics_refactor}
-    password: ${FINTRACK_ANALYTICS_REFACTOR_DB_PASSWORD:fintrack_analytics_refactor_dev_only}
+    url: jdbc:postgresql://localhost:5432/fintrack
+    username: fintrack
+    password:
     hikari:
       poolName: Hikari
       auto-commit: false
@@ -51,7 +51,7 @@ spring:
     cache: false
 
 server:
-  port: ${FINTRACK_ANALYTICS_REFACTOR_SERVER_PORT:19080}
+  port: 8080
   # make sure requests the proxy uri instead of the server one
   forward-headers-strategy: native
 

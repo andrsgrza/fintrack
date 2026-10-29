@@ -20,6 +20,7 @@ import ApiIngestion from './api-ingestion';
 import ApiAccessToken from './api-access-token';
 import ApiAccessTokenPermission from './api-access-token-permission';
 import TransactionBatch from './transaction-batch';
+import AnalyticsExplorer from './analytics-explorer/analytics-explorer';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
 export default () => {
@@ -31,6 +32,7 @@ export default () => {
         <Route path="credit-account-details/*" element={<CreditAccountDetails />} />
         <Route path="financial-transaction/*" element={<FinancialTransaction />} />
         <Route path="transaction-batches/*" element={<TransactionBatch />} />
+        <Route path="analytics/explorer" element={<AnalyticsExplorer />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />
         <Route path="rules/*" element={<Rules />} />

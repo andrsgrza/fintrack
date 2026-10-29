@@ -1,0 +1,2366 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FINTRACK · Explorador de métricas</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2933;
+        --muted: #66737f;
+        --line: #d8e0e6;
+        --canvas: #f5f7f8;
+        --surface: #ffffff;
+        --blue: #35628d;
+        --blue-deep: #234b70;
+        --blue-soft: #edf4fa;
+        --green: #6aaa3a;
+        --green-soft: #f2f8eb;
+        --orange: #d78727;
+        --red: #c95a55;
+        --shadow: 0 8px 24px rgba(30, 52, 70, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--canvas);
+        font:
+          15px/1.45 Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      button,
+      select,
+      input,
+      textarea {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible {
+        outline: 3px solid rgba(53, 98, 141, 0.34);
+        outline-offset: 2px;
+      }
+
+      .topbar {
+        background: var(--blue);
+        color: #fff;
+        min-height: 68px;
+        display: flex;
+        align-items: center;
+      }
+      .topbar-inner,
+      main {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+      .brand {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        font-weight: 650;
+      }
+      .brand-mark {
+        width: 29px;
+        height: 29px;
+        border-radius: 8px;
+        background: #7bb44b;
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+      }
+      .topbar small {
+        color: rgba(255, 255, 255, 0.72);
+        margin-left: 8px;
+        font-weight: 500;
+      }
+      main {
+        padding: 30px 0 60px;
+      }
+      .page-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(25px, 3vw, 33px);
+        letter-spacing: -0.035em;
+        font-weight: 650;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 0;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+      }
+      h3 {
+        font-size: 15px;
+        margin: 0;
+        font-weight: 650;
+      }
+      p {
+        margin: 0;
+      }
+      .subhead {
+        color: var(--muted);
+        margin-top: 6px;
+        max-width: 680px;
+      }
+      .simulation {
+        align-self: center;
+        border: 1px solid #d5dfba;
+        background: #f4fae8;
+        color: #56742a;
+        border-radius: 999px;
+        padding: 7px 11px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 1px 2px rgba(30, 52, 70, 0.03);
+      }
+      .context {
+        padding: 18px 20px;
+        margin-bottom: 22px;
+      }
+      .section-kicker {
+        color: var(--blue);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-weight: 750;
+        margin-bottom: 3px;
+      }
+      .context-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      .context-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 1fr 1fr;
+        gap: 12px;
+      }
+      .field-label {
+        display: block;
+        color: #53616d;
+        font-size: 12px;
+        font-weight: 700;
+        margin: 0 0 5px;
+      }
+      .select-wrap {
+        position: relative;
+      }
+      select,
+      input[type='text'],
+      textarea {
+        width: 100%;
+        border: 1px solid #cbd5dc;
+        border-radius: 7px;
+        color: var(--ink);
+        background: #fff;
+        padding: 9px 10px;
+      }
+      select {
+        min-height: 40px;
+      }
+      .pick {
+        position: relative;
+      }
+      .pick-toggle {
+        width: 100%;
+        min-height: 40px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        text-align: left;
+        align-items: center;
+        background: #fff;
+        border: 1px solid #cbd5dc;
+        border-radius: 7px;
+        color: var(--ink);
+        padding: 9px 10px;
+      }
+      .pick-toggle::after {
+        content: '⌄';
+        color: var(--muted);
+      }
+      .popover {
+        position: absolute;
+        z-index: 10;
+        left: 0;
+        right: 0;
+        top: calc(100% + 6px);
+        padding: 10px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        box-shadow: var(--shadow);
+      }
+      .popover[hidden] {
+        display: none;
+      }
+      .search {
+        margin-bottom: 7px;
+      }
+      .check-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 4px;
+        color: #37444f;
+      }
+      .check-option input {
+        width: 16px;
+        height: 16px;
+      }
+
+      .intro {
+        padding: 23px;
+        margin-bottom: 22px;
+      }
+      .intro-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: start;
+      }
+      .intro p {
+        color: var(--muted);
+        max-width: 655px;
+        margin-top: 4px;
+      }
+      .example-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 18px;
+      }
+      .example {
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 13px;
+        background: #fff;
+        color: var(--ink);
+        min-height: 104px;
+        transition: 0.16s ease;
+      }
+      .example:hover {
+        border-color: var(--blue);
+        background: #f9fbfd;
+        transform: translateY(-1px);
+      }
+      .example .example-icon {
+        color: var(--blue);
+        font-size: 17px;
+        display: block;
+        margin-bottom: 8px;
+      }
+      .example strong {
+        display: block;
+        font-size: 13px;
+        line-height: 1.25;
+      }
+      .example span {
+        color: var(--muted);
+        display: block;
+        font-size: 12px;
+        line-height: 1.35;
+        margin-top: 4px;
+      }
+      .intro-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 17px;
+      }
+
+      .btn {
+        border: 1px solid #bdc8d1;
+        color: #4d5b67;
+        background: #fff;
+        border-radius: 7px;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .btn:hover {
+        background: #f6f8fa;
+      }
+      .btn-primary {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: var(--blue-deep);
+      }
+      .btn-quiet {
+        border-color: transparent;
+        background: transparent;
+        color: var(--blue);
+        padding-inline: 7px;
+      }
+      .btn-danger {
+        color: #a6413e;
+        border-color: #e6bfbc;
+        background: #fffafa;
+      }
+      .btn-icon {
+        min-width: 38px;
+        padding: 9px;
+      }
+
+      .workspace[hidden],
+      .written-workspace[hidden] {
+        display: none;
+      }
+      .workspace {
+        display: grid;
+        gap: 16px;
+      }
+      .mode-bar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+      .mode-tabs {
+        display: inline-flex;
+        padding: 3px;
+        gap: 2px;
+        background: #e9eef2;
+        border-radius: 8px;
+      }
+      .mode-tab {
+        border: 0;
+        border-radius: 6px;
+        color: #53616d;
+        background: transparent;
+        padding: 8px 11px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .mode-tab.is-active {
+        color: #fff;
+        background: var(--blue);
+      }
+      .mode-help {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .flow-card {
+        overflow: hidden;
+      }
+      .flow-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 15px 18px;
+        border-bottom: 1px solid var(--line);
+        background: #fbfcfd;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: 11px;
+      }
+      .step-no {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        background: var(--green);
+        border-radius: 50%;
+        font-size: 13px;
+        font-weight: 750;
+      }
+      .step-description {
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .flow-body {
+        padding: 17px 18px;
+      }
+      .flow-card .flow-card + .flow-card {
+        border-top: 1px solid var(--line);
+      }
+
+      .calculation-list,
+      .condition-list {
+        display: grid;
+        gap: 10px;
+      }
+      .calculation-row {
+        display: grid;
+        grid-template-columns: 1.7fr 1fr 1.35fr auto;
+        gap: 9px;
+        align-items: end;
+        padding: 11px;
+        background: #f8fafb;
+        border: 1px solid #e0e7eb;
+        border-radius: 9px;
+      }
+      .calculation-row .field-label,
+      .condition-row .field-label {
+        margin-bottom: 4px;
+      }
+      .inline-note {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 8px;
+      }
+      .section-actions {
+        margin-top: 11px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .condition-row {
+        display: grid;
+        grid-template-columns: 1.25fr 1fr 1.3fr auto;
+        gap: 9px;
+        align-items: end;
+        padding: 11px;
+        background: #f8fafb;
+        border: 1px solid #e0e7eb;
+        border-radius: 9px;
+      }
+      .condition-explanation {
+        margin: 12px 0 0;
+        color: #566771;
+        font-size: 12px;
+        border-left: 3px solid #aac0d4;
+        padding-left: 9px;
+      }
+      .advanced-toggle {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--blue);
+        background: none;
+        border: 0;
+        font-weight: 700;
+        font-size: 13px;
+        padding: 0;
+      }
+      .advanced-panel {
+        margin-top: 13px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 14px;
+      }
+      .advanced-panel[hidden] {
+        display: none;
+      }
+      .choice-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+      .choice {
+        background: #fff;
+        color: #495964;
+        border: 1px solid #ced8df;
+        border-radius: 999px;
+        padding: 7px 10px;
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .choice.is-selected {
+        border-color: var(--blue);
+        color: var(--blue-deep);
+        background: var(--blue-soft);
+      }
+      .temporal-options {
+        margin-top: 10px;
+      }
+      .viz-options {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+      }
+      .viz-option {
+        min-height: 68px;
+        display: grid;
+        place-content: center;
+        gap: 3px;
+        color: #51616c;
+        background: #fff;
+        border: 1px solid #ced8df;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 750;
+      }
+      .viz-option .glyph {
+        font-size: 19px;
+        color: var(--blue);
+      }
+      .viz-option.is-selected {
+        color: var(--blue-deep);
+        border-color: var(--blue);
+        background: var(--blue-soft);
+      }
+
+      .results {
+        padding: 20px;
+      }
+      .results-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: start;
+        margin-bottom: 16px;
+      }
+      .results-head p {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 3px;
+      }
+      .result-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 264px;
+        gap: 20px;
+      }
+      .chart-wrap {
+        min-width: 0;
+      }
+      .chart {
+        min-height: 300px;
+        position: relative;
+        padding: 14px 10px 0;
+      }
+      .legend {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        margin-top: 9px;
+        padding-left: 38px;
+      }
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #5c6973;
+        font-size: 12px;
+      }
+      .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 99px;
+        background: var(--blue);
+      }
+      .legend-dot.green {
+        background: var(--green);
+      }
+      .chart svg {
+        width: 100%;
+        height: 275px;
+        display: block;
+        overflow: visible;
+      }
+      .summary {
+        background: #f8fafb;
+        border: 1px solid #e1e8ec;
+        border-radius: 9px;
+        padding: 15px;
+      }
+      .summary h3 {
+        margin-bottom: 11px;
+      }
+      .summary-row {
+        border-top: 1px solid #e0e7eb;
+        padding: 10px 0;
+      }
+      .summary-row:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .summary-label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .summary-value {
+        font-weight: 700;
+        font-size: 18px;
+        margin-top: 2px;
+      }
+      .result-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .result-table th,
+      .result-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #e0e7eb;
+        text-align: left;
+      }
+      .result-table th {
+        color: #5c6973;
+        font-size: 12px;
+        font-weight: 750;
+      }
+      .result-table td:last-child,
+      .result-table th:last-child {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .illustrative {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 13px;
+      }
+
+      .written-workspace {
+        padding: 20px;
+      }
+      .written-lead {
+        color: var(--muted);
+        margin: 5px 0 15px;
+      }
+      textarea {
+        min-height: 285px;
+        resize: vertical;
+        color: #263b4c;
+        background: #fbfdfe;
+        line-height: 1.55;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
+      .written-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .written-note {
+        color: var(--muted);
+        font-size: 12px;
+        max-width: 650px;
+      }
+      .notice {
+        display: none;
+        margin-top: 13px;
+        border-left: 4px solid var(--green);
+        background: var(--green-soft);
+        color: #4d6c2c;
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+      .notice.show {
+        display: block;
+      }
+      .empty-state {
+        border: 1px dashed #b8c6d0;
+        color: var(--muted);
+        padding: 24px;
+        border-radius: 9px;
+        text-align: center;
+      }
+
+      @media (max-width: 900px) {
+        .example-grid {
+          grid-template-columns: repeat(3, minmax(140px, 1fr));
+        }
+        .result-grid {
+          grid-template-columns: 1fr;
+        }
+        .summary {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+        .summary h3 {
+          grid-column: 1 / -1;
+        }
+        .summary-row {
+          border-top: 0;
+          padding: 0;
+        }
+      }
+      @media (max-width: 680px) {
+        .topbar-inner,
+        main {
+          width: min(100% - 28px, 1180px);
+        }
+        main {
+          padding-top: 22px;
+        }
+        .page-head,
+        .intro-top,
+        .mode-bar,
+        .results-head {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .simulation {
+          align-self: flex-start;
+        }
+        .context-grid,
+        .advanced-panel {
+          grid-template-columns: 1fr;
+        }
+        .example-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .example {
+          min-height: 92px;
+        }
+        .calculation-row,
+        .condition-row {
+          grid-template-columns: 1fr;
+        }
+        .calculation-row .btn-icon,
+        .condition-row .btn-icon {
+          width: 100%;
+        }
+        .viz-options {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        .summary {
+          grid-template-columns: 1fr;
+        }
+        .summary h3 {
+          grid-column: auto;
+        }
+        .chart {
+          padding-left: 0;
+        }
+        .legend {
+          padding-left: 0;
+        }
+      }
+      @media (max-width: 390px) {
+        .example-grid {
+          grid-template-columns: 1fr;
+        }
+        .viz-options {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">▰</span> Fintrack <small>Explorador de métricas</small></div>
+      </div>
+    </header>
+    <main>
+      <div class="page-head">
+        <div>
+          <h1>Explorador de métricas</h1>
+          <p class="subhead">
+            Explora tus finanzas con una consulta visual o escrita. Los resultados de este prototipo son ilustrativos y no consultan tus
+            datos.
+          </p>
+        </div>
+        <span class="simulation">Prototipo para revisión</span>
+      </div>
+
+      <section class="context card" aria-labelledby="context-heading">
+        <div class="context-title">
+          <div>
+            <div class="section-kicker">Contexto de visualización</div>
+            <h2 id="context-heading">¿Qué parte de tus finanzas quieres ver?</h2>
+          </div>
+          <span class="mode-help" id="context-summary">Este año · Todas las cuentas · Todas las monedas</span>
+        </div>
+        <div class="context-grid">
+          <label
+            ><span class="field-label">Periodo</span
+            ><select id="period">
+              <option value="Este año">Este año</option>
+              <option value="Este mes">Este mes</option>
+              <option value="Últimos 3 meses">Últimos 3 meses</option>
+              <option value="Rango personalizado">Rango personalizado</option>
+            </select></label
+          >
+          <div class="pick">
+            <span class="field-label">Cuentas</span
+            ><button class="pick-toggle" id="account-toggle" type="button" aria-expanded="false" aria-controls="account-menu">
+              Todas las cuentas
+            </button>
+            <div class="popover" id="account-menu" hidden>
+              <input class="search" id="account-search" type="text" placeholder="Buscar una cuenta" aria-label="Buscar una cuenta" /><label
+                class="check-option"
+                ><input type="checkbox" class="account-check" value="Cuenta principal" /> Cuenta principal</label
+              ><label class="check-option"
+                ><input type="checkbox" class="account-check" value="Tarjeta de crédito" /> Tarjeta de crédito</label
+              ><label class="check-option"><input type="checkbox" class="account-check" value="Ahorro" /> Ahorro</label>
+            </div>
+          </div>
+          <div class="pick">
+            <span class="field-label">Monedas</span
+            ><button class="pick-toggle" id="currency-toggle" type="button" aria-expanded="false" aria-controls="currency-menu">
+              Todas las monedas
+            </button>
+            <div class="popover" id="currency-menu" hidden>
+              <input class="search" id="currency-search" type="text" placeholder="Buscar una moneda" aria-label="Buscar una moneda" /><label
+                class="check-option"
+                ><input type="checkbox" class="currency-check" value="MXN" /> MXN · Peso mexicano</label
+              ><label class="check-option"><input type="checkbox" class="currency-check" value="USD" /> USD · Dólar estadounidense</label
+              ><label class="check-option"><input type="checkbox" class="currency-check" value="EUR" /> EUR · Euro</label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="intro card" id="starter" aria-labelledby="starter-heading">
+        <div class="intro-top">
+          <div>
+            <div class="section-kicker">Empieza aquí</div>
+            <h2 id="starter-heading">Elige un ejemplo útil o crea tu propia consulta</h2>
+            <p>Los ejemplos solo dan un punto de partida. Después puedes cambiar cálculos, condiciones, desglose y presentación.</p>
+          </div>
+        </div>
+        <div class="example-grid">
+          <button class="example" data-example="expenses-category" type="button">
+            <span class="example-icon">◫</span><strong>Gastos por categoría</strong><span>Entiende en qué se va tu dinero.</span>
+          </button>
+          <button class="example" data-example="expenses-month" type="button">
+            <span class="example-icon">⌁</span><strong>Gastos a lo largo del tiempo</strong><span>Compara tus gastos mes a mes.</span>
+          </button>
+          <button class="example" data-example="income-expense" type="button">
+            <span class="example-icon">⇅</span><strong>Ingresos y gastos</strong><span>Ve la evolución económica.</span>
+          </button>
+          <button class="example" data-example="count-institution" type="button">
+            <span class="example-icon">#</span><strong>Movimientos por institución</strong><span>Cuenta tu actividad por institución.</span>
+          </button>
+          <button class="example" data-example="count-average" type="button">
+            <span class="example-icon">≈</span><strong>Frecuencia y gasto promedio</strong><span>Combina dos cálculos compatibles.</span>
+          </button>
+        </div>
+        <div class="intro-actions">
+          <button class="btn btn-primary" id="scratch" type="button">Crear consulta desde cero</button
+          ><span class="mode-help">También puedes empezar sin un ejemplo.</span>
+        </div>
+      </section>
+
+      <section class="workspace" id="workspace" hidden aria-live="polite">
+        <div class="mode-bar">
+          <div class="mode-tabs" role="tablist" aria-label="Modo de consulta">
+            <button class="mode-tab is-active" id="visual-tab" role="tab" type="button" aria-selected="true">Visual</button
+            ><button class="mode-tab" id="written-tab" role="tab" type="button" aria-selected="false">Consulta escrita</button>
+          </div>
+          <span class="mode-help">El modo visual y la consulta escrita representan la misma consulta.</span>
+        </div>
+
+        <div id="visual-workspace">
+          <section class="flow-card card" aria-labelledby="calculations-heading">
+            <div class="flow-head">
+              <div class="step">
+                <span class="step-no">1</span>
+                <div>
+                  <h2 id="calculations-heading">¿Qué quieres calcular?</h2>
+                  <p class="step-description">Añade uno o varios cálculos que se puedan leer juntos.</p>
+                </div>
+              </div>
+            </div>
+            <div class="flow-body">
+              <div class="calculation-list" id="calculation-list"></div>
+              <p class="inline-note" id="calculation-help">
+                Los gastos e ingresos económicos excluyen las piernas vinculadas a transferencias internas.
+              </p>
+              <div class="section-actions"><button class="btn" id="add-calculation" type="button">+ Añadir cálculo</button></div>
+            </div>
+          </section>
+
+          <section class="flow-card card" aria-labelledby="conditions-heading">
+            <div class="flow-head">
+              <div class="step">
+                <span class="step-no">2</span>
+                <div>
+                  <h2 id="conditions-heading">Condiciones</h2>
+                  <p class="step-description">Limita los movimientos que quieres incluir.</p>
+                </div>
+              </div>
+              <button class="advanced-toggle" id="condition-toggle" type="button" aria-expanded="false">
+                Mostrar condiciones <span aria-hidden="true">⌄</span>
+              </button>
+            </div>
+            <div class="flow-body" id="conditions-body" hidden>
+              <div class="condition-list" id="condition-list"></div>
+              <div class="section-actions"><button class="btn" id="add-condition" type="button">+ Añadir condición</button></div>
+              <p class="condition-explanation">
+                Las condiciones se aplican además del periodo, cuentas y monedas elegidos arriba. Estas selecciones no cambian tus cálculos.
+              </p>
+            </div>
+          </section>
+
+          <section class="flow-card card" aria-labelledby="breakdown-heading">
+            <div class="flow-head">
+              <div class="step">
+                <span class="step-no">3</span>
+                <div>
+                  <h2 id="breakdown-heading">Desglose</h2>
+                  <p class="step-description">Organiza el resultado para compararlo de una forma útil.</p>
+                </div>
+              </div>
+            </div>
+            <div class="flow-body">
+              <button class="advanced-toggle" id="breakdown-toggle" type="button" aria-expanded="false">
+                Configurar desglose <span aria-hidden="true">⌄</span>
+              </button>
+              <div class="advanced-panel" id="breakdown-body" hidden>
+                <div>
+                  <span class="field-label">Agrupar por</span>
+                  <div class="choice-strip" id="breakdown-options"></div>
+                  <div class="temporal-options">
+                    <span class="field-label">Si eliges tiempo</span>
+                    <div class="choice-strip" id="time-options"></div>
+                  </div>
+                </div>
+                <div>
+                  <label
+                    ><span class="field-label">Ordenar resultados</span
+                    ><select id="order">
+                      <option value="value-desc">Valor más alto primero</option>
+                      <option value="value-asc">Valor más bajo primero</option>
+                      <option value="name-asc">Nombre de A a Z</option>
+                    </select></label
+                  >
+                  <p class="inline-note">El orden puede usar el cálculo principal o el nombre del desglose.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="flow-card card" aria-labelledby="visualization-heading">
+            <div class="flow-head">
+              <div class="step">
+                <span class="step-no">4</span>
+                <div>
+                  <h2 id="visualization-heading">Visualización</h2>
+                  <p class="step-description">Elige cómo presentar el resultado.</p>
+                </div>
+              </div>
+            </div>
+            <div class="flow-body">
+              <div class="viz-options" id="visualization-options"></div>
+              <p class="inline-note" id="visualization-help">
+                La presentación cambia cómo ves los resultados, no los datos de la consulta.
+              </p>
+            </div>
+          </section>
+
+          <section class="results card" aria-labelledby="results-heading">
+            <div class="results-head">
+              <div>
+                <div class="section-kicker">Resultados</div>
+                <h2 id="results-heading">Vista previa ilustrativa</h2>
+                <p id="result-description">Elige un ejemplo o configura una consulta para ver la presentación.</p>
+              </div>
+              <button class="btn btn-primary" id="run" type="button">Actualizar vista previa</button>
+            </div>
+            <div id="result-content"></div>
+          </section>
+        </div>
+
+        <section class="written-workspace card" id="written-workspace" hidden aria-labelledby="written-heading">
+          <div class="section-kicker">Consulta escrita</div>
+          <h2 id="written-heading">Describe la misma consulta con el lenguaje financiero de Fintrack</h2>
+          <p class="written-lead">
+            Es una vista avanzada del mismo modelo. La conversión del prototipo es simulada: no analiza ni ejecuta una consulta real.
+          </p>
+          <label
+            ><span class="field-label">Consulta</span><textarea id="query-text" spellcheck="false" aria-label="Consulta escrita"></textarea>
+          </label>
+          <div class="written-actions">
+            <p class="written-note">
+              Esta experiencia conserva el contexto de visualización por separado. No escribe SQL ni accede a una base de datos.
+            </p>
+            <div>
+              <button class="btn" id="format-query" type="button">Dar formato</button
+              ><button class="btn btn-primary" id="apply-query" type="button">Usar en el modo visual</button>
+            </div>
+          </div>
+          <div class="notice" id="written-notice" role="status">
+            La consulta se aplicó al constructor visual como una simulación del prototipo.
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const metrics = {
+        economic_expense: {
+          label: 'Gastos económicos',
+          operations: ['SUM', 'AVG'],
+          unit: 'money',
+          detail: 'Salidas económicas; excluye piernas de transferencias internas vinculadas.',
+        },
+        economic_income: {
+          label: 'Ingresos económicos',
+          operations: ['SUM', 'AVG'],
+          unit: 'money',
+          detail: 'Entradas económicas; excluye piernas de transferencias internas vinculadas.',
+        },
+        transaction: {
+          label: 'Movimientos financieros',
+          operations: ['COUNT'],
+          unit: 'count',
+          detail: 'Cuenta movimientos registrados dentro del contexto elegido.',
+        },
+        balance: {
+          label: 'Saldo registrado',
+          operations: ['SUM', 'AVG'],
+          unit: 'money',
+          detail: 'Saldo contable disponible para las cuentas elegidas.',
+        },
+      };
+      const conditionFields = {
+        category: {
+          label: 'Categoría',
+          operators: ['es', 'no es'],
+          values: ['Alimentación', 'Transporte', 'Vivienda', 'Entretenimiento', 'Sin categoría'],
+        },
+        institution: {
+          label: 'Institución financiera',
+          operators: ['es', 'no es'],
+          values: ['Banco Central', 'Tarjeta Azul', 'Caja de ahorro'],
+        },
+        description: {
+          label: 'Descripción',
+          operators: ['contiene', 'no contiene'],
+          values: ['Supermercado', 'Nómina', 'Gasolina', 'Suscripción'],
+        },
+        amount: { label: 'Monto', operators: ['mayor que', 'menor que'], values: ['500', '1,000', '5,000'] },
+      };
+      const breakdowns = [
+        { id: 'none', label: 'Sin desglose' },
+        { id: 'category', label: 'Categoría' },
+        { id: 'institution', label: 'Institución financiera' },
+        { id: 'account', label: 'Cuenta' },
+        { id: 'time', label: 'Tiempo' },
+      ];
+      const timeBreakdowns = [
+        { id: 'day', label: 'Día' },
+        { id: 'week', label: 'Semana' },
+        { id: 'month', label: 'Mes' },
+        { id: 'year', label: 'Año' },
+      ];
+      const presentations = [
+        { id: 'kpi', glyph: '▣', label: 'KPI' },
+        { id: 'line', glyph: '⌁', label: 'Línea' },
+        { id: 'bar', glyph: '▥', label: 'Barras' },
+        { id: 'donut', glyph: '◔', label: 'Dona' },
+        { id: 'table', glyph: '☷', label: 'Tabla' },
+      ];
+      const scenarios = {
+        'expenses-category': {
+          title: 'Gastos económicos por categoría',
+          calculations: [{ metric: 'economic_expense', operation: 'SUM', name: 'Gastos' }],
+          conditions: [],
+          breakdown: 'category',
+          time: 'month',
+          presentation: 'donut',
+          description: 'Gastos económicos agrupados por categoría.',
+        },
+        'expenses-month': {
+          title: 'Gastos económicos a lo largo del tiempo',
+          calculations: [{ metric: 'economic_expense', operation: 'SUM', name: 'Gastos' }],
+          conditions: [],
+          breakdown: 'time',
+          time: 'month',
+          presentation: 'line',
+          description: 'Gastos económicos mensuales.',
+        },
+        'income-expense': {
+          title: 'Ingresos y gastos económicos a lo largo del tiempo',
+          calculations: [
+            { metric: 'economic_income', operation: 'SUM', name: 'Ingresos' },
+            { metric: 'economic_expense', operation: 'SUM', name: 'Gastos' },
+          ],
+          conditions: [],
+          breakdown: 'time',
+          time: 'month',
+          presentation: 'line',
+          description: 'Ingresos y gastos económicos mensuales.',
+        },
+        'count-institution': {
+          title: 'Movimientos por institución financiera',
+          calculations: [{ metric: 'transaction', operation: 'COUNT', name: 'Movimientos' }],
+          conditions: [],
+          breakdown: 'institution',
+          time: 'month',
+          presentation: 'bar',
+          description: 'Cantidad de movimientos agrupados por institución.',
+        },
+        'count-average': {
+          title: 'Frecuencia y gasto promedio por categoría',
+          calculations: [
+            { metric: 'transaction', operation: 'COUNT', name: 'Movimientos' },
+            { metric: 'economic_expense', operation: 'AVG', name: 'Gasto promedio' },
+          ],
+          conditions: [],
+          breakdown: 'category',
+          time: 'month',
+          presentation: 'table',
+          description: 'Cantidad de movimientos y gasto económico promedio por categoría.',
+        },
+        scratch: {
+          title: 'Nueva consulta',
+          calculations: [{ metric: 'transaction', operation: 'COUNT', name: 'Movimientos' }],
+          conditions: [],
+          breakdown: 'none',
+          time: 'month',
+          presentation: 'kpi',
+          description: 'Personaliza cálculos, condiciones y desglose.',
+        },
+      };
+      const state = {
+        scenario: 'scratch',
+        calculations: [],
+        conditions: [],
+        breakdown: 'none',
+        time: 'month',
+        presentation: 'kpi',
+        order: 'value-desc',
+      };
+      let sequence = 0;
+      const $ = id => document.getElementById(id);
+
+      function startScenario(id) {
+        const template = scenarios[id];
+        state.scenario = id;
+        state.calculations = template.calculations.map(c => ({ ...c, id: ++sequence }));
+        state.conditions = template.conditions.map(c => ({ ...c, id: ++sequence }));
+        state.breakdown = template.breakdown;
+        state.time = template.time;
+        state.presentation = template.presentation;
+        $('workspace').hidden = false;
+        $('starter').hidden = true;
+        $('conditions-body').hidden = state.conditions.length === 0;
+        $('condition-toggle').setAttribute('aria-expanded', String(state.conditions.length > 0));
+        renderAll();
+        $('workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function metricOptions(selected) {
+        return Object.entries(metrics)
+          .map(([id, m]) => `<option value="${id}" ${id === selected ? 'selected' : ''}>${m.label}</option>`)
+          .join('');
+      }
+      function operationOptions(metric, selected) {
+        return metrics[metric].operations
+          .map(op => `<option value="${op}" ${op === selected ? 'selected' : ''}>${operationLabel(op)}</option>`)
+          .join('');
+      }
+      function operationLabel(operation) {
+        return { SUM: 'Total', AVG: 'Promedio', COUNT: 'Cantidad' }[operation];
+      }
+      function renderCalculations() {
+        $('calculation-list').innerHTML = state.calculations
+          .map(
+            (calc, index) =>
+              `<div class="calculation-row" data-id="${calc.id}"><label><span class="field-label">Información</span><select class="calc-metric" data-id="${calc.id}">${metricOptions(calc.metric)}</select></label><label><span class="field-label">Cálculo</span><select class="calc-operation" data-id="${calc.id}">${operationOptions(calc.metric, calc.operation)}</select></label><label><span class="field-label">Nombre en resultados</span><input class="calc-name" data-id="${calc.id}" type="text" value="${escapeHtml(calc.name)}" /></label>${state.calculations.length > 1 ? `<button class="btn btn-danger btn-icon remove-calculation" data-id="${calc.id}" type="button" aria-label="Quitar cálculo ${index + 1}">×</button>` : '<span></span>'}</div>`,
+          )
+          .join('');
+      }
+      function renderConditions() {
+        $('condition-list').innerHTML = state.conditions
+          .map(condition => {
+            const field = conditionFields[condition.field];
+            return `<div class="condition-row" data-id="${condition.id}"><label><span class="field-label">Campo</span><select class="condition-field" data-id="${condition.id}">${Object.entries(
+              conditionFields,
+            )
+              .map(([id, item]) => `<option value="${id}" ${id === condition.field ? 'selected' : ''}>${item.label}</option>`)
+              .join(
+                '',
+              )}</select></label><label><span class="field-label">Operador</span><select class="condition-operator" data-id="${condition.id}">${field.operators.map(value => `<option ${value === condition.operator ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label><span class="field-label">Valor</span><select class="condition-value" data-id="${condition.id}">${field.values.map(value => `<option ${value === condition.value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><button class="btn btn-danger btn-icon remove-condition" data-id="${condition.id}" type="button" aria-label="Quitar condición">×</button></div>`;
+          })
+          .join('');
+      }
+      function renderBreakdowns() {
+        $('breakdown-options').innerHTML = breakdowns
+          .map(
+            item =>
+              `<button class="choice ${state.breakdown === item.id ? 'is-selected' : ''}" data-breakdown="${item.id}" type="button" aria-pressed="${state.breakdown === item.id}">${item.label}</button>`,
+          )
+          .join('');
+        $('time-options').innerHTML = timeBreakdowns
+          .map(
+            item =>
+              `<button class="choice ${state.time === item.id ? 'is-selected' : ''}" data-time="${item.id}" type="button" aria-pressed="${state.time === item.id}">${item.label}</button>`,
+          )
+          .join('');
+        $('time-options').parentElement.style.opacity = state.breakdown === 'time' ? '1' : '.46';
+      }
+      function renderPresentations() {
+        $('visualization-options').innerHTML = presentations
+          .map(
+            item =>
+              `<button class="viz-option ${state.presentation === item.id ? 'is-selected' : ''}" data-presentation="${item.id}" type="button" aria-pressed="${state.presentation === item.id}"><span class="glyph">${item.glyph}</span>${item.label}</button>`,
+          )
+          .join('');
+        const description = {
+          kpi: 'Ideal para un solo total o promedio.',
+          line: 'Ideal para ver cambios a lo largo del tiempo.',
+          bar: 'Ideal para comparar categorías o instituciones.',
+          donut: 'Ideal para ver partes de un total.',
+          table: 'Ideal cuando hay varios cálculos o detalles.',
+        };
+        $('visualization-help').textContent = description[state.presentation];
+      }
+      function currentTitle() {
+        return state.scenario === 'scratch' ? 'Vista previa de la consulta' : scenarios[state.scenario].title;
+      }
+      function describeQuery() {
+        const calc = state.calculations
+          .map(c => `${operationLabel(c.operation).toLowerCase()} de ${metrics[c.metric].label.toLowerCase()}`)
+          .join(' y ');
+        const breakdown =
+          state.breakdown === 'none'
+            ? ''
+            : `, por ${breakdowns.find(x => x.id === state.breakdown).label.toLowerCase()}${state.breakdown === 'time' ? ` (${timeBreakdowns.find(x => x.id === state.time).label.toLowerCase()})` : ''}`;
+        return `${capitalize(calc)}${breakdown}.`;
+      }
+      function sampleRows() {
+        if (state.breakdown === 'institution')
+          return [
+            ['Banco Central', 46],
+            ['Tarjeta Azul', 28],
+            ['Caja de ahorro', 17],
+          ];
+        if (state.breakdown === 'account')
+          return [
+            ['Cuenta principal', 21840],
+            ['Tarjeta de crédito', 12350],
+            ['Ahorro', 7240],
+          ];
+        if (state.breakdown === 'category')
+          return [
+            ['Alimentación', 8420],
+            ['Vivienda', 6740],
+            ['Transporte', 3250],
+            ['Entretenimiento', 1840],
+          ];
+        if (state.breakdown === 'time')
+          return [
+            ['Ene', 5830],
+            ['Feb', 6420],
+            ['Mar', 5210],
+            ['Abr', 7180],
+            ['May', 6340],
+            ['Jun', 7890],
+          ];
+        return [['Resultado', state.calculations[0]?.operation === 'COUNT' ? 91 : 28650]];
+      }
+      function formatValue(value, calc = state.calculations[0]) {
+        return calc?.operation === 'COUNT'
+          ? new Intl.NumberFormat('es-MX').format(value)
+          : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
+      }
+      function axisLabel(row) {
+        return escapeHtml(row[0]);
+      }
+      function chartSvg(rows) {
+        const width = 670,
+          height = 260,
+          left = 42,
+          bottom = 35,
+          top = 12,
+          right = 16;
+        const max = Math.max(...rows.map(x => x[1])) * 1.15;
+        const x = i => left + i * ((width - left - right) / Math.max(rows.length - 1, 1));
+        const y = v => top + (height - bottom - top) * (1 - v / max);
+        const grid = [0, 0.25, 0.5, 0.75, 1]
+          .map(
+            t =>
+              `<line x1="${left}" x2="${width - right}" y1="${y(max * t)}" y2="${y(max * t)}" stroke="#e3e9ed"/><text x="${left - 8}" y="${y(max * t) + 4}" text-anchor="end" fill="#7b8790" font-size="11">${formatValue(max * t)}</text>`,
+          )
+          .join('');
+        const labels = rows
+          .map((r, i) => `<text x="${x(i)}" y="${height - 12}" text-anchor="middle" fill="#66737f" font-size="11">${axisLabel(r)}</text>`)
+          .join('');
+        if (state.presentation === 'line') {
+          const income = rows.map((r, i) => [r[0], Math.round(r[1] * 0.72 + (i % 2) * 930)]);
+          const line = rows.map((r, i) => `${i ? 'L' : 'M'} ${x(i)} ${y(r[1])}`).join(' ');
+          const second = income.map((r, i) => `${i ? 'L' : 'M'} ${x(i)} ${y(r[1])}`).join(' ');
+          const nodes = rows.map((r, i) => `<circle cx="${x(i)}" cy="${y(r[1])}" r="4" fill="#35628d"/>`).join('');
+          const incomeNodes = income.map((r, i) => `<circle cx="${x(i)}" cy="${y(r[1])}" r="4" fill="#6aaa3a"/>`).join('');
+          return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfica ilustrativa de línea">${grid}<path d="${line}" fill="none" stroke="#35628d" stroke-width="3"/>${state.calculations.length > 1 ? `<path d="${second}" fill="none" stroke="#6aaa3a" stroke-width="3"/>${incomeNodes}` : ''}${nodes}${labels}</svg><div class="legend"><span class="legend-item"><i class="legend-dot"></i>${state.calculations[0]?.name || 'Cálculo principal'}</span>${state.calculations.length > 1 ? `<span class="legend-item"><i class="legend-dot green"></i>${state.calculations[1]?.name || 'Segundo cálculo'}</span>` : ''}</div>`;
+        }
+        if (state.presentation === 'donut') {
+          const sum = rows.reduce((a, b) => a + b[1], 0);
+          let offset = 0;
+          const colors = ['#35628d', '#6aaa3a', '#d78727', '#7a5d9f'];
+          const slices = rows
+            .map((r, i) => {
+              const value = r[1] / sum;
+              const dash = `${value * 100} ${100 - value * 100}`;
+              const slice = `<circle cx="180" cy="128" r="76" fill="none" stroke="${colors[i]}" stroke-width="36" pathLength="100" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 180 128)"/>`;
+              offset += value * 100;
+              return slice;
+            })
+            .join('');
+          const list = rows
+            .map(
+              (r, i) =>
+                `<div class="legend-item"><i class="legend-dot" style="background:${colors[i]}"></i>${axisLabel(r)} · ${Math.round((r[1] / sum) * 100)}%</div>`,
+            )
+            .join('');
+          return `<div class="chart" style="display:grid;grid-template-columns:350px 1fr;align-items:center"><svg viewBox="0 0 360 256" role="img" aria-label="Gráfica ilustrativa de dona">${slices}<text x="180" y="123" text-anchor="middle" fill="#66737f" font-size="12">Total</text><text x="180" y="146" text-anchor="middle" fill="#1f2933" font-size="19" font-weight="700">${formatValue(sum)}</text></svg><div class="legend">${list}</div></div>`;
+        }
+        const spacing = (width - left - right) / rows.length;
+        const bars = rows
+          .map((r, i) => {
+            const h = height - bottom - top - (y(r[1]) - top);
+            return `<rect x="${left + i * spacing + spacing * 0.18}" y="${y(r[1])}" width="${spacing * 0.64}" height="${h}" rx="4" fill="#35628d"/><text x="${left + i * spacing + spacing * 0.5}" y="${height - 12}" text-anchor="middle" fill="#66737f" font-size="11">${axisLabel(r)}</text>`;
+          })
+          .join('');
+        return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfica ilustrativa de barras">${grid}${bars}</svg>`;
+      }
+      function tableHtml(rows) {
+        const second = state.calculations[1];
+        return `<div class="table-responsive"><table class="result-table"><thead><tr><th>${state.breakdown === 'none' ? 'Resultado' : breakdowns.find(x => x.id === state.breakdown).label}</th><th>${state.calculations[0]?.name || 'Valor'}</th>${second ? `<th>${second.name}</th>` : ''}</tr></thead><tbody>${rows.map((r, i) => `<tr><td>${axisLabel(r)}</td><td>${formatValue(r[1])}</td>${second ? `<td>${formatValue(Math.round(r[1] / 8 + 130), second)}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+      }
+      function renderResults() {
+        const rows = sampleRows();
+        $('result-description').textContent = describeQuery();
+        const numeric = rows.reduce((a, b) => a + b[1], 0);
+        const main =
+          state.presentation === 'table'
+            ? tableHtml(rows)
+            : state.presentation === 'kpi'
+              ? `<div class="empty-state"><strong style="display:block;color:#1f2933;font-size:30px;margin-bottom:5px">${formatValue(numeric)}</strong>${escapeHtml(state.calculations[0]?.name || 'Resultado')}</div>`
+              : chartSvg(rows);
+        $('result-content').innerHTML =
+          `<div class="result-grid"><div class="chart-wrap">${main}</div><aside class="summary"><h3>Lectura rápida</h3><div class="summary-row"><div class="summary-label">Cálculo principal</div><div class="summary-value">${formatValue(numeric)}</div></div><div class="summary-row"><div class="summary-label">Resultados mostrados</div><div class="summary-value">${rows.length}</div></div><div class="summary-row"><div class="summary-label">Contexto</div><div class="summary-label">${escapeHtml($('context-summary').textContent)}</div></div></aside></div><p class="illustrative">Datos ilustrativos para revisar la interacción y la jerarquía visual. No representan una consulta ejecutada ni datos de Fintrack.</p>`;
+      }
+      function queryText() {
+        const projections = state.calculations
+          .map(c => `${c.operation}(${c.metric.toUpperCase()}) COMO ${c.name.toUpperCase().replaceAll(' ', '_')}`)
+          .join(',\n  ');
+        const conditions = state.conditions.length
+          ? `\nDONDE ${state.conditions.map(c => `${c.field.toUpperCase()} ${c.operator.toUpperCase()} "${c.value}"`).join(' Y ')}`
+          : '';
+        const breakdown =
+          state.breakdown === 'none'
+            ? ''
+            : `\nAGRUPAR POR ${state.breakdown === 'time' ? `TIEMPO_${state.time.toUpperCase()}` : state.breakdown.toUpperCase()}`;
+        return `MOSTRAR\n  ${projections}\nDE MOVIMIENTOS_FINANCIEROS${conditions}${breakdown}\nORDENAR POR VALOR DESC\nLÍMITE 50`;
+      }
+      function applyWrittenSimulation() {
+        const text = $('query-text').value.toUpperCase();
+        if (text.includes('INSTITU')) state.breakdown = 'institution';
+        else if (text.includes('CATEGOR')) state.breakdown = 'category';
+        else if (text.includes('TIEMPO') || text.includes('MES')) state.breakdown = 'time';
+        if (text.includes('PROMEDIO') || text.includes('AVG')) {
+          const expense = state.calculations.find(c => c.metric === 'economic_expense');
+          if (expense) expense.operation = 'AVG';
+        }
+        if (text.includes('INGRES')) {
+          if (!state.calculations.some(c => c.metric === 'economic_income'))
+            state.calculations.push({ id: ++sequence, metric: 'economic_income', operation: 'SUM', name: 'Ingresos' });
+        }
+        $('written-notice').classList.add('show');
+        switchMode('visual');
+        renderAll();
+      }
+      function switchMode(mode) {
+        const visual = mode === 'visual';
+        $('visual-workspace').hidden = !visual;
+        $('written-workspace').hidden = visual;
+        $('visual-tab').classList.toggle('is-active', visual);
+        $('visual-tab').setAttribute('aria-selected', String(visual));
+        $('written-tab').classList.toggle('is-active', !visual);
+        $('written-tab').setAttribute('aria-selected', String(!visual));
+        if (!visual) {
+          $('query-text').value = queryText();
+          $('written-notice').classList.remove('show');
+        }
+      }
+      function renderAll() {
+        renderCalculations();
+        renderConditions();
+        renderBreakdowns();
+        renderPresentations();
+        $('order').value = state.order;
+        renderResults();
+      }
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      }
+      function capitalize(value) {
+        return value.charAt(0).toUpperCase() + value.slice(1);
+      }
+      function refreshContext() {
+        const accounts = [...document.querySelectorAll('.account-check:checked')].map(x => x.value);
+        const currencies = [...document.querySelectorAll('.currency-check:checked')].map(x => x.value);
+        $('account-toggle').firstChild.textContent = accounts.length
+          ? accounts.length === 1
+            ? accounts[0]
+            : `${accounts.length} cuentas elegidas`
+          : 'Todas las cuentas';
+        $('currency-toggle').firstChild.textContent = currencies.length ? currencies.join(', ') : 'Todas las monedas';
+        $('context-summary').textContent =
+          `${$('period').value} · ${accounts.length ? accounts.join(', ') : 'Todas las cuentas'} · ${currencies.length ? currencies.join(', ') : 'Todas las monedas'}`;
+        if (!$('workspace').hidden) renderResults();
+      }
+      function bindPick(toggleId, menuId, searchId) {
+        $(toggleId).addEventListener('click', () => {
+          const open = $(menuId).hidden;
+          document.querySelectorAll('.popover').forEach(x => (x.hidden = true));
+          $(menuId).hidden = !open;
+          $(toggleId).setAttribute('aria-expanded', String(open));
+          if (open) $(searchId).focus();
+        });
+        $(searchId).addEventListener('input', event => {
+          const q = event.target.value.toLowerCase();
+          $(menuId)
+            .querySelectorAll('.check-option')
+            .forEach(row => (row.hidden = !row.textContent.toLowerCase().includes(q)));
+        });
+      }
+      document
+        .querySelectorAll('[data-example]')
+        .forEach(button => button.addEventListener('click', () => startScenario(button.dataset.example)));
+      $('scratch').addEventListener('click', () => startScenario('scratch'));
+      $('visual-tab').addEventListener('click', () => switchMode('visual'));
+      $('written-tab').addEventListener('click', () => switchMode('written'));
+      $('condition-toggle').addEventListener('click', () => {
+        const next = $('conditions-body').hidden;
+        $('conditions-body').hidden = !next;
+        $('condition-toggle').setAttribute('aria-expanded', String(next));
+      });
+      $('breakdown-toggle').addEventListener('click', () => {
+        const next = $('breakdown-body').hidden;
+        $('breakdown-body').hidden = !next;
+        $('breakdown-toggle').setAttribute('aria-expanded', String(next));
+      });
+      $('add-calculation').addEventListener('click', () => {
+        state.calculations.push({ id: ++sequence, metric: 'economic_expense', operation: 'SUM', name: 'Gastos' });
+        renderAll();
+      });
+      $('add-condition').addEventListener('click', () => {
+        state.conditions.push({ id: ++sequence, field: 'category', operator: 'es', value: 'Alimentación' });
+        $('conditions-body').hidden = false;
+        $('condition-toggle').setAttribute('aria-expanded', 'true');
+        renderAll();
+      });
+      $('calculation-list').addEventListener('change', event => {
+        const id = Number(event.target.dataset.id);
+        const calc = state.calculations.find(x => x.id === id);
+        if (!calc) return;
+        if (event.target.classList.contains('calc-metric')) {
+          calc.metric = event.target.value;
+          calc.operation = metrics[calc.metric].operations[0];
+          calc.name = metrics[calc.metric].label;
+        } else if (event.target.classList.contains('calc-operation')) calc.operation = event.target.value;
+        renderAll();
+      });
+      $('calculation-list').addEventListener('input', event => {
+        if (!event.target.classList.contains('calc-name')) return;
+        const calc = state.calculations.find(x => x.id === Number(event.target.dataset.id));
+        if (calc) {
+          calc.name = event.target.value;
+          renderResults();
+        }
+      });
+      $('calculation-list').addEventListener('click', event => {
+        const button = event.target.closest('.remove-calculation');
+        if (!button) return;
+        state.calculations = state.calculations.filter(x => x.id !== Number(button.dataset.id));
+        renderAll();
+      });
+      $('condition-list').addEventListener('change', event => {
+        const id = Number(event.target.dataset.id);
+        const condition = state.conditions.find(x => x.id === id);
+        if (!condition) return;
+        if (event.target.classList.contains('condition-field')) {
+          condition.field = event.target.value;
+          condition.operator = conditionFields[condition.field].operators[0];
+          condition.value = conditionFields[condition.field].values[0];
+        } else if (event.target.classList.contains('condition-operator')) condition.operator = event.target.value;
+        else if (event.target.classList.contains('condition-value')) condition.value = event.target.value;
+        renderAll();
+      });
+      $('condition-list').addEventListener('click', event => {
+        const button = event.target.closest('.remove-condition');
+        if (!button) return;
+        state.conditions = state.conditions.filter(x => x.id !== Number(button.dataset.id));
+        renderAll();
+      });
+      $('breakdown-options').addEventListener('click', event => {
+        const button = event.target.closest('[data-breakdown]');
+        if (!button) return;
+        state.breakdown = button.dataset.breakdown;
+        renderAll();
+      });
+      $('time-options').addEventListener('click', event => {
+        const button = event.target.closest('[data-time]');
+        if (!button || state.breakdown !== 'time') return;
+        state.time = button.dataset.time;
+        renderAll();
+      });
+      $('visualization-options').addEventListener('click', event => {
+        const button = event.target.closest('[data-presentation]');
+        if (!button) return;
+        state.presentation = button.dataset.presentation;
+        renderAll();
+      });
+      $('order').addEventListener('change', event => {
+        state.order = event.target.value;
+        renderResults();
+      });
+      $('run').addEventListener('click', () => {
+        renderResults();
+        $('results-heading').textContent = 'Vista previa actualizada';
+      });
+      $('format-query').addEventListener('click', () => {
+        $('query-text').value = queryText();
+      });
+      $('apply-query').addEventListener('click', applyWrittenSimulation);
+      $('period').addEventListener('change', refreshContext);
+      document.querySelectorAll('.account-check, .currency-check').forEach(x => x.addEventListener('change', refreshContext));
+      bindPick('account-toggle', 'account-menu', 'account-search');
+      bindPick('currency-toggle', 'currency-menu', 'currency-search');
+      document.addEventListener('click', event => {
+        if (!event.target.closest('.pick')) {
+          document.querySelectorAll('.popover').forEach(x => (x.hidden = true));
+          document.querySelectorAll('.pick-toggle').forEach(x => x.setAttribute('aria-expanded', 'false'));
+        }
+      });
+      startScenario('expenses-category');
+    </script>
+    <style>
+      /* V2 keeps the approved shell and replaces only the interactive query area. */
+      #starter,
+      #workspace {
+        display: none !important;
+      }
+      #v2-start,
+      #v2-workspace {
+        margin-top: 22px;
+      }
+      #v2-workspace[hidden],
+      #v2-written[hidden] {
+        display: none;
+      }
+      .v2-examples {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(160px, 1fr));
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .v2-example {
+        text-align: left;
+        min-height: 91px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+        color: var(--ink);
+      }
+      .v2-example:hover {
+        border-color: var(--blue);
+        background: #f8fbfd;
+      }
+      .v2-example strong {
+        display: block;
+        font-size: 13px;
+      }
+      .v2-example span {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .v2-section {
+        overflow: hidden;
+      }
+      .v2-section + .v2-section {
+        margin-top: 15px;
+      }
+      .v2-body {
+        padding: 17px 18px;
+      }
+      .v2-calcs,
+      .v2-conditions {
+        display: grid;
+        gap: 9px;
+      }
+      .v2-row {
+        display: grid;
+        grid-template-columns: 1.3fr 0.85fr 1fr auto;
+        gap: 9px;
+        align-items: end;
+        padding: 10px;
+        border: 1px solid #e0e7eb;
+        border-radius: 9px;
+        background: #f8fafb;
+      }
+      .v2-breakdown-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 14px;
+      }
+      .v2-explain {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-left: 3px solid #aac0d4;
+        background: #f7fafc;
+        color: #52626f;
+        font-size: 13px;
+      }
+      .v2-series {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: end;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+      .v2-series label {
+        min-width: 178px;
+      }
+      .v2-checks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+      .v2-check {
+        padding: 6px 9px;
+        border: 1px solid #d4dde3;
+        border-radius: 999px;
+        background: #fff;
+        color: #56646e;
+        font-size: 12px;
+      }
+      .v2-check input {
+        vertical-align: middle;
+        margin-right: 4px;
+      }
+      .v2-viz-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+      }
+      .v2-viz {
+        min-height: 62px;
+        border: 1px solid #ced8df;
+        border-radius: 8px;
+        background: #fff;
+        color: #52616c;
+        font-weight: 700;
+        font-size: 12px;
+      }
+      .v2-viz.is-selected {
+        color: var(--blue-deep);
+        border-color: var(--blue);
+        background: var(--blue-soft);
+      }
+      .v2-bar-kind {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .v2-bar-kind[hidden] {
+        display: none;
+      }
+      .v2-result {
+        padding: 20px;
+      }
+      .v2-result-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: start;
+        margin-bottom: 14px;
+      }
+      .v2-result-title p {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 3px;
+      }
+      .v2-panels {
+        display: grid;
+        gap: 16px;
+      }
+      .v2-panel {
+        padding: 13px;
+        border: 1px solid #e0e7eb;
+        border-radius: 9px;
+        background: #fcfdfe;
+      }
+      .v2-panel h3 {
+        margin-bottom: 8px;
+      }
+      .v2-chart {
+        width: 100%;
+        min-height: 270px;
+      }
+      .v2-chart svg {
+        width: 100%;
+        height: 255px;
+        display: block;
+      }
+      .v2-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 13px;
+        margin: 6px 0 2px;
+      }
+      .v2-legend span {
+        color: #5c6973;
+        font-size: 12px;
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .v2-dot {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #35628d;
+      }
+      .v2-note,
+      .v2-warning {
+        margin-top: 12px;
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+      .v2-note {
+        color: #5d6b75;
+        background: #f7fafc;
+        border-left: 3px solid #aac0d4;
+      }
+      .v2-warning {
+        color: #805c25;
+        background: #fff8ec;
+        border-left: 3px solid #d78727;
+      }
+      .v2-table-wrap {
+        margin-top: 14px;
+      }
+      .v2-written {
+        padding: 20px;
+      }
+      @media (max-width: 900px) {
+        .v2-examples {
+          grid-template-columns: repeat(3, minmax(150px, 1fr));
+        }
+        .v2-viz-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (max-width: 680px) {
+        .v2-examples,
+        .v2-breakdown-grid {
+          grid-template-columns: 1fr;
+        }
+        .v2-row {
+          grid-template-columns: 1fr;
+        }
+        .v2-row .btn {
+          width: 100%;
+        }
+        .v2-viz-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .v2-result-title {
+          flex-direction: column;
+        }
+      }
+    </style>
+    <script>
+      (() => {
+        const main = document.querySelector('main');
+        const node = document.createElement('div');
+        node.innerHTML = `
+          <section class="intro card" id="v2-start" aria-labelledby="v2-start-heading">
+            <div class="section-kicker">Empieza aquí</div><h2 id="v2-start-heading">Elige un ejemplo útil o crea tu propia consulta</h2>
+            <p class="subhead">Los ejemplos no limitan las posibilidades: son puntos de partida que puedes ajustar con cálculos, condiciones y dos desgloses ordenados.</p>
+            <div class="v2-examples">
+              <button class="v2-example" data-v2-example="category" type="button"><strong>Gastos por categoría</strong><span>Compara la composición de tus gastos.</span></button>
+              <button class="v2-example" data-v2-example="month" type="button"><strong>Gastos por mes</strong><span>Una línea para ver cambios en el tiempo.</span></button>
+              <button class="v2-example" data-v2-example="month-category" type="button"><strong>Gastos por mes y categoría</strong><span>Una serie por categoría.</span></button>
+              <button class="v2-example" data-v2-example="month-institution" type="button"><strong>Gastos por mes e institución</strong><span>Una serie por institución financiera.</span></button>
+              <button class="v2-example" data-v2-example="month-category-stacked" type="button"><strong>Composición mensual de gastos</strong><span>Barras apiladas por categoría.</span></button>
+              <button class="v2-example" data-v2-example="count-institution" type="button"><strong>Movimientos por institución</strong><span>Cuenta actividad financiera.</span></button>
+              <button class="v2-example" data-v2-example="balance-account" type="button"><strong>Saldos por cuenta y mes</strong><span>Posiciones históricas, no un total acumulable.</span></button>
+              <button class="v2-example" data-v2-example="count-average" type="button"><strong>Frecuencia y gasto promedio</strong><span>Dos cálculos compatibles en una tabla.</span></button>
+            </div>
+            <div class="intro-actions"><button id="v2-scratch" class="btn btn-primary" type="button">Crear consulta desde cero</button><span class="mode-help">Los resultados son datos ilustrativos.</span></div>
+          </section>
+          <section id="v2-workspace" hidden>
+            <div class="mode-bar"><div class="mode-tabs" role="tablist" aria-label="Modo de consulta"><button class="mode-tab is-active" id="v2-visual-tab" type="button" aria-selected="true">Visual</button><button class="mode-tab" id="v2-written-tab" type="button" aria-selected="false">Consulta escrita</button></div><span class="mode-help">El contexto de visualización se mantiene separado de esta consulta.</span></div>
+            <div id="v2-visual">
+              <section class="v2-section card"><div class="flow-head"><div class="step"><span class="step-no">1</span><div><h2>¿Qué quieres calcular?</h2><p class="step-description">Puedes combinar cálculos que sean comparables.</p></div></div></div><div class="v2-body"><div class="v2-calcs" id="v2-calcs"></div><p class="inline-note">Los ingresos y gastos económicos excluyen automáticamente las piernas de transferencias internas vinculadas.</p><div class="section-actions"><button class="btn" id="v2-add-calc" type="button">+ Añadir cálculo</button></div></div></section>
+              <section class="v2-section card"><div class="flow-head"><div class="step"><span class="step-no">2</span><div><h2>Condiciones</h2><p class="step-description">Acota qué movimientos incluir, sin modificar el periodo, cuentas ni monedas del contexto.</p></div></div><button class="advanced-toggle" id="v2-condition-toggle" type="button" aria-expanded="false">Mostrar condiciones <span>⌄</span></button></div><div class="v2-body" id="v2-conditions-wrap" hidden><div class="v2-conditions" id="v2-conditions"></div><div class="section-actions"><button class="btn" id="v2-add-condition" type="button">+ Añadir condición</button></div><p class="v2-note">Para movimientos financieros puedes elegir <strong>Transferencias internas</strong>: todos, excluir vinculados o solo vinculados. No cambia la definición de ingresos o gastos económicos.</p></div></section>
+              <section class="v2-section card"><div class="flow-head"><div class="step"><span class="step-no">3</span><div><h2>Desglose</h2><p class="step-description">Primero organiza; después compara grupos dentro de cada resultado.</p></div></div></div><div class="v2-body"><div class="v2-breakdown-grid"><label><span class="field-label">¿Cómo quieres organizar los resultados?</span><select id="v2-primary"></select></label><label><span class="field-label">¿Quieres comparar grupos dentro de cada uno?</span><select id="v2-comparison"></select></label></div><p class="v2-explain" id="v2-grouping-explanation"></p><div class="v2-series"><label><span class="field-label">Series que quieres mostrar</span><select id="v2-top"><option value="5">Principales 5</option><option value="10">Principales 10</option><option value="all">Todas las disponibles</option></select></label><div><span class="field-label">Series específicas</span><div class="v2-checks" id="v2-series-checks"></div></div></div><p class="inline-note">Las series se ordenan por el primer cálculo. La tabla conserva el resultado ilustrativo completo; este prototipo no agrupa valores distintos bajo «Otros».</p></div></section>
+              <section class="v2-section card"><div class="flow-head"><div class="step"><span class="step-no">4</span><div><h2>Visualización</h2><p class="step-description">Escoge la presentación adecuada para el resultado.</p></div></div></div><div class="v2-body"><div class="v2-viz-grid" id="v2-viz"></div><div class="v2-bar-kind" id="v2-bar-kind" hidden><span class="field-label" style="margin:0">Barras</span><button class="choice is-selected" data-v2-bar="grouped" type="button">Agrupadas</button><button class="choice" data-v2-bar="stacked" type="button">Apiladas</button></div><p class="inline-note" id="v2-viz-note"></p></div></section>
+              <section class="v2-section card v2-result"><div class="v2-result-title"><div><div class="section-kicker">Resultados</div><h2 id="v2-result-title">Vista previa ilustrativa</h2><p id="v2-result-subtitle"></p></div><button id="v2-refresh" class="btn btn-primary" type="button">Actualizar vista previa</button></div><div id="v2-results"></div></section>
+            </div>
+            <section id="v2-written" class="card v2-written" hidden><div class="section-kicker">Consulta escrita</div><h2>La misma consulta, en forma escrita</h2><p class="written-lead">La ilustración cambia con los dos desgloses. Es un prototipo: no hay parser ni ejecución de backend.</p><label><span class="field-label">Consulta</span><textarea id="v2-query" spellcheck="false"></textarea></label><div class="written-actions"><span class="written-note">El periodo, las cuentas y las monedas permanecen en el contexto de visualización, no dentro de la consulta.</span><div><button id="v2-format" class="btn" type="button">Dar formato</button><button id="v2-use-visual" class="btn btn-primary" type="button">Usar en el modo visual</button></div></div><div class="notice" id="v2-written-notice" role="status">Conversión ilustrativa aplicada al constructor visual.</div></section>
+          </section>`;
+        main.append(...node.children);
+
+        const $ = id => document.getElementById(id);
+        const dims = [
+          ['none', 'Sin desglose'],
+          ['day', 'Día'],
+          ['week', 'Semana'],
+          ['month', 'Mes'],
+          ['year', 'Año'],
+          ['category', 'Categoría'],
+          ['institution', 'Institución financiera'],
+          ['account', 'Cuenta'],
+          ['accountType', 'Tipo de cuenta'],
+        ];
+        const comparisonDims = dims.filter(([id]) => !['none', 'day', 'week', 'month', 'year'].includes(id));
+        const metric = {
+          expense: {
+            label: 'Gastos económicos',
+            ops: ['SUM', 'AVG'],
+            unit: 'money',
+            help: 'Salidas económicas sin piernas de transferencias internas vinculadas.',
+          },
+          income: {
+            label: 'Ingresos económicos',
+            ops: ['SUM', 'AVG'],
+            unit: 'money',
+            help: 'Entradas económicas sin piernas de transferencias internas vinculadas.',
+          },
+          transactions: {
+            label: 'Movimientos financieros',
+            ops: ['COUNT'],
+            unit: 'count',
+            help: 'Cantidad de movimientos; puede filtrarse por relación con transferencia interna.',
+          },
+          balance: {
+            label: 'Saldo histórico',
+            ops: ['CLOSING'],
+            unit: 'money',
+            help: 'Posición a cada fecha de corte; no se suman los saldos mensuales.',
+          },
+        };
+        const scenario = {
+          category: {
+            title: 'Gastos económicos por categoría',
+            calcs: [['expense', 'SUM', 'Gastos']],
+            primary: 'category',
+            comparison: 'none',
+            view: 'bar',
+            bars: 'grouped',
+          },
+          month: {
+            title: 'Gastos económicos por mes',
+            calcs: [['expense', 'SUM', 'Gastos']],
+            primary: 'month',
+            comparison: 'none',
+            view: 'line',
+            bars: 'grouped',
+          },
+          'month-category': {
+            title: 'Gastos económicos por mes y categoría',
+            calcs: [['expense', 'SUM', 'Gastos']],
+            primary: 'month',
+            comparison: 'category',
+            view: 'line',
+            bars: 'grouped',
+          },
+          'month-institution': {
+            title: 'Gastos económicos por mes e institución financiera',
+            calcs: [['expense', 'SUM', 'Gastos']],
+            primary: 'month',
+            comparison: 'institution',
+            view: 'line',
+            bars: 'grouped',
+          },
+          'month-category-stacked': {
+            title: 'Composición mensual de gastos por categoría',
+            calcs: [['expense', 'SUM', 'Gastos']],
+            primary: 'month',
+            comparison: 'category',
+            view: 'bar',
+            bars: 'stacked',
+          },
+          'count-institution': {
+            title: 'Movimientos por institución financiera',
+            calcs: [['transactions', 'COUNT', 'Movimientos']],
+            primary: 'institution',
+            comparison: 'none',
+            view: 'bar',
+            bars: 'grouped',
+          },
+          'balance-account': {
+            title: 'Saldos históricos por cuenta y mes',
+            calcs: [['balance', 'CLOSING', 'Saldo al cierre']],
+            primary: 'month',
+            comparison: 'account',
+            view: 'line',
+            bars: 'grouped',
+          },
+          'count-average': {
+            title: 'Frecuencia y gasto promedio por categoría',
+            calcs: [
+              ['transactions', 'COUNT', 'Movimientos'],
+              ['expense', 'AVG', 'Gasto promedio'],
+            ],
+            primary: 'category',
+            comparison: 'none',
+            view: 'table',
+            bars: 'grouped',
+          },
+          scratch: {
+            title: 'Nueva consulta',
+            calcs: [['transactions', 'COUNT', 'Movimientos']],
+            primary: 'none',
+            comparison: 'none',
+            view: 'kpi',
+            bars: 'grouped',
+          },
+        };
+        const state = {
+          name: 'scratch',
+          calcs: [],
+          conditions: [],
+          primary: 'none',
+          comparison: 'none',
+          view: 'kpi',
+          bars: 'grouped',
+          top: '5',
+          selected: new Set(),
+          warning: '',
+        };
+        let seq = 0;
+        const color = ['#35628d', '#6aaa3a', '#d78727', '#7a5d9f', '#bf5a80', '#4f8b8d', '#a86e30', '#607eae', '#b06c55', '#47865d'];
+        const label = id => (dims.find(d => d[0] === id) || ['', ''])[1];
+        const opLabel = op => ({ SUM: 'Total', AVG: 'Promedio', COUNT: 'Cantidad', CLOSING: 'Saldo al cierre' })[op];
+        const money = (v, c = 'MXN') =>
+          new Intl.NumberFormat('es-MX', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(v);
+        const esc = value => String(value).replace(/[&<>\"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' })[char]);
+        const currencySelection = () => {
+          const selected = [...document.querySelectorAll('.currency-check:checked')].map(x => x.value);
+          return selected.length ? selected : ['MXN'];
+        };
+        const primaryOptions = () =>
+          dims.map(([id, text]) => `<option value="${id}" ${id === state.primary ? 'selected' : ''}>${text}</option>`).join('');
+        const comparisonOptions = () =>
+          `<option value="none" ${state.comparison === 'none' ? 'selected' : ''}>Sin comparación adicional</option>` +
+          comparisonDims
+            .map(
+              ([id, text]) =>
+                `<option value="${id}" ${id === state.comparison ? 'selected' : ''} ${id === state.primary ? 'disabled' : ''}>${text}${id === state.primary ? ' (ya es el desglose principal)' : ''}</option>`,
+            )
+            .join('');
+        function load(name) {
+          const s = scenario[name];
+          state.name = name;
+          state.calcs = s.calcs.map(([m, o, n]) => ({ id: ++seq, m, o, n }));
+          state.conditions = [];
+          state.primary = s.primary;
+          state.comparison = s.comparison;
+          state.view = s.view;
+          state.bars = s.bars;
+          state.warning = '';
+          state.selected = new Set();
+          $('v2-start').hidden = true;
+          $('v2-workspace').hidden = false;
+          render();
+          $('v2-workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        function renderCalcs() {
+          $('v2-calcs').innerHTML = state.calcs
+            .map(
+              (c, index) =>
+                `<div class="v2-row"><label><span class="field-label">Información</span><select data-calc-metric="${c.id}">${Object.entries(
+                  metric,
+                )
+                  .map(([id, m]) => `<option value="${id}" ${id === c.m ? 'selected' : ''}>${m.label}</option>`)
+                  .join(
+                    '',
+                  )}</select></label><label><span class="field-label">Cálculo</span><select data-calc-op="${c.id}">${metric[c.m].ops.map(o => `<option value="${o}" ${o === c.o ? 'selected' : ''}>${opLabel(o)}</option>`).join('')}</select></label><label><span class="field-label">Nombre en resultados</span><input type="text" data-calc-name="${c.id}" value="${esc(c.n)}"></label>${state.calcs.length > 1 ? `<button class="btn btn-danger" data-remove-calc="${c.id}" type="button">Quitar</button>` : '<span></span>'}</div>`,
+            )
+            .join('');
+        }
+        const conditionCatalog = {
+          category: ['Categoría', ['es', 'no es'], ['Alimentación', 'Vivienda', 'Transporte', 'Entretenimiento']],
+          institution: ['Institución financiera', ['es', 'no es'], ['Banco Central', 'Tarjeta Azul', 'Caja de ahorro']],
+          transfer: [
+            'Transferencias internas',
+            ['incluir todos', 'excluir movimientos vinculados', 'solo movimientos vinculados'],
+            ['Aplicar'],
+          ],
+          description: ['Descripción', ['contiene', 'no contiene'], ['Supermercado', 'Nómina', 'Suscripción']],
+        };
+        function renderConditions() {
+          $('v2-conditions').innerHTML = state.conditions
+            .map(c => {
+              const f = conditionCatalog[c.f];
+              return `<div class="v2-row"><label><span class="field-label">Campo</span><select data-cond-field="${c.id}">${Object.entries(
+                conditionCatalog,
+              )
+                .map(([id, item]) => `<option value="${id}" ${id === c.f ? 'selected' : ''}>${item[0]}</option>`)
+                .join(
+                  '',
+                )}</select></label><label><span class="field-label">Operador</span><select data-cond-op="${c.id}">${f[1].map(o => `<option ${o === c.o ? 'selected' : ''}>${o}</option>`).join('')}</select></label><label><span class="field-label">Valor</span><select data-cond-value="${c.id}">${f[2].map(v => `<option ${v === c.v ? 'selected' : ''}>${v}</option>`).join('')}</select></label><button class="btn btn-danger" data-remove-cond="${c.id}" type="button">Quitar</button></div>`;
+            })
+            .join('');
+        }
+        function temporal() {
+          return ['day', 'week', 'month', 'year'].includes(state.primary);
+        }
+        function groups(dim) {
+          return (
+            {
+              category: ['Alimentación', 'Vivienda', 'Transporte', 'Entretenimiento', 'Salud', 'Suscripciones'],
+              institution: ['Banco Central', 'Tarjeta Azul', 'Caja de ahorro', 'Banco Norte', 'Billetera digital', 'Cooperativa'],
+              account: ['Cuenta principal', 'Tarjeta Azul', 'Ahorro', 'Viajes'],
+              accountType: ['Débito', 'Crédito', 'Ahorro'],
+              month: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
+              week: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5', 'Sem 6'],
+              day: ['3', '7', '11', '15', '19', '23'],
+              year: ['2024', '2025', '2026'],
+            }[dim] || ['Resultado']
+          );
+        }
+        function renderBreakdowns() {
+          $('v2-primary').innerHTML = primaryOptions();
+          $('v2-comparison').innerHTML = comparisonOptions();
+          $('v2-top').value = state.top;
+          const order =
+            state.comparison === 'none'
+              ? `por ${label(state.primary).toLowerCase()}`
+              : `primero por ${label(state.primary).toLowerCase()} y, dentro de cada resultado, por ${label(state.comparison).toLowerCase()}`;
+          const timeText = temporal()
+            ? ` El periodo de arriba decide qué fechas se incluyen; «${label(state.primary)}» decide cómo se agrupan.`
+            : '';
+          $('v2-grouping-explanation').textContent =
+            `Los resultados se organizarán ${state.primary === 'none' ? 'sin desglose' : order}.${timeText}${state.warning ? ` ${state.warning}` : ''}`;
+          const candidates = state.comparison === 'none' ? groups(state.primary) : groups(state.comparison);
+          const limit = state.top === 'all' ? candidates.length : Math.min(Number(state.top), candidates.length);
+          const visible = state.selected.size ? [...state.selected] : candidates.slice(0, limit);
+          $('v2-series-checks').innerHTML = candidates
+            .map(
+              (name, i) =>
+                `<label class="v2-check"><input class="v2-series-item" type="checkbox" value="${esc(name)}" ${visible.includes(name) ? 'checked' : ''}>${esc(name)}</label>`,
+            )
+            .join('');
+        }
+        const views = [
+          ['kpi', 'KPI'],
+          ['line', 'Línea'],
+          ['bar', 'Barras'],
+          ['donut', 'Dona'],
+          ['table', 'Tabla'],
+        ];
+        function compatible() {
+          if (state.view === 'kpi' && (state.primary !== 'none' || state.comparison !== 'none'))
+            return 'Un KPI resume un solo resultado. Elige «Sin desglose» o usa una tabla o gráfica.';
+          if (state.view === 'donut' && (temporal() || state.comparison !== 'none'))
+            return 'Una dona no explica una serie temporal ni una comparación dentro de cada periodo. Usa barras, línea o tabla.';
+          if (state.calcs.length > 1 && state.view !== 'table')
+            return 'Hay cálculos con unidades distintas. Para no mezclar cantidad y dinero en un mismo eje, se muestra una tabla.';
+          if (state.view === 'line' && !temporal())
+            return 'Una línea comunica cambios en el tiempo. Elige Día, Semana, Mes o Año como desglose principal.';
+          return '';
+        }
+        function renderViews() {
+          $('v2-viz').innerHTML = views
+            .map(
+              ([id, text]) =>
+                `<button class="v2-viz ${state.view === id ? 'is-selected' : ''}" data-view="${id}" type="button">${text}</button>`,
+            )
+            .join('');
+          $('v2-bar-kind').hidden = state.view !== 'bar';
+          $('v2-bar-kind')
+            .querySelectorAll('[data-v2-bar]')
+            .forEach(b => b.classList.toggle('is-selected', b.dataset.v2Bar === state.bars));
+          $('v2-viz-note').textContent =
+            state.view === 'bar'
+              ? 'Barras agrupadas comparan series lado a lado; apiladas muestran la composición de cada periodo.'
+              : 'La presentación cambia cómo ves el resultado, no el cálculo ni el contexto.';
+        }
+        function sampleMatrix(currency) {
+          const x = groups(state.primary);
+          const series = state.comparison === 'none' ? [state.calcs[0].n] : groups(state.comparison);
+          const limit = state.top === 'all' ? series.length : Math.min(Number(state.top), series.length);
+          const use = state.selected.size ? series.filter(s => state.selected.has(s)) : series.slice(0, limit);
+          const factor = currency === 'USD' ? 0.055 : 1;
+          return {
+            x,
+            series: use,
+            data: use.map((name, si) =>
+              x.map((_, xi) => Math.round((1900 + (xi + 1) * 680 + si * 540 + ((xi * si + 2) % 4) * 280) * factor)),
+            ),
+          };
+        }
+        function svgChart(matrix, currency) {
+          const w = 720,
+            h = 260,
+            l = 46,
+            r = 18,
+            t = 14,
+            b = 36;
+          const all = matrix.data.flat();
+          const max = Math.max(...all, 1) * 1.15;
+          const x = i => l + i * ((w - l - r) / Math.max(matrix.x.length - 1, 1));
+          const y = v => t + (h - t - b) * (1 - v / max);
+          const unit = metric[state.calcs[0].m].unit;
+          const tick = v => (unit === 'count' ? Math.round(v) : money(v, currency));
+          const grid = [0, 0.25, 0.5, 0.75, 1]
+            .map(
+              q =>
+                `<line x1="${l}" x2="${w - r}" y1="${y(max * q)}" y2="${y(max * q)}" stroke="#e2e8ec"/><text x="${l - 7}" y="${y(max * q) + 4}" text-anchor="end" fill="#74818a" font-size="10">${tick(max * q)}</text>`,
+            )
+            .join('');
+          const labels = matrix.x
+            .map((v, i) => `<text x="${x(i)}" y="${h - 13}" text-anchor="middle" fill="#66737f" font-size="11">${v}</text>`)
+            .join('');
+          if (state.view === 'line') {
+            const paths = matrix.data
+              .map(
+                (values, si) =>
+                  `<path d="${values.map((v, i) => `${i ? 'L' : 'M'} ${x(i)} ${y(v)}`).join(' ')}" fill="none" stroke="${color[si % color.length]}" stroke-width="3"/>${values.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${color[si % color.length]}"/>`).join('')}`,
+              )
+              .join('');
+            return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Gráfica de líneas ilustrativa">${grid}${paths}${labels}</svg>`;
+          }
+          const slot = (w - l - r) / matrix.x.length;
+          const stacked = state.bars === 'stacked' && matrix.series.length > 1;
+          let marks = '';
+          matrix.x.forEach((_, xi) => {
+            let base = h - b;
+            matrix.data.forEach((values, si) => {
+              const value = values[xi],
+                height = (h - t - b) * (value / max);
+              const bw = stacked ? slot * 0.58 : (slot * 0.58) / matrix.series.length;
+              const bx = stacked ? l + xi * slot + slot * 0.21 : l + xi * slot + slot * 0.21 + si * bw;
+              const by = stacked ? base - height : y(value);
+              marks += `<rect x="${bx}" y="${by}" width="${bw - 2}" height="${height}" rx="3" fill="${color[si % color.length]}"/>`;
+              if (stacked) base = by;
+            });
+          });
+          return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Gráfica de barras ilustrativa">${grid}${marks}${labels}</svg>`;
+        }
+        function legend(series) {
+          return `<div class="v2-legend">${series.map((s, i) => `<span><i class="v2-dot" style="background:${color[i % color.length]}"></i>${esc(s)}</span>`).join('')}</div>`;
+        }
+        function resultTable(matrices) {
+          const matrix = matrices[0].matrix;
+          const rows = matrix.x
+            .map(
+              (x, xi) =>
+                `<tr><td>${x}</td>${matrix.series.map((s, si) => `<td>${metric[state.calcs[0].m].unit === 'count' ? matrix.data[si][xi] : money(matrix.data[si][xi], matrices[0].currency)}</td>`).join('')}</tr>`,
+            )
+            .join('');
+          return `<div class="v2-table-wrap table-responsive"><table class="result-table"><thead><tr><th>${label(state.primary) || 'Resultado'}</th>${matrix.series.map(s => `<th>${esc(s)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+        }
+        function renderResults() {
+          const currencies = currencySelection();
+          const mismatch = compatible();
+          const matrices = currencies.map(c => ({ currency: c, matrix: sampleMatrix(c) }));
+          const title = state.name === 'scratch' ? 'Vista previa de la consulta' : scenario[state.name].title;
+          $('v2-result-title').textContent = title;
+          const grouping = state.comparison === 'none' ? label(state.primary) : `${label(state.primary)} y ${label(state.comparison)}`;
+          $('v2-result-subtitle').textContent =
+            `${state.calcs.map(c => `${opLabel(c.o).toLowerCase()} de ${metric[c.m].label.toLowerCase()}`).join(' · ')}${state.primary === 'none' ? '' : ` · Agrupado por ${grouping}`}`;
+          const panels = matrices
+            .map(({ currency, matrix }) => {
+              const total = matrix.data.flat().reduce((a, b) => a + b, 0);
+              let graphic = '';
+              if (mismatch || state.view === 'table') graphic = '';
+              else if (state.view === 'kpi')
+                graphic = `<div class="empty-state"><strong style="display:block;color:#1f2933;font-size:30px;margin-bottom:5px">${metric[state.calcs[0].m].unit === 'count' ? total : money(total, currency)}</strong>${esc(state.calcs[0].n)}</div>`;
+              else if (state.view === 'donut')
+                graphic = `<div class="v2-warning">La dona se muestra en esta demo únicamente para un desglose sin comparación; elige barras o tabla para leer todas las series.</div>`;
+              else graphic = `<div class="v2-chart">${svgChart(matrix, currency)}</div>${legend(matrix.series)}`;
+              return `<article class="v2-panel"><h3>${currencies.length > 1 ? `Resultados en ${currency}` : 'Resultados'}</h3>${graphic}</article>`;
+            })
+            .join('');
+          const chart = mismatch ? `<div class="v2-warning">${mismatch}</div>` : panels;
+          const allTable = resultTable(matrices);
+          $('v2-results').innerHTML =
+            `${chart}${allTable}<p class="illustrative">Datos ilustrativos. ${currencies.length > 1 ? 'Las monedas se presentan en paneles separados: nunca se suman MXN y USD. ' : ''}${state.calcs.some(c => c.m === 'balance') ? 'Cada punto de saldo es una posición al cierre del periodo; no se suma con otros meses. ' : ''}La tabla permite inspeccionar el resultado completo de esta demostración.</p>`;
+        }
+        function render() {
+          renderCalcs();
+          renderConditions();
+          renderBreakdowns();
+          renderViews();
+          renderResults();
+        }
+        function query() {
+          const p = state.calcs.map(c => `${opLabel(c.o).toUpperCase()}(${metric[c.m].label.toUpperCase()})`).join(',\n  ');
+          const g = [state.primary, state.comparison]
+            .filter(x => x !== 'none')
+            .map(x => label(x).toUpperCase())
+            .join(', ');
+          const where = state.conditions.length
+            ? `\nDONDE ${state.conditions.map(c => `${conditionCatalog[c.f][0].toUpperCase()} ${c.o.toUpperCase()} ${c.v}`).join(' Y ')}`
+            : '';
+          return `MOSTRAR\n  ${p}\nDE ACTIVIDAD_FINANCIERA${where}${g ? `\nAGRUPAR POR ${g}` : ''}\nORDENAR POR VALOR DESC\nLÍMITE 50`;
+        }
+        function setMode(mode) {
+          const visual = mode === 'visual';
+          $('v2-visual').hidden = !visual;
+          $('v2-written').hidden = visual;
+          $('v2-visual-tab').classList.toggle('is-active', visual);
+          $('v2-written-tab').classList.toggle('is-active', !visual);
+          if (!visual) {
+            $('v2-query').value = query();
+            $('v2-written-notice').classList.remove('show');
+          }
+        }
+        document.querySelectorAll('[data-v2-example]').forEach(b => b.addEventListener('click', () => load(b.dataset.v2Example)));
+        $('v2-scratch').addEventListener('click', () => load('scratch'));
+        $('v2-visual-tab').addEventListener('click', () => setMode('visual'));
+        $('v2-written-tab').addEventListener('click', () => setMode('written'));
+        $('v2-condition-toggle').addEventListener('click', () => {
+          const next = $('v2-conditions-wrap').hidden;
+          $('v2-conditions-wrap').hidden = !next;
+          $('v2-condition-toggle').setAttribute('aria-expanded', String(next));
+        });
+        $('v2-add-calc').addEventListener('click', () => {
+          state.calcs.push({ id: ++seq, m: 'expense', o: 'SUM', n: 'Gastos' });
+          render();
+        });
+        $('v2-add-condition').addEventListener('click', () => {
+          state.conditions.push({ id: ++seq, f: 'category', o: 'es', v: 'Alimentación' });
+          render();
+        });
+        $('v2-calcs').addEventListener('change', e => {
+          const id = Number(e.target.dataset.calcMetric || e.target.dataset.calcOp);
+          const c = state.calcs.find(x => x.id === id);
+          if (!c) return;
+          if (e.target.dataset.calcMetric) {
+            c.m = e.target.value;
+            c.o = metric[c.m].ops[0];
+            c.n = metric[c.m].label;
+          } else c.o = e.target.value;
+          render();
+        });
+        $('v2-calcs').addEventListener('input', e => {
+          const c = state.calcs.find(x => x.id === Number(e.target.dataset.calcName));
+          if (c) {
+            c.n = e.target.value;
+            renderResults();
+          }
+        });
+        $('v2-calcs').addEventListener('click', e => {
+          const b = e.target.closest('[data-remove-calc]');
+          if (b) {
+            state.calcs = state.calcs.filter(x => x.id !== Number(b.dataset.removeCalc));
+            render();
+          }
+        });
+        $('v2-conditions').addEventListener('change', e => {
+          const id = Number(e.target.dataset.condField || e.target.dataset.condOp || e.target.dataset.condValue);
+          const c = state.conditions.find(x => x.id === id);
+          if (!c) return;
+          if (e.target.dataset.condField) {
+            c.f = e.target.value;
+            c.o = conditionCatalog[c.f][1][0];
+            c.v = conditionCatalog[c.f][2][0];
+          } else if (e.target.dataset.condOp) c.o = e.target.value;
+          else c.v = e.target.value;
+          render();
+        });
+        $('v2-conditions').addEventListener('click', e => {
+          const b = e.target.closest('[data-remove-cond]');
+          if (b) {
+            state.conditions = state.conditions.filter(x => x.id !== Number(b.dataset.removeCond));
+            render();
+          }
+        });
+        $('v2-primary').addEventListener('change', e => {
+          const previousComparison = state.comparison;
+          state.primary = e.target.value;
+          if (state.primary === state.comparison) {
+            state.comparison = 'none';
+            state.warning = `La comparación «${label(previousComparison)}» se quitó porque no puede repetirse como desglose principal.`;
+          } else state.warning = '';
+          render();
+        });
+        $('v2-comparison').addEventListener('change', e => {
+          if (e.target.value === state.primary) {
+            state.warning = 'Elige una comparación distinta del desglose principal.';
+            return render();
+          }
+          state.comparison = e.target.value;
+          state.warning = '';
+          render();
+        });
+        $('v2-top').addEventListener('change', e => {
+          state.top = e.target.value;
+          state.selected = new Set();
+          render();
+        });
+        $('v2-series-checks').addEventListener('change', () => {
+          state.selected = new Set([...document.querySelectorAll('.v2-series-item:checked')].map(x => x.value));
+          renderResults();
+        });
+        $('v2-viz').addEventListener('click', e => {
+          const b = e.target.closest('[data-view]');
+          if (b) {
+            state.view = b.dataset.view;
+            render();
+          }
+        });
+        $('v2-bar-kind').addEventListener('click', e => {
+          const b = e.target.closest('[data-v2-bar]');
+          if (b) {
+            state.bars = b.dataset.v2Bar;
+            render();
+          }
+        });
+        $('v2-refresh').addEventListener('click', renderResults);
+        $('v2-format').addEventListener('click', () => {
+          $('v2-query').value = query();
+        });
+        $('v2-use-visual').addEventListener('click', () => {
+          $('v2-written-notice').classList.add('show');
+          setMode('visual');
+          render();
+        });
+        ['period', 'account-toggle', 'currency-toggle'].forEach(id =>
+          $(id).addEventListener('change', () => {
+            if (!$('v2-workspace').hidden) renderResults();
+          }),
+        );
+        document.querySelectorAll('.account-check,.currency-check').forEach(x =>
+          x.addEventListener('change', () => {
+            if (!$('v2-workspace').hidden) renderResults();
+          }),
+        );
+        load('category');
+      })();
+    </script>
+  </body>
+</html>

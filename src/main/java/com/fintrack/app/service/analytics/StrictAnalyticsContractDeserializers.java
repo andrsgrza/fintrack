@@ -13,39 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Input contracts must remain strict even though the application-wide Spring ObjectMapper accepts unknown fields for
- * legacy resources. These deserializers deliberately scope strictness to the clean Analytics boundary.
- */
+/** Input contracts remain strict even though the application-wide mapper accepts unknown fields elsewhere. */
 public final class StrictAnalyticsContractDeserializers {
 
     private StrictAnalyticsContractDeserializers() {}
-
-    public static final class QueryDefinitionDeserializer extends StrictObjectDeserializer<QueryDefinition> {
-
-        public QueryDefinitionDeserializer() {
-            super(QueryDefinition.class);
-        }
-
-        @Override
-        public QueryDefinition deserialize(JsonParser parser, DeserializationContext context) throws IOException {
-            ObjectNode node = object(
-                parser,
-                context,
-                Set.of("schemaVersion", "semanticModel", "measures", "groupings", "analyticalPredicates", "dateBasis", "sort", "limit")
-            );
-            return new QueryDefinition(
-                integer(node, "schemaVersion", parser),
-                text(node, "semanticModel", parser),
-                strings(node, "measures", parser),
-                strings(node, "groupings", parser),
-                objects(node, "analyticalPredicates", AnalyticalPredicate.class, parser),
-                text(node, "dateBasis", parser),
-                object(node, "sort", AnalyticsSort.class, parser),
-                integer(node, "limit", parser)
-            );
-        }
-    }
 
     public static final class VisualizationContextDeserializer extends StrictObjectDeserializer<VisualizationContext> {
 
@@ -83,50 +54,122 @@ public final class StrictAnalyticsContractDeserializers {
         }
     }
 
-    public static final class ExecutionRequestDeserializer extends StrictObjectDeserializer<FinancialAnalyticsExecutionRequest> {
+    public static final class SemanticQueryDefinitionDeserializer extends StrictObjectDeserializer<SemanticQueryDefinition> {
 
-        public ExecutionRequestDeserializer() {
-            super(FinancialAnalyticsExecutionRequest.class);
+        public SemanticQueryDefinitionDeserializer() {
+            super(SemanticQueryDefinition.class);
         }
 
         @Override
-        public FinancialAnalyticsExecutionRequest deserialize(JsonParser parser, DeserializationContext context) throws IOException {
-            ObjectNode node = object(parser, context, Set.of("schemaVersion", "definition", "context"));
-            return new FinancialAnalyticsExecutionRequest(
+        public SemanticQueryDefinition deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            ObjectNode node = object(
+                parser,
+                context,
+                Set.of(
+                    "schemaVersion",
+                    "semanticModel",
+                    "dataset",
+                    "timeBinding",
+                    "projections",
+                    "predicates",
+                    "groupBy",
+                    "orderBy",
+                    "limit"
+                )
+            );
+            return new SemanticQueryDefinition(
                 integer(node, "schemaVersion", parser),
-                object(node, "definition", QueryDefinition.class, parser),
-                object(node, "context", VisualizationContext.class, parser)
+                text(node, "semanticModel", parser),
+                enumeration(node, "dataset", SemanticDataset.class, parser),
+                enumeration(node, "timeBinding", SemanticField.class, parser),
+                objects(node, "projections", SemanticAggregateProjection.class, parser),
+                objects(node, "predicates", SemanticPredicate.class, parser),
+                enumerations(node, "groupBy", SemanticField.class, parser),
+                objects(node, "orderBy", SemanticOrder.class, parser),
+                integer(node, "limit", parser)
             );
         }
     }
 
-    public static final class PredicateDeserializer extends StrictObjectDeserializer<AnalyticalPredicate> {
+    public static final class SemanticAggregateProjectionDeserializer extends StrictObjectDeserializer<SemanticAggregateProjection> {
 
-        public PredicateDeserializer() {
-            super(AnalyticalPredicate.class);
+        public SemanticAggregateProjectionDeserializer() {
+            super(SemanticAggregateProjection.class);
         }
 
         @Override
-        public AnalyticalPredicate deserialize(JsonParser parser, DeserializationContext context) throws IOException {
-            ObjectNode node = object(parser, context, Set.of("attributeId", "operatorId", "values"));
-            return new AnalyticalPredicate(
-                text(node, "attributeId", parser),
-                text(node, "operatorId", parser),
+        public SemanticAggregateProjection deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            ObjectNode node = object(parser, context, Set.of("alias", "function", "field", "conditions"));
+            return new SemanticAggregateProjection(
+                text(node, "alias", parser),
+                enumeration(node, "function", SemanticAggregateFunction.class, parser),
+                enumeration(node, "field", SemanticField.class, parser),
+                objects(node, "conditions", SemanticPredicate.class, parser)
+            );
+        }
+    }
+
+    public static final class SemanticPredicateDeserializer extends StrictObjectDeserializer<SemanticPredicate> {
+
+        public SemanticPredicateDeserializer() {
+            super(SemanticPredicate.class);
+        }
+
+        @Override
+        public SemanticPredicate deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            ObjectNode node = object(parser, context, Set.of("field", "operator", "values"));
+            return new SemanticPredicate(
+                enumeration(node, "field", SemanticField.class, parser),
+                enumeration(node, "operator", SemanticPredicateOperator.class, parser),
                 strings(node, "values", parser)
             );
         }
     }
 
-    public static final class SortDeserializer extends StrictObjectDeserializer<AnalyticsSort> {
+    public static final class SemanticOrderDeserializer extends StrictObjectDeserializer<SemanticOrder> {
 
-        public SortDeserializer() {
-            super(AnalyticsSort.class);
+        public SemanticOrderDeserializer() {
+            super(SemanticOrder.class);
         }
 
         @Override
-        public AnalyticsSort deserialize(JsonParser parser, DeserializationContext context) throws IOException {
-            ObjectNode node = object(parser, context, Set.of("groupingId", "direction"));
-            return new AnalyticsSort(text(node, "groupingId", parser), text(node, "direction", parser));
+        public SemanticOrder deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            ObjectNode node = object(parser, context, Set.of("field", "projectionAlias", "direction"));
+            return new SemanticOrder(
+                enumeration(node, "field", SemanticField.class, parser),
+                text(node, "projectionAlias", parser),
+                enumeration(node, "direction", SemanticSortDirection.class, parser)
+            );
+        }
+    }
+
+    public static final class SemanticExecutionRequestDeserializer extends StrictObjectDeserializer<SemanticAnalyticsExecutionRequest> {
+
+        public SemanticExecutionRequestDeserializer() {
+            super(SemanticAnalyticsExecutionRequest.class);
+        }
+
+        @Override
+        public SemanticAnalyticsExecutionRequest deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            ObjectNode node = object(parser, context, Set.of("schemaVersion", "definition", "context"));
+            return new SemanticAnalyticsExecutionRequest(
+                integer(node, "schemaVersion", parser),
+                object(node, "definition", SemanticQueryDefinition.class, parser),
+                object(node, "context", VisualizationContext.class, parser)
+            );
+        }
+    }
+
+    public static final class SemanticParseRequestDeserializer extends StrictObjectDeserializer<SemanticAnalyticsDslParseRequest> {
+
+        public SemanticParseRequestDeserializer() {
+            super(SemanticAnalyticsDslParseRequest.class);
+        }
+
+        @Override
+        public SemanticAnalyticsDslParseRequest deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            ObjectNode node = object(parser, context, Set.of("text"));
+            return new SemanticAnalyticsDslParseRequest(text(node, "text", parser));
         }
     }
 
@@ -253,6 +296,57 @@ public final class StrictAnalyticsContractDeserializers {
                     throw invalidType(parser, field, "an array of objects");
                 }
                 result.add(codec.treeToValue(element, type));
+            }
+            return List.copyOf(result);
+        }
+
+        protected <E extends Enum<E>> E enumeration(ObjectNode node, String field, Class<E> type, JsonParser parser) throws IOException {
+            String value = text(node, field, parser);
+            if (value == null) {
+                return null;
+            }
+            try {
+                return Enum.valueOf(type, value);
+            } catch (IllegalArgumentException exception) {
+                throw JsonMappingException.from(
+                    parser,
+                    "Field '%s' in Analytics contract %s has an unknown %s value.".formatted(
+                            field,
+                            handledType().getSimpleName(),
+                            type.getSimpleName()
+                        ),
+                    exception
+                );
+            }
+        }
+
+        protected <E extends Enum<E>> List<E> enumerations(ObjectNode node, String field, Class<E> type, JsonParser parser)
+            throws IOException {
+            JsonNode value = node.get(field);
+            if (value == null || value.isNull()) {
+                return null;
+            }
+            if (!value.isArray()) {
+                throw invalidType(parser, field, "an array of " + type.getSimpleName() + " values");
+            }
+            List<E> result = new ArrayList<>();
+            for (JsonNode element : value) {
+                if (!element.isTextual()) {
+                    throw invalidType(parser, field, "an array of " + type.getSimpleName() + " values");
+                }
+                try {
+                    result.add(Enum.valueOf(type, element.textValue()));
+                } catch (IllegalArgumentException exception) {
+                    throw JsonMappingException.from(
+                        parser,
+                        "Field '%s' in Analytics contract %s has an unknown %s value.".formatted(
+                                field,
+                                handledType().getSimpleName(),
+                                type.getSimpleName()
+                            ),
+                        exception
+                    );
+                }
             }
             return List.copyOf(result);
         }
