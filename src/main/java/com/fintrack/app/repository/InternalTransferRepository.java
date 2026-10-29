@@ -137,6 +137,27 @@ public interface InternalTransferRepository extends JpaRepository<InternalTransf
     )
     List<InternalTransfer> findAllWithToOneRelationshipsByAccountUserLogin(@Param("login") String login);
 
+    /**
+     * Governed analytics grain is one transfer aggregate. The owner predicate protects both legs, while account
+     * context deliberately includes an event once when either endpoint is selected.
+     */
+    @Query(
+        "select internalTransfer from InternalTransfer internalTransfer " +
+        "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +
+        "join fetch outgoingTransaction.account outgoingAccount " +
+        "join fetch internalTransfer.incomingTransaction incomingTransaction " +
+        "join fetch incomingTransaction.account incomingAccount " +
+        "where outgoingAccount.user.login = :login and incomingAccount.user.login = :login " +
+        "and outgoingTransaction.transactionDate between :fromDate and :throughDate " +
+        "and (outgoingAccount.id in :accountIds or incomingAccount.id in :accountIds)"
+    )
+    List<InternalTransfer> findAllForSemanticAnalytics(
+        @Param("login") String login,
+        @Param("accountIds") List<Long> accountIds,
+        @Param("fromDate") LocalDate fromDate,
+        @Param("throughDate") LocalDate throughDate
+    );
+
     @Query(
         value = "select internalTransfer from InternalTransfer internalTransfer " +
         "join fetch internalTransfer.outgoingTransaction outgoingTransaction " +

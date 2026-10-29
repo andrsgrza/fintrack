@@ -11,15 +11,21 @@ public class SemanticAnalyticsExecutionService {
     private final SemanticAnalyticsValidator validator;
     private final SemanticTransactionLedgerExecutor transactionLedgerExecutor;
     private final SemanticAccountPositionExecutor accountPositionExecutor;
+    private final SemanticCreditAccountExecutor creditAccountExecutor;
+    private final SemanticInternalTransferExecutor internalTransferExecutor;
 
     public SemanticAnalyticsExecutionService(
         SemanticAnalyticsValidator validator,
         SemanticTransactionLedgerExecutor transactionLedgerExecutor,
-        SemanticAccountPositionExecutor accountPositionExecutor
+        SemanticAccountPositionExecutor accountPositionExecutor,
+        SemanticCreditAccountExecutor creditAccountExecutor,
+        SemanticInternalTransferExecutor internalTransferExecutor
     ) {
         this.validator = validator;
         this.transactionLedgerExecutor = transactionLedgerExecutor;
         this.accountPositionExecutor = accountPositionExecutor;
+        this.creditAccountExecutor = creditAccountExecutor;
+        this.internalTransferExecutor = internalTransferExecutor;
     }
 
     public SemanticAnalyticsResult execute(SemanticAnalyticsExecutionRequest request) {
@@ -27,6 +33,8 @@ public class SemanticAnalyticsExecutionService {
         return switch (scope.definition().dataset()) {
             case TRANSACTION_LEDGER -> transactionLedgerExecutor.execute(scope);
             case ACCOUNT_POSITION_SNAPSHOT -> accountPositionExecutor.execute(scope);
+            case CREDIT_ACCOUNT_SNAPSHOT -> creditAccountExecutor.execute(scope);
+            case INTERNAL_TRANSFER_EVENT -> internalTransferExecutor.execute(scope);
         };
     }
 }

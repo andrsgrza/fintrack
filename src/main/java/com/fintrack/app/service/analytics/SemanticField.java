@@ -31,11 +31,34 @@ public enum SemanticField {
     CATEGORY_BRANCH_CHILD(Set.of(SemanticDataset.TRANSACTION_LEDGER)),
     /** Tag identity; grouping intentionally has overlapping, non-additive semantics. */
     TAG_ID(Set.of(SemanticDataset.TRANSACTION_LEDGER)),
-    ACCOUNT_TYPE(EnumSet.of(SemanticDataset.TRANSACTION_LEDGER, SemanticDataset.ACCOUNT_POSITION_SNAPSHOT)),
-    ACCOUNT_ID(EnumSet.of(SemanticDataset.TRANSACTION_LEDGER, SemanticDataset.ACCOUNT_POSITION_SNAPSHOT)),
-    OBSERVATION_DATE(Set.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT)),
-    OBSERVATION_MONTH(Set.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT)),
-    POSITION_BALANCE(Set.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT));
+    ACCOUNT_TYPE(
+        EnumSet.of(SemanticDataset.TRANSACTION_LEDGER, SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)
+    ),
+    ACCOUNT_ID(
+        EnumSet.of(SemanticDataset.TRANSACTION_LEDGER, SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)
+    ),
+    OBSERVATION_DATE(EnumSet.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
+    OBSERVATION_MONTH(EnumSet.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
+    POSITION_BALANCE(Set.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT)),
+    /** Authoritative debt for a credit-card account: opening debt + OUT - IN. */
+    CREDIT_DEBT(Set.of(SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
+    /** Recorded current limit only; FINTRACK does not keep historical limit revisions. */
+    CREDIT_LIMIT(Set.of(SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
+    CREDIT_AVAILABLE(Set.of(SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
+    CREDIT_UTILIZATION_PERCENT(Set.of(SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
+    TRANSFER_ID(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    TRANSFER_AMOUNT(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    TRANSFER_DATE(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    TRANSFER_DAY(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    TRANSFER_WEEK(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    TRANSFER_MONTH(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    TRANSFER_YEAR(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    SOURCE_ACCOUNT_ID(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    SOURCE_ACCOUNT_INSTITUTION(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    SOURCE_ACCOUNT_TYPE(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    DESTINATION_ACCOUNT_ID(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    DESTINATION_ACCOUNT_INSTITUTION(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT)),
+    DESTINATION_ACCOUNT_TYPE(Set.of(SemanticDataset.INTERNAL_TRANSFER_EVENT));
 
     private final Set<SemanticDataset> datasets;
 

@@ -45,7 +45,22 @@ class SemanticAccountPositionExecutor {
         if (rows.size() > definition.limit()) {
             rows = new ArrayList<>(rows.subList(0, definition.limit()));
         }
-        return SemanticAnalyticsResultFactory.result(scope, rows, SemanticAnalyticsResultFactory.columns(definition));
+        List<SemanticAnalyticsWarning> warnings = new ArrayList<>();
+        warnings.add(
+            new SemanticAnalyticsWarning(
+                "NON_ADDITIVE_ACCOUNT_POSITION",
+                "Account positions are point-in-time values and are never added across accounts or observation dates."
+            )
+        );
+        if (accounts.stream().anyMatch(account -> account.getAccountType() == AccountType.INVESTMENT)) {
+            warnings.add(
+                new SemanticAnalyticsWarning(
+                    "INVESTMENT_BOOK_BALANCE_NOT_MARKET_VALUE",
+                    "Investment accounts report their registered book balance, not market value or investment return."
+                )
+            );
+        }
+        return SemanticAnalyticsResultFactory.result(scope, rows, SemanticAnalyticsResultFactory.columns(definition), warnings);
     }
 
     private List<FinancialAccount> scopedAssetAccounts(List<FinancialAccount> accounts, List<SemanticPredicate> predicates) {
@@ -87,7 +102,14 @@ class SemanticAccountPositionExecutor {
                 yield new SemanticAnalyticsResultDimension(
                     field,
                     account.getId(),
-                    new SemanticDimensionMetadata("ACCOUNT:" + account.getId(), label, null, account.getActive(), false, List.of(label))
+                    new SemanticDimensionMetadata(
+                        "ACCOUNT:" + account.getId(),
+                        label,
+                        account.getColor(),
+                        account.getActive(),
+                        false,
+                        List.of(label)
+                    )
                 );
             }
             case OBSERVATION_MONTH -> {

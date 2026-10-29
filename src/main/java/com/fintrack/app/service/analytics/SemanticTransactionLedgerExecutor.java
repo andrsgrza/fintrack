@@ -339,7 +339,7 @@ class SemanticTransactionLedgerExecutor {
             return new SemanticAnalyticsResultDimension(
                 field,
                 id,
-                new SemanticDimensionMetadata("ACCOUNT:" + id, label, null, account.getActive(), false, List.of(label))
+                new SemanticDimensionMetadata("ACCOUNT:" + id, label, account.getColor(), account.getActive(), false, List.of(label))
             );
         }
         if (field == SemanticField.ACCOUNT_INSTITUTION) {

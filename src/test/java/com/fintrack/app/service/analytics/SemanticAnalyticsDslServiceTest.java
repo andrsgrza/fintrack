@@ -41,6 +41,18 @@ class SemanticAnalyticsDslServiceTest {
             SemanticDataset.ACCOUNT_POSITION_SNAPSHOT,
             SemanticAggregateFunction.SUM
         );
+        assertRoundTrips(
+            "SELECT SUM(CREDIT_DEBT) AS debt FROM CREDIT_ACCOUNT_SNAPSHOT " +
+            "TIME BINDING OBSERVATION_DATE GROUP BY ACCOUNT_ID, OBSERVATION_MONTH LIMIT 100",
+            SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT,
+            SemanticAggregateFunction.SUM
+        );
+        assertRoundTrips(
+            "SELECT COUNT(TRANSFER_ID) AS transfer_count, SUM(TRANSFER_AMOUNT) AS transfer_volume " +
+            "FROM INTERNAL_TRANSFER_EVENT GROUP BY TRANSFER_MONTH, DESTINATION_ACCOUNT_ID LIMIT 100",
+            SemanticDataset.INTERNAL_TRANSFER_EVENT,
+            SemanticAggregateFunction.COUNT
+        );
     }
 
     @Test
@@ -109,7 +121,12 @@ class SemanticAnalyticsDslServiceTest {
                         assertThat(diagnostic.code()).isEqualTo(AnalyticsDiagnosticCode.UNKNOWN_DATASET);
                         assertThat(diagnostic.line()).isEqualTo(1);
                         assertThat(diagnostic.column()).isPositive();
-                        assertThat(diagnostic.allowedValues()).contains("TRANSACTION_LEDGER", "ACCOUNT_POSITION_SNAPSHOT");
+                        assertThat(diagnostic.allowedValues()).contains(
+                            "TRANSACTION_LEDGER",
+                            "ACCOUNT_POSITION_SNAPSHOT",
+                            "CREDIT_ACCOUNT_SNAPSHOT",
+                            "INTERNAL_TRANSFER_EVENT"
+                        );
                     });
             });
 
@@ -129,9 +146,7 @@ class SemanticAnalyticsDslServiceTest {
     private void assertRoundTrips(String text, SemanticDataset dataset, SemanticAggregateFunction aggregate) {
         SemanticAnalyticsDslParseResult parsed = service.parse(text);
         assertThat(parsed.definition().dataset()).isEqualTo(dataset);
-        assertThat(parsed.definition().projections())
-            .singleElement()
-            .satisfies(projection -> assertThat(projection.function()).isEqualTo(aggregate));
+        assertThat(parsed.definition().projections().get(0).function()).isEqualTo(aggregate);
         assertThat(service.parse(parsed.canonicalText()).definition()).isEqualTo(parsed.definition());
         assertThat(service.parse(service.parse(parsed.canonicalText()).canonicalText()).canonicalText()).isEqualTo(parsed.canonicalText());
     }

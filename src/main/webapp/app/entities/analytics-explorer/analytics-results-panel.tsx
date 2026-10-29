@@ -13,9 +13,10 @@ type Props = {
   onVisualizationChange: (visualization: ExplorerVisualization) => void;
 };
 
-const display = (value: number | null, unit: 'COUNT' | 'MONEY', currency: string | null, locale: string) => {
+const display = (value: number | null, unit: 'COUNT' | 'MONEY' | 'PERCENT', currency: string | null, locale: string) => {
   if (value === null) return '—';
   if (unit === 'MONEY') return new Intl.NumberFormat(locale, { style: 'currency', currency: currency ?? 'MXN' }).format(value);
+  if (unit === 'PERCENT') return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(value / 100);
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
 };
 

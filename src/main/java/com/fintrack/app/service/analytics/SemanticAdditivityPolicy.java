@@ -7,4 +7,5 @@ public enum SemanticAdditivityPolicy {
     /** Deliberately expanded many-to-many groups, such as transaction tags. */
     NON_ADDITIVE_OVERLAPPING,
     POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH,
+    POINT_IN_TIME_REQUIRES_ACCOUNT,
 }

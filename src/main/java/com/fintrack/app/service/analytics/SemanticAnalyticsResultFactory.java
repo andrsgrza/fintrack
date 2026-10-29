@@ -23,12 +23,22 @@ final class SemanticAnalyticsResultFactory {
         List<SemanticAnalyticsResultColumn> columns,
         List<SemanticAnalyticsWarning> warnings
     ) {
+        return result(scope, rows, columns, warnings, availability(rows));
+    }
+
+    static SemanticAnalyticsResult result(
+        SemanticAnalyticsExecutionScope scope,
+        List<SemanticAnalyticsResultRow> rows,
+        List<SemanticAnalyticsResultColumn> columns,
+        List<SemanticAnalyticsWarning> warnings,
+        SemanticResultAvailability availability
+    ) {
         return new SemanticAnalyticsResult(
             SemanticAnalyticsSchema.VERSION,
             SemanticAnalyticsSchema.SEMANTIC_MODEL,
             scope.context(),
             Instant.now(),
-            availability(rows),
+            availability,
             columns,
             rows,
             warnings
@@ -67,7 +77,8 @@ final class SemanticAnalyticsResultFactory {
     }
 
     static SemanticUnit unit(SemanticAggregateProjection projection) {
-        return projection.function() == SemanticAggregateFunction.COUNT ? SemanticUnit.COUNT : SemanticUnit.MONEY;
+        if (projection.function() == SemanticAggregateFunction.COUNT) return SemanticUnit.COUNT;
+        return projection.field() == SemanticField.CREDIT_UTILIZATION_PERCENT ? SemanticUnit.PERCENT : SemanticUnit.MONEY;
     }
 
     private static SemanticResultAvailability availability(List<SemanticAnalyticsResultRow> rows) {
@@ -87,6 +98,16 @@ final class SemanticAnalyticsResultFactory {
     }
 
     private static SemanticAdditivityPolicy projectionAdditivity(SemanticAggregateProjection projection) {
+        if (projection.field() == SemanticField.POSITION_BALANCE || projection.field() == SemanticField.CREDIT_DEBT) {
+            return SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH;
+        }
+        if (
+            projection.field() == SemanticField.CREDIT_LIMIT ||
+            projection.field() == SemanticField.CREDIT_AVAILABLE ||
+            projection.field() == SemanticField.CREDIT_UTILIZATION_PERCENT
+        ) {
+            return SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT;
+        }
         return projection.function() == SemanticAggregateFunction.AVG
             ? SemanticAdditivityPolicy.NON_ADDITIVE
             : SemanticAdditivityPolicy.ADDITIVE;

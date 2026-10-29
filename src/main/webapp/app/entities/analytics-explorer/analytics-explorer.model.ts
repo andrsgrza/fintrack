@@ -4,7 +4,7 @@ export type SemanticPredicateOperator = 'EQUALS' | 'IN' | 'DESCENDANT_OF' | 'IS_
 export type SemanticAggregateCapability = {
   function: 'COUNT' | 'SUM' | 'AVG';
   field: SemanticField;
-  outputUnit: 'COUNT' | 'MONEY';
+  outputUnit: 'COUNT' | 'MONEY' | 'PERCENT';
   additivity: string;
 };
 
@@ -16,7 +16,7 @@ export type SemanticPredicateCapability = {
 export type SemanticFieldDefinition = {
   field: SemanticField;
   valueType: string;
-  unit: 'COUNT' | 'MONEY' | null;
+  unit: 'COUNT' | 'MONEY' | 'PERCENT' | null;
   aggregateable: boolean;
   filterable: boolean;
   groupable: boolean;
@@ -86,7 +86,7 @@ export type SemanticAnalyticsResult = {
   semanticModel: string;
   effectiveContext: { from: string; through: string; accountIds: number[]; currencyCodes: string[] };
   executedAt: string;
-  columns: Array<{ id: string; dimension: boolean; unit: 'COUNT' | 'MONEY' | null; currencyFaceted: boolean }>;
+  columns: Array<{ id: string; dimension: boolean; unit: 'COUNT' | 'MONEY' | 'PERCENT' | null; currencyFaceted: boolean }>;
   rows: Array<{
     dimensions: Array<{
       field: SemanticField;
@@ -101,7 +101,12 @@ export type SemanticAnalyticsResult = {
       } | null;
     }>;
     currencyCode: string | null;
-    values: Array<{ alias: string; value: number | null; unit: 'COUNT' | 'MONEY'; availability: 'COMPLETE' | 'ZERO' | 'UNAVAILABLE' }>;
+    values: Array<{
+      alias: string;
+      value: number | null;
+      unit: 'COUNT' | 'MONEY' | 'PERCENT';
+      availability: 'COMPLETE' | 'ZERO' | 'UNAVAILABLE';
+    }>;
   }>;
   availability?: 'COMPLETE' | 'ZERO' | 'NO_DATA' | 'UNAVAILABLE' | 'NOT_APPLICABLE' | 'PARTIAL';
   warnings?: Array<{ code: string; message: string }>;

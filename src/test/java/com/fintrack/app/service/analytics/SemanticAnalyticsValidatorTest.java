@@ -258,4 +258,63 @@ class SemanticAnalyticsValidatorTest {
             .extracting(AnalyticsDiagnostic::code)
             .contains(AnalyticsDiagnosticCode.UNSUPPORTED_GROUPING_COMBINATION);
     }
+
+    @Test
+    void governs_credit_observations_and_transfer_time_buckets_without_restoring_named_metrics() {
+        List<AnalyticsDiagnostic> creditDiagnostics = new ArrayList<>();
+        var credit = validator.validateDefinition(
+            new SemanticQueryDefinition(
+                SemanticAnalyticsSchema.VERSION,
+                SemanticAnalyticsSchema.SEMANTIC_MODEL,
+                SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT,
+                SemanticField.OBSERVATION_DATE,
+                List.of(new SemanticAggregateProjection("debt", SemanticAggregateFunction.SUM, SemanticField.CREDIT_DEBT)),
+                List.of(),
+                List.of(SemanticField.ACCOUNT_ID, SemanticField.OBSERVATION_MONTH),
+                List.of(),
+                10
+            ),
+            creditDiagnostics
+        );
+        assertThat(creditDiagnostics).isEmpty();
+        assertThat(credit).isPresent();
+
+        List<AnalyticsDiagnostic> missingAccountDiagnostics = new ArrayList<>();
+        validator.validateDefinition(
+            new SemanticQueryDefinition(
+                SemanticAnalyticsSchema.VERSION,
+                SemanticAnalyticsSchema.SEMANTIC_MODEL,
+                SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT,
+                SemanticField.OBSERVATION_DATE,
+                List.of(new SemanticAggregateProjection("debt", SemanticAggregateFunction.SUM, SemanticField.CREDIT_DEBT)),
+                List.of(),
+                List.of(SemanticField.OBSERVATION_MONTH),
+                List.of(),
+                10
+            ),
+            missingAccountDiagnostics
+        );
+        assertThat(missingAccountDiagnostics)
+            .extracting(AnalyticsDiagnostic::code)
+            .contains(AnalyticsDiagnosticCode.INVALID_CREDIT_CALCULATION);
+
+        List<AnalyticsDiagnostic> transferDiagnostics = new ArrayList<>();
+        validator.validateDefinition(
+            new SemanticQueryDefinition(
+                SemanticAnalyticsSchema.VERSION,
+                SemanticAnalyticsSchema.SEMANTIC_MODEL,
+                SemanticDataset.INTERNAL_TRANSFER_EVENT,
+                SemanticField.TRANSFER_DATE,
+                List.of(new SemanticAggregateProjection("count", SemanticAggregateFunction.COUNT, SemanticField.TRANSFER_ID)),
+                List.of(),
+                List.of(SemanticField.TRANSFER_MONTH, SemanticField.TRANSFER_WEEK),
+                List.of(),
+                10
+            ),
+            transferDiagnostics
+        );
+        assertThat(transferDiagnostics)
+            .extracting(AnalyticsDiagnostic::code)
+            .contains(AnalyticsDiagnosticCode.UNSUPPORTED_GROUPING_COMBINATION);
+    }
 }

@@ -70,6 +70,9 @@ public class SemanticAnalyticsValidator {
         Optional<SemanticQueryDefinition> definition = validateDefinition(request.definition(), diagnostics);
         String ownerLogin = currentUserService.getCurrentUserLogin();
         Optional<ContextResolution> context = validateContext(request.context(), ownerLogin, diagnostics);
+        if (definition.isPresent() && context.isPresent()) {
+            validateContextSpecificSemantics(definition.orElseThrow(), context.orElseThrow().context(), diagnostics);
+        }
         SemanticAnalyticsReferenceCatalog references = null;
         if (diagnostics.isEmpty()) {
             try {
@@ -134,6 +137,7 @@ public class SemanticAnalyticsValidator {
         List<SemanticField> groups = normalizeGroups(definition.groupBy(), dataset, diagnostics);
         validateGroupingComposition(dataset, groups, diagnostics);
         validatePositionSemantics(dataset, projections, groups, diagnostics);
+        validateCreditSemantics(dataset, projections, groups, diagnostics);
         validateCategoryBranchGrouping(dataset, groups, predicates, diagnostics);
         List<SemanticOrder> order = normalizeOrder(definition.orderBy(), groups, projections, diagnostics);
         Integer limit = normalizeLimit(definition.limit(), diagnostics);
@@ -380,14 +384,18 @@ public class SemanticAnalyticsValidator {
     }
 
     private void validateGroupingComposition(SemanticDataset dataset, List<SemanticField> groups, List<AnalyticsDiagnostic> diagnostics) {
-        if (dataset != SemanticDataset.TRANSACTION_LEDGER) return;
-        long temporalGroups = groups.stream().filter(this::isTransactionTemporalGrouping).count();
+        long temporalGroups =
+            switch (dataset) {
+                case TRANSACTION_LEDGER -> groups.stream().filter(this::isTransactionTemporalGrouping).count();
+                case INTERNAL_TRANSFER_EVENT -> groups.stream().filter(this::isTransferTemporalGrouping).count();
+                default -> 0;
+            };
         if (temporalGroups > 1) {
             diagnostics.add(
                 diagnostic(
                     AnalyticsDiagnosticCode.UNSUPPORTED_GROUPING_COMBINATION,
                     "definition.groupBy",
-                    "Choose one transaction time breakdown and, optionally, one comparison breakdown."
+                    "Choose one time breakdown and, optionally, one comparison breakdown."
                 )
             );
         }
@@ -396,6 +404,13 @@ public class SemanticAnalyticsValidator {
     private boolean isTransactionTemporalGrouping(SemanticField field) {
         return switch (field) {
             case TRANSACTION_DAY, TRANSACTION_WEEK, TRANSACTION_MONTH, TRANSACTION_YEAR -> true;
+            default -> false;
+        };
+    }
+
+    private boolean isTransferTemporalGrouping(SemanticField field) {
+        return switch (field) {
+            case TRANSFER_DAY, TRANSFER_WEEK, TRANSFER_MONTH, TRANSFER_YEAR -> true;
             default -> false;
         };
     }
@@ -429,6 +444,67 @@ public class SemanticAnalyticsValidator {
                 )
             );
         }
+    }
+
+    private void validateCreditSemantics(
+        SemanticDataset dataset,
+        List<SemanticAggregateProjection> projections,
+        List<SemanticField> groups,
+        List<AnalyticsDiagnostic> diagnostics
+    ) {
+        if (dataset != SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT) return;
+        if (!groups.contains(SemanticField.ACCOUNT_ID)) {
+            diagnostics.add(
+                diagnostic(
+                    AnalyticsDiagnosticCode.INVALID_CREDIT_CALCULATION,
+                    "definition.groupBy",
+                    "Credit observations must retain ACCOUNT_ID so point-in-time values are never added across accounts."
+                )
+            );
+        }
+        boolean includesLimitDerivedValue = projections
+            .stream()
+            .map(SemanticAggregateProjection::field)
+            .anyMatch(this::isCreditLimitDerivedField);
+        if (includesLimitDerivedValue && groups.contains(SemanticField.OBSERVATION_MONTH)) {
+            diagnostics.add(
+                diagnostic(
+                    AnalyticsDiagnosticCode.INVALID_CREDIT_CALCULATION,
+                    "definition.groupBy",
+                    "Credit limit, available credit and utilization do not support historical month grouping."
+                )
+            );
+        }
+    }
+
+    private void validateContextSpecificSemantics(
+        SemanticQueryDefinition definition,
+        ResolvedVisualizationContext context,
+        List<AnalyticsDiagnostic> diagnostics
+    ) {
+        if (definition.dataset() != SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT) return;
+        boolean includesLimitDerivedValue = definition
+            .projections()
+            .stream()
+            .map(SemanticAggregateProjection::field)
+            .anyMatch(this::isCreditLimitDerivedField);
+        if (includesLimitDerivedValue && !(context.from().equals(timePolicy.today()) && context.through().equals(timePolicy.today()))) {
+            diagnostics.add(
+                diagnostic(
+                    AnalyticsDiagnosticCode.INCOMPATIBLE_HISTORICAL_CREDIT_LIMIT,
+                    "context.time",
+                    "Credit limit, available credit and utilization are current-only because FINTRACK has no credit-limit history."
+                )
+            );
+        }
+    }
+
+    private boolean isCreditLimitDerivedField(SemanticField field) {
+        return (
+            field == SemanticField.CREDIT_LIMIT ||
+            field == SemanticField.CREDIT_AVAILABLE ||
+            field == SemanticField.CREDIT_UTILIZATION_PERCENT
+        );
     }
 
     private void validateCategoryBranchGrouping(
@@ -627,7 +703,11 @@ public class SemanticAnalyticsValidator {
                     if (dataset == SemanticDataset.ACCOUNT_POSITION_SNAPSHOT && !ASSET_ACCOUNT_TYPES.containsAll(accountTypes)) {
                         throw new IllegalArgumentException("Historical balance positions are available only for asset account types.");
                     }
+                    if (dataset == SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT && !Set.of(AccountType.CREDIT_CARD).containsAll(accountTypes)) {
+                        throw new IllegalArgumentException("Credit observations are available only for credit-card accounts.");
+                    }
                 }
+                case SOURCE_ACCOUNT_TYPE, DESTINATION_ACCOUNT_TYPE -> values.forEach(AccountType::valueOf);
                 case CATEGORY_ID -> {
                     if (
                         !Set.of(

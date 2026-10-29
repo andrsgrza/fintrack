@@ -38,6 +38,8 @@ public class SemanticAnalyticsCatalogService {
         Map<SemanticDataset, SemanticDatasetDefinition> definitions = new EnumMap<>(SemanticDataset.class);
         definitions.put(SemanticDataset.TRANSACTION_LEDGER, transactionLedger());
         definitions.put(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, accountPositionSnapshot());
+        definitions.put(SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT, creditAccountSnapshot());
+        definitions.put(SemanticDataset.INTERNAL_TRANSFER_EVENT, internalTransferEvent());
         datasets = Map.copyOf(definitions);
     }
 
@@ -189,6 +191,136 @@ public class SemanticAnalyticsCatalogService {
         );
     }
 
+    private SemanticDatasetDefinition creditAccountSnapshot() {
+        return new SemanticDatasetDefinition(
+            SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT,
+            "one credit-card FinancialAccount at one authoritative observation date",
+            SemanticField.OBSERVATION_DATE,
+            List.of(
+                new SemanticRelationshipDefinition(
+                    "ACCOUNT",
+                    "FinancialAccount",
+                    "MANY_TO_ONE",
+                    "Credit-card account identity, type and currency"
+                ),
+                new SemanticRelationshipDefinition(
+                    "CREDIT_DETAILS",
+                    "CreditAccountDetails",
+                    "ONE_TO_ONE_OPTIONAL",
+                    "Current recorded credit limit; its historical revisions are not retained"
+                )
+            ),
+            List.of(
+                field(SemanticField.ACCOUNT_ID, SemanticValueType.IDENTIFIER, null, false, false, true),
+                field(SemanticField.ACCOUNT_TYPE, SemanticValueType.ENUM, null, false, true, false),
+                field(SemanticField.OBSERVATION_DATE, SemanticValueType.DATE, null, false, false, false),
+                field(SemanticField.OBSERVATION_MONTH, SemanticValueType.TEMPORAL_BUCKET, null, false, false, true),
+                field(SemanticField.CREDIT_DEBT, SemanticValueType.DECIMAL, SemanticUnit.MONEY, true, false, false),
+                field(SemanticField.CREDIT_LIMIT, SemanticValueType.DECIMAL, SemanticUnit.MONEY, true, false, false),
+                field(SemanticField.CREDIT_AVAILABLE, SemanticValueType.DECIMAL, SemanticUnit.MONEY, true, false, false),
+                field(SemanticField.CREDIT_UTILIZATION_PERCENT, SemanticValueType.DECIMAL, SemanticUnit.PERCENT, true, false, false)
+            ),
+            List.of(
+                aggregate(
+                    SemanticAggregateFunction.SUM,
+                    SemanticField.CREDIT_DEBT,
+                    SemanticUnit.MONEY,
+                    SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH
+                ),
+                aggregate(
+                    SemanticAggregateFunction.SUM,
+                    SemanticField.CREDIT_LIMIT,
+                    SemanticUnit.MONEY,
+                    SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT
+                ),
+                aggregate(
+                    SemanticAggregateFunction.SUM,
+                    SemanticField.CREDIT_AVAILABLE,
+                    SemanticUnit.MONEY,
+                    SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT
+                ),
+                aggregate(
+                    SemanticAggregateFunction.SUM,
+                    SemanticField.CREDIT_UTILIZATION_PERCENT,
+                    SemanticUnit.PERCENT,
+                    SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT
+                )
+            ),
+            List.of(predicate(SemanticField.ACCOUNT_TYPE)),
+            List.of(SemanticField.ACCOUNT_ID, SemanticField.OBSERVATION_MONTH),
+            SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH,
+            SemanticCurrencyPolicy.PARTITION_BY_ACCOUNT_CURRENCY,
+            "Credit debt is an authoritative point-in-time value. Limit, available credit and utilization are current-only because FINTRACK does not retain limit history."
+        );
+    }
+
+    private SemanticDatasetDefinition internalTransferEvent() {
+        return new SemanticDatasetDefinition(
+            SemanticDataset.INTERNAL_TRANSFER_EVENT,
+            "one validated InternalTransfer aggregate",
+            SemanticField.TRANSFER_DATE,
+            List.of(
+                new SemanticRelationshipDefinition(
+                    "SOURCE_ACCOUNT",
+                    "FinancialAccount",
+                    "MANY_TO_ONE",
+                    "Outgoing transfer account, institution, type and currency"
+                ),
+                new SemanticRelationshipDefinition(
+                    "DESTINATION_ACCOUNT",
+                    "FinancialAccount",
+                    "MANY_TO_ONE",
+                    "Incoming transfer account, institution, type and currency"
+                )
+            ),
+            List.of(
+                field(SemanticField.TRANSFER_ID, SemanticValueType.IDENTIFIER, null, true, false, false),
+                field(SemanticField.TRANSFER_AMOUNT, SemanticValueType.DECIMAL, SemanticUnit.MONEY, true, false, false),
+                field(SemanticField.TRANSFER_DATE, SemanticValueType.DATE, null, false, false, false),
+                field(SemanticField.TRANSFER_DAY, SemanticValueType.TEMPORAL_BUCKET, null, false, false, true),
+                field(SemanticField.TRANSFER_WEEK, SemanticValueType.TEMPORAL_BUCKET, null, false, false, true),
+                field(SemanticField.TRANSFER_MONTH, SemanticValueType.TEMPORAL_BUCKET, null, false, false, true),
+                field(SemanticField.TRANSFER_YEAR, SemanticValueType.TEMPORAL_BUCKET, null, false, false, true),
+                field(SemanticField.SOURCE_ACCOUNT_ID, SemanticValueType.IDENTIFIER, null, false, false, true),
+                field(SemanticField.SOURCE_ACCOUNT_INSTITUTION, SemanticValueType.TEXT, null, false, false, true),
+                field(SemanticField.SOURCE_ACCOUNT_TYPE, SemanticValueType.ENUM, null, false, true, true),
+                field(SemanticField.DESTINATION_ACCOUNT_ID, SemanticValueType.IDENTIFIER, null, false, false, true),
+                field(SemanticField.DESTINATION_ACCOUNT_INSTITUTION, SemanticValueType.TEXT, null, false, false, true),
+                field(SemanticField.DESTINATION_ACCOUNT_TYPE, SemanticValueType.ENUM, null, false, true, true)
+            ),
+            List.of(
+                aggregate(
+                    SemanticAggregateFunction.COUNT,
+                    SemanticField.TRANSFER_ID,
+                    SemanticUnit.COUNT,
+                    SemanticAdditivityPolicy.ADDITIVE
+                ),
+                aggregate(
+                    SemanticAggregateFunction.SUM,
+                    SemanticField.TRANSFER_AMOUNT,
+                    SemanticUnit.MONEY,
+                    SemanticAdditivityPolicy.ADDITIVE
+                )
+            ),
+            List.of(predicate(SemanticField.SOURCE_ACCOUNT_TYPE), predicate(SemanticField.DESTINATION_ACCOUNT_TYPE)),
+            List.of(
+                SemanticField.TRANSFER_DAY,
+                SemanticField.TRANSFER_WEEK,
+                SemanticField.TRANSFER_MONTH,
+                SemanticField.TRANSFER_YEAR,
+                SemanticField.SOURCE_ACCOUNT_ID,
+                SemanticField.SOURCE_ACCOUNT_INSTITUTION,
+                SemanticField.SOURCE_ACCOUNT_TYPE,
+                SemanticField.DESTINATION_ACCOUNT_ID,
+                SemanticField.DESTINATION_ACCOUNT_INSTITUTION,
+                SemanticField.DESTINATION_ACCOUNT_TYPE
+            ),
+            SemanticAdditivityPolicy.ADDITIVE,
+            SemanticCurrencyPolicy.PARTITION_BY_ACCOUNT_CURRENCY,
+            "One InternalTransfer is counted once using its validated outgoing-leg date and amount. Account context includes the event when either owned endpoint is selected."
+        );
+    }
+
     private SemanticFieldDefinition field(
         SemanticField field,
         SemanticValueType valueType,
@@ -239,6 +371,23 @@ public class SemanticAnalyticsCatalogService {
             case OBSERVATION_DATE -> text("Fecha de observación", "Observation date");
             case OBSERVATION_MONTH -> text("Mes de observación", "Observation month");
             case POSITION_BALANCE -> text("Saldo registrado", "Recorded balance");
+            case CREDIT_DEBT -> text("Deuda de tarjeta", "Credit-card debt");
+            case CREDIT_LIMIT -> text("Límite de crédito actual", "Current credit limit");
+            case CREDIT_AVAILABLE -> text("Crédito disponible actual", "Current available credit");
+            case CREDIT_UTILIZATION_PERCENT -> text("Utilización de crédito actual", "Current credit utilization");
+            case TRANSFER_ID -> text("Transferencia interna", "Internal transfer");
+            case TRANSFER_AMOUNT -> text("Importe transferido", "Transferred amount");
+            case TRANSFER_DATE -> text("Fecha de transferencia", "Transfer date");
+            case TRANSFER_DAY -> text("Día de transferencia", "Transfer day");
+            case TRANSFER_WEEK -> text("Semana ISO de transferencia", "Transfer ISO week");
+            case TRANSFER_MONTH -> text("Mes de transferencia", "Transfer month");
+            case TRANSFER_YEAR -> text("Año de transferencia", "Transfer year");
+            case SOURCE_ACCOUNT_ID -> text("Cuenta de origen", "Source account");
+            case SOURCE_ACCOUNT_INSTITUTION -> text("Institución de origen", "Source institution");
+            case SOURCE_ACCOUNT_TYPE -> text("Tipo de cuenta de origen", "Source account type");
+            case DESTINATION_ACCOUNT_ID -> text("Cuenta de destino", "Destination account");
+            case DESTINATION_ACCOUNT_INSTITUTION -> text("Institución de destino", "Destination institution");
+            case DESTINATION_ACCOUNT_TYPE -> text("Tipo de cuenta de destino", "Destination account type");
         };
     }
 
@@ -275,6 +424,34 @@ public class SemanticAnalyticsCatalogService {
             case POSITION_BALANCE -> text(
                 "Saldo calculado a una fecha con historial disponible.",
                 "Balance calculated at a date with available history."
+            );
+            case CREDIT_DEBT -> text(
+                "Deuda calculada como saldo inicial más salidas menos entradas; puede ser negativa por sobrepago.",
+                "Debt calculated as opening balance plus outflows minus inflows; it can be negative after overpayment."
+            );
+            case CREDIT_LIMIT -> text(
+                "Límite registrado hoy; FINTRACK no conserva su historial.",
+                "Limit recorded today; FINTRACK does not retain its history."
+            );
+            case CREDIT_AVAILABLE -> text(
+                "Límite actual menos deuda actual; no se conoce para fechas históricas ni sin límite válido.",
+                "Current limit minus current debt; unknown for historical dates or without a valid limit."
+            );
+            case CREDIT_UTILIZATION_PERCENT -> text(
+                "Deuda actual dividida entre límite positivo actual, expresada en porcentaje y sin tope artificial.",
+                "Current debt divided by the current positive limit, expressed as a percentage and never artificially capped."
+            );
+            case TRANSFER_AMOUNT -> text(
+                "Importe del evento de transferencia único; no es ingreso ni gasto económico.",
+                "Amount of the unique transfer event; it is neither economic income nor expense."
+            );
+            case TRANSFER_DATE -> text(
+                "Fecha de la pierna saliente validada; ambas piernas de una transferencia comparten fecha.",
+                "Date of the validated outgoing leg; both legs of a transfer share that date."
+            );
+            case TRANSFER_DAY, TRANSFER_WEEK, TRANSFER_MONTH, TRANSFER_YEAR -> text(
+                "Desglose temporal del evento de transferencia único.",
+                "Temporal breakdown of the unique transfer event."
             );
             default -> label(field);
         };

@@ -4,4 +4,8 @@ package com.fintrack.app.service.analytics;
 public enum SemanticDataset {
     TRANSACTION_LEDGER,
     ACCOUNT_POSITION_SNAPSHOT,
+    /** One credit-card account at one authoritative observation date. */
+    CREDIT_ACCOUNT_SNAPSHOT,
+    /** One validated InternalTransfer aggregate, never either individual transaction leg. */
+    INTERNAL_TRANSFER_EVENT,
 }
