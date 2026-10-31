@@ -17,10 +17,10 @@ type Props = {
 const toggle = <T,>(values: T[], value: T) =>
   values.includes(value) ? values.filter(candidate => candidate !== value) : [...values, value];
 
-const scopeSummary = (locale: string, count: number, selectedEs: string, selectedEn: string) =>
-  count ? copy(locale, `${count} ${selectedEs}`, `${count} ${selectedEn}`) : copy(locale, 'Todas', 'All');
+const selectionSummary = (locale: string, count: number, allEs: string, allEn: string) =>
+  count ? copy(locale, `${count} seleccionadas`, `${count} selected`) : copy(locale, allEs, allEn);
 
-/** Compact execution controls. They never mutate the semantic definition. */
+/** A compact execution-only context. It never changes the query definition. */
 export const AnalyticsContextControls = ({ catalog, context, accounts, locale, disabled, onChange }: Props) => {
   const [accountSearch, setAccountSearch] = useState('');
   const [currencySearch, setCurrencySearch] = useState('');
@@ -36,109 +36,153 @@ export const AnalyticsContextControls = ({ catalog, context, accounts, locale, d
       .includes(accountSearch.toLocaleLowerCase()),
   );
   const visibleCurrencies = currencies.filter(currency => currency.toLocaleLowerCase().includes(currencySearch.toLocaleLowerCase()));
+  const periodSummary = relative
+    ? relativePeriodLabel(locale, context.time.relativePeriod ?? '')
+    : copy(locale, 'Rango personalizado', 'Custom range');
 
   return (
     <section data-cy="analyticsContext" aria-labelledby="analytics-context-heading">
-      <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+      <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
         <div>
-          <p className="text-uppercase small fw-semibold text-muted mb-1">{copy(locale, 'Alcance de resultados', 'Result scope')}</p>
-          <h2 id="analytics-context-heading" className="h5 mb-1">
-            {copy(locale, '¿Para qué periodo y cuentas?', 'Which period and accounts?')}
-          </h2>
-          <p className="small text-muted mb-0">
-            {copy(
-              locale,
-              'Este alcance se aplica sólo al ejecutar. No cambia los cálculos de la consulta.',
-              'This scope applies only when running. It never changes the query calculations.',
-            )}
+          <p className="text-uppercase small fw-semibold text-primary mb-1">
+            {copy(locale, 'Contexto de visualización', 'Visualization context')}
           </p>
+          <h2 id="analytics-context-heading" className="h5 mb-1">
+            {copy(locale, '¿Qué parte de tus finanzas quieres ver?', 'Which part of your finances do you want to see?')}
+          </h2>
         </div>
+        <span className="small text-muted">
+          {periodSummary} · {selectionSummary(locale, context.accountIds.length, 'Todas las cuentas', 'All accounts')} ·{' '}
+          {selectionSummary(locale, context.currencyCodes.length, 'Todas las monedas', 'All currencies')}
+        </span>
       </div>
-      <div className="row g-3 align-items-end">
-        <div className="col-12 col-sm-6 col-lg-3">
-          <Label for="analytics-context-time-mode">{copy(locale, 'Periodo', 'Period')}</Label>
+
+      <div className="row g-2 g-md-3">
+        <div className="col-12 col-md-4">
+          <Label className="small text-uppercase fw-semibold text-muted mb-1" for="analytics-context-period">
+            {copy(locale, 'Periodo', 'Period')}
+          </Label>
           <Input
-            id="analytics-context-time-mode"
+            id="analytics-context-period"
             type="select"
             disabled={disabled}
-            value={context.time.mode}
+            value={relative ? (context.time.relativePeriod ?? '') : 'ABSOLUTE_RANGE'}
             data-cy="analyticsContextTimeMode"
-            onChange={event =>
-              event.target.value === 'RELATIVE'
-                ? updateTime({
-                    mode: 'RELATIVE',
-                    relativePeriod: catalog.supportedRelativePeriods[0] ?? 'THIS_MONTH',
-                    from: null,
-                    through: null,
-                  })
-                : updateTime({ mode: 'ABSOLUTE_RANGE', relativePeriod: null, from: '', through: '' })
-            }
+            onChange={event => {
+              if (event.target.value === 'ABSOLUTE_RANGE') {
+                updateTime({
+                  mode: 'ABSOLUTE_RANGE',
+                  relativePeriod: null,
+                  from: context.time.from ?? '',
+                  through: context.time.through ?? '',
+                });
+              } else {
+                updateTime({ mode: 'RELATIVE', relativePeriod: event.target.value, from: null, through: null });
+              }
+            }}
           >
-            <option value="RELATIVE">{copy(locale, 'Periodo relativo', 'Relative period')}</option>
-            <option value="ABSOLUTE_RANGE">{copy(locale, 'Rango personalizado', 'Custom range')}</option>
+            {catalog.supportedRelativePeriods.map(period => (
+              <option key={period} value={period}>
+                {relativePeriodLabel(locale, period)}
+              </option>
+            ))}
+            <option value="ABSOLUTE_RANGE">{copy(locale, 'Rango personalizado…', 'Custom range…')}</option>
           </Input>
+          {!relative ? (
+            <div className="row g-2 mt-1">
+              <div className="col-6">
+                <Label className="visually-hidden" for="analytics-context-from">
+                  {copy(locale, 'Desde', 'From')}
+                </Label>
+                <Input
+                  id="analytics-context-from"
+                  type="date"
+                  disabled={disabled}
+                  value={context.time.from ?? ''}
+                  data-cy="analyticsContextFrom"
+                  onChange={event => updateTime({ from: event.target.value })}
+                />
+              </div>
+              <div className="col-6">
+                <Label className="visually-hidden" for="analytics-context-through">
+                  {copy(locale, 'Hasta', 'Through')}
+                </Label>
+                <Input
+                  id="analytics-context-through"
+                  type="date"
+                  disabled={disabled}
+                  value={context.time.through ?? ''}
+                  data-cy="analyticsContextThrough"
+                  onChange={event => updateTime({ through: event.target.value })}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
-        {relative ? (
-          <div className="col-12 col-sm-6 col-lg-3">
-            <Label for="analytics-context-relative-period">{copy(locale, 'Seleccionar periodo', 'Select period')}</Label>
-            <Input
-              id="analytics-context-relative-period"
-              type="select"
-              disabled={disabled}
-              value={context.time.relativePeriod ?? ''}
-              data-cy="analyticsContextRelativePeriod"
-              onChange={event => updateTime({ relativePeriod: event.target.value })}
-            >
-              {catalog.supportedRelativePeriods.map(period => (
-                <option key={period} value={period}>
-                  {relativePeriodLabel(locale, period)}
-                </option>
-              ))}
-            </Input>
-          </div>
-        ) : (
-          <>
-            <div className="col-6 col-lg-3">
-              <Label for="analytics-context-from">{copy(locale, 'Desde', 'From')}</Label>
-              <Input
-                id="analytics-context-from"
-                type="date"
-                disabled={disabled}
-                value={context.time.from ?? ''}
-                data-cy="analyticsContextFrom"
-                onChange={event => updateTime({ from: event.target.value })}
-              />
-            </div>
-            <div className="col-6 col-lg-3">
-              <Label for="analytics-context-through">{copy(locale, 'Hasta', 'Through')}</Label>
-              <Input
-                id="analytics-context-through"
-                type="date"
-                disabled={disabled}
-                value={context.time.through ?? ''}
-                data-cy="analyticsContextThrough"
-                onChange={event => updateTime({ through: event.target.value })}
-              />
-            </div>
-          </>
-        )}
-        <div className="col-12 col-lg-3">
-          <details className="border rounded-2 p-2" data-cy="analyticsCurrencyPicker">
-            <summary className="small fw-semibold" role="button">
-              {copy(locale, 'Monedas', 'Currencies')} · {scopeSummary(locale, context.currencyCodes.length, 'seleccionadas', 'selected')}
+
+        <div className="col-12 col-md-4">
+          <details className="border rounded-2 h-100 p-2" data-cy="analyticsAccountPicker">
+            <summary className="small text-uppercase fw-semibold text-muted" role="button">
+              {copy(locale, 'Cuentas', 'Accounts')} · {selectionSummary(locale, context.accountIds.length, 'Todas', 'All')}
             </summary>
             <div className="pt-2">
+              <Label className="visually-hidden" for="analytics-account-search">
+                {copy(locale, 'Buscar cuenta', 'Search accounts')}
+              </Label>
               <Input
-                aria-label={copy(locale, 'Buscar moneda', 'Search currencies')}
+                id="analytics-account-search"
+                type="search"
+                bsSize="sm"
+                value={accountSearch}
+                disabled={disabled}
+                onChange={event => setAccountSearch(event.target.value)}
+                placeholder={copy(locale, 'Buscar una cuenta', 'Search an account')}
+              />
+              <div className="mt-2 d-flex flex-column gap-1" style={{ maxHeight: '12rem', overflowY: 'auto' }}>
+                {visibleAccounts.map(account => (
+                  <Label check className="border rounded-2 px-2 py-1 small" key={account.id}>
+                    <Input
+                      type="checkbox"
+                      checked={context.accountIds.includes(account.id)}
+                      disabled={disabled}
+                      onChange={() => onChange({ ...context, accountIds: toggle(context.accountIds, account.id) })}
+                    />{' '}
+                    {account.name}
+                    <span className="text-muted">
+                      {' '}
+                      · {account.accountType ? label(locale, account.accountType) : ''} · {account.currency}
+                    </span>
+                  </Label>
+                ))}
+                {!visibleAccounts.length ? (
+                  <span className="small text-muted">{copy(locale, 'No hay coincidencias.', 'No matches.')}</span>
+                ) : null}
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div className="col-12 col-md-4">
+          <details className="border rounded-2 h-100 p-2" data-cy="analyticsCurrencyPicker">
+            <summary className="small text-uppercase fw-semibold text-muted" role="button">
+              {copy(locale, 'Monedas', 'Currencies')} · {selectionSummary(locale, context.currencyCodes.length, 'Todas', 'All')}
+            </summary>
+            <div className="pt-2">
+              <Label className="visually-hidden" for="analytics-currency-search">
+                {copy(locale, 'Buscar moneda', 'Search currencies')}
+              </Label>
+              <Input
+                id="analytics-currency-search"
+                type="search"
                 bsSize="sm"
                 value={currencySearch}
                 disabled={disabled}
                 onChange={event => setCurrencySearch(event.target.value)}
-                placeholder={copy(locale, 'Buscar…', 'Search…')}
+                placeholder={copy(locale, 'Buscar una moneda', 'Search a currency')}
               />
               <div className="mt-2 d-flex flex-wrap gap-2">
                 {visibleCurrencies.map(currency => (
-                  <Label check className="border rounded-pill px-2 py-1" key={currency}>
+                  <Label check className="border rounded-pill px-2 py-1 small" key={currency}>
                     <Input
                       type="checkbox"
                       checked={context.currencyCodes.includes(currency)}
@@ -149,52 +193,6 @@ export const AnalyticsContextControls = ({ catalog, context, accounts, locale, d
                   </Label>
                 ))}
               </div>
-              <p className="small text-muted mb-0 mt-2">
-                {copy(
-                  locale,
-                  'Sin selección incluye todas; los importes no se mezclan.',
-                  'No selection includes all; amounts are never mixed.',
-                )}
-              </p>
-            </div>
-          </details>
-        </div>
-        <div className="col-12 col-lg-3">
-          <details className="border rounded-2 p-2" data-cy="analyticsAccountPicker">
-            <summary className="small fw-semibold" role="button">
-              {copy(locale, 'Cuentas', 'Accounts')} · {scopeSummary(locale, context.accountIds.length, 'seleccionadas', 'selected')}
-            </summary>
-            <div className="pt-2">
-              <Input
-                aria-label={copy(locale, 'Buscar cuenta', 'Search accounts')}
-                bsSize="sm"
-                value={accountSearch}
-                disabled={disabled}
-                onChange={event => setAccountSearch(event.target.value)}
-                placeholder={copy(locale, 'Buscar por cuenta, tipo o moneda…', 'Search account, type, or currency…')}
-              />
-              <div className="mt-2 d-flex flex-column gap-1" style={{ maxHeight: '12rem', overflowY: 'auto' }}>
-                {visibleAccounts.map(account => (
-                  <Label check className="border rounded-2 px-2 py-1" key={account.id}>
-                    <Input
-                      type="checkbox"
-                      checked={context.accountIds.includes(account.id)}
-                      disabled={disabled}
-                      onChange={() => onChange({ ...context, accountIds: toggle(context.accountIds, account.id) })}
-                    />{' '}
-                    {account.name}{' '}
-                    <span className="text-muted">
-                      · {account.accountType ? label(locale, account.accountType) : ''} · {account.currency}
-                    </span>
-                  </Label>
-                ))}
-                {!visibleAccounts.length ? (
-                  <span className="small text-muted">{copy(locale, 'No hay coincidencias.', 'No matches.')}</span>
-                ) : null}
-              </div>
-              <p className="small text-muted mb-0 mt-2">
-                {copy(locale, 'Sin selección incluye todas tus cuentas accesibles.', 'No selection includes all accessible accounts.')}
-              </p>
             </div>
           </details>
         </div>

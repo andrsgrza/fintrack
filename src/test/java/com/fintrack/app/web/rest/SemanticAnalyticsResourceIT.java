@@ -53,11 +53,15 @@ class SemanticAnalyticsResourceIT {
             .andExpect(jsonPath("$.schemaVersion").value(SemanticAnalyticsSchema.VERSION))
             .andExpect(jsonPath("$.semanticModel").value(SemanticAnalyticsSchema.SEMANTIC_MODEL))
             .andExpect(jsonPath("$.authenticatedOwnerRequired").value(true))
-            .andExpect(jsonPath("$.datasets.length()").value(2))
+            .andExpect(jsonPath("$.datasets.length()").value(4))
             .andExpect(jsonPath("$.datasets[0].dataset").value("TRANSACTION_LEDGER"))
             .andExpect(jsonPath("$.datasets[0].grain").value("one FinancialTransaction"))
             .andExpect(jsonPath("$.datasets[1].dataset").value("ACCOUNT_POSITION_SNAPSHOT"))
             .andExpect(jsonPath("$.datasets[1].additivity").value("POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH"))
+            .andExpect(jsonPath("$.datasets[2].dataset").value("CREDIT_ACCOUNT_SNAPSHOT"))
+            .andExpect(jsonPath("$.datasets[2].timeBinding").value("OBSERVATION_DATE"))
+            .andExpect(jsonPath("$.datasets[3].dataset").value("INTERNAL_TRANSFER_EVENT"))
+            .andExpect(jsonPath("$.datasets[3].timeBinding").value("TRANSFER_DATE"))
             .andExpect(jsonPath("$.metrics").doesNotExist())
             .andExpect(jsonPath("$.accountIds").doesNotExist());
     }

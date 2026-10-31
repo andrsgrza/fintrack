@@ -73,7 +73,27 @@ final class SemanticAnalyticsResultFactory {
         SemanticResultAvailability availability = amount == null
             ? SemanticResultAvailability.UNAVAILABLE
             : amount.signum() == 0 ? SemanticResultAvailability.ZERO : SemanticResultAvailability.COMPLETE;
-        return new SemanticAnalyticsResultValue(projection.alias(), amount, unit(projection), availability);
+        return new SemanticAnalyticsResultValue(projection.alias(), amount, unit(projection), availability, false);
+    }
+
+    static SemanticAnalyticsResultValue ledgerValue(SemanticAggregateProjection projection, BigDecimal amount) {
+        if (amount == null && projection.function() == SemanticAggregateFunction.AVG) {
+            return new SemanticAnalyticsResultValue(projection.alias(), null, unit(projection), SemanticResultAvailability.NO_DATA, false);
+        }
+        return value(projection, amount);
+    }
+
+    static SemanticAnalyticsResultValue emptyPeriodValue(SemanticAggregateProjection projection) {
+        if (projection.function() == SemanticAggregateFunction.AVG) {
+            return new SemanticAnalyticsResultValue(projection.alias(), null, unit(projection), SemanticResultAvailability.NO_DATA, true);
+        }
+        return new SemanticAnalyticsResultValue(
+            projection.alias(),
+            BigDecimal.ZERO,
+            unit(projection),
+            SemanticResultAvailability.ZERO,
+            true
+        );
     }
 
     static SemanticUnit unit(SemanticAggregateProjection projection) {
@@ -83,13 +103,19 @@ final class SemanticAnalyticsResultFactory {
 
     private static SemanticResultAvailability availability(List<SemanticAnalyticsResultRow> rows) {
         if (rows.isEmpty()) return SemanticResultAvailability.NO_DATA;
+        long noData = rows
+            .stream()
+            .flatMap(row -> row.values().stream())
+            .filter(value -> value.availability() == SemanticResultAvailability.NO_DATA)
+            .count();
         long unavailable = rows
             .stream()
             .flatMap(row -> row.values().stream())
             .filter(value -> value.availability() == SemanticResultAvailability.UNAVAILABLE)
             .count();
-        if (unavailable == 0) return SemanticResultAvailability.COMPLETE;
         long values = rows.stream().mapToLong(row -> row.values().size()).sum();
+        if (unavailable == 0 && noData == 0) return SemanticResultAvailability.COMPLETE;
+        if (noData == values) return SemanticResultAvailability.NO_DATA;
         return unavailable == values ? SemanticResultAvailability.UNAVAILABLE : SemanticResultAvailability.PARTIAL;
     }
 

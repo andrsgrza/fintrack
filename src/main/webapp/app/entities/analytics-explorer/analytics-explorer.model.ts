@@ -105,11 +105,25 @@ export type SemanticAnalyticsResult = {
       alias: string;
       value: number | null;
       unit: 'COUNT' | 'MONEY' | 'PERCENT';
-      availability: 'COMPLETE' | 'ZERO' | 'UNAVAILABLE';
+      availability: 'COMPLETE' | 'ZERO' | 'NO_DATA' | 'UNAVAILABLE' | 'NOT_APPLICABLE' | 'PARTIAL';
+      /** True only for a valid empty calendar period completed by the semantic backend. */
+      derived?: boolean;
     }>;
   }>;
   availability?: 'COMPLETE' | 'ZERO' | 'NO_DATA' | 'UNAVAILABLE' | 'NOT_APPLICABLE' | 'PARTIAL';
   warnings?: Array<{ code: string; message: string }>;
 };
 
-export type ExplorerVisualization = 'TABLE' | 'KPI' | 'BAR' | 'LINE' | 'DONUT';
+/** Presentation is local UI state. It never changes the semantic query definition. */
+export type ExplorerVisualization = 'TABLE' | 'KPI' | 'LINE' | 'BAR' | 'GROUPED_BAR' | 'STACKED_BAR' | 'DONUT';
+
+export type AnalyticsReference = {
+  id: number;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  active?: boolean;
+  parentId?: number | null;
+  path?: string[];
+  system?: boolean;
+};

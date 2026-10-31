@@ -663,7 +663,7 @@ class SemanticAnalyticsExecutionServiceIT {
     }
 
     @Test
-    void calculates_income_and_expense_series_with_zero_without_fabricating_sparse_months_or_mixing_currencies() {
+    void calculates_income_and_expense_series_with_zero_and_completes_valid_empty_months_without_mixing_currencies() {
         Fixture fixture = fixture();
         SemanticQueryDefinition incomeAndExpenseByMonth = new SemanticQueryDefinition(
             SemanticAnalyticsSchema.VERSION,
@@ -749,8 +749,139 @@ class SemanticAnalyticsExecutionServiceIT {
             LocalDate.of(2026, 4, 1),
             LocalDate.of(2026, 4, 30)
         );
-        assertThat(sparse.rows()).isEmpty();
-        assertThat(sparse.availability()).isEqualTo(SemanticResultAvailability.NO_DATA);
+        SemanticAnalyticsResultRow april = row(sparse, "MXN", SemanticField.TRANSACTION_MONTH, "2026-04", null, null);
+        assertThat(value(april, "income").value()).isZero();
+        assertThat(value(april, "income").availability()).isEqualTo(SemanticResultAvailability.ZERO);
+        assertThat(value(april, "income").derived()).isTrue();
+        assertThat(value(april, "expense").value()).isZero();
+        assertThat(value(april, "expense").availability()).isEqualTo(SemanticResultAvailability.ZERO);
+        assertThat(value(april, "expense").derived()).isTrue();
+        assertThat(sparse.availability()).isEqualTo(SemanticResultAvailability.COMPLETE);
+    }
+
+    @Test
+    void completes_empty_weeks_by_measure_and_series_without_fabricating_averages_categories_or_currencies() {
+        Fixture fixture = fixture();
+        List<SemanticPredicate> economicExpense = List.of(
+            new SemanticPredicate(SemanticField.TRANSACTION_FLOW, SemanticPredicateOperator.EQUALS, List.of("OUT")),
+            new SemanticPredicate(SemanticField.TRANSFER_LINK_STATUS, SemanticPredicateOperator.EQUALS, List.of("UNLINKED"))
+        );
+        SemanticQueryDefinition weeklyMeasures = new SemanticQueryDefinition(
+            SemanticAnalyticsSchema.VERSION,
+            SemanticAnalyticsSchema.SEMANTIC_MODEL,
+            SemanticDataset.TRANSACTION_LEDGER,
+            SemanticField.TRANSACTION_DATE,
+            List.of(
+                new SemanticAggregateProjection("expense", SemanticAggregateFunction.SUM, SemanticField.TRANSACTION_AMOUNT),
+                new SemanticAggregateProjection("movement_count", SemanticAggregateFunction.COUNT, SemanticField.TRANSACTION_ID),
+                new SemanticAggregateProjection("average_expense", SemanticAggregateFunction.AVG, SemanticField.TRANSACTION_AMOUNT)
+            ),
+            economicExpense,
+            List.of(SemanticField.TRANSACTION_WEEK),
+            List.of(),
+            100
+        );
+
+        SemanticAnalyticsResult weekly = execute(
+            weeklyMeasures,
+            List.of(fixture.debit().getId()),
+            List.of("MXN"),
+            LocalDate.of(2026, 2, 9),
+            LocalDate.of(2026, 2, 22)
+        );
+        SemanticAnalyticsResultRow weekWithExpense = row(weekly, "MXN", SemanticField.TRANSACTION_WEEK, "2026-W07", null, null);
+        assertThat(value(weekWithExpense, "expense").value()).isEqualByComparingTo("300");
+        assertThat(value(weekWithExpense, "movement_count").value()).isEqualByComparingTo("1");
+        assertThat(value(weekWithExpense, "average_expense").value()).isEqualByComparingTo("300");
+
+        SemanticAnalyticsResultRow emptyWeek = row(weekly, "MXN", SemanticField.TRANSACTION_WEEK, "2026-W08", null, null);
+        assertThat(value(emptyWeek, "expense").value()).isZero();
+        assertThat(value(emptyWeek, "expense").availability()).isEqualTo(SemanticResultAvailability.ZERO);
+        assertThat(value(emptyWeek, "expense").derived()).isTrue();
+        assertThat(value(emptyWeek, "movement_count").value()).isZero();
+        assertThat(value(emptyWeek, "movement_count").availability()).isEqualTo(SemanticResultAvailability.ZERO);
+        assertThat(value(emptyWeek, "movement_count").derived()).isTrue();
+        assertThat(value(emptyWeek, "average_expense").value()).isNull();
+        assertThat(value(emptyWeek, "average_expense").availability()).isEqualTo(SemanticResultAvailability.NO_DATA);
+        assertThat(value(emptyWeek, "average_expense").derived()).isTrue();
+
+        SemanticQueryDefinition byWeekAndCategory = ledgerDefinition(
+            new SemanticAggregateProjection("expense", SemanticAggregateFunction.SUM, SemanticField.TRANSACTION_AMOUNT),
+            economicExpense,
+            List.of(SemanticField.TRANSACTION_WEEK, SemanticField.CATEGORY_ID),
+            List.of()
+        );
+        SemanticAnalyticsResult categories = execute(
+            byWeekAndCategory,
+            List.of(fixture.debit().getId()),
+            List.of("MXN"),
+            LocalDate.of(2026, 2, 9),
+            LocalDate.of(2026, 3, 8)
+        );
+        SemanticAnalyticsResultRow foodInEmptyWeek = row(
+            categories,
+            "MXN",
+            SemanticField.TRANSACTION_WEEK,
+            "2026-W08",
+            SemanticField.CATEGORY_ID,
+            fixture.food().getId()
+        );
+        assertThat(value(foodInEmptyWeek, null).value()).isZero();
+        assertThat(value(foodInEmptyWeek, null).derived()).isTrue();
+        assertThat(
+            categories
+                .rows()
+                .stream()
+                .filter(candidate -> "2026-W08".equals(dimension(candidate, SemanticField.TRANSACTION_WEEK)))
+                .map(candidate -> dimension(candidate, SemanticField.CATEGORY_ID))
+        ).containsExactlyInAnyOrder(fixture.food().getId(), fixture.travel().getId());
+
+        SemanticAnalyticsResult currencies = execute(
+            byWeekAndCategory,
+            List.of(fixture.debit().getId(), fixture.investment().getId()),
+            List.of("MXN", "USD"),
+            LocalDate.of(2026, 2, 9),
+            LocalDate.of(2026, 2, 22)
+        );
+        assertThat(
+            value(
+                row(currencies, "MXN", SemanticField.TRANSACTION_WEEK, "2026-W08", SemanticField.CATEGORY_ID, fixture.food().getId()),
+                null
+            ).value()
+        ).isZero();
+        assertThat(
+            value(
+                row(currencies, "USD", SemanticField.TRANSACTION_WEEK, "2026-W08", SemanticField.CATEGORY_ID, fixture.food().getId()),
+                null
+            ).value()
+        ).isZero();
+    }
+
+    @Test
+    void preserves_the_31275_13_mxn_weekly_expense_peak_while_completing_the_following_empty_week() {
+        Fixture fixture = fixture();
+        transactionRepository.saveAndFlush(
+            transaction(fixture.debit(), fixture.food(), TransactionFlow.OUT, "31275.13", LocalDate.of(2026, 2, 2))
+        );
+        SemanticQueryDefinition weeklyExpenses = ledgerDefinition(
+            new SemanticAggregateProjection("expense", SemanticAggregateFunction.SUM, SemanticField.TRANSACTION_AMOUNT),
+            List.of(
+                new SemanticPredicate(SemanticField.TRANSACTION_FLOW, SemanticPredicateOperator.EQUALS, List.of("OUT")),
+                new SemanticPredicate(SemanticField.TRANSFER_LINK_STATUS, SemanticPredicateOperator.EQUALS, List.of("UNLINKED"))
+            ),
+            List.of(SemanticField.TRANSACTION_WEEK),
+            List.of()
+        );
+        SemanticAnalyticsResult result = execute(
+            weeklyExpenses,
+            List.of(fixture.debit().getId()),
+            List.of("MXN"),
+            LocalDate.of(2026, 1, 26),
+            LocalDate.of(2026, 2, 8)
+        );
+        assertThat(value(row(result, "MXN", SemanticField.TRANSACTION_WEEK, "2026-W06", null, null), null).value()).isEqualByComparingTo(
+            "31275.13"
+        );
     }
 
     @Test
@@ -759,24 +890,20 @@ class SemanticAnalyticsExecutionServiceIT {
         Fixture fixture = fixture();
         Category foreignCategory = category(fixture.foreignOwner(), "Private category");
         Tag foreignTag = tag(fixture.foreignOwner(), "private tag");
-        SemanticQueryDefinition foreignCategoryQuery = ledgerDefinition(
-            new SemanticAggregateProjection("count", SemanticAggregateFunction.COUNT, SemanticField.TRANSACTION_ID),
-            List.of(
-                new SemanticPredicate(
-                    SemanticField.CATEGORY_ID,
-                    SemanticPredicateOperator.EQUALS,
-                    List.of(foreignCategory.getId().toString())
-                )
-            ),
-            List.of(),
-            List.of()
-        );
-        SemanticQueryDefinition foreignTagQuery = ledgerDefinition(
-            new SemanticAggregateProjection("count", SemanticAggregateFunction.COUNT, SemanticField.TRANSACTION_ID),
-            List.of(new SemanticPredicate(SemanticField.TAG_ID, SemanticPredicateOperator.HAS_ANY, List.of(foreignTag.getId().toString()))),
-            List.of(),
-            List.of()
-        );
+        SemanticQueryDefinition foreignCategoryQuery = dslService
+            .parse(
+                "SELECT COUNT(TRANSACTION_ID) AS count FROM TRANSACTION_LEDGER WHERE CATEGORY_ID = '" +
+                foreignCategory.getId() +
+                "' LIMIT 100"
+            )
+            .definition();
+        SemanticQueryDefinition foreignTagQuery = dslService
+            .parse(
+                "SELECT COUNT(TRANSACTION_ID) AS count FROM TRANSACTION_LEDGER WHERE TAG_ID HAS_ANY ('" +
+                foreignTag.getId() +
+                "') LIMIT 100"
+            )
+            .definition();
 
         assertThatThrownBy(() -> execute(foreignCategoryQuery, List.of(), List.of()))
             .isInstanceOf(SemanticAnalyticsValidationException.class)
@@ -959,7 +1086,7 @@ class SemanticAnalyticsExecutionServiceIT {
         );
         transactionRepository.saveAndFlush(transaction(investment, food, TransactionFlow.OUT, "20", LocalDate.of(2026, 2, 12)));
         transactionRepository.saveAndFlush(transaction(foreignAccount, food, TransactionFlow.OUT, "999", LocalDate.of(2026, 2, 1)));
-        return new Fixture(debit, food, travel, laterAccount, foreignOwner);
+        return new Fixture(debit, investment, food, travel, laterAccount, foreignOwner);
     }
 
     private SemanticQueryDefinition ledgerDefinition(
@@ -1183,5 +1310,12 @@ class SemanticAnalyticsExecutionServiceIT {
             .updatedAt(Instant.now());
     }
 
-    private record Fixture(FinancialAccount debit, Category food, Category travel, FinancialAccount laterAccount, User foreignOwner) {}
+    private record Fixture(
+        FinancialAccount debit,
+        FinancialAccount investment,
+        Category food,
+        Category travel,
+        FinancialAccount laterAccount,
+        User foreignOwner
+    ) {}
 }

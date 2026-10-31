@@ -236,6 +236,84 @@ class SemanticSpecializedAnalyticsExecutionServiceIT {
     }
 
     @Test
+    void parses_formats_and_executes_credit_and_transfer_queries_through_the_single_semantic_pipeline() {
+        Fixture fixture = fixture();
+        SemanticAnalyticsResult debt = executeRoundTrip(
+            "SELECT SUM(CREDIT_DEBT) AS debt FROM CREDIT_ACCOUNT_SNAPSHOT TIME BINDING OBSERVATION_DATE " +
+            "GROUP BY ACCOUNT_ID, OBSERVATION_MONTH ORDER BY OBSERVATION_MONTH ASC LIMIT 100",
+            List.of(fixture.creditWithLimit().getId()),
+            List.of("MXN"),
+            HISTORY_FROM,
+            HISTORY_THROUGH
+        );
+        assertCreditValue(
+            debt,
+            fixture.creditWithLimit().getId(),
+            LocalDate.of(2026, 1, 1),
+            "debt",
+            "400",
+            SemanticResultAvailability.COMPLETE
+        );
+        assertCreditValue(
+            debt,
+            fixture.creditWithLimit().getId(),
+            LocalDate.of(2026, 3, 1),
+            "debt",
+            "1250",
+            SemanticResultAvailability.COMPLETE
+        );
+
+        LocalDate current = LocalDate.now(SemanticAnalyticsTimePolicy.BUSINESS_ZONE);
+        SemanticAnalyticsResult currentCredit = executeRoundTrip(
+            "SELECT SUM(CREDIT_LIMIT) AS credit_limit, SUM(CREDIT_AVAILABLE) AS available, " +
+            "SUM(CREDIT_UTILIZATION_PERCENT) AS utilization FROM CREDIT_ACCOUNT_SNAPSHOT TIME BINDING OBSERVATION_DATE " +
+            "GROUP BY ACCOUNT_ID ORDER BY ACCOUNT_ID ASC LIMIT 100",
+            List.of(fixture.creditWithLimit().getId()),
+            List.of("MXN"),
+            current,
+            current
+        );
+        SemanticAnalyticsResultRow creditRow = accountRow(currentCredit, fixture.creditWithLimit().getId());
+        assertThat(value(creditRow, "credit_limit").value()).isEqualByComparingTo("1000");
+        assertThat(value(creditRow, "available").value()).isEqualByComparingTo("-250");
+        assertThat(value(creditRow, "utilization").value()).isEqualByComparingTo("125.0000");
+
+        SemanticAnalyticsResult transfer = executeRoundTrip(
+            "SELECT COUNT(TRANSFER_ID) AS transfer_count, SUM(TRANSFER_AMOUNT) AS transfer_volume " +
+            "FROM INTERNAL_TRANSFER_EVENT TIME BINDING TRANSFER_DATE " +
+            "WHERE SOURCE_ACCOUNT_TYPE = DEBIT AND DESTINATION_ACCOUNT_TYPE = CASH " +
+            "GROUP BY TRANSFER_MONTH, DESTINATION_ACCOUNT_ID ORDER BY TRANSFER_MONTH ASC LIMIT 100",
+            List.of(fixture.transferSource().getId(), fixture.transferDestination().getId()),
+            List.of("MXN"),
+            HISTORY_FROM,
+            HISTORY_THROUGH
+        );
+        assertTransferValues(transfer, "2026-02", fixture.transferDestination().getId(), "MXN", "1", "250");
+        assertTransferValues(transfer, "2026-03", fixture.transferDestination().getId(), "MXN", "1", "100");
+
+        SemanticAnalyticsDslParseResult historicalUtilization = dslService.parse(
+            "SELECT SUM(CREDIT_UTILIZATION_PERCENT) AS utilization FROM CREDIT_ACCOUNT_SNAPSHOT " +
+            "TIME BINDING OBSERVATION_DATE GROUP BY ACCOUNT_ID LIMIT 100"
+        );
+        assertThat(dslService.format(historicalUtilization.definition())).isEqualTo(historicalUtilization.canonicalText());
+        assertThatThrownBy(() ->
+            execute(
+                historicalUtilization.definition(),
+                List.of(fixture.creditWithLimit().getId()),
+                List.of("MXN"),
+                HISTORY_FROM,
+                HISTORY_THROUGH
+            )
+        )
+            .isInstanceOf(SemanticAnalyticsValidationException.class)
+            .satisfies(error ->
+                assertThat(((SemanticAnalyticsValidationException) error).getDiagnostics())
+                    .extracting(AnalyticsDiagnostic::code)
+                    .contains(AnalyticsDiagnosticCode.INCOMPATIBLE_HISTORICAL_CREDIT_LIMIT)
+            );
+    }
+
+    @Test
     void keeps_transfer_events_out_of_economic_income_and_expense_and_owner_scope() {
         Fixture fixture = fixture();
         SemanticQueryDefinition economicMovements = new SemanticQueryDefinition(

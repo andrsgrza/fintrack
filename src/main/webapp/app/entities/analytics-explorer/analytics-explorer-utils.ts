@@ -7,82 +7,199 @@ import {
   VisualizationContext,
 } from './analytics-explorer.model';
 
-const spanish: Record<string, string> = {
-  TRANSACTION_LEDGER: 'Movimientos financieros',
-  ACCOUNT_POSITION_SNAPSHOT: 'Saldos históricos',
-  TRANSACTION_ID: 'Transacción',
-  TRANSACTION_AMOUNT: 'Importe',
-  TRANSACTION_FLOW: 'Flujo',
-  TRANSACTION_DATE: 'Fecha de transacción',
-  TRANSFER_LINK_STATUS: 'Estado de transferencia interna',
-  ACCOUNT_INSTITUTION: 'Institución financiera',
-  CATEGORY_ID: 'Categoría',
-  CATEGORY_ROOT: 'Categoría principal',
-  CATEGORY_SUBCATEGORY: 'Subcategoría',
-  CATEGORY_BRANCH_CHILD: 'Subcategoría de la rama',
-  TAG_ID: 'Etiqueta',
-  ACCOUNT_TYPE: 'Tipo de cuenta',
-  ACCOUNT_ID: 'Cuenta',
-  OBSERVATION_DATE: 'Fecha de observación',
-  OBSERVATION_MONTH: 'Mes de observación',
-  POSITION_BALANCE: 'Saldo registrado',
-  COUNT: 'Conteo',
-  SUM: 'Suma',
-  AVG: 'Promedio',
-  EQUALS: 'Es igual a',
-  IN: 'Es uno de',
-  COMPLETE: 'Completo',
-  ZERO: 'Cero',
-  UNAVAILABLE: 'No disponible',
-  NO_DATA: 'Sin datos',
-  NOT_APPLICABLE: 'No aplica',
-  PARTIAL: 'Parcial',
-  DEBIT: 'Débito',
-  CASH: 'Efectivo',
-  INVESTMENT: 'Inversión',
-  CREDIT: 'Tarjeta de crédito',
-};
+type Translation = { es: string; en: string };
 
-const english: Record<string, string> = {
-  TRANSACTION_LEDGER: 'Financial activity',
-  ACCOUNT_POSITION_SNAPSHOT: 'Historical balances',
-  TRANSACTION_ID: 'Transaction',
-  TRANSACTION_AMOUNT: 'Amount',
-  TRANSACTION_FLOW: 'Flow',
-  TRANSACTION_DATE: 'Transaction date',
-  TRANSFER_LINK_STATUS: 'Internal transfer status',
-  ACCOUNT_INSTITUTION: 'Financial institution',
-  CATEGORY_ID: 'Category',
-  CATEGORY_ROOT: 'Main category',
-  CATEGORY_SUBCATEGORY: 'Subcategory',
-  CATEGORY_BRANCH_CHILD: 'Branch subcategory',
-  TAG_ID: 'Tag',
-  ACCOUNT_TYPE: 'Account type',
-  ACCOUNT_ID: 'Account',
-  OBSERVATION_DATE: 'Observation date',
-  OBSERVATION_MONTH: 'Observation month',
-  POSITION_BALANCE: 'Recorded balance',
-  COUNT: 'Count',
-  SUM: 'Sum',
-  AVG: 'Average',
-  EQUALS: 'Equals',
-  IN: 'Is one of',
-  COMPLETE: 'Complete',
-  ZERO: 'Zero',
-  UNAVAILABLE: 'Unavailable',
-  NO_DATA: 'No data',
-  NOT_APPLICABLE: 'Not applicable',
-  PARTIAL: 'Partial',
-  DEBIT: 'Debit',
-  CASH: 'Cash',
-  INVESTMENT: 'Investment',
-  CREDIT: 'Credit card',
+const translations: Record<string, Translation> = {
+  TRANSACTION_LEDGER: { es: 'Movimientos', en: 'Transactions' },
+  ACCOUNT_POSITION_SNAPSHOT: { es: 'Posiciones de cuentas', en: 'Account positions' },
+  CREDIT_ACCOUNT_SNAPSHOT: { es: 'Tarjetas de crédito', en: 'Credit cards' },
+  INTERNAL_TRANSFER_EVENT: { es: 'Transferencias internas', en: 'Internal transfers' },
+  TRANSACTION_ID: { es: 'Movimiento', en: 'Transaction' },
+  TRANSACTION_AMOUNT: { es: 'Importe', en: 'Amount' },
+  TRANSACTION_FLOW: { es: 'Flujo', en: 'Flow' },
+  TRANSACTION_DATE: { es: 'Fecha de movimiento', en: 'Transaction date' },
+  TRANSACTION_DAY: { es: 'Día', en: 'Day' },
+  TRANSACTION_WEEK: { es: 'Semana', en: 'Week' },
+  TRANSACTION_MONTH: { es: 'Mes', en: 'Month' },
+  TRANSACTION_YEAR: { es: 'Año', en: 'Year' },
+  TRANSFER_LINK_STATUS: { es: 'Relación con transferencia interna', en: 'Internal transfer relationship' },
+  ACCOUNT_INSTITUTION: { es: 'Institución financiera', en: 'Financial institution' },
+  ACCOUNT_ID: { es: 'Cuenta', en: 'Account' },
+  ACCOUNT_TYPE: { es: 'Tipo de cuenta', en: 'Account type' },
+  CATEGORY_ID: { es: 'Categoría asignada', en: 'Assigned category' },
+  CATEGORY_ROOT: { es: 'Categoría principal', en: 'Root category' },
+  CATEGORY_SUBCATEGORY: { es: 'Subcategoría', en: 'Subcategory' },
+  CATEGORY_BRANCH_CHILD: { es: 'Hijos de la categoría', en: 'Category children' },
+  TAG_ID: { es: 'Etiqueta', en: 'Tag' },
+  OBSERVATION_DATE: { es: 'Fecha de observación', en: 'Observation date' },
+  OBSERVATION_MONTH: { es: 'Mes de observación', en: 'Observation month' },
+  POSITION_BALANCE: { es: 'Saldo registrado', en: 'Recorded balance' },
+  CREDIT_DEBT: { es: 'Deuda de tarjeta', en: 'Credit-card debt' },
+  CREDIT_LIMIT: { es: 'Límite de crédito actual', en: 'Current credit limit' },
+  CREDIT_AVAILABLE: { es: 'Crédito disponible actual', en: 'Current available credit' },
+  CREDIT_UTILIZATION_PERCENT: { es: 'Utilización de crédito actual', en: 'Current credit utilization' },
+  TRANSFER_ID: { es: 'Transferencia interna', en: 'Internal transfer' },
+  TRANSFER_AMOUNT: { es: 'Importe transferido', en: 'Transferred amount' },
+  TRANSFER_DATE: { es: 'Fecha de transferencia', en: 'Transfer date' },
+  TRANSFER_DAY: { es: 'Día', en: 'Day' },
+  TRANSFER_WEEK: { es: 'Semana', en: 'Week' },
+  TRANSFER_MONTH: { es: 'Mes', en: 'Month' },
+  TRANSFER_YEAR: { es: 'Año', en: 'Year' },
+  SOURCE_ACCOUNT_ID: { es: 'Cuenta de origen', en: 'Source account' },
+  SOURCE_ACCOUNT_INSTITUTION: { es: 'Institución de origen', en: 'Source institution' },
+  SOURCE_ACCOUNT_TYPE: { es: 'Tipo de cuenta de origen', en: 'Source account type' },
+  DESTINATION_ACCOUNT_ID: { es: 'Cuenta de destino', en: 'Destination account' },
+  DESTINATION_ACCOUNT_INSTITUTION: { es: 'Institución de destino', en: 'Destination institution' },
+  DESTINATION_ACCOUNT_TYPE: { es: 'Tipo de cuenta de destino', en: 'Destination account type' },
+  COUNT: { es: 'Contar', en: 'Count' },
+  SUM: { es: 'Total', en: 'Total' },
+  AVG: { es: 'Promedio', en: 'Average' },
+  EQUALS: { es: 'Es igual a', en: 'Equals' },
+  IN: { es: 'Es uno de', en: 'Is one of' },
+  DESCENDANT_OF: { es: 'Está dentro de', en: 'Is within' },
+  IS_UNCATEGORIZED: { es: 'No tiene categoría', en: 'Has no category' },
+  HAS_ANY: { es: 'Tiene alguna de', en: 'Has any of' },
+  HAS_ALL: { es: 'Tiene todas', en: 'Has all' },
+  HAS_NONE: { es: 'No tiene etiquetas', en: 'Has no tags' },
+  COMPLETE: { es: 'Completo', en: 'Complete' },
+  ZERO: { es: 'Cero', en: 'Zero' },
+  NO_DATA: { es: 'Sin datos', en: 'No data' },
+  UNAVAILABLE: { es: 'No disponible', en: 'Unavailable' },
+  NOT_APPLICABLE: { es: 'No aplica', en: 'Not applicable' },
+  PARTIAL: { es: 'Parcial', en: 'Partial' },
+  DEBIT: { es: 'Débito', en: 'Debit' },
+  CASH: { es: 'Efectivo', en: 'Cash' },
+  INVESTMENT: { es: 'Inversión', en: 'Investment' },
+  CREDIT_CARD: { es: 'Tarjeta de crédito', en: 'Credit card' },
+  CREDIT: { es: 'Tarjeta de crédito', en: 'Credit card' },
+  OUT: { es: 'Salida', en: 'Outflow' },
+  LINKED: { es: 'Vinculado a transferencia interna', en: 'Linked to an internal transfer' },
+  UNLINKED: { es: 'No vinculado a transferencia interna', en: 'Not linked to an internal transfer' },
 };
 
 export const copy = (locale: string, es: string, en: string) => (locale.startsWith('es') ? es : en);
-export const label = (locale: string, id: string) => (locale.startsWith('es') ? spanish[id] : english[id]) ?? id;
+export const label = (locale: string, id: string) => translations[id]?.[locale.startsWith('es') ? 'es' : 'en'] ?? id;
 export const datasetById = (catalog: SemanticAnalyticsCatalog, id: string | null | undefined) =>
   catalog.datasets.find(dataset => dataset.dataset === id);
+export const isTemporalField = (field: string) => /_(DAY|WEEK|MONTH|YEAR)$/.test(field) || field === 'OBSERVATION_MONTH';
+export const isCategoryField = (field: string) =>
+  ['CATEGORY_ID', 'CATEGORY_ROOT', 'CATEGORY_SUBCATEGORY', 'CATEGORY_BRANCH_CHILD'].includes(field);
+
+const presentationLocale = (locale: string) => (locale.startsWith('es') ? 'es-MX' : 'en-US');
+
+const isoWeekStart = (year: number, week: number) => {
+  const fourthOfJanuary = new Date(Date.UTC(year, 0, 4));
+  const mondayOffset = (fourthOfJanuary.getUTCDay() + 6) % 7;
+  const start = new Date(fourthOfJanuary);
+  start.setUTCDate(fourthOfJanuary.getUTCDate() - mondayOffset + (week - 1) * 7);
+  return start;
+};
+
+const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+const dateFromIso = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const startOfIsoWeek = (date: Date) => {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+  return start;
+};
+const isoWeekBucket = (monday: Date) => {
+  const thursday = new Date(monday);
+  thursday.setUTCDate(thursday.getUTCDate() + 3);
+  const weekYear = thursday.getUTCFullYear();
+  const firstMonday = isoWeekStart(weekYear, 1);
+  const week = Math.floor((monday.getTime() - firstMonday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return `${weekYear}-W${String(week).padStart(2, '0')}`;
+};
+
+/** A canonical identity is required so generated empty buckets and returned ISO-week buckets share one chart point. */
+export const temporalBucketIdentity = (field: string, value: string | number | null) => {
+  const raw = String(value ?? '—').replace(/^ISO\s+/, '');
+  return `${field}:${raw}`;
+};
+
+/**
+ * Lists every calendar bucket that overlaps the executed context. These are presentation-only null points:
+ * they preserve the real distance between returned observations without manufacturing a financial result.
+ */
+export const temporalBucketsInContext = (field: string, from: string, through: string) => {
+  if (!isTemporalField(field)) return [];
+  const start = dateFromIso(from);
+  const end = dateFromIso(through);
+  if (!start || !end || start > end) return [];
+
+  const buckets: Array<{ value: string; sortKey: number }> = [];
+  if (field.endsWith('_DAY')) {
+    for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      buckets.push({ value: isoDate(cursor), sortKey: cursor.getTime() });
+    }
+    return buckets;
+  }
+  if (field.endsWith('_WEEK')) {
+    for (let cursor = startOfIsoWeek(start), last = startOfIsoWeek(end); cursor <= last; cursor.setUTCDate(cursor.getUTCDate() + 7)) {
+      buckets.push({ value: isoWeekBucket(cursor), sortKey: cursor.getTime() });
+    }
+    return buckets;
+  }
+  if (field.endsWith('_MONTH') || field === 'OBSERVATION_MONTH') {
+    for (
+      let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1)),
+        last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+      cursor <= last;
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+    ) {
+      buckets.push({ value: `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`, sortKey: cursor.getTime() });
+    }
+    return buckets;
+  }
+  for (let year = start.getUTCFullYear(); year <= end.getUTCFullYear(); year += 1) {
+    buckets.push({ value: String(year), sortKey: Date.UTC(year, 0, 1) });
+  }
+  return buckets;
+};
+
+/** Turns a semantic temporal identity into a date the person can read. The raw identity stays in the result/AST. */
+export const formatTemporalBucket = (field: string, value: string | number | null, locale: string) => {
+  if (value === null || value === undefined) return '—';
+  const raw = String(value);
+  const language = presentationLocale(locale);
+  const week = raw.match(/^(?:ISO\s+)?(\d{4})-W(\d{1,2})$/);
+  if (week && isTemporalField(field)) {
+    const start = isoWeekStart(Number(week[1]), Number(week[2]));
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    const startFormatter = new Intl.DateTimeFormat(language, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const endFormatter = new Intl.DateTimeFormat(language, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    return `${startFormatter.format(start)} – ${endFormatter.format(end)}`;
+  }
+  if (/^\d{4}-\d{2}$/.test(raw) && isTemporalField(field)) {
+    const [year, month] = raw.split('-').map(Number);
+    return new Intl.DateTimeFormat(language, { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
+      new Date(Date.UTC(year, month - 1, 1)),
+    );
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw) && isTemporalField(field)) {
+    return new Intl.DateTimeFormat(language, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
+      new Date(`${raw}T00:00:00.000Z`),
+    );
+  }
+  return raw;
+};
+
+/** Sorts temporal buckets without changing their source identity. */
+export const temporalSortKey = (field: string, value: string | number | null) => {
+  if (!isTemporalField(field) || value === null || value === undefined) return null;
+  const raw = String(value);
+  const week = raw.match(/^(?:ISO\s+)?(\d{4})-W(\d{1,2})$/);
+  if (week) return isoWeekStart(Number(week[1]), Number(week[2])).getTime();
+  if (/^\d{4}-\d{2}$/.test(raw)) return Date.parse(`${raw}-01T00:00:00.000Z`);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return Date.parse(`${raw}T00:00:00.000Z`);
+  if (/^\d{4}$/.test(raw)) return Date.UTC(Number(raw), 0, 1);
+  return null;
+};
 
 const aliasFor = (functionName: string, field: string) => `${functionName.toLowerCase()}_${field.toLowerCase()}`;
 
@@ -93,7 +210,7 @@ export const initialDefinition = (catalog: SemanticAnalyticsCatalog, dataset: Se
     semanticModel: catalog.semanticModel,
     dataset: dataset.dataset,
     timeBinding: dataset.timeBinding,
-    projections: [{ alias: aliasFor(first.function, first.field), function: first.function, field: first.field }],
+    projections: [{ alias: aliasFor(first.function, first.field), function: first.function, field: first.field, conditions: [] }],
     predicates: [],
     groupBy: [],
     orderBy: [],
@@ -110,75 +227,125 @@ export const defaultVisualizationContext = (schemaVersion: number, relativePerio
 
 export type QueryExample = {
   id: string;
-  title: { es: string; en: string };
-  description: { es: string; en: string };
+  title: Translation;
+  description: Translation;
   definition: SemanticQueryDefinition;
 };
 
-/** Optional starting points. They are ordinary semantic definitions, never an alternative capability registry. */
+const baseDefinition = (catalog: SemanticAnalyticsCatalog, dataset: SemanticDatasetDefinition) => ({
+  schemaVersion: catalog.schemaVersion,
+  semanticModel: catalog.semanticModel,
+  dataset: dataset.dataset,
+  timeBinding: dataset.timeBinding,
+  limit: catalog.defaultLimit,
+});
+
+const hasAggregate = (dataset: SemanticDatasetDefinition | undefined, functionName: string, field: string) =>
+  !!dataset?.aggregateCapabilities.some(item => item.function === functionName && item.field === field);
+
+/** Examples are canonical, editable definitions. The catalog remains the capability authority. */
 export const queryExamples = (catalog: SemanticAnalyticsCatalog): QueryExample[] => {
-  const ledger = catalog.datasets.find(dataset => dataset.dataset === 'TRANSACTION_LEDGER');
+  const ledger = datasetById(catalog, 'TRANSACTION_LEDGER');
+  const positions = datasetById(catalog, 'ACCOUNT_POSITION_SNAPSHOT');
   if (!ledger) return [];
-  const base = {
-    schemaVersion: catalog.schemaVersion,
-    semanticModel: catalog.semanticModel,
-    dataset: ledger.dataset,
-    timeBinding: ledger.timeBinding,
-    limit: catalog.defaultLimit,
-  };
-  return [
+  const base = baseDefinition(catalog, ledger);
+  const economicExpense = [
+    { field: 'TRANSACTION_FLOW', operator: 'EQUALS' as const, values: ['OUT'] },
+    { field: 'TRANSFER_LINK_STATUS', operator: 'EQUALS' as const, values: ['UNLINKED'] },
+  ];
+  const economicIncome = [
+    { field: 'TRANSACTION_FLOW', operator: 'EQUALS' as const, values: ['IN'] },
+    { field: 'TRANSFER_LINK_STATUS', operator: 'EQUALS' as const, values: ['UNLINKED'] },
+  ];
+  const examples: QueryExample[] = [
     {
-      id: 'transactions-by-institution',
-      title: { es: 'Movimientos por institución', en: 'Transactions by institution' },
-      description: { es: 'Cuenta movimientos y los compara por institución financiera.', en: 'Counts activity by financial institution.' },
-      definition: {
-        ...base,
-        projections: [{ alias: 'transaction_count', function: 'COUNT', field: 'TRANSACTION_ID' }],
-        predicates: [],
-        groupBy: ['ACCOUNT_INSTITUTION'],
-        orderBy: [{ field: 'ACCOUNT_INSTITUTION', projectionAlias: null, direction: 'ASC' }],
-      },
-    },
-    {
-      id: 'economic-expense-by-category',
-      title: { es: 'Gasto económico promedio por categoría', en: 'Average economic expense by category' },
+      id: 'expenses-by-category',
+      title: { es: 'Gastos por categoría', en: 'Expenses by category' },
       description: {
-        es: 'Excluye transferencias internas vinculadas para medir sólo gasto económico.',
-        en: 'Excludes linked internal transfers to measure economic expense only.',
+        es: 'Gasto económico: excluye transferencias internas vinculadas.',
+        en: 'Economic expense: excludes linked internal transfers.',
       },
       definition: {
         ...base,
-        projections: [{ alias: 'average_expense', function: 'AVG', field: 'TRANSACTION_AMOUNT' }],
-        predicates: [
-          { field: 'TRANSACTION_FLOW', operator: 'EQUALS', values: ['OUT'] },
-          { field: 'TRANSFER_LINK_STATUS', operator: 'EQUALS', values: ['UNLINKED'] },
-        ],
+        projections: [{ alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: [] }],
+        predicates: economicExpense,
         groupBy: ['CATEGORY_ID'],
-        orderBy: [{ field: null, projectionAlias: 'average_expense', direction: 'DESC' }],
+        orderBy: [{ field: null, projectionAlias: 'gastos', direction: 'DESC' }],
       },
     },
     {
-      id: 'count-and-average-expense',
-      title: { es: 'Cantidad y promedio de gastos', en: 'Expense count and average' },
-      description: {
-        es: 'Combina dos cálculos compatibles en una misma consulta.',
-        en: 'Combines two compatible calculations in one query.',
+      id: 'expenses-over-time',
+      title: { es: 'Gastos a lo largo del tiempo', en: 'Expenses over time' },
+      description: { es: 'Evolución mensual del gasto económico.', en: 'Monthly economic expense trend.' },
+      definition: {
+        ...base,
+        projections: [{ alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: [] }],
+        predicates: economicExpense,
+        groupBy: ['TRANSACTION_MONTH'],
+        orderBy: [{ field: 'TRANSACTION_MONTH', projectionAlias: null, direction: 'ASC' }],
       },
+    },
+    {
+      id: 'income-and-expenses-monthly',
+      title: { es: 'Ingresos y gastos mensuales', en: 'Monthly income and expenses' },
+      description: { es: 'Dos cálculos económicos comparables por mes.', en: 'Two comparable economic calculations by month.' },
       definition: {
         ...base,
         projections: [
-          { alias: 'expense_count', function: 'COUNT', field: 'TRANSACTION_ID' },
-          { alias: 'average_expense', function: 'AVG', field: 'TRANSACTION_AMOUNT' },
+          { alias: 'ingresos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: economicIncome },
+          { alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: economicExpense },
         ],
-        predicates: [
-          { field: 'TRANSACTION_FLOW', operator: 'EQUALS', values: ['OUT'] },
-          { field: 'TRANSFER_LINK_STATUS', operator: 'EQUALS', values: ['UNLINKED'] },
-        ],
-        groupBy: ['CATEGORY_ID'],
-        orderBy: [{ field: null, projectionAlias: 'average_expense', direction: 'DESC' }],
+        predicates: [],
+        groupBy: ['TRANSACTION_MONTH'],
+        orderBy: [{ field: 'TRANSACTION_MONTH', projectionAlias: null, direction: 'ASC' }],
+      },
+    },
+    {
+      id: 'transactions-by-institution',
+      title: { es: 'Movimientos por institución', en: 'Transactions by institution' },
+      description: { es: 'Cuenta los movimientos por institución financiera.', en: 'Counts transactions by financial institution.' },
+      definition: {
+        ...base,
+        projections: [{ alias: 'movimientos', function: 'COUNT', field: 'TRANSACTION_ID', conditions: [] }],
+        predicates: [],
+        groupBy: ['ACCOUNT_INSTITUTION'],
+        orderBy: [{ field: null, projectionAlias: 'movimientos', direction: 'DESC' }],
+      },
+    },
+    {
+      id: 'expenses-by-tag',
+      title: { es: 'Gastos por etiqueta', en: 'Expenses by tag' },
+      description: {
+        es: 'Las etiquetas pueden solaparse; sus totales no se suman entre sí.',
+        en: 'Tags can overlap; their totals do not add together.',
+      },
+      definition: {
+        ...base,
+        projections: [{ alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: [] }],
+        predicates: economicExpense,
+        groupBy: ['TAG_ID'],
+        orderBy: [{ field: null, projectionAlias: 'gastos', direction: 'DESC' }],
       },
     },
   ];
+  if (positions && hasAggregate(positions, 'SUM', 'POSITION_BALANCE')) {
+    examples.push({
+      id: 'balances-by-account',
+      title: { es: 'Saldos por cuenta', en: 'Balances by account' },
+      description: {
+        es: 'Saldos contables registrados por cuenta y mes; no es valor de mercado.',
+        en: 'Recorded book balances by account and month; not market value.',
+      },
+      definition: {
+        ...baseDefinition(catalog, positions),
+        projections: [{ alias: 'saldo_registrado', function: 'SUM', field: 'POSITION_BALANCE', conditions: [] }],
+        predicates: [],
+        groupBy: ['OBSERVATION_MONTH', 'ACCOUNT_ID'],
+        orderBy: [{ field: 'OBSERVATION_MONTH', projectionAlias: null, direction: 'ASC' }],
+      },
+    });
+  }
+  return examples;
 };
 
 export const querySignature = (definition: SemanticQueryDefinition | null, context: VisualizationContext | null) =>
@@ -187,101 +354,104 @@ export const querySignature = (definition: SemanticQueryDefinition | null, conte
 export const rowLabel = (row: SemanticAnalyticsResult['rows'][number], locale: string) =>
   row.dimensions.length
     ? row.dimensions
-        .map(dimension => `${label(locale, dimension.field)}: ${dimension.metadata?.label ?? dimension.value ?? '—'}`)
+        .map(
+          dimension =>
+            `${label(locale, dimension.field)}: ${
+              isTemporalField(dimension.field)
+                ? formatTemporalBucket(dimension.field, dimension.value, locale)
+                : (dimension.metadata?.label ?? dimension.value ?? '—')
+            }`,
+        )
         .join(' · ')
     : copy(locale, 'Total', 'Total');
 
-export const visualizationOptions = (result: SemanticAnalyticsResult | null): ExplorerVisualization[] => {
-  if (!result?.rows.length) return ['TABLE'];
-  const groupCount = result.rows[0]?.dimensions.length ?? 0;
-  if (!groupCount) return ['KPI', 'TABLE'];
-  const time = result.rows[0]?.dimensions.some(dimension => dimension.field === 'OBSERVATION_MONTH');
-  return time ? ['LINE', 'TABLE', 'BAR'] : ['BAR', 'TABLE', 'DONUT'];
-};
-
 export const derivedAlias = aliasFor;
+
+/** Readable defaults keep implementation field names out of the normal visual workflow. */
+export const suggestedAlias = (functionName: string, field: string) => {
+  const defaults: Record<string, string> = {
+    'COUNT:TRANSACTION_ID': 'movimientos',
+    'SUM:TRANSACTION_AMOUNT': 'total',
+    'AVG:TRANSACTION_AMOUNT': 'promedio',
+    'SUM:POSITION_BALANCE': 'saldo_registrado',
+    'AVG:POSITION_BALANCE': 'saldo_promedio',
+    'SUM:CREDIT_DEBT': 'deuda_tarjeta',
+    'SUM:CREDIT_LIMIT': 'limite_credito',
+    'SUM:CREDIT_AVAILABLE': 'credito_disponible',
+    'AVG:CREDIT_UTILIZATION_PERCENT': 'utilizacion_credito',
+    'COUNT:TRANSFER_ID': 'transferencias',
+    'SUM:TRANSFER_AMOUNT': 'total_transferido',
+  };
+  return defaults[`${functionName}:${field}`] ?? aliasFor(functionName, field);
+};
 
 type FieldHelp = { es: string; en: string; typeEs: string; typeEn: string };
 
 const fieldHelp: Record<string, FieldHelp> = {
-  TRANSACTION_ID: {
-    es: 'Cuenta cuántos movimientos hay.',
-    en: 'Counts financial movements.',
-    typeEs: 'Identificador',
-    typeEn: 'Identifier',
-  },
-  TRANSACTION_AMOUNT: {
-    es: 'Usa el importe registrado de cada movimiento.',
-    en: 'Uses the recorded amount of each movement.',
-    typeEs: 'Importe',
-    typeEn: 'Amount',
-  },
-  TRANSACTION_FLOW: {
-    es: 'Distingue entradas y salidas.',
-    en: 'Distinguishes money in and money out.',
-    typeEs: 'Opción',
-    typeEn: 'Option',
-  },
+  TRANSACTION_ID: { es: 'Cuenta movimientos financieros.', en: 'Counts financial transactions.', typeEs: 'Conteo', typeEn: 'Count' },
+  TRANSACTION_AMOUNT: { es: 'Importe registrado del movimiento.', en: 'Recorded transaction amount.', typeEs: 'Importe', typeEn: 'Amount' },
+  TRANSACTION_FLOW: { es: 'Distingue entradas y salidas.', en: 'Distinguishes inflows and outflows.', typeEs: 'Opción', typeEn: 'Option' },
   TRANSFER_LINK_STATUS: {
-    es: 'Permite incluir o excluir las dos piernas de transferencias internas.',
-    en: 'Lets you include or exclude both legs of internal transfers.',
+    es: 'Distingue las piernas vinculadas a transferencias internas.',
+    en: 'Distinguishes legs linked to internal transfers.',
     typeEs: 'Opción',
     typeEn: 'Option',
-  },
-  ACCOUNT_INSTITUTION: {
-    es: 'Agrupa por la institución de cada cuenta.',
-    en: 'Groups by each account’s institution.',
-    typeEs: 'Texto',
-    typeEn: 'Text',
   },
   CATEGORY_ID: {
-    es: 'Agrupa por la categoría asignada al movimiento.',
-    en: 'Groups by the category assigned to a movement.',
+    es: 'Categoría asignada al movimiento.',
+    en: 'Category assigned to the transaction.',
     typeEs: 'Categoría',
     typeEn: 'Category',
   },
   CATEGORY_ROOT: {
-    es: 'Agrupa cada categoría bajo su categoría principal.',
-    en: 'Groups each category under its main category.',
+    es: 'Categoría principal de la asignación.',
+    en: 'Root category of the assignment.',
     typeEs: 'Categoría',
     typeEn: 'Category',
   },
-  CATEGORY_SUBCATEGORY: {
-    es: 'Agrupa por la primera subcategoría debajo de la categoría principal.',
-    en: 'Groups by the first subcategory below the main category.',
-    typeEs: 'Categoría',
-    typeEn: 'Category',
-  },
+  CATEGORY_SUBCATEGORY: { es: 'Primera subcategoría.', en: 'First subcategory.', typeEs: 'Categoría', typeEn: 'Category' },
   CATEGORY_BRANCH_CHILD: {
-    es: 'Agrupa por la subcategoría inmediata de una categoría seleccionada.',
-    en: 'Groups by the immediate subcategory of a selected category.',
+    es: 'Hijo inmediato de una categoría elegida; conserva asignaciones directas.',
+    en: 'Immediate child of a selected category; retains direct assignments.',
     typeEs: 'Categoría',
     typeEn: 'Category',
   },
   TAG_ID: {
-    es: 'Agrupa movimientos por etiqueta; un movimiento con varias etiquetas puede aparecer en varios grupos.',
-    en: 'Groups activity by tag; a movement with several tags can appear in several groups.',
+    es: 'Un movimiento con varias etiquetas puede aparecer en varios grupos.',
+    en: 'A transaction with several tags can appear in several groups.',
     typeEs: 'Etiqueta',
     typeEn: 'Tag',
   },
-  ACCOUNT_TYPE: {
-    es: 'Distingue débito, efectivo, inversión y otros tipos.',
-    en: 'Distinguishes debit, cash, investment, and other account types.',
-    typeEs: 'Opción',
-    typeEn: 'Option',
-  },
-  ACCOUNT_ID: {
-    es: 'Distingue cada cuenta en el saldo histórico.',
-    en: 'Distinguishes each account in historical balances.',
-    typeEs: 'Cuenta',
-    typeEn: 'Account',
-  },
-  OBSERVATION_MONTH: { es: 'Agrupa saldos por mes.', en: 'Groups balances by month.', typeEs: 'Mes', typeEn: 'Month' },
   POSITION_BALANCE: {
-    es: 'Usa el saldo contable calculado a una fecha.',
-    en: 'Uses the authoritative recorded balance on a date.',
+    es: 'Saldo contable a una fecha; no es valor de mercado.',
+    en: 'Book balance at a date; not market value.',
     typeEs: 'Saldo',
     typeEn: 'Balance',
+  },
+  CREDIT_DEBT: { es: 'Deuda registrada de una tarjeta.', en: 'Recorded credit-card debt.', typeEs: 'Importe', typeEn: 'Amount' },
+  CREDIT_LIMIT: {
+    es: 'Límite registrado hoy; sin historial.',
+    en: 'Limit recorded today; no history.',
+    typeEs: 'Importe',
+    typeEn: 'Amount',
+  },
+  CREDIT_AVAILABLE: {
+    es: 'Límite actual menos deuda actual; puede ser negativo.',
+    en: 'Current limit minus current debt; can be negative.',
+    typeEs: 'Importe',
+    typeEn: 'Amount',
+  },
+  CREDIT_UTILIZATION_PERCENT: {
+    es: 'Deuda actual sobre límite positivo actual; sin tope artificial.',
+    en: 'Current debt over current positive limit; never capped.',
+    typeEs: 'Porcentaje',
+    typeEn: 'Percent',
+  },
+  TRANSFER_AMOUNT: {
+    es: 'Un evento de transferencia, no dos piernas ni un gasto.',
+    en: 'One transfer event, not two legs or an expense.',
+    typeEs: 'Importe',
+    typeEn: 'Amount',
   },
 };
 
@@ -289,14 +459,24 @@ export const describeField = (locale: string, field: string) =>
   fieldHelp[field]?.[locale.startsWith('es') ? 'es' : 'en'] ?? label(locale, field);
 export const fieldType = (locale: string, field: string) => fieldHelp[field]?.[locale.startsWith('es') ? 'typeEs' : 'typeEn'] ?? '';
 
-export const sourceDescription = (locale: string, dataset: string) =>
-  dataset === 'TRANSACTION_LEDGER'
-    ? copy(
-        locale,
-        'Analiza tus movimientos: cantidad, importe promedio o total.',
-        'Analyze your activity: count, average amount, or total amount.',
-      )
-    : copy(locale, 'Consulta saldos históricos por cuenta y mes.', 'Review historical balances by account and month.');
+export const sourceDescription = (locale: string, dataset: string) => {
+  const descriptions: Record<string, Translation> = {
+    TRANSACTION_LEDGER: {
+      es: 'Movimientos, categorías, etiquetas y actividad económica.',
+      en: 'Transactions, categories, tags, and economic activity.',
+    },
+    ACCOUNT_POSITION_SNAPSHOT: {
+      es: 'Saldos contables históricos por cuenta y mes.',
+      en: 'Historical book balances by account and month.',
+    },
+    CREDIT_ACCOUNT_SNAPSHOT: {
+      es: 'Deuda histórica y medidas actuales de tarjetas de crédito.',
+      en: 'Historical debt and current credit-card measures.',
+    },
+    INTERNAL_TRANSFER_EVENT: { es: 'Cada transferencia interna se cuenta una sola vez.', en: 'Every internal transfer is counted once.' },
+  };
+  return descriptions[dataset]?.[locale.startsWith('es') ? 'es' : 'en'] ?? label(locale, dataset);
+};
 
 export const relativePeriodLabel = (locale: string, period: string) =>
   ({
@@ -311,16 +491,27 @@ export const predicateValueOptions = (locale: string, field: string): Array<{ va
   const raw =
     field === 'TRANSACTION_FLOW'
       ? [
-          ['OUT', copy(locale, 'Salida / gasto', 'Money out / expense')],
-          ['IN', copy(locale, 'Entrada / ingreso', 'Money in / income')],
+          ['OUT', copy(locale, 'Salida', 'Outflow')],
+          ['IN', copy(locale, 'Entrada', 'Inflow')],
         ]
       : field === 'TRANSFER_LINK_STATUS'
         ? [
-            ['UNLINKED', copy(locale, 'Excluir transferencias internas', 'Exclude internal transfers')],
-            ['LINKED', copy(locale, 'Sólo transferencias internas', 'Only internal transfers')],
+            ['UNLINKED', copy(locale, 'No vinculada a transferencia interna', 'Not linked to an internal transfer')],
+            ['LINKED', copy(locale, 'Vinculada a transferencia interna', 'Linked to an internal transfer')],
           ]
-        : field === 'ACCOUNT_TYPE'
-          ? ['DEBIT', 'CASH', 'INVESTMENT', 'CREDIT'].map(value => [value, label(locale, value)])
+        : ['ACCOUNT_TYPE', 'SOURCE_ACCOUNT_TYPE', 'DESTINATION_ACCOUNT_TYPE'].includes(field)
+          ? ['DEBIT', 'CASH', 'INVESTMENT', 'CREDIT_CARD'].map(value => [value, label(locale, value)])
           : [];
   return raw.map(([value, optionLabel]) => ({ value, label: optionLabel }));
 };
+
+export const visualizationTitle = (locale: string, visualization: ExplorerVisualization) =>
+  ({
+    KPI: copy(locale, 'Indicadores', 'Indicators'),
+    LINE: copy(locale, 'Líneas', 'Line chart'),
+    BAR: copy(locale, 'Barras', 'Bars'),
+    GROUPED_BAR: copy(locale, 'Barras agrupadas', 'Grouped bars'),
+    STACKED_BAR: copy(locale, 'Barras apiladas', 'Stacked bars'),
+    DONUT: copy(locale, 'Dona', 'Donut'),
+    TABLE: copy(locale, 'Tabla', 'Table'),
+  })[visualization];

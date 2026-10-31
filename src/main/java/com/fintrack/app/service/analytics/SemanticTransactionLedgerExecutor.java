@@ -2,10 +2,17 @@ package com.fintrack.app.service.analytics;
 
 import com.fintrack.app.domain.FinancialAccount;
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.temporal.IsoFields;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -98,6 +105,7 @@ class SemanticTransactionLedgerExecutor {
             .stream()
             .map(source -> row(source, definition, monetary, scope.references(), accountsById))
             .toList();
+        rows = completeEmptyTemporalPeriods(scope, rows, monetary);
         List<SemanticAnalyticsWarning> warnings = definition.groupBy().contains(SemanticField.TAG_ID)
             ? List.of(
                 new SemanticAnalyticsWarning(
@@ -315,7 +323,9 @@ class SemanticTransactionLedgerExecutor {
         }
         List<SemanticAnalyticsResultValue> values = new ArrayList<>();
         for (int index = 0; index < definition.projections().size(); index++) {
-            values.add(SemanticAnalyticsResultFactory.value(definition.projections().get(index), decimal(source.get("measure_" + index))));
+            values.add(
+                SemanticAnalyticsResultFactory.ledgerValue(definition.projections().get(index), decimal(source.get("measure_" + index)))
+            );
         }
         Object currency = source.get("analytics_currency");
         return new SemanticAnalyticsResultRow(dimensions, monetary && currency != null ? String.valueOf(currency) : null, values);
@@ -416,4 +426,274 @@ class SemanticTransactionLedgerExecutor {
         if (value instanceof Number number) return new BigDecimal(number.toString());
         return new BigDecimal(value.toString());
     }
+
+    /**
+     * SQL can aggregate only periods that contain ledger rows. Calendar completion belongs to the semantic result,
+     * not to the chart: a valid empty period is a known zero for SUM and COUNT, but not an invented AVG. Existing
+     * query rows are retained unchanged and each generated value is explicitly marked as derived.
+     */
+    private List<SemanticAnalyticsResultRow> completeEmptyTemporalPeriods(
+        SemanticAnalyticsExecutionScope scope,
+        List<SemanticAnalyticsResultRow> source,
+        boolean monetary
+    ) {
+        SemanticField temporal = temporalGrouping(scope.definition().groupBy());
+        if (temporal == null) return source;
+
+        List<TemporalBucket> buckets = temporalBuckets(temporal, scope.context().from(), scope.context().through());
+        if (buckets.isEmpty()) return source;
+
+        int temporalIndex = scope.definition().groupBy().indexOf(temporal);
+        Map<String, SeriesTemplate> templates = new LinkedHashMap<>();
+        source.forEach(row -> {
+            SeriesTemplate template = new SeriesTemplate(row.currencyCode(), withoutTemporalDimension(row.dimensions(), temporalIndex));
+            templates.putIfAbsent(template.key(), template);
+        });
+        if (templates.isEmpty()) {
+            emptyScopeTemplates(scope, temporal, monetary).forEach(template -> templates.putIfAbsent(template.key(), template));
+        }
+        if (templates.isEmpty()) return source;
+
+        Map<String, SemanticAnalyticsResultRow> rows = new LinkedHashMap<>();
+        source.forEach(row -> rows.put(rowKey(row), row));
+        for (SeriesTemplate template : templates.values()) {
+            for (TemporalBucket bucket : buckets) {
+                if (!hasAvailableAccount(scope.accounts(), template, bucket)) continue;
+                SemanticAnalyticsResultRow generated = new SemanticAnalyticsResultRow(
+                    dimensionsFor(scope.definition().groupBy(), temporal, template, bucket),
+                    template.currencyCode(),
+                    scope.definition().projections().stream().map(SemanticAnalyticsResultFactory::emptyPeriodValue).toList()
+                );
+                rows.putIfAbsent(rowKey(generated), generated);
+            }
+        }
+        return orderCompletedRows(scope.definition(), new ArrayList<>(rows.values()), temporal);
+    }
+
+    private SemanticField temporalGrouping(List<SemanticField> groups) {
+        return groups.stream().filter(this::isTransactionTemporalGrouping).findFirst().orElse(null);
+    }
+
+    private List<SeriesTemplate> emptyScopeTemplates(SemanticAnalyticsExecutionScope scope, SemanticField temporal, boolean monetary) {
+        List<SemanticField> comparisons = scope.definition().groupBy().stream().filter(field -> field != temporal).toList();
+        if (comparisons.isEmpty()) {
+            if (!monetary) return List.of(new SeriesTemplate(null, List.of()));
+            return scope
+                .accounts()
+                .stream()
+                .map(FinancialAccount::getCurrency)
+                .map(Enum::name)
+                .distinct()
+                .map(currency -> new SeriesTemplate(currency, List.of()))
+                .toList();
+        }
+        if (comparisons.size() != 1 || !accountComparison(comparisons.get(0))) return List.of();
+
+        Map<String, SeriesTemplate> templates = new LinkedHashMap<>();
+        for (FinancialAccount account : scope.accounts()) {
+            SemanticAnalyticsResultDimension comparison = accountComparisonDimension(comparisons.get(0), account);
+            String currency = monetary ? account.getCurrency().name() : null;
+            SeriesTemplate template = new SeriesTemplate(currency, List.of(comparison));
+            templates.putIfAbsent(template.key(), template);
+        }
+        return List.copyOf(templates.values());
+    }
+
+    private boolean accountComparison(SemanticField field) {
+        return field == SemanticField.ACCOUNT_ID || field == SemanticField.ACCOUNT_INSTITUTION || field == SemanticField.ACCOUNT_TYPE;
+    }
+
+    private SemanticAnalyticsResultDimension accountComparisonDimension(SemanticField field, FinancialAccount account) {
+        if (field == SemanticField.ACCOUNT_ID) {
+            String label = account.getName();
+            return new SemanticAnalyticsResultDimension(
+                field,
+                account.getId(),
+                new SemanticDimensionMetadata(
+                    "ACCOUNT:" + account.getId(),
+                    label,
+                    account.getColor(),
+                    account.getActive(),
+                    false,
+                    List.of(label)
+                )
+            );
+        }
+        if (field == SemanticField.ACCOUNT_INSTITUTION) {
+            String institution = institution(account);
+            return new SemanticAnalyticsResultDimension(
+                field,
+                institution,
+                new SemanticDimensionMetadata("INSTITUTION:" + institution, institution, null, null, false, List.of(institution))
+            );
+        }
+        return new SemanticAnalyticsResultDimension(field, account.getAccountType().name());
+    }
+
+    private List<SemanticAnalyticsResultDimension> withoutTemporalDimension(
+        List<SemanticAnalyticsResultDimension> dimensions,
+        int temporalIndex
+    ) {
+        List<SemanticAnalyticsResultDimension> result = new ArrayList<>(dimensions);
+        result.remove(temporalIndex);
+        return List.copyOf(result);
+    }
+
+    private List<SemanticAnalyticsResultDimension> dimensionsFor(
+        List<SemanticField> groups,
+        SemanticField temporal,
+        SeriesTemplate template,
+        TemporalBucket bucket
+    ) {
+        List<SemanticAnalyticsResultDimension> dimensions = new ArrayList<>();
+        int comparisonIndex = 0;
+        for (SemanticField group : groups) {
+            if (group == temporal) {
+                dimensions.add(new SemanticAnalyticsResultDimension(temporal, bucket.value(), temporalMetadata(temporal, bucket.value())));
+            } else {
+                dimensions.add(template.comparisons().get(comparisonIndex++));
+            }
+        }
+        return List.copyOf(dimensions);
+    }
+
+    private boolean hasAvailableAccount(List<FinancialAccount> accounts, SeriesTemplate template, TemporalBucket bucket) {
+        return accounts
+            .stream()
+            .filter(account -> template.currencyCode() == null || template.currencyCode().equals(account.getCurrency().name()))
+            .filter(account -> matchesAccountComparisons(account, template.comparisons()))
+            .anyMatch(account -> !account.getInitialBalanceDate().isAfter(bucket.availableThrough()));
+    }
+
+    private boolean matchesAccountComparisons(FinancialAccount account, List<SemanticAnalyticsResultDimension> comparisons) {
+        return comparisons
+            .stream()
+            .allMatch(comparison ->
+                switch (comparison.field()) {
+                    case ACCOUNT_ID -> Objects.equals(account.getId(), ((Number) comparison.value()).longValue());
+                    case ACCOUNT_INSTITUTION -> institution(account).equals(String.valueOf(comparison.value()));
+                    case ACCOUNT_TYPE -> account.getAccountType().name().equals(String.valueOf(comparison.value()));
+                    default -> true;
+                }
+            );
+    }
+
+    private String institution(FinancialAccount account) {
+        String institution = account.getInstitutionName();
+        return institution == null || institution.trim().isEmpty() ? "UNSPECIFIED" : institution.trim();
+    }
+
+    private List<TemporalBucket> temporalBuckets(SemanticField temporal, LocalDate from, LocalDate through) {
+        List<TemporalBucket> buckets = new ArrayList<>();
+        switch (temporal) {
+            case TRANSACTION_DAY -> {
+                for (LocalDate date = from; !date.isAfter(through); date = date.plusDays(1)) {
+                    buckets.add(new TemporalBucket(date.toString(), date, date, date));
+                }
+            }
+            case TRANSACTION_WEEK -> {
+                LocalDate start = from.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                for (LocalDate date = start; !date.isAfter(through); date = date.plusWeeks(1)) {
+                    LocalDate end = date.plusDays(6);
+                    String value = "%d-W%02d".formatted(date.get(IsoFields.WEEK_BASED_YEAR), date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR));
+                    buckets.add(new TemporalBucket(value, date, end, end.isAfter(through) ? through : end));
+                }
+            }
+            case TRANSACTION_MONTH -> {
+                for (YearMonth month = YearMonth.from(from); !month.isAfter(YearMonth.from(through)); month = month.plusMonths(1)) {
+                    LocalDate end = month.atEndOfMonth();
+                    buckets.add(new TemporalBucket(month.toString(), month.atDay(1), end, end.isAfter(through) ? through : end));
+                }
+            }
+            case TRANSACTION_YEAR -> {
+                for (int year = from.getYear(); year <= through.getYear(); year++) {
+                    LocalDate end = LocalDate.of(year, 12, 31);
+                    buckets.add(
+                        new TemporalBucket(String.valueOf(year), LocalDate.of(year, 1, 1), end, end.isAfter(through) ? through : end)
+                    );
+                }
+            }
+            default -> throw new IllegalArgumentException("Verified ledger temporal grouping was not handled: " + temporal);
+        }
+        return List.copyOf(buckets);
+    }
+
+    private List<SemanticAnalyticsResultRow> orderCompletedRows(
+        SemanticQueryDefinition definition,
+        List<SemanticAnalyticsResultRow> rows,
+        SemanticField temporal
+    ) {
+        Comparator<SemanticAnalyticsResultRow> comparator = Comparator.comparing(
+            row -> String.valueOf(dimensionValue(row, temporal)),
+            Comparator.nullsLast(Comparator.naturalOrder())
+        );
+        for (SemanticOrder order : definition.orderBy()) {
+            Comparator<SemanticAnalyticsResultRow> requested = order.field() == null
+                ? Comparator.comparing(
+                    row -> projectionValue(row, order.projectionAlias()),
+                    Comparator.nullsLast(Comparator.naturalOrder())
+                )
+                : Comparator.comparing(
+                    row -> sortable(dimensionValue(row, order.field())),
+                    Comparator.nullsLast(Comparator.naturalOrder())
+                );
+            comparator = order.direction() == SemanticSortDirection.ASC
+                ? requested.thenComparing(comparator)
+                : requested.reversed().thenComparing(comparator);
+        }
+        rows.sort(comparator);
+        return List.copyOf(rows);
+    }
+
+    private Object dimensionValue(SemanticAnalyticsResultRow row, SemanticField field) {
+        return row
+            .dimensions()
+            .stream()
+            .filter(dimension -> dimension.field() == field)
+            .map(SemanticAnalyticsResultDimension::value)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private String sortable(Object value) {
+        if (value instanceof Number number) return "%020d".formatted(number.longValue());
+        return value == null ? null : value.toString();
+    }
+
+    private BigDecimal projectionValue(SemanticAnalyticsResultRow row, String alias) {
+        return row
+            .values()
+            .stream()
+            .filter(value -> value.alias().equalsIgnoreCase(alias))
+            .map(SemanticAnalyticsResultValue::value)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private String rowKey(SemanticAnalyticsResultRow row) {
+        return (
+            row.currencyCode() +
+            "|" +
+            row
+                .dimensions()
+                .stream()
+                .map(dimension -> dimension.field() + "=" + dimension.value())
+                .collect(java.util.stream.Collectors.joining("|"))
+        );
+    }
+
+    private record SeriesTemplate(String currencyCode, List<SemanticAnalyticsResultDimension> comparisons) {
+        private String key() {
+            return (
+                currencyCode +
+                "|" +
+                comparisons
+                    .stream()
+                    .map(dimension -> dimension.field() + "=" + dimension.value())
+                    .collect(java.util.stream.Collectors.joining("|"))
+            );
+        }
+    }
+
+    private record TemporalBucket(String value, LocalDate start, LocalDate end, LocalDate availableThrough) {}
 }

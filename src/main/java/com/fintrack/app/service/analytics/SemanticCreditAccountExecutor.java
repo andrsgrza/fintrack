@@ -167,7 +167,13 @@ class SemanticCreditAccountExecutor {
         SemanticResultAvailability availability = amount == null
             ? SemanticResultAvailability.UNAVAILABLE
             : amount.signum() == 0 ? SemanticResultAvailability.ZERO : SemanticResultAvailability.COMPLETE;
-        return new SemanticAnalyticsResultValue(projection.alias(), amount, SemanticAnalyticsResultFactory.unit(projection), availability);
+        return new SemanticAnalyticsResultValue(
+            projection.alias(),
+            amount,
+            SemanticAnalyticsResultFactory.unit(projection),
+            availability,
+            false
+        );
     }
 
     private BigDecimal utilization(FinancialAccountBalanceDTO snapshot) {

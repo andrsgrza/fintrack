@@ -8,9 +8,10 @@ import org.junit.jupiter.api.Test;
 /** Pure contract tests for the bounded text syntax and canonical roundtrip behavior. */
 class SemanticAnalyticsDslServiceTest {
 
+    private final SemanticAnalyticsCatalogService catalog = new SemanticAnalyticsCatalogService();
     private final SemanticAnalyticsDslService service = new SemanticAnalyticsDslService(
-        new SemanticAnalyticsValidator(null, null, null, new SemanticAnalyticsCatalogService()),
-        new SemanticAnalyticsCatalogService()
+        new SemanticAnalyticsValidator(null, null, null, catalog),
+        catalog
     );
 
     @Test
@@ -143,11 +144,181 @@ class SemanticAnalyticsDslServiceTest {
             );
     }
 
+    @Test
+    void formatsAndParsesEveryCapabilityTheCatalogCurrentlyDeclaresExecutable() {
+        for (SemanticDataset dataset : SemanticDataset.values()) {
+            SemanticDatasetDefinition definition = catalog.dataset(dataset).orElseThrow();
+            for (SemanticAggregateCapability capability : definition.aggregateCapabilities()) {
+                assertDefinitionRoundTrips(
+                    executableDefinition(dataset, capability, requiredGroups(dataset, capability.field()), java.util.List.of())
+                );
+            }
+            for (SemanticField group : definition.groupings()) {
+                SemanticAggregateCapability capability = aggregateForGrouping(dataset, definition, group);
+                assertDefinitionRoundTrips(
+                    executableDefinition(
+                        dataset,
+                        capability,
+                        requiredGroups(dataset, capability.field(), group),
+                        requiredPredicates(dataset, group)
+                    )
+                );
+            }
+            for (SemanticPredicateCapability capability : definition.predicateCapabilities()) {
+                for (SemanticPredicateOperator operator : capability.operators()) {
+                    assertDefinitionRoundTrips(
+                        executableDefinition(
+                            dataset,
+                            definition.aggregateCapabilities().get(0),
+                            requiredGroups(dataset, definition.aggregateCapabilities().get(0).field()),
+                            java.util.List.of(
+                                new SemanticPredicate(capability.field(), operator, values(dataset, capability.field(), operator))
+                            )
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    @Test
+    void rejectsUnsafeAndUnsupportedTextBeforeItCanBecomeAnExecutableDefinition() {
+        assertDslDiagnostic(
+            "SELECT MEDIAN(TRANSACTION_AMOUNT) AS median FROM TRANSACTION_LEDGER LIMIT 10",
+            AnalyticsDiagnosticCode.UNKNOWN_AGGREGATION
+        );
+        assertDslDiagnostic(
+            "SELECT COUNT(TRANSACTION_ID) AS c FROM TRANSACTION_LEDGER JOIN FINANCIAL_ACCOUNT LIMIT 10",
+            AnalyticsDiagnosticCode.TRAILING_GARBAGE
+        );
+        assertDslDiagnostic(
+            "SELECT COUNT(TRANSACTION_ID) AS c FROM TRANSACTION_LEDGER; DROP TABLE financial_transaction",
+            AnalyticsDiagnosticCode.INVALID_TOKEN
+        );
+        assertDslDiagnostic("SELECT COUNT(TRANSACTION_ID) AS c FROM TRANSACTION_LEDGER -- comment", AnalyticsDiagnosticCode.INVALID_TOKEN);
+        assertDslDiagnostic(
+            "SELECT COUNT(TRANSACTION_ID) AS c FROM TRANSACTION_LEDGER WHERE TRANSACTION_FLOW = OUT OR ACCOUNT_TYPE = DEBIT",
+            AnalyticsDiagnosticCode.TRAILING_GARBAGE
+        );
+        assertDslDiagnostic(
+            "SELECT SUM(CREDIT_LIMIT) AS limit FROM CREDIT_ACCOUNT_SNAPSHOT GROUP BY ACCOUNT_ID, OBSERVATION_MONTH LIMIT 10",
+            AnalyticsDiagnosticCode.INVALID_CREDIT_CALCULATION
+        );
+        assertDslDiagnostic(
+            "SELECT COUNT(TRANSFER_ID) AS c FROM INTERNAL_TRANSFER_EVENT GROUP BY TRANSFER_DAY, TRANSFER_WEEK LIMIT 10",
+            AnalyticsDiagnosticCode.UNSUPPORTED_GROUPING_COMBINATION
+        );
+        assertDslDiagnostic(
+            "SELECT COUNT(TRANSACTION_ID FILTER WHERE ACCOUNT_TYPE HAS_ANY ('DEBIT')) AS c FROM TRANSACTION_LEDGER LIMIT 10",
+            AnalyticsDiagnosticCode.UNSUPPORTED_PREDICATE
+        );
+    }
+
     private void assertRoundTrips(String text, SemanticDataset dataset, SemanticAggregateFunction aggregate) {
         SemanticAnalyticsDslParseResult parsed = service.parse(text);
         assertThat(parsed.definition().dataset()).isEqualTo(dataset);
         assertThat(parsed.definition().projections().get(0).function()).isEqualTo(aggregate);
         assertThat(service.parse(parsed.canonicalText()).definition()).isEqualTo(parsed.definition());
         assertThat(service.parse(service.parse(parsed.canonicalText()).canonicalText()).canonicalText()).isEqualTo(parsed.canonicalText());
+    }
+
+    private void assertDefinitionRoundTrips(SemanticQueryDefinition definition) {
+        String formatted;
+        try {
+            formatted = service.format(definition);
+        } catch (SemanticAnalyticsValidationException exception) {
+            throw new AssertionError("Catalog capability has no canonical DSL representation: " + definition, exception);
+        }
+        SemanticAnalyticsDslParseResult parsed = service.parse(formatted);
+        assertThat(service.parse(parsed.canonicalText()).definition()).isEqualTo(parsed.definition());
+        assertThat(service.format(parsed.definition())).isEqualTo(parsed.canonicalText());
+    }
+
+    private SemanticQueryDefinition executableDefinition(
+        SemanticDataset dataset,
+        SemanticAggregateCapability capability,
+        java.util.List<SemanticField> groups,
+        java.util.List<SemanticPredicate> predicates
+    ) {
+        return new SemanticQueryDefinition(
+            SemanticAnalyticsSchema.VERSION,
+            SemanticAnalyticsSchema.SEMANTIC_MODEL,
+            dataset,
+            catalog.timeBinding(dataset),
+            java.util.List.of(new SemanticAggregateProjection("result", capability.function(), capability.field())),
+            predicates,
+            groups,
+            java.util.List.of(),
+            100
+        );
+    }
+
+    private SemanticAggregateCapability aggregateForGrouping(
+        SemanticDataset dataset,
+        SemanticDatasetDefinition definition,
+        SemanticField group
+    ) {
+        if (dataset == SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT && group == SemanticField.OBSERVATION_MONTH) {
+            return definition
+                .aggregateCapabilities()
+                .stream()
+                .filter(capability -> capability.field() == SemanticField.CREDIT_DEBT)
+                .findFirst()
+                .orElseThrow();
+        }
+        return definition.aggregateCapabilities().get(0);
+    }
+
+    private java.util.List<SemanticField> requiredGroups(
+        SemanticDataset dataset,
+        SemanticField aggregateField,
+        SemanticField... requested
+    ) {
+        SemanticField requestedGroup = requested.length == 0 ? null : requested[0];
+        return switch (dataset) {
+            case TRANSACTION_LEDGER, INTERNAL_TRANSFER_EVENT -> requestedGroup == null
+                ? java.util.List.of()
+                : java.util.List.of(requestedGroup);
+            case ACCOUNT_POSITION_SNAPSHOT -> java.util.List.of(SemanticField.ACCOUNT_ID, SemanticField.OBSERVATION_MONTH);
+            case CREDIT_ACCOUNT_SNAPSHOT -> aggregateField == SemanticField.CREDIT_DEBT
+                ? java.util.List.of(SemanticField.ACCOUNT_ID, SemanticField.OBSERVATION_MONTH)
+                : java.util.List.of(SemanticField.ACCOUNT_ID);
+        };
+    }
+
+    private java.util.List<SemanticPredicate> requiredPredicates(SemanticDataset dataset, SemanticField group) {
+        if (dataset == SemanticDataset.TRANSACTION_LEDGER && group == SemanticField.CATEGORY_BRANCH_CHILD) {
+            return java.util.List.of(
+                new SemanticPredicate(SemanticField.CATEGORY_ID, SemanticPredicateOperator.DESCENDANT_OF, java.util.List.of("1"))
+            );
+        }
+        return java.util.List.of();
+    }
+
+    private java.util.List<String> values(SemanticDataset dataset, SemanticField field, SemanticPredicateOperator operator) {
+        if (
+            operator == SemanticPredicateOperator.IS_UNCATEGORIZED || operator == SemanticPredicateOperator.HAS_NONE
+        ) return java.util.List.of();
+        return switch (field) {
+            case TRANSACTION_FLOW -> java.util.List.of("OUT");
+            case TRANSFER_LINK_STATUS -> java.util.List.of("UNLINKED");
+            case ACCOUNT_TYPE -> java.util.List.of(dataset == SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT ? "CREDIT_CARD" : "DEBIT");
+            case SOURCE_ACCOUNT_TYPE, DESTINATION_ACCOUNT_TYPE -> java.util.List.of("DEBIT");
+            case CATEGORY_ID -> operator == SemanticPredicateOperator.IN ? java.util.List.of("1", "2") : java.util.List.of("1");
+            case TAG_ID -> operator == SemanticPredicateOperator.HAS_ANY || operator == SemanticPredicateOperator.HAS_ALL
+                ? java.util.List.of("1", "2")
+                : java.util.List.of("1");
+            default -> throw new IllegalArgumentException("No DSL fixture values are registered for " + field);
+        };
+    }
+
+    private void assertDslDiagnostic(String text, AnalyticsDiagnosticCode expected) {
+        assertThatThrownBy(() -> service.parse(text))
+            .isInstanceOf(SemanticAnalyticsDslException.class)
+            .satisfies(exception ->
+                assertThat(((SemanticAnalyticsDslException) exception).getDiagnostics())
+                    .extracting(AnalyticsDiagnostic::code)
+                    .contains(expected)
+            );
     }
 }
