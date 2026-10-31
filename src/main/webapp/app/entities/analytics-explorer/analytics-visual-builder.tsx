@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, Input, Label } from 'reactstrap';
 
 import {
@@ -35,6 +35,14 @@ type InformationChoice = {
   economicFlow?: 'IN' | 'OUT';
   title: { es: string; en: string };
   description: { es: string; en: string };
+};
+
+type EconomicCalculation = {
+  id: 'TOTAL' | 'COUNT' | 'AVERAGE';
+  function: 'COUNT' | 'SUM' | 'AVG';
+  field: string;
+  alias: { expense: string; income: string };
+  title: { expense: { es: string; en: string }; income: { es: string; en: string } };
 };
 
 const informationChoices: InformationChoice[] = [
@@ -84,6 +92,33 @@ const informationChoices: InformationChoice[] = [
   },
 ];
 
+const economicCalculations: EconomicCalculation[] = [
+  {
+    id: 'TOTAL',
+    function: 'SUM',
+    field: 'TRANSACTION_AMOUNT',
+    alias: { expense: 'gastos', income: 'ingresos' },
+    title: { expense: { es: 'Total gastado', en: 'Total spent' }, income: { es: 'Total ingresado', en: 'Total received' } },
+  },
+  {
+    id: 'COUNT',
+    function: 'COUNT',
+    field: 'TRANSACTION_ID',
+    alias: { expense: 'numero_gastos', income: 'numero_ingresos' },
+    title: {
+      expense: { es: 'Número de gastos', en: 'Number of expenses' },
+      income: { es: 'Número de ingresos', en: 'Number of income entries' },
+    },
+  },
+  {
+    id: 'AVERAGE',
+    function: 'AVG',
+    field: 'TRANSACTION_AMOUNT',
+    alias: { expense: 'gasto_promedio', income: 'ingreso_promedio' },
+    title: { expense: { es: 'Gasto promedio', en: 'Average expense' }, income: { es: 'Ingreso promedio', en: 'Average income' } },
+  },
+];
+
 const clone = (definition: SemanticQueryDefinition): SemanticQueryDefinition =>
   JSON.parse(JSON.stringify(definition)) as SemanticQueryDefinition;
 const noValueOperator = (operator: SemanticPredicateOperator) => operator === 'IS_UNCATEGORIZED' || operator === 'HAS_NONE';
@@ -95,6 +130,28 @@ const conditionsFor = (definition: SemanticQueryDefinition, scope: ConditionScop
   scope === 'GLOBAL' ? definition.predicates : (definition.projections.find(projection => projection.alias === scope)?.conditions ?? []);
 const hasPredicate = (definition: SemanticQueryDefinition, field: string, value: string) =>
   definition.predicates.some(predicate => predicate.field === field && predicate.values.includes(value));
+const economicFlow = (predicates: SemanticPredicate[]): 'OUT' | 'IN' | null => {
+  const flow = predicates.find(predicate => predicate.field === 'TRANSACTION_FLOW' && predicate.operator === 'EQUALS')?.values[0];
+  const unlinked = predicates.some(
+    predicate => predicate.field === 'TRANSFER_LINK_STATUS' && predicate.operator === 'EQUALS' && predicate.values.includes('UNLINKED'),
+  );
+  return unlinked && (flow === 'OUT' || flow === 'IN') ? flow : null;
+};
+const economicFlowForProjection = (definition: SemanticQueryDefinition, projection: SemanticQueryDefinition['projections'][number]) =>
+  economicFlow(definition.predicates) ?? economicFlow(projection.conditions ?? []);
+const economicCalculationFor = (projection: SemanticQueryDefinition['projections'][number]) =>
+  economicCalculations.find(item => item.function === projection.function && item.field === projection.field);
+const economicCalculationText = (locale: string, flow: 'OUT' | 'IN', calculation: EconomicCalculation) => {
+  const text = calculation.title[flow === 'OUT' ? 'expense' : 'income'];
+  return locale.startsWith('es') ? text.es : text.en;
+};
+const uniqueAlias = (definition: SemanticQueryDefinition, preferred: string) => {
+  const aliases = new Set(definition.projections.map(projection => projection.alias));
+  if (!aliases.has(preferred)) return preferred;
+  let index = 2;
+  while (aliases.has(`${preferred}_${index}`)) index += 1;
+  return `${preferred}_${index}`;
+};
 const currentInformation = (definition: SemanticQueryDefinition | null) => {
   if (!definition) return '';
   if (definition.dataset !== 'TRANSACTION_LEDGER') return definition.dataset;
@@ -104,10 +161,18 @@ const currentInformation = (definition: SemanticQueryDefinition | null) => {
     return 'ECONOMIC_INCOME';
   return 'TRANSACTION_LEDGER';
 };
-const projectionName = (locale: string, projection: SemanticQueryDefinition['projections'][number]) =>
-  projection.alias === suggestedAlias(projection.function, projection.field)
+const projectionName = (
+  locale: string,
+  definition: SemanticQueryDefinition,
+  projection: SemanticQueryDefinition['projections'][number],
+) => {
+  const flow = economicFlowForProjection(definition, projection);
+  const economicCalculation = economicCalculationFor(projection);
+  if (flow && economicCalculation) return economicCalculationText(locale, flow, economicCalculation);
+  return projection.alias === suggestedAlias(projection.function, projection.field)
     ? `${label(locale, projection.function)} ${label(locale, projection.field).toLocaleLowerCase()}`
     : projection.alias;
+};
 
 const StepHeading = ({ number, title, help, children }: { number: number; title: string; help: string; children?: React.ReactNode }) => (
   <header className="d-flex justify-content-between align-items-start gap-3 p-3 border-bottom bg-light">
@@ -190,6 +255,7 @@ const ProjectionRow = ({
   const dataset = datasetById(catalog, definition.dataset);
   const projection = definition.projections[projectionIndex];
   if (!dataset || !projection) return null;
+  const isEconomicShortcut = Boolean(economicFlowForProjection(definition, projection) && economicCalculationFor(projection));
   const fields = [...new Set(dataset.aggregateCapabilities.map(capability => capability.field))];
   const functions = dataset.aggregateCapabilities
     .filter(capability => capability.field === projection.field)
@@ -220,6 +286,7 @@ const ProjectionRow = ({
     });
   return (
     <div className="border rounded-2 p-2 bg-light" data-cy={`analyticsProjection-${projection.alias}`}>
+      {isEconomicShortcut ? <div className="small fw-semibold mb-2">{projectionName(locale, definition, projection)}</div> : null}
       <div className="row g-2 align-items-end">
         <div className="col-12 col-md-5">
           <Label className="small text-uppercase fw-semibold text-muted mb-1" for={`analytics-projection-field-${projectionIndex}`}>
@@ -281,7 +348,11 @@ const ProjectionRow = ({
             className="w-100"
             disabled={busy || definition.projections.length === 1}
             onClick={() => onApply(candidate => candidate.projections.splice(projectionIndex, 1))}
-            aria-label={copy(locale, `Quitar ${projectionName(locale, projection)}`, `Remove ${projectionName(locale, projection)}`)}
+            aria-label={copy(
+              locale,
+              `Quitar ${projectionName(locale, definition, projection)}`,
+              `Remove ${projectionName(locale, definition, projection)}`,
+            )}
           >
             {copy(locale, 'Quitar', 'Remove')}
           </Button>
@@ -290,6 +361,88 @@ const ProjectionRow = ({
     </div>
   );
 };
+
+const ProjectionSummaryRow = ({
+  definition,
+  projectionIndex,
+  locale,
+  busy,
+  onRemove,
+}: {
+  definition: SemanticQueryDefinition;
+  projectionIndex: number;
+  locale: string;
+  busy: boolean;
+  onRemove: () => void;
+}) => {
+  const projection = definition.projections[projectionIndex];
+  if (!projection) return null;
+  return (
+    <div
+      className="d-flex align-items-center justify-content-between gap-2 border rounded-2 px-3 py-2 bg-light"
+      data-cy={`analyticsProjection-${projection.alias}`}
+    >
+      <div>
+        <div className="fw-semibold">{projectionName(locale, definition, projection)}</div>
+        <div className="small text-muted">{copy(locale, 'Cálculo configurado', 'Configured calculation')}</div>
+      </div>
+      <Button
+        type="button"
+        color="secondary"
+        outline
+        size="sm"
+        disabled={busy || definition.projections.length === 1}
+        onClick={onRemove}
+        aria-label={copy(
+          locale,
+          `Quitar ${projectionName(locale, definition, projection)}`,
+          `Remove ${projectionName(locale, definition, projection)}`,
+        )}
+      >
+        {copy(locale, 'Quitar', 'Remove')}
+      </Button>
+    </div>
+  );
+};
+
+const EconomicShortcutPicker = ({
+  flow,
+  selected,
+  locale,
+  busy,
+  onChoose,
+  onCustomize,
+}: {
+  flow: 'OUT' | 'IN';
+  selected: EconomicCalculation | undefined;
+  locale: string;
+  busy: boolean;
+  onChoose: (calculation: EconomicCalculation) => void;
+  onCustomize: () => void;
+}) => (
+  <div className="border rounded-2 p-2 bg-light" data-cy="analyticsEconomicCalculationShortcuts">
+    <div className="small fw-semibold mb-2">{copy(locale, 'Elige un cálculo', 'Choose a calculation')}</div>
+    <div className="d-flex flex-wrap align-items-center gap-2">
+      <ButtonGroup size="sm" aria-label={copy(locale, 'Cálculos económicos', 'Economic calculations')}>
+        {economicCalculations.map(calculation => (
+          <Button
+            key={calculation.id}
+            type="button"
+            color={selected?.id === calculation.id ? 'primary' : 'secondary'}
+            outline={selected?.id !== calculation.id}
+            disabled={busy}
+            onClick={() => onChoose(calculation)}
+          >
+            {economicCalculationText(locale, flow, calculation)}
+          </Button>
+        ))}
+      </ButtonGroup>
+      <Button type="button" color="link" size="sm" disabled={busy} onClick={onCustomize}>
+        {copy(locale, 'Personalizar cálculo…', 'Customize calculation…')}
+      </Button>
+    </div>
+  </div>
+);
 
 const CalculationSection = ({
   catalog,
@@ -309,8 +462,15 @@ const CalculationSection = ({
   onClear: () => void;
 }) => {
   const [adding, setAdding] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
   const [search, setSearch] = useState('');
   const dataset = datasetById(catalog, definition.dataset);
+  const information = currentInformation(definition);
+  const economic = information === 'ECONOMIC_EXPENSE' ? 'OUT' : information === 'ECONOMIC_INCOME' ? 'IN' : null;
+  useEffect(() => {
+    setAdvanced(false);
+    setAdding(false);
+  }, [information]);
   if (!dataset) return null;
   const choices = dataset.aggregateCapabilities.filter(capability => {
     const text =
@@ -319,14 +479,38 @@ const CalculationSection = ({
   });
   const add = (functionName: 'COUNT' | 'SUM' | 'AVG', field: string) => {
     onApply(candidate => {
-      const aliases = new Set(candidate.projections.map(projection => projection.alias));
       const base = suggestedAlias(functionName, field);
-      const alias = aliases.has(base) ? `${base}_${candidate.projections.length + 1}` : base;
-      candidate.projections.push({ alias, function: functionName, field, conditions: [] });
+      candidate.projections.push({ alias: uniqueAlias(candidate, base), function: functionName, field, conditions: [] });
     });
     setAdding(false);
     setSearch('');
   };
+  const chooseEconomicCalculation = (calculation: EconomicCalculation) => {
+    if (!economic) return;
+    onApply(candidate => {
+      const current = candidate.projections[0];
+      candidate.projections[0] = {
+        alias: calculation.alias[economic === 'OUT' ? 'expense' : 'income'],
+        function: calculation.function,
+        field: calculation.field,
+        conditions: current.conditions ?? [],
+      };
+    });
+  };
+  const addEconomicCalculation = (calculation: EconomicCalculation) => {
+    if (!economic) return;
+    onApply(candidate => {
+      const preferred = calculation.alias[economic === 'OUT' ? 'expense' : 'income'];
+      candidate.projections.push({
+        alias: uniqueAlias(candidate, preferred),
+        function: calculation.function,
+        field: calculation.field,
+        conditions: [],
+      });
+    });
+    setAdding(false);
+  };
+  const remove = (projectionIndex: number) => onApply(candidate => candidate.projections.splice(projectionIndex, 1));
   return (
     <section className="border-bottom" data-cy="analyticsCalculationSection">
       <StepHeading
@@ -348,20 +532,51 @@ const CalculationSection = ({
             <InformationSelector definition={definition} locale={locale} busy={busy} onChoose={onChooseInformation} />
           </div>
         </div>
-        <div className="d-flex flex-column gap-2">
-          {definition.projections.map((_, index) => (
-            <ProjectionRow
-              key={`${definition.projections[index].alias}-${index}`}
-              catalog={catalog}
-              definition={definition}
-              projectionIndex={index}
+        {economic && !advanced ? (
+          <div className="d-flex flex-column gap-2">
+            <EconomicShortcutPicker
+              flow={economic}
+              selected={economicCalculationFor(definition.projections[0])}
               locale={locale}
               busy={busy}
-              onApply={onApply}
+              onChoose={chooseEconomicCalculation}
+              onCustomize={() => setAdvanced(true)}
             />
-          ))}
-        </div>
-        {currentInformation(definition).startsWith('ECONOMIC_') ? (
+            {definition.projections.map((_, index) => (
+              <ProjectionSummaryRow
+                key={`${definition.projections[index].alias}-${index}`}
+                definition={definition}
+                projectionIndex={index}
+                locale={locale}
+                busy={busy}
+                onRemove={() => remove(index)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="d-flex flex-column gap-2">
+            {economic ? (
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <p className="small text-muted mb-0">{copy(locale, 'Editor avanzado de cálculos', 'Advanced calculation editor')}</p>
+                <Button type="button" color="link" size="sm" disabled={busy} onClick={() => setAdvanced(false)}>
+                  {copy(locale, 'Usar opciones simples', 'Use simple options')}
+                </Button>
+              </div>
+            ) : null}
+            {definition.projections.map((_, index) => (
+              <ProjectionRow
+                key={`${definition.projections[index].alias}-${index}`}
+                catalog={catalog}
+                definition={definition}
+                projectionIndex={index}
+                locale={locale}
+                busy={busy}
+                onApply={onApply}
+              />
+            ))}
+          </div>
+        )}
+        {economic ? (
           <p className="small text-muted mt-2 mb-0">
             {copy(
               locale,
@@ -376,6 +591,42 @@ const CalculationSection = ({
               <Button type="button" color="secondary" outline size="sm" disabled={busy} onClick={() => setAdding(true)}>
                 {copy(locale, '+ Añadir cálculo', '+ Add calculation')}
               </Button>
+            ) : economic && !advanced ? (
+              <div className="border rounded-2 p-2 bg-white" data-cy="analyticsCalculationPicker">
+                <div className="d-flex justify-content-between gap-2 align-items-center mb-2">
+                  <span className="small fw-semibold">{copy(locale, 'Añadir cálculo', 'Add calculation')}</span>
+                  <Button type="button" color="link" size="sm" disabled={busy} onClick={() => setAdding(false)}>
+                    {copy(locale, 'Cerrar', 'Close')}
+                  </Button>
+                </div>
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  {economicCalculations.map(calculation => (
+                    <Button
+                      key={calculation.id}
+                      type="button"
+                      size="sm"
+                      color="secondary"
+                      outline
+                      disabled={busy}
+                      onClick={() => addEconomicCalculation(calculation)}
+                    >
+                      {economicCalculationText(locale, economic, calculation)}
+                    </Button>
+                  ))}
+                  <Button
+                    type="button"
+                    color="link"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => {
+                      setAdding(false);
+                      setAdvanced(true);
+                    }}
+                  >
+                    {copy(locale, 'Personalizar cálculo…', 'Customize calculation…')}
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="border rounded-2 p-2 bg-white" data-cy="analyticsCalculationPicker">
                 <div className="d-flex justify-content-between gap-2 align-items-center mb-2">
@@ -581,7 +832,7 @@ const ConditionEditor = ({
               <option value="GLOBAL">{copy(locale, 'Toda la consulta', 'Whole query')}</option>
               {definition.projections.map(projection => (
                 <option key={projection.alias} value={projection.alias}>
-                  {projectionName(locale, projection)}
+                  {projectionName(locale, definition, projection)}
                 </option>
               ))}
             </Input>
@@ -764,7 +1015,7 @@ const ConditionsSection = ({
               scope === 'GLOBAL'
                 ? copy(locale, 'Toda la consulta', 'Whole query')
                 : scopedProjection
-                  ? projectionName(locale, scopedProjection)
+                  ? projectionName(locale, definition, scopedProjection)
                   : scope;
             return (
               <div className="mb-2" key={scope}>

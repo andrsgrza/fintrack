@@ -183,16 +183,53 @@ describe('Metric Explorer V2', () => {
     expect(screen.getByLabelText('How do you want to organize results?')).toBeTruthy();
   });
 
-  it('uses compact calculation rows and lets the user add a compatible calculation', async () => {
+  it('uses financial shortcuts for economic calculations and preserves their canonical AST through written mode', async () => {
     render(<AnalyticsExplorer />);
     await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
     fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
     await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
 
+    expect(screen.getByRole('button', { name: 'Total spent' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Number of expenses' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Average expense' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Number of expenses' }));
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-numero_gastos"]')).toBeTruthy());
+
     fireEvent.click(screen.getByRole('button', { name: '+ Add calculation' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Average · Amount' }));
-    expect(document.querySelector('[data-cy="analyticsProjection-promedio"]')).toBeTruthy();
+    const averageExpense = screen.getAllByRole('button', { name: 'Average expense' });
+    fireEvent.click(averageExpense[averageExpense.length - 1]);
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gasto_promedio"]')).toBeTruthy());
     expect(document.querySelector('[data-cy="analyticsDatasetCatalog"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Written query' }));
+    await waitFor(() => expect(formatSemanticQuery).toHaveBeenCalled());
+    const formatted = formatSemanticQuery.mock.calls.at(-1)?.[0] as SemanticQueryDefinition;
+    expect(formatted.projections).toEqual([
+      { alias: 'numero_gastos', function: 'COUNT', field: 'TRANSACTION_ID', conditions: [] },
+      { alias: 'gasto_promedio', function: 'AVG', field: 'TRANSACTION_AMOUNT', conditions: [] },
+    ]);
+    expect(formatted.predicates).toEqual(
+      expect.arrayContaining([
+        { field: 'TRANSACTION_FLOW', operator: 'EQUALS', values: ['OUT'] },
+        { field: 'TRANSFER_LINK_STATUS', operator: 'EQUALS', values: ['UNLINKED'] },
+      ]),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Visual' }));
+    expect((await screen.findAllByText('Number of expenses')).length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Average expense').length).toBeGreaterThan(0);
+  });
+
+  it('keeps the full catalog-backed editor available only when the user asks to customize', async () => {
+    render(<AnalyticsExplorer />);
+    await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
+    fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize calculation…' }));
+    expect(screen.getByText('Advanced calculation editor')).toBeTruthy();
+    expect(screen.getByDisplayValue('Amount')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '+ Add calculation' }));
+    expect(screen.getByRole('button', { name: 'Average · Amount' })).toBeTruthy();
   });
 
   it('adds an owner-scoped category condition and keeps it in the visual AST draft', async () => {
