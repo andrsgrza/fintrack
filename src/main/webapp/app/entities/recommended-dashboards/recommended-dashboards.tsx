@@ -29,7 +29,12 @@ import {
 } from './recommended-dashboard-templates';
 
 type Account = { id: number; name: string; accountType?: string; currency?: string };
-type WidgetState = { loading: boolean; result: SemanticAnalyticsResult | null; error: string | null };
+export type DashboardWidgetState = { loading: boolean; result: SemanticAnalyticsResult | null; error: string | null };
+export type DashboardExecutableWidget = {
+  id: string | number;
+  definition: SemanticQueryDefinition;
+  contextPolicy?: 'CURRENT_ONLY';
+};
 type DrillState = { definition: SemanticQueryDefinition; label: string };
 type WidgetInstance = FinancialVisualizationDefinition & { definition: SemanticQueryDefinition; trail: DrillState[] };
 type TrendGranularity = 'AUTO' | 'TRANSACTION_DAY' | 'TRANSACTION_WEEK' | 'TRANSACTION_MONTH' | 'TRANSACTION_YEAR';
@@ -54,12 +59,13 @@ const currentContext = (schemaVersion: number): VisualizationContext => {
   };
 };
 const contextKey = (context: VisualizationContext) => JSON.stringify(context);
-const widgetKey = (widget: WidgetInstance) => JSON.stringify({ definition: widget.definition, contextPolicy: widget.contextPolicy });
+const widgetKey = (widget: DashboardExecutableWidget) =>
+  JSON.stringify({ definition: widget.definition, contextPolicy: widget.contextPolicy });
 const title = (locale: string, value: { es: string; en: string }) => copy(locale, value.es, value.en);
 const dashboardById = (templates: RecommendedDashboardTemplate[], id: string | undefined) =>
   templates.find(template => template.id === id) ?? templates[0];
-const blankState = (): WidgetState => ({ loading: true, result: null, error: null });
-const diagnosticsFrom = (error: unknown) => {
+const blankState = (): DashboardWidgetState => ({ loading: true, result: null, error: null });
+export const dashboardDiagnostics = (error: unknown) => {
   if (axios.isAxiosError<AnalyticsProblem>(error)) {
     const data = error.response?.data;
     if (data?.diagnostics?.length) return data.diagnostics.map(diagnostic => diagnostic.message).join(' ');
@@ -104,8 +110,8 @@ const formatAsOf = (locale: string, isoDate: string) =>
  * Executes the existing canonical endpoint with at most three in-flight requests. Identical AST/context pairs share
  * one promise, and the monotonically increasing token prevents an older context from overwriting newer results.
  */
-const useWidgetResults = (widgets: WidgetInstance[], context: VisualizationContext | null) => {
-  const [states, setStates] = useState<Record<string, WidgetState>>({});
+export const useDashboardWidgetResults = (widgets: DashboardExecutableWidget[], context: VisualizationContext | null) => {
+  const [states, setStates] = useState<Record<string, DashboardWidgetState>>({});
   const sequence = useRef(0);
   const completedForCurrentContext = useRef(new Map<string, SemanticAnalyticsResult>());
   const priorContextKey = useRef<string | null>(null);
@@ -120,15 +126,15 @@ const useWidgetResults = (widgets: WidgetInstance[], context: VisualizationConte
     const requestCache = new Map<string, Promise<SemanticAnalyticsResult>>();
     const compatible = widgets.filter(widget => widget.contextPolicy !== 'CURRENT_ONLY' || isCurrentOnlyContext(context));
     const incompatible = widgets.filter(widget => !compatible.includes(widget));
-    const requestKeyFor = (widget: WidgetInstance) => `${widgetKey(widget)}:${nextContextKey}`;
+    const requestKeyFor = (widget: DashboardExecutableWidget) => `${widgetKey(widget)}:${nextContextKey}`;
     const pending = compatible.filter(widget => !completedForCurrentContext.current.has(requestKeyFor(widget)));
     setStates(
       Object.fromEntries(
         widgets.map(widget => {
           if (incompatible.includes(widget))
-            return [widget.id, { loading: false, result: null, error: 'CURRENT_ONLY_CONTEXT' } satisfies WidgetState];
+            return [widget.id, { loading: false, result: null, error: 'CURRENT_ONLY_CONTEXT' } satisfies DashboardWidgetState];
           const cached = completedForCurrentContext.current.get(requestKeyFor(widget));
-          return [widget.id, cached ? ({ loading: false, result: cached, error: null } satisfies WidgetState) : blankState()];
+          return [widget.id, cached ? ({ loading: false, result: cached, error: null } satisfies DashboardWidgetState) : blankState()];
         }),
       ),
     );
@@ -147,7 +153,7 @@ const useWidgetResults = (widgets: WidgetInstance[], context: VisualizationConte
           }
         } catch (error) {
           if (sequence.current === token) {
-            setStates(previous => ({ ...previous, [widget.id]: { loading: false, result: null, error: diagnosticsFrom(error) } }));
+            setStates(previous => ({ ...previous, [widget.id]: { loading: false, result: null, error: dashboardDiagnostics(error) } }));
           }
         }
       }
@@ -168,6 +174,9 @@ const DashboardNav = ({
   locale: string;
 }) => (
   <nav className="nav nav-pills gap-1 mb-3" aria-label={copy(locale, 'Dashboards recomendados', 'Recommended dashboards')}>
+    <Link className="nav-link" to="/analytics/dashboards">
+      {copy(locale, 'Todos los dashboards', 'All dashboards')}
+    </Link>
     {templates.map(template => (
       <Link
         className={`nav-link ${template.id === selected.id ? 'active' : ''}`}
@@ -192,7 +201,7 @@ const WidgetCard = ({
   onDrillBack,
 }: {
   widget: WidgetInstance;
-  state: WidgetState | undefined;
+  state: DashboardWidgetState | undefined;
   locale: string;
   context: VisualizationContext;
   onDrillDown: (widget: WidgetInstance, categoryId: string, categoryLabel: string) => void;
@@ -274,7 +283,7 @@ const RecommendedDashboards = () => {
         );
       })
       .catch(requestError => {
-        if (active) setError(diagnosticsFrom(requestError));
+        if (active) setError(dashboardDiagnostics(requestError));
       });
     return () => {
       active = false;
@@ -295,7 +304,7 @@ const RecommendedDashboards = () => {
       return { ...widget, definition, trail: overrides[widget.id]?.trail ?? [] };
     });
   }, [context, dashboard, overviewGranularity, overrides]);
-  const states = useWidgetResults(widgets, context);
+  const states = useDashboardWidgetResults(widgets, context);
 
   const drillDown = (widget: WidgetInstance, categoryId: string, categoryLabel: string) => {
     if (widget.definition.dataset !== 'TRANSACTION_LEDGER') return;

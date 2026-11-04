@@ -21,6 +21,8 @@ import ApiAccessToken from './api-access-token';
 import ApiAccessTokenPermission from './api-access-token-permission';
 import TransactionBatch from './transaction-batch';
 import AnalyticsExplorer from './analytics-explorer/analytics-explorer';
+import PersonalDashboardGallery from './personal-dashboards/personal-dashboard-gallery';
+import PersonalDashboardViewer from './personal-dashboards/personal-dashboard-viewer';
 import RecommendedDashboards from './recommended-dashboards/recommended-dashboards';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
@@ -34,7 +36,8 @@ export default () => {
         <Route path="financial-transaction/*" element={<FinancialTransaction />} />
         <Route path="transaction-batches/*" element={<TransactionBatch />} />
         <Route path="analytics/explorer" element={<AnalyticsExplorer />} />
-        <Route path="analytics/dashboards" element={<RecommendedDashboards />} />
+        <Route path="analytics/dashboards" element={<PersonalDashboardGallery />} />
+        <Route path="analytics/dashboards/personal/:dashboardId" element={<PersonalDashboardViewer />} />
         <Route path="analytics/dashboards/:dashboardId" element={<RecommendedDashboards />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />

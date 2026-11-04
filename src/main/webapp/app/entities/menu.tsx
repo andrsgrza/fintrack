@@ -45,7 +45,7 @@ const EntitiesMenu = () => {
         <Translate contentKey="global.menu.entities.analyticsExplorer" />
       </MenuItem>
       <MenuItem icon="chart-line" to="/analytics/dashboards">
-        Dashboards recomendados
+        Dashboards
       </MenuItem>
       <MenuItem icon="asterisk" to="/api-ingestion">
         <Translate contentKey="global.menu.entities.apiIngestion" />{' '}

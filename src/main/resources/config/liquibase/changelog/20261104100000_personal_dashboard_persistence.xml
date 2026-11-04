@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Analytics is development-only at this point. Remove the pre-refactor personal-dashboard
+        tables rather than attempting to reinterpret their incompatible query/widget contracts.
+        Financial-domain tables are deliberately not touched.
+    -->
+    <changeSet id="20261104100000-0" author="fintrack">
+        <sql>drop table if exists personal_dashboard_operation cascade</sql>
+        <sql>drop table if exists personal_dashboard_home cascade</sql>
+        <sql>drop table if exists personal_dashboard_widget cascade</sql>
+        <sql>drop table if exists personal_dashboard cascade</sql>
+    </changeSet>
+
+    <!-- Personal dashboard definitions only. No calculated financial values, screenshots, or legacy Analytics state. -->
+    <changeSet id="20261104100000-1" author="fintrack">
+        <createTable tableName="personal_dashboard" remarks="Owned dashboard aggregate with a canonical default VisualizationContext.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="name" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="normalized_name" type="varchar(120)"><constraints nullable="false"/></column>
+            <column name="description" type="varchar(500)"/>
+            <column name="default_context_json" type="text"><constraints nullable="false"/></column>
+            <column name="schema_version" type="integer"><constraints nullable="false"/></column>
+            <column name="created_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="updated_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="user_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="personal_dashboard" baseColumnNames="user_id"
+                                 constraintName="fk_personal_dashboard__user_id" referencedTableName="jhi_user" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="personal_dashboard" columnNames="user_id,normalized_name"
+                             constraintName="ux_personal_dashboard_owner_normalized_name"/>
+        <createIndex tableName="personal_dashboard" indexName="ix_personal_dashboard_owner_updated">
+            <column name="user_id"/><column name="updated_at"/>
+        </createIndex>
+        <sql>alter table personal_dashboard add constraint ck_personal_dashboard_schema_version check (schema_version &gt;= 1)</sql>
+    </changeSet>
+
+    <changeSet id="20261104100000-2" author="fintrack">
+        <createTable tableName="personal_dashboard_widget" remarks="Canonical semantic query and shared presentation configuration owned by a personal dashboard.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="title" type="varchar(120)"><constraints nullable="false"/></column>
+            <column name="description" type="varchar(500)"/>
+            <column name="query_definition_json" type="text"><constraints nullable="false"/></column>
+            <column name="query_schema_version" type="integer"><constraints nullable="false"/></column>
+            <column name="visualization_type" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="visualization_options_json" type="text"><constraints nullable="false"/></column>
+            <column name="position" type="integer"><constraints nullable="false"/></column>
+            <column name="width" type="varchar(16)"><constraints nullable="false"/></column>
+            <column name="visible" type="boolean"><constraints nullable="false"/></column>
+            <column name="created_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="updated_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="dashboard_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="personal_dashboard_widget" baseColumnNames="dashboard_id"
+                                 constraintName="fk_personal_dashboard_widget__dashboard" referencedTableName="personal_dashboard"
+                                 referencedColumnNames="id" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="personal_dashboard_widget" columnNames="dashboard_id,position"
+                             constraintName="ux_personal_dashboard_widget_position"/>
+        <createIndex tableName="personal_dashboard_widget" indexName="ix_personal_dashboard_widget_dashboard">
+            <column name="dashboard_id"/><column name="position"/>
+        </createIndex>
+        <sql>alter table personal_dashboard_widget add constraint ck_personal_dashboard_widget_position check (position &gt;= 0)</sql>
+        <sql>alter table personal_dashboard_widget add constraint ck_personal_dashboard_widget_query_schema check (query_schema_version &gt;= 1)</sql>
+        <sql>alter table personal_dashboard_widget add constraint ck_personal_dashboard_widget_width check (width in ('COMPACT', 'MEDIUM', 'FULL'))</sql>
+        <sql>alter table personal_dashboard_widget add constraint ck_personal_dashboard_widget_visualization check (visualization_type in ('TABLE', 'KPI', 'LINE', 'BAR', 'GROUPED_BAR', 'STACKED_BAR', 'DONUT'))</sql>
+    </changeSet>
+
+    <!-- Retry receipts intentionally keep only a hash and target identifiers. Dashboard deletion therefore cascades only to widget definitions. -->
+    <changeSet id="20261104100000-3" author="fintrack">
+        <createTable tableName="personal_dashboard_request" remarks="Bounded personal-dashboard command idempotency receipts without request payloads or financial data.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="scope" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="client_request_id" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="request_digest" type="varchar(128)"><constraints nullable="false"/></column>
+            <column name="dashboard_id" type="bigint"/>
+            <column name="widget_id" type="bigint"/>
+            <column name="created_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="user_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="personal_dashboard_request" baseColumnNames="user_id"
+                                 constraintName="fk_personal_dashboard_request__user_id" referencedTableName="jhi_user" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="personal_dashboard_request" columnNames="user_id,scope,client_request_id"
+                             constraintName="ux_personal_dashboard_request_owner_scope_key"/>
+        <sql>alter table personal_dashboard_request add constraint ck_personal_dashboard_request_scope check (scope in ('CREATE_DASHBOARD', 'ADD_WIDGET'))</sql>
+    </changeSet>
+</databaseChangeLog>

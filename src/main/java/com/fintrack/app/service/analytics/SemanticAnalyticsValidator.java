@@ -108,6 +108,44 @@ public class SemanticAnalyticsValidator {
         return normalized.orElseThrow();
     }
 
+    /**
+     * Validates a stored dashboard context without executing a financial query. Relative periods deliberately remain
+     * relative in the returned contract; only the execution path resolves them to concrete dates.
+     */
+    public VisualizationContext normalizeContextOrThrow(VisualizationContext context) {
+        List<AnalyticsDiagnostic> diagnostics = new ArrayList<>();
+        String ownerLogin = currentUserService.getCurrentUserLogin();
+        Optional<ContextResolution> resolution = validateContext(context, ownerLogin, diagnostics);
+        if (!diagnostics.isEmpty() || resolution.isEmpty()) {
+            throw new SemanticAnalyticsValidationException(diagnostics);
+        }
+        VisualizationTime time = context.time();
+        VisualizationTime normalizedTime = new VisualizationTime(
+            normalize(time.mode()),
+            "RELATIVE".equals(normalize(time.mode())) ? normalize(time.relativePeriod()) : null,
+            time.from(),
+            time.through()
+        );
+        return new VisualizationContext(
+            SemanticAnalyticsSchema.VERSION,
+            normalizedTime,
+            resolution.orElseThrow().context().accountIds(),
+            resolution.orElseThrow().context().currencyCodes()
+        );
+    }
+
+    /**
+     * Validates and normalizes a stored widget definition against an authenticated owner's saved context without
+     * running the financial executor. Keeping this facade here avoids leaking the package-private execution scope
+     * into persistence code.
+     */
+    public SemanticQueryDefinition normalizeOwnedDefinitionForContextOrThrow(
+        SemanticQueryDefinition definition,
+        VisualizationContext context
+    ) {
+        return validateOrThrow(new SemanticAnalyticsExecutionRequest(SemanticAnalyticsSchema.VERSION, definition, context)).definition();
+    }
+
     /** Package-visible so the unit proof can reject invalid datasets, fields and functions without a database. */
     Optional<SemanticQueryDefinition> validateDefinition(SemanticQueryDefinition definition, List<AnalyticsDiagnostic> diagnostics) {
         if (definition == null) {
