@@ -37,9 +37,17 @@ public enum SemanticField {
     ACCOUNT_ID(
         EnumSet.of(SemanticDataset.TRANSACTION_LEDGER, SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)
     ),
-    OBSERVATION_DATE(EnumSet.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
+    OBSERVATION_DATE(
+        EnumSet.of(
+            SemanticDataset.FINANCIAL_POSITION_SNAPSHOT,
+            SemanticDataset.ACCOUNT_POSITION_SNAPSHOT,
+            SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT
+        )
+    ),
     OBSERVATION_MONTH(EnumSet.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
     POSITION_BALANCE(Set.of(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT)),
+    /** Assets less recorded credit-card debt, partitioned by currency at one observation cutoff. */
+    FINANCIAL_POSITION(Set.of(SemanticDataset.FINANCIAL_POSITION_SNAPSHOT)),
     /** Authoritative debt for a credit-card account: opening debt + OUT - IN. */
     CREDIT_DEBT(Set.of(SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT)),
     /** Recorded current limit only; FINTRACK does not keep historical limit revisions. */

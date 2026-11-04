@@ -90,7 +90,7 @@ class SemanticAnalyticsValidatorTest {
     }
 
     @Test
-    void rejectsPositionQueriesThatCouldAddBalancesAcrossDifferentDates() {
+    void acceptsAnAsOfPositionPerAccountButRejectsUngroupedHistoricalBalances() {
         List<AnalyticsDiagnostic> diagnostics = new ArrayList<>();
 
         var normalized = validator.validateDefinition(
@@ -108,8 +108,50 @@ class SemanticAnalyticsValidatorTest {
             diagnostics
         );
 
+        assertThat(diagnostics).isEmpty();
+        assertThat(normalized).isPresent();
+
+        diagnostics.clear();
+        normalized = validator.validateDefinition(
+            new SemanticQueryDefinition(
+                SemanticAnalyticsSchema.VERSION,
+                SemanticAnalyticsSchema.SEMANTIC_MODEL,
+                SemanticDataset.ACCOUNT_POSITION_SNAPSHOT,
+                SemanticField.OBSERVATION_DATE,
+                List.of(new SemanticAggregateProjection("balance", SemanticAggregateFunction.SUM, SemanticField.POSITION_BALANCE)),
+                List.of(),
+                List.of(),
+                List.of(),
+                10
+            ),
+            diagnostics
+        );
+
         assertThat(normalized).isEmpty();
         assertThat(diagnostics).extracting(AnalyticsDiagnostic::code).contains(AnalyticsDiagnosticCode.NON_ADDITIVE_TIME_AGGREGATION);
+    }
+
+    @Test
+    void acceptsOnlyTheGovernedCurrencyPartitionedFinancialPositionKpi() {
+        List<AnalyticsDiagnostic> diagnostics = new ArrayList<>();
+
+        var normalized = validator.validateDefinition(
+            new SemanticQueryDefinition(
+                SemanticAnalyticsSchema.VERSION,
+                SemanticAnalyticsSchema.SEMANTIC_MODEL,
+                SemanticDataset.FINANCIAL_POSITION_SNAPSHOT,
+                SemanticField.OBSERVATION_DATE,
+                List.of(new SemanticAggregateProjection("position", SemanticAggregateFunction.SUM, SemanticField.FINANCIAL_POSITION)),
+                List.of(),
+                List.of(),
+                List.of(),
+                10
+            ),
+            diagnostics
+        );
+
+        assertThat(diagnostics).isEmpty();
+        assertThat(normalized).isPresent();
     }
 
     @Test

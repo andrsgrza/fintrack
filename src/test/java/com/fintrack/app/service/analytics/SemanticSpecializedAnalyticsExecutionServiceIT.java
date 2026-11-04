@@ -406,6 +406,46 @@ class SemanticSpecializedAnalyticsExecutionServiceIT {
             .contains("NON_ADDITIVE_ACCOUNT_POSITION", "INVESTMENT_BOOK_BALANCE_NOT_MARKET_VALUE");
     }
 
+    @Test
+    void calculates_one_currency_partitioned_financial_position_at_the_cutoff_without_cross_date_aggregation() {
+        Fixture fixture = fixture();
+        SemanticQueryDefinition position = new SemanticQueryDefinition(
+            SemanticAnalyticsSchema.VERSION,
+            SemanticAnalyticsSchema.SEMANTIC_MODEL,
+            SemanticDataset.FINANCIAL_POSITION_SNAPSHOT,
+            SemanticField.OBSERVATION_DATE,
+            List.of(new SemanticAggregateProjection("position", SemanticAggregateFunction.SUM, SemanticField.FINANCIAL_POSITION)),
+            List.of(),
+            List.of(),
+            List.of(),
+            100
+        );
+
+        SemanticAnalyticsResult result = execute(
+            position,
+            List.of(
+                fixture.investment().getId(),
+                fixture.creditWithLimit().getId(),
+                fixture.creditWithoutDetails().getId(),
+                fixture.creditZeroLimit().getId(),
+                fixture.creditUsdZeroDebt().getId()
+            ),
+            List.of("MXN", "USD"),
+            HISTORY_FROM,
+            HISTORY_THROUGH
+        );
+
+        // MXN 700 book balance at 31 Mar 2026 minus debts 1,250, 75 and 20; USD remains a separate zero position.
+        assertThat(result.rows()).hasSize(2);
+        assertThat(value(row(result, "MXN", null, null, null, null), "position").value()).isEqualByComparingTo("-645");
+        assertThat(value(row(result, "MXN", null, null, null, null), "position").availability()).isEqualTo(
+            SemanticResultAvailability.COMPLETE
+        );
+        assertThat(value(row(result, "USD", null, null, null, null), "position").value()).isEqualByComparingTo("0");
+        assertThat(value(row(result, "USD", null, null, null, null), "position").availability()).isEqualTo(SemanticResultAvailability.ZERO);
+        assertThat(result.warnings()).extracting(SemanticAnalyticsWarning::code).contains("FINANCIAL_POSITION_AT_CUTOFF");
+    }
+
     private Fixture fixture() {
         User owner = TestUtil.findAll(em, User.class).stream().filter(user -> "user".equals(user.getLogin())).findFirst().orElseThrow();
         User foreignOwner = foreignUser();

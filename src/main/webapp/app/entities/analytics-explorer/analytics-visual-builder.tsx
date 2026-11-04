@@ -39,7 +39,7 @@ type InformationChoice = {
 
 type EconomicCalculation = {
   id: 'TOTAL' | 'COUNT' | 'AVERAGE';
-  function: 'COUNT' | 'SUM' | 'AVG';
+  function: 'COUNT' | 'SUM' | 'AVG' | 'NET';
   field: string;
   alias: { expense: string; income: string };
   title: { expense: { es: string; en: string }; income: { es: string; en: string } };
@@ -274,7 +274,7 @@ const ProjectionRow = ({
       };
     });
   };
-  const changeFunction = (functionName: 'COUNT' | 'SUM' | 'AVG') =>
+  const changeFunction = (functionName: 'COUNT' | 'SUM' | 'AVG' | 'NET') =>
     onApply(candidate => {
       const current = candidate.projections[projectionIndex];
       const rename = current.alias === suggestedAlias(current.function, current.field);
@@ -315,7 +315,7 @@ const ProjectionRow = ({
             type="select"
             value={projection.function}
             disabled={busy}
-            onChange={event => changeFunction(event.target.value as 'COUNT' | 'SUM' | 'AVG')}
+            onChange={event => changeFunction(event.target.value as 'COUNT' | 'SUM' | 'AVG' | 'NET')}
           >
             {functions.map(functionName => (
               <option key={functionName} value={functionName}>
@@ -477,7 +477,7 @@ const CalculationSection = ({
       `${label(locale, capability.function)} ${label(locale, capability.field)} ${describeField(locale, capability.field)}`.toLocaleLowerCase();
     return text.includes(search.toLocaleLowerCase());
   });
-  const add = (functionName: 'COUNT' | 'SUM' | 'AVG', field: string) => {
+  const add = (functionName: 'COUNT' | 'SUM' | 'AVG' | 'NET', field: string) => {
     onApply(candidate => {
       const base = suggestedAlias(functionName, field);
       candidate.projections.push({ alias: uniqueAlias(candidate, base), function: functionName, field, conditions: [] });

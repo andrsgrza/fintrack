@@ -11,6 +11,7 @@ type Translation = { es: string; en: string };
 
 const translations: Record<string, Translation> = {
   TRANSACTION_LEDGER: { es: 'Movimientos', en: 'Transactions' },
+  FINANCIAL_POSITION_SNAPSHOT: { es: 'Posición financiera registrada', en: 'Registered financial position' },
   ACCOUNT_POSITION_SNAPSHOT: { es: 'Posiciones de cuentas', en: 'Account positions' },
   CREDIT_ACCOUNT_SNAPSHOT: { es: 'Tarjetas de crédito', en: 'Credit cards' },
   INTERNAL_TRANSFER_EVENT: { es: 'Transferencias internas', en: 'Internal transfers' },
@@ -34,6 +35,7 @@ const translations: Record<string, Translation> = {
   OBSERVATION_DATE: { es: 'Fecha de observación', en: 'Observation date' },
   OBSERVATION_MONTH: { es: 'Mes de observación', en: 'Observation month' },
   POSITION_BALANCE: { es: 'Saldo registrado', en: 'Recorded balance' },
+  FINANCIAL_POSITION: { es: 'Posición financiera registrada', en: 'Registered financial position' },
   CREDIT_DEBT: { es: 'Deuda de tarjeta', en: 'Credit-card debt' },
   CREDIT_LIMIT: { es: 'Límite de crédito actual', en: 'Current credit limit' },
   CREDIT_AVAILABLE: { es: 'Crédito disponible actual', en: 'Current available credit' },
@@ -53,6 +55,7 @@ const translations: Record<string, Translation> = {
   DESTINATION_ACCOUNT_TYPE: { es: 'Tipo de cuenta de destino', en: 'Destination account type' },
   COUNT: { es: 'Contar', en: 'Count' },
   SUM: { es: 'Total', en: 'Total' },
+  NET: { es: 'Flujo neto económico', en: 'Net economic flow' },
   AVG: { es: 'Promedio', en: 'Average' },
   EQUALS: { es: 'Es igual a', en: 'Equals' },
   IN: { es: 'Es uno de', en: 'Is one of' },
@@ -378,6 +381,7 @@ export const suggestedAlias = (functionName: string, field: string) => {
   const defaults: Record<string, string> = {
     'COUNT:TRANSACTION_ID': 'movimientos',
     'SUM:TRANSACTION_AMOUNT': 'total',
+    'NET:TRANSACTION_AMOUNT': 'flujo_neto',
     'AVG:TRANSACTION_AMOUNT': 'promedio',
     'SUM:POSITION_BALANCE': 'saldo_registrado',
     'AVG:POSITION_BALANCE': 'saldo_promedio',
@@ -470,6 +474,10 @@ export const sourceDescription = (locale: string, dataset: string) => {
     TRANSACTION_LEDGER: {
       es: 'Movimientos, categorías, etiquetas y actividad económica.',
       en: 'Transactions, categories, tags, and economic activity.',
+    },
+    FINANCIAL_POSITION_SNAPSHOT: {
+      es: 'Saldos registrados compatibles menos deuda registrada de tarjetas, a una misma fecha y por moneda.',
+      en: 'Compatible recorded balances less recorded credit-card debt, at one date and per currency.',
     },
     ACCOUNT_POSITION_SNAPSHOT: {
       es: 'Saldos contables históricos por cuenta y mes.',

@@ -2,7 +2,7 @@ export type SemanticField = string;
 export type SemanticPredicateOperator = 'EQUALS' | 'IN' | 'DESCENDANT_OF' | 'IS_UNCATEGORIZED' | 'HAS_ANY' | 'HAS_ALL' | 'HAS_NONE';
 
 export type SemanticAggregateCapability = {
-  function: 'COUNT' | 'SUM' | 'AVG';
+  function: 'COUNT' | 'SUM' | 'AVG' | 'NET';
   field: SemanticField;
   outputUnit: 'COUNT' | 'MONEY' | 'PERCENT';
   additivity: string;
@@ -44,7 +44,7 @@ export type SemanticQueryDefinition = {
   semanticModel: string;
   dataset: string;
   timeBinding: SemanticField;
-  projections: Array<{ alias: string; function: 'COUNT' | 'SUM' | 'AVG'; field: SemanticField; conditions?: SemanticPredicate[] }>;
+  projections: Array<{ alias: string; function: 'COUNT' | 'SUM' | 'AVG' | 'NET'; field: SemanticField; conditions?: SemanticPredicate[] }>;
   predicates: SemanticPredicate[];
   groupBy: SemanticField[];
   orderBy: Array<{ field: SemanticField | null; projectionAlias: string | null; direction: 'ASC' | 'DESC' }>;

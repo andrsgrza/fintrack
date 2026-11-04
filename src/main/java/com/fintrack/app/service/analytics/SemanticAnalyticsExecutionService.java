@@ -10,6 +10,7 @@ public class SemanticAnalyticsExecutionService {
 
     private final SemanticAnalyticsValidator validator;
     private final SemanticTransactionLedgerExecutor transactionLedgerExecutor;
+    private final SemanticFinancialPositionExecutor financialPositionExecutor;
     private final SemanticAccountPositionExecutor accountPositionExecutor;
     private final SemanticCreditAccountExecutor creditAccountExecutor;
     private final SemanticInternalTransferExecutor internalTransferExecutor;
@@ -17,12 +18,14 @@ public class SemanticAnalyticsExecutionService {
     public SemanticAnalyticsExecutionService(
         SemanticAnalyticsValidator validator,
         SemanticTransactionLedgerExecutor transactionLedgerExecutor,
+        SemanticFinancialPositionExecutor financialPositionExecutor,
         SemanticAccountPositionExecutor accountPositionExecutor,
         SemanticCreditAccountExecutor creditAccountExecutor,
         SemanticInternalTransferExecutor internalTransferExecutor
     ) {
         this.validator = validator;
         this.transactionLedgerExecutor = transactionLedgerExecutor;
+        this.financialPositionExecutor = financialPositionExecutor;
         this.accountPositionExecutor = accountPositionExecutor;
         this.creditAccountExecutor = creditAccountExecutor;
         this.internalTransferExecutor = internalTransferExecutor;
@@ -32,6 +35,7 @@ public class SemanticAnalyticsExecutionService {
         SemanticAnalyticsExecutionScope scope = validator.validateOrThrow(request);
         return switch (scope.definition().dataset()) {
             case TRANSACTION_LEDGER -> transactionLedgerExecutor.execute(scope);
+            case FINANCIAL_POSITION_SNAPSHOT -> financialPositionExecutor.execute(scope);
             case ACCOUNT_POSITION_SNAPSHOT -> accountPositionExecutor.execute(scope);
             case CREDIT_ACCOUNT_SNAPSHOT -> creditAccountExecutor.execute(scope);
             case INTERNAL_TRANSFER_EVENT -> internalTransferExecutor.execute(scope);

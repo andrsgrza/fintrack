@@ -124,7 +124,11 @@ final class SemanticAnalyticsResultFactory {
     }
 
     private static SemanticAdditivityPolicy projectionAdditivity(SemanticAggregateProjection projection) {
-        if (projection.field() == SemanticField.POSITION_BALANCE || projection.field() == SemanticField.CREDIT_DEBT) {
+        if (
+            projection.field() == SemanticField.FINANCIAL_POSITION ||
+            projection.field() == SemanticField.POSITION_BALANCE ||
+            projection.field() == SemanticField.CREDIT_DEBT
+        ) {
             return SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH;
         }
         if (

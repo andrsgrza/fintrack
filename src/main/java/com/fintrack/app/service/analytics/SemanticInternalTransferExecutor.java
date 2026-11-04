@@ -98,6 +98,7 @@ class SemanticInternalTransferExecutor {
                     .map(transfer -> transfer.getOutgoingTransaction().getAmount())
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
                 case AVG -> throw new IllegalArgumentException("Verified transfer aggregate was not handled: " + projection.function());
+                case NET -> throw new IllegalArgumentException("NET is only available for economic transaction flow.");
             };
         return SemanticAnalyticsResultFactory.value(projection, value);
     }

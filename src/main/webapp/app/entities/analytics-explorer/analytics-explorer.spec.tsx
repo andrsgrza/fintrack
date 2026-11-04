@@ -316,7 +316,7 @@ describe('Metric Explorer V2', () => {
       />,
     );
 
-    expect(screen.getByText('Tag groups overlap.')).toBeTruthy();
+    expect(screen.getByText('Tags can overlap, so their totals are not exclusive parts of one total.')).toBeTruthy();
     expect(screen.getByText(/shown by currency and unit/i)).toBeTruthy();
     const presentation = visualizationEligibility(
       {
@@ -458,5 +458,200 @@ describe('Metric Explorer V2', () => {
     expect(chart.data.at(-1)?.['gastos::']).toBeNull();
     expect(chart.fillsContext).toBe(true);
     expect(chart.missingPeriods).toBe(11);
+  });
+
+  it('keeps category colors and the complete result table when the interactive chart legend hides a visual series', () => {
+    const rows = [
+      {
+        dimensions: [
+          { field: 'TRANSACTION_MONTH' as const, value: '2026-01', metadata: null },
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'food',
+            metadata: { stableId: 'food', label: 'Food', color: '#4477aa', active: true, synthetic: false, path: ['Food'] },
+          },
+        ],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 100, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+      },
+      {
+        dimensions: [
+          { field: 'TRANSACTION_MONTH' as const, value: '2026-01', metadata: null },
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'travel',
+            metadata: { stableId: 'travel', label: 'Travel', color: '#cc7733', active: true, synthetic: false, path: ['Travel'] },
+          },
+        ],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 40, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+      },
+    ];
+    const panel: ResultPanel = { currency: 'MXN', unit: 'MONEY', rows, values: rows.map(row => ({ row, value: row.values[0] })) };
+    const chart = chartRows(panel, 'ALL', 'en');
+
+    expect(chart.series).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ semanticId: 'gastos:food', color: '#4477aa' }),
+        expect.objectContaining({ semanticId: 'gastos:travel', color: '#cc7733' }),
+      ]),
+    );
+
+    render(
+      <AnalyticsResultsPanel
+        definition={{
+          ...definition,
+          projections: [{ alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: [] }],
+          groupBy: ['TRANSACTION_MONTH', 'CATEGORY_ROOT'],
+        }}
+        result={{
+          schemaVersion: 1,
+          semanticModel: 'FINTRACK_FINANCIAL',
+          effectiveContext: { from: '2026-01-01', through: '2026-01-31', accountIds: [], currencyCodes: ['MXN'] },
+          executedAt: '2026-01-31T12:00:00Z',
+          columns: [{ id: 'gastos', dimension: false, unit: 'MONEY', currencyFaceted: true }],
+          rows,
+        }}
+        visualization="LINE"
+        locale="en"
+        loading={false}
+        stale={false}
+        seriesLimit="ALL"
+        drillTrail={[]}
+        onDrillDown={jest.fn()}
+        onDrillBack={jest.fn()}
+      />,
+    );
+
+    const foodToggle = document.querySelector<HTMLButtonElement>('[data-cy="analyticsLegendToggle-gastos:food"]');
+    if (!foodToggle) throw new Error('Food legend toggle was not rendered.');
+    fireEvent.click(foodToggle);
+    expect(foodToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText(/Root category: Food/)).toBeTruthy();
+    expect(screen.getByText(/Root category: Travel/)).toBeTruthy();
+  });
+
+  it('keeps dashboard rows and financial notices available behind an accessible compact details control', () => {
+    render(
+      <AnalyticsResultsPanel
+        definition={{
+          ...definition,
+          dataset: 'FINANCIAL_POSITION_SNAPSHOT',
+          timeBinding: 'OBSERVATION_DATE',
+          projections: [{ alias: 'posicion_financiera', function: 'SUM', field: 'FINANCIAL_POSITION', conditions: [] }],
+        }}
+        result={{
+          schemaVersion: 1,
+          semanticModel: 'FINTRACK_FINANCIAL',
+          effectiveContext: { from: '2026-01-01', through: '2026-03-31', accountIds: [], currencyCodes: ['MXN'] },
+          executedAt: '2026-03-31T12:00:00Z',
+          availability: 'PARTIAL',
+          columns: [{ id: 'posicion_financiera', dimension: false, unit: 'MONEY', currencyFaceted: true }],
+          warnings: [{ code: 'FINANCIAL_POSITION_AT_CUTOFF', message: 'One cutoff only.' }],
+          rows: [
+            {
+              dimensions: [],
+              currencyCode: 'MXN',
+              values: [{ alias: 'posicion_financiera', value: 750, unit: 'MONEY', availability: 'PARTIAL' }],
+            },
+          ],
+        }}
+        visualization="KPI"
+        locale="en"
+        loading={false}
+        stale={false}
+        seriesLimit="ALL"
+        drillTrail={[]}
+        onDrillDown={jest.fn()}
+        onDrillBack={jest.fn()}
+        compact
+      />,
+    );
+
+    expect(screen.getByText('$750.00 MXN')).toBeTruthy();
+    expect(screen.getByText(/Position uses one cutoff per account/)).toBeTruthy();
+    const details = screen.getByRole('button', { name: 'View data' });
+    expect(details.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[data-cy="analyticsResultTable"]')).toBeNull();
+    fireEvent.click(details);
+    expect(details.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('[data-cy="analyticsResultTable"]')).not.toBeNull();
+    expect(screen.getAllByText('$750.00 MXN')).toHaveLength(2);
+  });
+
+  it('keeps all twenty tag series available with stable IDs, fallback colors, search, show/hide, and isolate controls', () => {
+    const rows = Array.from({ length: 20 }, (_, index) => ({
+      dimensions: [
+        { field: 'TRANSACTION_MONTH' as const, value: '2026-01', metadata: null },
+        {
+          field: 'TAG_ID' as const,
+          value: `${index + 1}`,
+          metadata: {
+            stableId: `tag-${index + 1}`,
+            label: index < 2 ? 'Duplicate display name' : `Tag ${index + 1}`,
+            color: index === 2 ? '#44aa77' : null,
+            active: true,
+            synthetic: false,
+            path: [],
+          },
+        },
+      ],
+      currencyCode: 'MXN',
+      values: [{ alias: 'gastos', value: index + 1, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+    }));
+    const panel: ResultPanel = { currency: 'MXN', unit: 'MONEY', rows, values: rows.map(row => ({ row, value: row.values[0] })) };
+    const first = chartRows(panel, 'ALL', 'en');
+    const second = chartRows(panel, 'ALL', 'en');
+
+    expect(first.series).toHaveLength(20);
+    expect(first.hidden).toBe(0);
+    expect(first.series.map(series => series.semanticId)).toContain('gastos:tag-1');
+    expect(first.series.map(series => series.semanticId)).toContain('gastos:tag-2');
+    expect(first.series.find(series => series.semanticId === 'gastos:tag-3')?.color).toBe('#44aa77');
+    expect(first.series.map(series => series.color)).toEqual(second.series.map(series => series.color));
+
+    render(
+      <AnalyticsResultsPanel
+        definition={{
+          ...definition,
+          projections: [{ alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: [] }],
+          groupBy: ['TRANSACTION_MONTH', 'TAG_ID'],
+        }}
+        result={{
+          schemaVersion: 1,
+          semanticModel: 'FINTRACK_FINANCIAL',
+          effectiveContext: { from: '2026-01-01', through: '2026-01-31', accountIds: [], currencyCodes: ['MXN'] },
+          executedAt: '2026-01-31T12:00:00Z',
+          columns: [{ id: 'gastos', dimension: false, unit: 'MONEY', currencyFaceted: true }],
+          rows,
+          warnings: [{ code: 'NON_ADDITIVE_OVERLAPPING_TAG_GROUPS', message: 'Tag groups overlap.' }],
+        }}
+        visualization="LINE"
+        locale="en"
+        loading={false}
+        stale={false}
+        seriesLimit="ALL"
+        drillTrail={[]}
+        onDrillDown={jest.fn()}
+        onDrillBack={jest.fn()}
+      />,
+    );
+
+    const search = document.querySelector<HTMLInputElement>('[data-cy="analyticsLegendSearch"]');
+    if (!search) throw new Error('Dense chart legend search was not rendered.');
+    fireEvent.change(search, { target: { value: 'Tag 20' } });
+    expect(document.querySelector('[data-cy="analyticsLegendToggle-gastos:tag-20"]')).not.toBeNull();
+    fireEvent.change(search, { target: { value: '' } });
+    const hideAll = document.querySelector<HTMLButtonElement>('[data-cy="analyticsLegendHideAll"]');
+    const showAll = document.querySelector<HTMLButtonElement>('[data-cy="analyticsLegendShowAll"]');
+    const isolateTagTwenty = document.querySelector<HTMLButtonElement>('[aria-label="Show only Expenses · Tag 20"]');
+    if (!hideAll || !showAll || !isolateTagTwenty) throw new Error('Dense chart legend controls were not rendered.');
+    fireEvent.click(hideAll);
+    expect(document.querySelectorAll('[aria-pressed="false"]').length).toBeGreaterThanOrEqual(20);
+    fireEvent.click(showAll);
+    fireEvent.click(isolateTagTwenty);
+    expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(1);
+    expect(document.querySelectorAll('[data-cy="analyticsResultTable"] tbody tr')).toHaveLength(20);
+    expect(screen.getByText('Tags can overlap, so their totals are not exclusive parts of one total.')).toBeTruthy();
   });
 });

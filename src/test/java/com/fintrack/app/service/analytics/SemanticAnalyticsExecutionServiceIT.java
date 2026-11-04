@@ -133,6 +133,25 @@ class SemanticAnalyticsExecutionServiceIT {
     }
 
     @Test
+    void calculatesGovernedNetEconomicFlowWithoutCountingEitherLinkedTransferLeg() {
+        fixture();
+        SemanticQueryDefinition netFlow = ledgerDefinition(
+            new SemanticAggregateProjection("net_flow", SemanticAggregateFunction.NET, SemanticField.TRANSACTION_AMOUNT),
+            List.of(),
+            List.of(SemanticField.TRANSACTION_MONTH),
+            List.of(new SemanticOrder(SemanticField.TRANSACTION_MONTH, SemanticSortDirection.ASC))
+        );
+
+        SemanticAnalyticsResult result = execute(netFlow, List.of(), List.of());
+
+        // January: 1,000 income - 100 expense. February excludes the 200 outgoing and incoming transfer legs.
+        assertValue(result, SemanticField.TRANSACTION_MONTH, "2026-01", "MXN", "900");
+        assertValue(result, SemanticField.TRANSACTION_MONTH, "2026-02", "MXN", "-300");
+        assertValue(result, SemanticField.TRANSACTION_MONTH, "2026-02", "USD", "-20");
+        assertValue(result, SemanticField.TRANSACTION_MONTH, "2026-03", "MXN", "-50");
+    }
+
+    @Test
     void combinesCountAndAverageInOneQueryAndOrdersByTheAverageAlias() {
         Fixture fixture = fixture();
         SemanticAnalyticsResult result = executeRoundTrip(

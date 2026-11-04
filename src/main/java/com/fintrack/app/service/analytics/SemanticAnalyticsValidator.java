@@ -136,6 +136,7 @@ public class SemanticAnalyticsValidator {
         List<SemanticPredicate> predicates = normalizePredicates(definition.predicates(), dataset, "definition.predicates", diagnostics);
         List<SemanticField> groups = normalizeGroups(definition.groupBy(), dataset, diagnostics);
         validateGroupingComposition(dataset, groups, diagnostics);
+        validateFinancialPositionSemantics(dataset, projections, groups, diagnostics);
         validatePositionSemantics(dataset, projections, groups, diagnostics);
         validateCreditSemantics(dataset, projections, groups, diagnostics);
         validateCategoryBranchGrouping(dataset, groups, predicates, diagnostics);
@@ -435,12 +436,46 @@ public class SemanticAnalyticsValidator {
                 )
             );
         }
-        if (!groups.contains(SemanticField.ACCOUNT_ID) || !groups.contains(SemanticField.OBSERVATION_MONTH)) {
+        boolean asOfByAccount = groups.equals(List.of(SemanticField.ACCOUNT_ID));
+        boolean historicalByAccount =
+            groups.contains(SemanticField.ACCOUNT_ID) && groups.contains(SemanticField.OBSERVATION_MONTH) && groups.size() == 2;
+        if (!asOfByAccount && !historicalByAccount) {
             diagnostics.add(
                 diagnostic(
                     AnalyticsDiagnosticCode.NON_ADDITIVE_TIME_AGGREGATION,
                     "definition.groupBy",
-                    "Historical balances must group by both ACCOUNT_ID and OBSERVATION_MONTH."
+                    "Account positions must group by ACCOUNT_ID, with OBSERVATION_MONTH only for historical evolution."
+                )
+            );
+        }
+    }
+
+    private void validateFinancialPositionSemantics(
+        SemanticDataset dataset,
+        List<SemanticAggregateProjection> projections,
+        List<SemanticField> groups,
+        List<AnalyticsDiagnostic> diagnostics
+    ) {
+        if (dataset != SemanticDataset.FINANCIAL_POSITION_SNAPSHOT) return;
+        if (
+            projections.size() != 1 ||
+            projections.get(0).function() != SemanticAggregateFunction.SUM ||
+            projections.get(0).field() != SemanticField.FINANCIAL_POSITION
+        ) {
+            diagnostics.add(
+                diagnostic(
+                    AnalyticsDiagnosticCode.NON_ADDITIVE_TIME_AGGREGATION,
+                    "definition.projections",
+                    "Financial position supports only SUM(FINANCIAL_POSITION) at the observation cutoff."
+                )
+            );
+        }
+        if (!groups.isEmpty()) {
+            diagnostics.add(
+                diagnostic(
+                    AnalyticsDiagnosticCode.NON_ADDITIVE_TIME_AGGREGATION,
+                    "definition.groupBy",
+                    "Financial position is already one governed amount per currency at one observation cutoff."
                 )
             );
         }

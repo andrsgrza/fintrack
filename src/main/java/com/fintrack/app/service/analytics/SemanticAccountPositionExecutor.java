@@ -31,7 +31,10 @@ class SemanticAccountPositionExecutor {
         SemanticQueryDefinition definition = scope.definition();
         List<FinancialAccount> accounts = scopedAssetAccounts(scope.accounts(), definition.predicates());
         List<SemanticAnalyticsResultRow> rows = new ArrayList<>();
-        for (LocalDate asOf : monthEnds(scope.context().from(), scope.context().through())) {
+        List<LocalDate> observations = definition.groupBy().contains(SemanticField.OBSERVATION_MONTH)
+            ? monthEnds(scope.context().from(), scope.context().through())
+            : List.of(scope.context().through());
+        for (LocalDate asOf : observations) {
             List<FinancialAccount> opened = accounts.stream().filter(account -> !asOf.isBefore(account.getInitialBalanceDate())).toList();
             Map<Long, FinancialAccountBalanceDTO> balances = balanceService.calculateBalances(opened, asOf);
             for (FinancialAccount account : accounts) {
@@ -48,8 +51,12 @@ class SemanticAccountPositionExecutor {
         List<SemanticAnalyticsWarning> warnings = new ArrayList<>();
         warnings.add(
             new SemanticAnalyticsWarning(
-                "NON_ADDITIVE_ACCOUNT_POSITION",
-                "Account positions are point-in-time values and are never added across accounts or observation dates."
+                definition.groupBy().contains(SemanticField.OBSERVATION_MONTH)
+                    ? "NON_ADDITIVE_ACCOUNT_POSITION"
+                    : "ACCOUNT_POSITION_AT_CUTOFF",
+                definition.groupBy().contains(SemanticField.OBSERVATION_MONTH)
+                    ? "Account positions are point-in-time values and are never added across accounts or observation dates."
+                    : "Account positions use one authoritative observation cutoff per account and are never added across dates."
             )
         );
         if (accounts.stream().anyMatch(account -> account.getAccountType() == AccountType.INVESTMENT)) {

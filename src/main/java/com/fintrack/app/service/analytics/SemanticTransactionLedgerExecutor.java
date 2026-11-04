@@ -176,18 +176,32 @@ class SemanticTransactionLedgerExecutor {
         String prefix
     ) {
         String conditions = predicateExpression(projection.conditions(), parameters, references, prefix);
+        if (projection.function() == SemanticAggregateFunction.NET) {
+            String qualified = (conditions.isBlank() ? "true" : conditions) + " and " + unlinkedTransferExpression();
+            return (
+                "coalesce(sum(case when " +
+                qualified +
+                " then case when ft.flow = 'IN' then ft.amount when ft.flow = 'OUT' then -ft.amount else 0 end else 0 end), 0)"
+            );
+        }
         if (!conditions.isBlank()) {
             return switch (projection.function()) {
                 case COUNT -> "count(case when " + conditions + " then ft.id end)";
                 case AVG -> "avg(case when " + conditions + " then ft.amount end)";
                 case SUM -> "coalesce(sum(case when " + conditions + " then ft.amount else 0 end), 0)";
+                case NET -> throw new IllegalStateException("NET was handled before conditional aggregation.");
             };
         }
         return switch (projection.function()) {
             case COUNT -> "count(ft.id)";
             case AVG -> "avg(ft.amount)";
             case SUM -> "coalesce(sum(ft.amount), 0)";
+            case NET -> throw new IllegalStateException("NET was handled before ordinary aggregation.");
         };
+    }
+
+    private String unlinkedTransferExpression() {
+        return "not exists (select 1 from internal_transfer transfer where transfer.outgoing_transaction_id = ft.id or transfer.incoming_transaction_id = ft.id)";
     }
 
     private void appendPredicates(

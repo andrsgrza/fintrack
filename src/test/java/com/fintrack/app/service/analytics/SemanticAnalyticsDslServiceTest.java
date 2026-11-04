@@ -36,6 +36,12 @@ class SemanticAnalyticsDslServiceTest {
             SemanticAggregateFunction.SUM
         );
         assertRoundTrips(
+            "SELECT NET(TRANSACTION_AMOUNT) AS net_flow FROM TRANSACTION_LEDGER " +
+            "GROUP BY TRANSACTION_MONTH ORDER BY TRANSACTION_MONTH ASC LIMIT 100",
+            SemanticDataset.TRANSACTION_LEDGER,
+            SemanticAggregateFunction.NET
+        );
+        assertRoundTrips(
             "SELECT SUM(POSITION_BALANCE) AS balance FROM ACCOUNT_POSITION_SNAPSHOT " +
             "TIME BINDING OBSERVATION_DATE GROUP BY ACCOUNT_ID, OBSERVATION_MONTH " +
             "ORDER BY OBSERVATION_MONTH ASC LIMIT 500",
@@ -279,6 +285,7 @@ class SemanticAnalyticsDslServiceTest {
             case TRANSACTION_LEDGER, INTERNAL_TRANSFER_EVENT -> requestedGroup == null
                 ? java.util.List.of()
                 : java.util.List.of(requestedGroup);
+            case FINANCIAL_POSITION_SNAPSHOT -> java.util.List.of();
             case ACCOUNT_POSITION_SNAPSHOT -> java.util.List.of(SemanticField.ACCOUNT_ID, SemanticField.OBSERVATION_MONTH);
             case CREDIT_ACCOUNT_SNAPSHOT -> aggregateField == SemanticField.CREDIT_DEBT
                 ? java.util.List.of(SemanticField.ACCOUNT_ID, SemanticField.OBSERVATION_MONTH)

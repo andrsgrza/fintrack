@@ -74,7 +74,9 @@ const AnalyticsExplorer = () => {
   const [result, setResult] = useState<SemanticAnalyticsResult | null>(null);
   const [executedSignature, setExecutedSignature] = useState<string | null>(null);
   const [visualization, setVisualization] = useState<ExplorerVisualization>('TABLE');
-  const [seriesLimit, setSeriesLimit] = useState<number | 'ALL'>(5);
+  // All returned series are visible by default. A person may opt into Top N in the advanced builder, but it is never
+  // confused with the semantic query LIMIT and never removes rows from the accessible result table.
+  const [seriesLimit, setSeriesLimit] = useState<number | 'ALL'>('ALL');
   const [mode, setMode] = useState<Mode>('VISUAL');
   const [sqlText, setSqlText] = useState('');
   const [sqlValidated, setSqlValidated] = useState(true);

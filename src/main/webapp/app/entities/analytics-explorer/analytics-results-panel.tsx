@@ -1,14 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   Line,
   LineChart,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -33,7 +33,7 @@ import {
 type Row = SemanticAnalyticsResult['rows'][number];
 type Value = Row['values'][number];
 type Unit = Value['unit'];
-export type ChartSeries = { key: string; label: string; color: string; rank: number };
+export type ChartSeries = { key: string; semanticId: string; label: string; color: string; rank: number };
 export type ResultPanel = { currency: string | null; unit: Unit; rows: Row[]; values: Array<{ row: Row; value: Value }> };
 export type ChartPoint = { x: string; xId: string; sortKey: number | null; [key: string]: string | number | boolean | null };
 export type ChartRows = {
@@ -57,6 +57,8 @@ type Props = {
   drillTrail: string[];
   onDrillDown: (categoryId: string, labelText: string) => void;
   onDrillBack: () => void;
+  /** Allows recommended and future personal widgets to reuse the exact renderer without nesting Explorer chrome. */
+  compact?: boolean;
 };
 
 const palette = ['#2f6493', '#5f8f3e', '#9b5d97', '#ce7b32', '#55758f', '#a95656', '#8c7c35', '#4f7f73', '#6b6b9f', '#96705b'];
@@ -79,6 +81,100 @@ const display = (value: number | null, unit: Unit, currency: string | null, loca
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
 };
 
+/** Query aliases are contract identifiers. Presentation gives the common financial aliases a person-facing name. */
+const presentationAlias = (alias: string, locale: string) => {
+  const spanish = locale.startsWith('es');
+  const known: Record<string, [string, string]> = {
+    posicion_financiera: ['Posición financiera registrada', 'Registered financial position'],
+    ingresos: ['Ingresos', 'Income'],
+    gastos: ['Gastos', 'Expenses'],
+    flujo_neto: ['Flujo neto', 'Net flow'],
+    saldo_registrado: ['Saldo registrado', 'Recorded balance'],
+    deuda_tarjeta: ['Deuda de tarjetas', 'Card debt'],
+    limite_credito: ['Límite de crédito', 'Credit limit'],
+    credito_disponible: ['Crédito disponible', 'Available credit'],
+    utilizacion_credito: ['Utilización de crédito', 'Credit utilization'],
+    sin_categoria: ['Gastos sin categoría', 'Uncategorized expenses'],
+    transferencias: ['Transferencias internas', 'Internal transfers'],
+    importe_transferido: ['Importe transferido', 'Transferred amount'],
+  };
+  const translated = known[alias.toLocaleLowerCase()];
+  if (translated) return translated[spanish ? 0 : 1];
+  const humanized = alias.replace(/_/g, ' ').trim();
+  return humanized ? `${humanized.charAt(0).toLocaleUpperCase(locale)}${humanized.slice(1)}` : alias;
+};
+
+/** Backend codes remain stable; dashboard copy explains their financial meaning without exposing implementation wording. */
+const warningText = (code: string, message: string, locale: string) => {
+  switch (code) {
+    case 'FINANCIAL_POSITION_AT_CUTOFF':
+      return copy(
+        locale,
+        'La posición usa un solo corte por cuenta: saldos compatibles menos deuda registrada de tarjetas, siempre por moneda.',
+        'Position uses one cutoff per account: compatible balances less recorded card debt, always per currency.',
+      );
+    case 'ACCOUNT_POSITION_AT_CUTOFF':
+      return copy(
+        locale,
+        'Cada cuenta se muestra una sola vez, con su saldo registrado a la fecha de corte.',
+        'Each account appears once with its recorded balance at the cutoff.',
+      );
+    case 'NON_ADDITIVE_ACCOUNT_POSITION':
+      return copy(
+        locale,
+        'Los saldos históricos se leen por cuenta y fecha; no se suman entre fechas.',
+        'Historical balances are read per account and date; they are not added across dates.',
+      );
+    case 'CREDIT_DEBT_POINT_IN_TIME':
+      return copy(
+        locale,
+        'La deuda se muestra por tarjeta y fecha de observación; no se suma entre fechas.',
+        'Debt is shown per card and observation date; it is not added across dates.',
+      );
+    case 'INVESTMENT_BOOK_BALANCE_NOT_MARKET_VALUE':
+      return copy(
+        locale,
+        'Las inversiones muestran su saldo registrado, no valor de mercado ni rendimiento.',
+        'Investments show their recorded balance, not market value or return.',
+      );
+    case 'CREDIT_DETAILS_UNAVAILABLE':
+      return copy(
+        locale,
+        'Algunas tarjetas no tienen límite registrado; sus valores derivados no están disponibles.',
+        'Some cards have no recorded limit, so their derived values are unavailable.',
+      );
+    case 'CREDIT_UTILIZATION_UNAVAILABLE':
+      return copy(
+        locale,
+        'La utilización requiere un límite de crédito positivo registrado; la deuda sigue disponible.',
+        'Utilization needs a recorded positive credit limit; debt remains available.',
+      );
+    case 'TAG_GROUPS_OVERLAP':
+    case 'NON_ADDITIVE_OVERLAPPING_TAG_GROUPS':
+      return copy(
+        locale,
+        'Las etiquetas pueden superponerse; sus totales no son partes exclusivas de un mismo total.',
+        'Tags can overlap, so their totals are not exclusive parts of one total.',
+      );
+    case 'TRANSFER_EVENT_VOLUME_NOT_ECONOMIC_FLOW':
+      return copy(
+        locale,
+        'Cada transferencia se cuenta una vez; no es un ingreso ni un gasto económico.',
+        'Each transfer is counted once; it is neither economic income nor expense.',
+      );
+    case 'NO_APPLICABLE_CREDIT_ACCOUNTS':
+      return copy(locale, 'No hay tarjetas de crédito aplicables para este contexto.', 'No credit cards apply to this context.');
+    case 'NO_APPLICABLE_POSITION_ACCOUNTS':
+      return copy(
+        locale,
+        'No hay cuentas de activo o tarjetas aplicables para este contexto.',
+        'No asset or card accounts apply to this context.',
+      );
+    default:
+      return message;
+  }
+};
+
 const panelKey = (currency: string | null, unit: Unit) => `${currency ?? 'NON_MONETARY'}:${unit}`;
 const dimensionLabel = (row: Row, index: number, locale: string) => {
   const dimension = row.dimensions[index];
@@ -93,6 +189,10 @@ const dimensionId = (row: Row, index: number) => {
   return dimension?.metadata?.stableId ?? `${dimension?.field}:${dimension?.value ?? '—'}`;
 };
 const colorFor = (key: string) => palette[Math.abs([...key].reduce((total, char) => total + char.charCodeAt(0), 0)) % palette.length];
+const semanticColor = (value: string | null | undefined, fallbackIdentity: string) => {
+  const candidate = value?.trim();
+  return candidate && /^#[0-9a-f]{3,8}$/i.test(candidate) ? candidate : colorFor(fallbackIdentity);
+};
 const resultPanels = (result: SemanticAnalyticsResult): ResultPanel[] => {
   const panels = new Map<string, ResultPanel>();
   result.rows.forEach(row => {
@@ -118,7 +218,9 @@ export const visualizationEligibility = (
   const fields = result?.rows.length ? (result.rows[0]?.dimensions.map(dimension => dimension.field) ?? []) : (definition?.groupBy ?? []);
   const temporal = isTemporalField(fields[0] ?? '');
   const tagGrouping = fields.includes('TAG_ID');
-  const pointInTime = ['ACCOUNT_POSITION_SNAPSHOT', 'CREDIT_ACCOUNT_SNAPSHOT'].includes(definition?.dataset ?? '');
+  const pointInTime = ['FINANCIAL_POSITION_SNAPSHOT', 'ACCOUNT_POSITION_SNAPSHOT', 'CREDIT_ACCOUNT_SNAPSHOT'].includes(
+    definition?.dataset ?? '',
+  );
   const additive = !!definition?.projections.every(projection => projection.function !== 'AVG');
   const groupCount = fields.length;
   const oneProjection = definition?.projections.length === 1;
@@ -201,6 +303,7 @@ export const chartRows = (
 ): ChartRows => {
   const valuesByX = new Map<string, ChartPoint>();
   const ranks = new Map<string, number>();
+  const seriesMetadata = new Map<string, { semanticId: string; color: string }>();
   panel.values.forEach(({ row, value }) => {
     const primary = row.dimensions[0];
     const xId = primary ? dimensionId(row, 0) : 'TOTAL';
@@ -208,20 +311,31 @@ export const chartRows = (
     const secondDimension = row.dimensions.length > 1 ? dimensionId(row, 1) : '';
     const secondLabel = row.dimensions.length > 1 ? String(dimensionLabel(row, 1, locale)) : '';
     const key = `${value.alias}::${secondDimension}`;
-    const seriesLabel = row.dimensions.length > 1 ? `${value.alias} · ${secondLabel}` : value.alias;
+    const seriesLabel =
+      row.dimensions.length > 1 ? `${presentationAlias(value.alias, locale)} · ${secondLabel}` : presentationAlias(value.alias, locale);
+    // A comparison has a stable domain member (for example a category or tag) that owns the color. A single
+    // time-series has no such member, so its measure alias—not the first date in the selected context—is its identity.
+    const colorDimension = row.dimensions.length > 1 ? row.dimensions[1] : primary && !isTemporalField(primary.field) ? primary : undefined;
+    const colorIdentity = colorDimension?.metadata?.stableId ?? `MEASURE:${value.alias}`;
+    const semanticId = `${value.alias}:${colorIdentity}`;
     const item =
       valuesByX.get(xId) ?? ({ x, xId, sortKey: primary ? temporalSortKey(primary.field, primary.value) : null } satisfies ChartPoint);
     item[key] = plottableValue(value);
     item[`${key}::label`] = seriesLabel;
     item[`${key}::derived`] = value.derived === true;
+    item[`${key}::color`] = semanticColor(colorDimension?.metadata?.color, colorIdentity);
     valuesByX.set(xId, item);
     ranks.set(key, (ranks.get(key) ?? 0) + Math.abs(plottableValue(value) ?? 0));
+    if (!seriesMetadata.has(key)) {
+      seriesMetadata.set(key, { semanticId, color: semanticColor(colorDimension?.metadata?.color, colorIdentity) });
+    }
   });
   const series = [...ranks.entries()]
     .map(([key, rank]) => ({
       key,
       label: String([...valuesByX.values()].find(row => row[`${key}::label`])?.[`${key}::label`] ?? key),
-      color: colorFor(key),
+      semanticId: seriesMetadata.get(key)?.semanticId ?? key,
+      color: seriesMetadata.get(key)?.color ?? colorFor(key),
       rank,
     }))
     .sort((left, right) => right.rank - left.rank || left.key.localeCompare(right.key));
@@ -250,6 +364,7 @@ export const chartRows = (
     selected.forEach(seriesItem => {
       next[seriesItem.key] = typeof item[seriesItem.key] === 'number' ? item[seriesItem.key] : null;
       next[`${seriesItem.key}::derived`] = item[`${seriesItem.key}::derived`] === true;
+      next[`${seriesItem.key}::color`] = item[`${seriesItem.key}::color`] ?? seriesItem.color;
     });
     return next;
   });
@@ -302,18 +417,99 @@ const panelTitle = (panel: ResultPanel, locale: string) => {
   return copy(locale, 'Cantidad de resultados', 'Result count');
 };
 
-const ChartLegend = ({ series }: { series: ChartSeries[] }) => (
-  <ul className="list-inline small mb-0" aria-label="Series">
-    {series.map(seriesItem => (
-      <li className="list-inline-item me-3" key={seriesItem.key}>
-        <span aria-hidden="true" style={{ color: seriesItem.color }}>
-          ●
-        </span>{' '}
-        {seriesItem.label}
-      </li>
-    ))}
-  </ul>
-);
+type LegendEntry = { key: string; semanticId: string; label: string; color: string };
+
+/**
+ * Presentation-only, identity-keyed series controls.  The complete semantic result remains in the table even when a
+ * person hides a series here; neither the query definition nor the visualization context is changed.
+ */
+const InteractiveChartLegend = ({
+  entries,
+  hidden,
+  onToggle,
+  onShowAll,
+  onHideAll,
+  onIsolate,
+  locale,
+}: {
+  entries: LegendEntry[];
+  hidden: ReadonlySet<string>;
+  onToggle: (key: string) => void;
+  onShowAll: () => void;
+  onHideAll: () => void;
+  onIsolate: (key: string) => void;
+  locale: string;
+}) => {
+  const [search, setSearch] = useState('');
+  const matches = entries.filter(entry => entry.label.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const shouldSearch = entries.length > 8;
+  return (
+    <section
+      className="border-top mt-2 pt-2"
+      aria-label={copy(locale, 'Leyenda de series', 'Series legend')}
+      data-cy="analyticsInteractiveLegend"
+    >
+      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <span className="small fw-semibold">
+          {copy(locale, 'Series', 'Series')} ({entries.length})
+        </span>
+        <div className="d-flex gap-1">
+          <Button type="button" color="secondary" outline size="sm" onClick={onShowAll} data-cy="analyticsLegendShowAll">
+            {copy(locale, 'Mostrar todas', 'Show all')}
+          </Button>
+          <Button type="button" color="secondary" outline size="sm" onClick={onHideAll} data-cy="analyticsLegendHideAll">
+            {copy(locale, 'Ocultar todas', 'Hide all')}
+          </Button>
+        </div>
+      </div>
+      {shouldSearch ? (
+        <input
+          type="search"
+          className="form-control form-control-sm mb-2"
+          value={search}
+          onChange={event => setSearch(event.target.value)}
+          placeholder={copy(locale, 'Buscar una serie', 'Search a series')}
+          aria-label={copy(locale, 'Buscar una serie en la leyenda', 'Search a series in the legend')}
+          data-cy="analyticsLegendSearch"
+        />
+      ) : null}
+      <div className="overflow-auto pe-1" style={{ maxHeight: 176 }}>
+        <ul className="list-unstyled mb-0 d-grid gap-1">
+          {matches.map(entry => {
+            const isHidden = hidden.has(entry.key);
+            return (
+              <li key={entry.key} className="d-flex align-items-center gap-1">
+                <Button
+                  type="button"
+                  color="link"
+                  className={`text-start text-decoration-none flex-grow-1 p-1 rounded ${isHidden ? 'text-muted opacity-50' : 'text-body'}`}
+                  aria-pressed={!isHidden}
+                  onClick={() => onToggle(entry.key)}
+                  data-cy={`analyticsLegendToggle-${entry.semanticId}`}
+                >
+                  <span aria-hidden="true" className="me-1" style={{ color: entry.color }}>
+                    ●
+                  </span>
+                  {entry.label}
+                </Button>
+                <Button
+                  type="button"
+                  color="secondary"
+                  outline
+                  size="sm"
+                  onClick={() => onIsolate(entry.key)}
+                  aria-label={copy(locale, `Mostrar sólo ${entry.label}`, `Show only ${entry.label}`)}
+                >
+                  {copy(locale, 'Sólo', 'Only')}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
+  );
+};
 
 const FinancialTooltip = ({
   active,
@@ -325,7 +521,15 @@ const FinancialTooltip = ({
 }: {
   active?: boolean;
   label?: string | number;
-  payload?: Array<{ dataKey?: string | number; name?: string; value?: number; payload?: ChartPoint }>;
+  payload?: Array<{
+    dataKey?: string | number;
+    name?: string;
+    value?: number;
+    color?: string;
+    fill?: string;
+    stroke?: string;
+    payload?: ChartPoint;
+  }>;
   currency: string | null;
   unit: Unit;
   locale: string;
@@ -336,8 +540,20 @@ const FinancialTooltip = ({
       {pointLabel ? <div className="fw-semibold mb-1">{pointLabel}</div> : null}
       {payload.map(item => {
         const derived = item.dataKey ? item.payload?.[`${item.dataKey}::derived`] === true : false;
+        const pointColor =
+          item.color ??
+          item.fill ??
+          item.stroke ??
+          (item.dataKey && typeof item.payload?.[`${item.dataKey}::color`] === 'string'
+            ? String(item.payload?.[`${item.dataKey}::color`])
+            : undefined);
         return (
           <div key={item.name}>
+            {pointColor ? (
+              <span aria-hidden="true" className="me-1" style={{ color: pointColor }}>
+                ●
+              </span>
+            ) : null}
             {item.name}: {display(item.value ?? null, unit, currency, locale)}
             {derived ? (
               <span className="d-block text-muted">
@@ -357,15 +573,37 @@ const SemanticChart = ({
   seriesLimit,
   locale,
   effectiveContext,
+  horizontal,
 }: {
   panel: ResultPanel;
   visualization: ExplorerVisualization;
   seriesLimit: number | 'ALL';
   locale: string;
   effectiveContext: SemanticAnalyticsResult['effectiveContext'];
+  horizontal: boolean;
 }) => {
   const chart = useMemo(() => chartRows(panel, seriesLimit, locale, effectiveContext), [panel, seriesLimit, locale, effectiveContext]);
-  const scale = useMemo(() => chartAxisScale(panel.values.map(({ value }) => plottableValue(value))), [panel]);
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(() => new Set());
+  const identity = chart.series.map(series => series.key).join('|');
+  useEffect(() => {
+    setHiddenSeries(current => new Set([...current].filter(key => chart.series.some(series => series.key === key))));
+  }, [identity]);
+  const visibleSeries = chart.series.filter(series => !hiddenSeries.has(series.key));
+  const scale = useMemo(
+    () => chartAxisScale(chart.data.flatMap(point => visibleSeries.map(series => point[series.key] as number | null))),
+    [chart.data, visibleSeries],
+  );
+  const legend = chart.series.map(series => ({ ...series }));
+  const toggle = (key: string) =>
+    setHiddenSeries(current => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const hideAll = () => setHiddenSeries(new Set(chart.series.map(series => series.key)));
+  const showAll = () => setHiddenSeries(new Set());
+  const isolate = (key: string) => setHiddenSeries(new Set(chart.series.filter(series => series.key !== key).map(series => series.key)));
   if (!chart.data.length || !chart.series.length) return null;
   if (!chart.hasPlottableValues) {
     return (
@@ -380,32 +618,60 @@ const SemanticChart = ({
   }
   if (visualization === 'DONUT') {
     const series = chart.series[0];
-    const data = chart.data.flatMap(row => (typeof row[series.key] === 'number' ? [{ name: String(row.x), value: row[series.key] }] : []));
+    const data = panel.values.flatMap(({ row, value }) => {
+      if (typeof plottableValue(value) !== 'number') return [];
+      const dimension = row.dimensions[0];
+      const semanticId = dimension?.metadata?.stableId ?? `${dimension?.field}:${dimension?.value}`;
+      return [
+        {
+          key: `${series.key}::${semanticId}`,
+          semanticId,
+          name: dimension ? dimensionLabel(row, 0, locale) : String(rowLabel(row, locale)),
+          value: plottableValue(value) ?? 0,
+          color: semanticColor(dimension?.metadata?.color, semanticId),
+        },
+      ];
+    });
+    const visibleSlices = data.filter(slice => !hiddenSeries.has(slice.key));
     return (
-      <div style={{ height: 340 }} role="img" aria-label={copy(locale, 'Gráfica de dona', 'Donut chart')}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart margin={{ top: 16, right: 24, bottom: 44, left: 24 }}>
-            <Tooltip content={<FinancialTooltip currency={panel.currency} unit={panel.unit} locale={locale} />} />
-            <Legend />
-            <Pie
-              data={data}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="45%"
-              innerRadius={56}
-              outerRadius={108}
-              paddingAngle={1}
-              label
-              isAnimationActive={false}
-            >
-              {data.map((slice, index) => (
-                <Cell key={slice.name} fill={palette[index % palette.length]} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
+      <>
+        {visibleSlices.length ? (
+          <div style={{ height: 340 }} role="img" aria-label={copy(locale, 'Gráfica de dona', 'Donut chart')}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart margin={{ top: 16, right: 24, bottom: 44, left: 24 }}>
+                <Tooltip content={<FinancialTooltip currency={panel.currency} unit={panel.unit} locale={locale} />} />
+                <Pie
+                  data={visibleSlices}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="45%"
+                  innerRadius={56}
+                  outerRadius={108}
+                  paddingAngle={1}
+                  label
+                  isAnimationActive={false}
+                >
+                  {visibleSlices.map(slice => (
+                    <Cell key={slice.key} fill={slice.color} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="border rounded-2 p-3 text-muted">{copy(locale, 'Todas las series están ocultas.', 'All series are hidden.')}</div>
+        )}
+        <InteractiveChartLegend
+          entries={data.map(slice => ({ ...slice, label: String(slice.name) }))}
+          hidden={hiddenSeries}
+          onToggle={toggle}
+          onShowAll={showAll}
+          onHideAll={hideAll}
+          onIsolate={isolate}
+          locale={locale}
+        />
+      </>
     );
   }
   const bars = visualization === 'BAR' || visualization === 'GROUPED_BAR' || visualization === 'STACKED_BAR';
@@ -421,27 +687,53 @@ const SemanticChart = ({
       tick={{ fontSize: 12 }}
     />
   );
+  const horizontalValueAxis = (
+    <XAxis
+      type="number"
+      domain={scale?.domain ?? ['auto', 'auto']}
+      ticks={scale?.ticks}
+      tickFormatter={value => display(Number(value), panel.unit, panel.currency, locale)}
+      tickMargin={8}
+      tick={{ fontSize: 12 }}
+    />
+  );
   return (
     <>
       <div style={{ height: 390 }} role="img" aria-label={visualizationTitle(locale, visualization)} data-cy="analyticsSemanticChart">
         <ResponsiveContainer width="100%" height="100%">
           {bars ? (
-            <BarChart data={chart.data} margin={{ top: 16, right: 24, bottom: 44, left: 0 }}>
+            <BarChart data={chart.data} layout={horizontal ? 'vertical' : undefined} margin={{ top: 16, right: 24, bottom: 44, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="x"
-                angle={-24}
-                textAnchor="end"
-                interval="preserveStartEnd"
-                minTickGap={24}
-                height={76}
-                tick={{ fontSize: 12 }}
-              />
-              {yAxis}
+              {horizontal ? (
+                <>
+                  {horizontalValueAxis}
+                  <YAxis type="category" dataKey="x" width={168} tick={{ fontSize: 12 }} />
+                  <ReferenceLine x={0} stroke="#5f6368" strokeWidth={1.5} data-cy="analyticsZeroBaseline" />
+                </>
+              ) : (
+                <>
+                  <XAxis
+                    dataKey="x"
+                    angle={-24}
+                    textAnchor="end"
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                    height={76}
+                    tick={{ fontSize: 12 }}
+                  />
+                  {yAxis}
+                </>
+              )}
               <Tooltip content={<FinancialTooltip currency={panel.currency} unit={panel.unit} locale={locale} />} />
-              <Legend />
-              {chart.series.map(series => (
-                <Bar key={series.key} dataKey={series.key} name={series.label} fill={series.color} stackId={stackId} />
+              {visibleSeries.map(series => (
+                <Bar key={series.key} dataKey={series.key} name={series.label} fill={series.color} stackId={stackId}>
+                  {chart.data.map((point, pointIndex) => (
+                    <Cell
+                      key={`${series.key}-${point.xId}-${pointIndex}`}
+                      fill={typeof point[`${series.key}::color`] === 'string' ? String(point[`${series.key}::color`]) : series.color}
+                    />
+                  ))}
+                </Bar>
               ))}
             </BarChart>
           ) : (
@@ -458,8 +750,7 @@ const SemanticChart = ({
               />
               {yAxis}
               <Tooltip content={<FinancialTooltip currency={panel.currency} unit={panel.unit} locale={locale} />} />
-              <Legend />
-              {chart.series.map(series => (
+              {visibleSeries.map((series, index) => (
                 <Line
                   key={series.key}
                   type="linear"
@@ -467,6 +758,7 @@ const SemanticChart = ({
                   name={series.label}
                   stroke={series.color}
                   strokeWidth={2.5}
+                  strokeDasharray={index % 4 === 0 ? undefined : index % 4 === 1 ? '7 4' : index % 4 === 2 ? '3 3' : '10 3 2 3'}
                   dot={{ r: 3 }}
                   activeDot={{ r: 5 }}
                   connectNulls={false}
@@ -476,6 +768,15 @@ const SemanticChart = ({
           )}
         </ResponsiveContainer>
       </div>
+      <InteractiveChartLegend
+        entries={legend}
+        hidden={hiddenSeries}
+        onToggle={toggle}
+        onShowAll={showAll}
+        onHideAll={hideAll}
+        onIsolate={isolate}
+        locale={locale}
+      />
       {chart.temporal ? (
         <p className="small text-muted mb-0" data-cy="analyticsTemporalChartNote">
           {chart.fillsContext
@@ -491,12 +792,12 @@ const SemanticChart = ({
   );
 };
 
-const Kpis = ({ panel, locale }: { panel: ResultPanel; locale: string }) => (
+const Kpis = ({ panel, locale, compact }: { panel: ResultPanel; locale: string; compact: boolean }) => (
   <div className="row g-2">
     {panel.values.map(({ row, value }, index) => (
-      <div className="col-12 col-sm-6 col-lg-3" key={`${value.alias}-${index}`}>
+      <div className={compact ? 'col-12' : 'col-12 col-sm-6 col-lg-3'} key={`${value.alias}-${index}`}>
         <div className="bg-light rounded-2 p-3 h-100">
-          <div className="small text-muted">{value.alias}</div>
+          <div className="small text-muted">{presentationAlias(value.alias, locale)}</div>
           <div className="fs-5 fw-semibold">{display(value.value, value.unit, row.currencyCode, locale)}</div>
           <div className="small text-muted">{label(locale, value.availability)}</div>
         </div>
@@ -521,7 +822,7 @@ const ResultTable = ({
           <th scope="col">{copy(locale, 'Grupo', 'Group')}</th>
           {rows[0]?.values.map(value => (
             <th scope="col" key={value.alias}>
-              {value.alias}
+              {presentationAlias(value.alias, locale)}
             </th>
           ))}
         </tr>
@@ -581,26 +882,31 @@ export const AnalyticsResultsPanel = ({
   drillTrail,
   onDrillDown,
   onDrillBack,
+  compact = false,
 }: Props) => {
   const options = visualizationEligibility(definition, result, locale);
   const current = options.find(option => option.option === visualization)?.enabled ? visualization : 'TABLE';
   const panels = result ? resultPanels(result) : [];
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
   return (
-    <section className="card border shadow-sm" data-cy="analyticsResults" aria-live="polite">
-      <div className="card-body p-3 p-md-4">
-        <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
-          <div>
-            <p className="text-uppercase small fw-semibold text-muted mb-1">{copy(locale, 'Resultados', 'Results')}</p>
-            <h2 className="h5 mb-1">{copy(locale, 'Vista previa de la consulta', 'Query preview')}</h2>
-            <p className="small text-muted mb-0">
-              {copy(
-                locale,
-                'Los resultados siempre provienen de la última ejecución explícita.',
-                'Results always come from the last explicit run.',
-              )}
-            </p>
+    <section className={compact ? '' : 'card border shadow-sm'} data-cy="analyticsResults" aria-live="polite">
+      <div className={compact ? '' : 'card-body p-3 p-md-4'}>
+        {!compact ? (
+          <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
+            <div>
+              <p className="text-uppercase small fw-semibold text-muted mb-1">{copy(locale, 'Resultados', 'Results')}</p>
+              <h2 className="h5 mb-1">{copy(locale, 'Vista previa de la consulta', 'Query preview')}</h2>
+              <p className="small text-muted mb-0">
+                {copy(
+                  locale,
+                  'Los resultados siempre provienen de la última ejecución explícita.',
+                  'Results always come from the last explicit run.',
+                )}
+              </p>
+            </div>
           </div>
-        </div>
+        ) : null}
         {stale ? (
           <div className="alert alert-warning py-2" data-cy="analyticsPreviewStale">
             {copy(
@@ -617,7 +923,10 @@ export const AnalyticsResultsPanel = ({
           </div>
         ) : null}
         {!loading && result && !result.rows.length ? (
-          <div className="border rounded-2 p-4 text-muted" data-cy="analyticsNoData">
+          <div
+            className={compact ? 'border-start border-3 border-info ps-2 small text-muted' : 'border rounded-2 p-4 text-muted'}
+            data-cy="analyticsNoData"
+          >
             <p className="mb-2">
               {result.availability === 'NOT_APPLICABLE'
                 ? copy(locale, 'Esta consulta no aplica al contexto seleccionado.', 'This query does not apply to the selected context.')
@@ -633,17 +942,23 @@ export const AnalyticsResultsPanel = ({
               </p>
             ) : null}
             {result.warnings?.map(warning => (
-              <div className="alert alert-warning py-2 mb-0" key={warning.code} data-cy={`analyticsWarning-${warning.code}`}>
-                {warning.message}
+              <div
+                className={compact ? 'border-start border-3 border-warning ps-2 mb-0' : 'alert alert-warning py-2 mb-0'}
+                key={warning.code}
+                data-cy={`analyticsWarning-${warning.code}`}
+              >
+                {warningText(warning.code, warning.message, locale)}
               </div>
             ))}
           </div>
         ) : null}
         {!loading && result?.rows.length ? (
           <>
-            <p className="small text-muted" data-cy="analyticsEffectiveContext">
-              {copy(locale, 'Contexto efectivo', 'Effective context')}: {result.effectiveContext.from} — {result.effectiveContext.through}
-            </p>
+            {!compact ? (
+              <p className="small text-muted" data-cy="analyticsEffectiveContext">
+                {copy(locale, 'Contexto efectivo', 'Effective context')}: {result.effectiveContext.from} — {result.effectiveContext.through}
+              </p>
+            ) : null}
             {drillTrail.length ? (
               <div className="alert alert-info py-2 d-flex justify-content-between gap-2 align-items-center">
                 <span>{copy(locale, `Explorando: ${drillTrail.join(' › ')}`, `Exploring: ${drillTrail.join(' › ')}`)}</span>
@@ -653,17 +968,24 @@ export const AnalyticsResultsPanel = ({
               </div>
             ) : null}
             {result.availability && result.availability !== 'COMPLETE' ? (
-              <div className="alert alert-info py-2" data-cy="analyticsResultAvailability">
+              <div
+                className={compact ? 'small border-start border-info border-3 ps-2 mb-2' : 'alert alert-info py-2'}
+                data-cy="analyticsResultAvailability"
+              >
                 {copy(locale, 'Disponibilidad del resultado', 'Result availability')}: {label(locale, result.availability)}
               </div>
             ) : null}
             {result.warnings?.map(warning => (
-              <div className="alert alert-warning py-2" key={warning.code} data-cy={`analyticsWarning-${warning.code}`}>
-                {warning.message}
+              <div
+                className={compact ? 'small border-start border-warning border-3 ps-2 mb-2' : 'alert alert-warning py-2'}
+                key={warning.code}
+                data-cy={`analyticsWarning-${warning.code}`}
+              >
+                {warningText(warning.code, warning.message, locale)}
               </div>
             ))}
             {panels.length > 1 ? (
-              <div className="alert alert-info py-2">
+              <div className={compact ? 'small border-start border-info border-3 ps-2 mb-2' : 'alert alert-info py-2'}>
                 {copy(
                   locale,
                   'Los importes se presentan por moneda y unidad; FINTRACK no los mezcla ni convierte.',
@@ -676,12 +998,12 @@ export const AnalyticsResultsPanel = ({
               const chartState = chart ? chartRows(panel, seriesLimit, locale, result.effectiveContext) : null;
               return (
                 <section
-                  className="border rounded-2 p-3 mb-3"
+                  className={compact ? 'mb-3' : 'border rounded-2 p-3 mb-3'}
                   key={panelKey(panel.currency, panel.unit)}
                   data-cy={`analyticsCurrencyFacet-${panel.currency ?? 'NON_MONETARY'}-${panel.unit}`}
                 >
-                  <h3 className="h6">{panelTitle(panel, locale)}</h3>
-                  {current === 'KPI' ? <Kpis panel={panel} locale={locale} /> : null}
+                  {!compact || current !== 'KPI' ? <h3 className="h6">{panelTitle(panel, locale)}</h3> : null}
+                  {current === 'KPI' ? <Kpis panel={panel} locale={locale} compact={compact} /> : null}
                   {chart ? (
                     <SemanticChart
                       panel={panel}
@@ -689,6 +1011,9 @@ export const AnalyticsResultsPanel = ({
                       seriesLimit={seriesLimit}
                       locale={locale}
                       effectiveContext={result.effectiveContext}
+                      horizontal={
+                        definition?.dataset === 'ACCOUNT_POSITION_SNAPSHOT' && definition.groupBy[0] === 'ACCOUNT_ID' && current === 'BAR'
+                      }
                     />
                   ) : null}
                   {chartState && chartState.hidden ? (
@@ -700,11 +1025,32 @@ export const AnalyticsResultsPanel = ({
                       )}
                     </p>
                   ) : null}
-                  {chartState ? <ChartLegend series={chartState.series} /> : null}
                 </section>
               );
             })}
-            <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+            {compact ? (
+              <div className="border-top pt-2">
+                <Button
+                  type="button"
+                  color="secondary"
+                  outline
+                  size="sm"
+                  aria-expanded={detailsOpen}
+                  aria-controls={detailsId}
+                  onClick={() => setDetailsOpen(open => !open)}
+                  data-cy="analyticsResultDetailsToggle"
+                >
+                  {detailsOpen ? copy(locale, 'Ocultar datos', 'Hide data') : copy(locale, 'Ver datos', 'View data')}
+                </Button>
+                {detailsOpen ? (
+                  <div id={detailsId} className="mt-2">
+                    <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+            )}
           </>
         ) : null}
       </div>

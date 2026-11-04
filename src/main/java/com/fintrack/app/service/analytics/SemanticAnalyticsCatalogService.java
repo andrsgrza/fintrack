@@ -37,6 +37,7 @@ public class SemanticAnalyticsCatalogService {
     public SemanticAnalyticsCatalogService() {
         Map<SemanticDataset, SemanticDatasetDefinition> definitions = new EnumMap<>(SemanticDataset.class);
         definitions.put(SemanticDataset.TRANSACTION_LEDGER, transactionLedger());
+        definitions.put(SemanticDataset.FINANCIAL_POSITION_SNAPSHOT, financialPositionSnapshot());
         definitions.put(SemanticDataset.ACCOUNT_POSITION_SNAPSHOT, accountPositionSnapshot());
         definitions.put(SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT, creditAccountSnapshot());
         definitions.put(SemanticDataset.INTERNAL_TRANSFER_EVENT, internalTransferEvent());
@@ -131,6 +132,12 @@ public class SemanticAnalyticsCatalogService {
                     SemanticField.TRANSACTION_AMOUNT,
                     SemanticUnit.MONEY,
                     SemanticAdditivityPolicy.ADDITIVE
+                ),
+                aggregate(
+                    SemanticAggregateFunction.NET,
+                    SemanticField.TRANSACTION_AMOUNT,
+                    SemanticUnit.MONEY,
+                    SemanticAdditivityPolicy.ADDITIVE
                 )
             ),
             List.of(
@@ -157,6 +164,32 @@ public class SemanticAnalyticsCatalogService {
             SemanticAdditivityPolicy.ADDITIVE,
             SemanticCurrencyPolicy.PARTITION_BY_ACCOUNT_CURRENCY,
             "Transaction date selects an inclusive period. Monetary results are partitioned by account currency."
+        );
+    }
+
+    private SemanticDatasetDefinition financialPositionSnapshot() {
+        return new SemanticDatasetDefinition(
+            SemanticDataset.FINANCIAL_POSITION_SNAPSHOT,
+            "compatible asset balances less recorded credit-card debt at one authoritative observation cutoff, partitioned by currency",
+            SemanticField.OBSERVATION_DATE,
+            List.of(new SemanticRelationshipDefinition("ACCOUNT", "FinancialAccount", "MANY_TO_ONE", "Owned account, type and currency")),
+            List.of(
+                field(SemanticField.OBSERVATION_DATE, SemanticValueType.DATE, null, false, false, false),
+                field(SemanticField.FINANCIAL_POSITION, SemanticValueType.DECIMAL, SemanticUnit.MONEY, true, false, false)
+            ),
+            List.of(
+                aggregate(
+                    SemanticAggregateFunction.SUM,
+                    SemanticField.FINANCIAL_POSITION,
+                    SemanticUnit.MONEY,
+                    SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH
+                )
+            ),
+            List.of(),
+            List.of(),
+            SemanticAdditivityPolicy.POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH,
+            SemanticCurrencyPolicy.PARTITION_BY_ACCOUNT_CURRENCY,
+            "Uses one authoritative cutoff: compatible asset balances less recorded credit-card debt. Currencies are never combined, and accounts without history at the cutoff make that currency partial or unavailable."
         );
     }
 
@@ -371,6 +404,7 @@ public class SemanticAnalyticsCatalogService {
             case OBSERVATION_DATE -> text("Fecha de observación", "Observation date");
             case OBSERVATION_MONTH -> text("Mes de observación", "Observation month");
             case POSITION_BALANCE -> text("Saldo registrado", "Recorded balance");
+            case FINANCIAL_POSITION -> text("Posición financiera registrada", "Registered financial position");
             case CREDIT_DEBT -> text("Deuda de tarjeta", "Credit-card debt");
             case CREDIT_LIMIT -> text("Límite de crédito actual", "Current credit limit");
             case CREDIT_AVAILABLE -> text("Crédito disponible actual", "Current available credit");
@@ -424,6 +458,10 @@ public class SemanticAnalyticsCatalogService {
             case POSITION_BALANCE -> text(
                 "Saldo calculado a una fecha con historial disponible.",
                 "Balance calculated at a date with available history."
+            );
+            case FINANCIAL_POSITION -> text(
+                "Saldos registrados compatibles menos deuda registrada de tarjetas, a una misma fecha y sin mezclar monedas.",
+                "Compatible recorded balances less recorded credit-card debt, at one date and without mixing currencies."
             );
             case CREDIT_DEBT -> text(
                 "Deuda calculada como saldo inicial más salidas menos entradas; puede ser negativa por sobrepago.",
