@@ -384,10 +384,21 @@ const SemanticChart = ({
     return (
       <div style={{ height: 340 }} role="img" aria-label={copy(locale, 'Gráfica de dona', 'Donut chart')}>
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+          <PieChart margin={{ top: 16, right: 24, bottom: 44, left: 24 }}>
             <Tooltip content={<FinancialTooltip currency={panel.currency} unit={panel.unit} locale={locale} />} />
             <Legend />
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius="45%" outerRadius="80%" label>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="45%"
+              innerRadius={56}
+              outerRadius={108}
+              paddingAngle={1}
+              label
+              isAnimationActive={false}
+            >
               {data.map((slice, index) => (
                 <Cell key={slice.name} fill={palette[index % palette.length]} />
               ))}
@@ -530,7 +541,7 @@ const ResultTable = ({
                     color="link"
                     size="sm"
                     className="p-0 ms-2"
-                    onClick={() => onDrillDown(category.metadata.stableId, category.metadata.label)}
+                    onClick={() => onDrillDown(String(category.value), category.metadata.label)}
                   >
                     {copy(locale, 'Ver subcategorías', 'View subcategories')}
                   </Button>
@@ -607,7 +618,25 @@ export const AnalyticsResultsPanel = ({
         ) : null}
         {!loading && result && !result.rows.length ? (
           <div className="border rounded-2 p-4 text-muted" data-cy="analyticsNoData">
-            {copy(locale, 'No hay datos para este contexto; no equivale a cero.', 'There is no data for this context; this is not zero.')}
+            <p className="mb-2">
+              {result.availability === 'NOT_APPLICABLE'
+                ? copy(locale, 'Esta consulta no aplica al contexto seleccionado.', 'This query does not apply to the selected context.')
+                : copy(
+                    locale,
+                    'No hay datos para este contexto; no equivale a cero.',
+                    'There is no data for this context; this is not zero.',
+                  )}
+            </p>
+            {result.availability && result.availability !== 'COMPLETE' ? (
+              <p className="small mb-2" data-cy="analyticsResultAvailability">
+                {copy(locale, 'Disponibilidad del resultado', 'Result availability')}: {label(locale, result.availability)}
+              </p>
+            ) : null}
+            {result.warnings?.map(warning => (
+              <div className="alert alert-warning py-2 mb-0" key={warning.code} data-cy={`analyticsWarning-${warning.code}`}>
+                {warning.message}
+              </div>
+            ))}
           </div>
         ) : null}
         {!loading && result?.rows.length ? (
@@ -624,7 +653,7 @@ export const AnalyticsResultsPanel = ({
               </div>
             ) : null}
             {result.availability && result.availability !== 'COMPLETE' ? (
-              <div className="alert alert-info py-2">
+              <div className="alert alert-info py-2" data-cy="analyticsResultAvailability">
                 {copy(locale, 'Disponibilidad del resultado', 'Result availability')}: {label(locale, result.availability)}
               </div>
             ) : null}

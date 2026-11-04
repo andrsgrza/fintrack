@@ -205,6 +205,12 @@ const aliasFor = (functionName: string, field: string) => `${functionName.toLowe
 
 export const initialDefinition = (catalog: SemanticAnalyticsCatalog, dataset: SemanticDatasetDefinition): SemanticQueryDefinition => {
   const first = dataset.aggregateCapabilities[0];
+  const groupBy =
+    dataset.dataset === 'ACCOUNT_POSITION_SNAPSHOT'
+      ? ['ACCOUNT_ID', 'OBSERVATION_MONTH']
+      : dataset.dataset === 'CREDIT_ACCOUNT_SNAPSHOT'
+        ? ['ACCOUNT_ID']
+        : [];
   return {
     schemaVersion: catalog.schemaVersion,
     semanticModel: catalog.semanticModel,
@@ -212,7 +218,7 @@ export const initialDefinition = (catalog: SemanticAnalyticsCatalog, dataset: Se
     timeBinding: dataset.timeBinding,
     projections: [{ alias: aliasFor(first.function, first.field), function: first.function, field: first.field, conditions: [] }],
     predicates: [],
-    groupBy: [],
+    groupBy,
     orderBy: [],
     limit: catalog.defaultLimit,
   };
