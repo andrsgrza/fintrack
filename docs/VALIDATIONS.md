@@ -11,6 +11,10 @@ Companion docs:
 
 **Principle:** REST checks **shape** (`@Valid` on DTO); entity/DB check **structure**; **service** is the source of truth for ownership, cross-entity rules, immutability, server defaults, and business guards.
 
+> **Analytics update — 2026-11-04:** `UserDashboardPreference` is retired. Personal dashboards
+> are a command aggregate, not generated CRUD. Their canonical contract is documented in
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
+
 ---
 
 ## Layers
@@ -34,10 +38,10 @@ Companion docs:
 
 ### PATCH styles
 
-| Style         | Entities                                                                                                                                                                                                                                                                                            | Semantics                                                                                                        |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **JsonNode**  | CreditAccountDetails, FinancialAccount, FinancialTransaction, TransactionCandidate, Budget, TransactionRule, TransactionRuleCondition, FinancialSubscription, TransactionIngestion, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessToken, ApiAccessTokenPermission, UserDashboardPreference | Service uses `patchNode.has(field)` — absent preserves, explicit `null` is meaningful, `null`/`[]` on M2M clears |
-| **DTO merge** | Category; Tag for non-timestamp scalar null behavior                                                                                                                                                                                                                                                | Null/absent in partial DTO typically means “do not change” via mapper `partialUpdate`                            |
+| Style         | Entities                                                                                                                                                                                                                                                                   | Semantics                                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **JsonNode**  | CreditAccountDetails, FinancialAccount, FinancialTransaction, TransactionCandidate, Budget, TransactionRule, TransactionRuleCondition, FinancialSubscription, TransactionIngestion, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessToken, ApiAccessTokenPermission | Service uses `patchNode.has(field)` — absent preserves, explicit `null` is meaningful, `null`/`[]` on M2M clears |
+| **DTO merge** | Category; Tag for non-timestamp scalar null behavior                                                                                                                                                                                                                       | Null/absent in partial DTO typically means “do not change” via mapper `partialUpdate`                            |
 
 **Preferred contract for new work:** use presence-aware `JsonNode` PATCH semantics. An absent field preserves its current value; a present value replaces it; explicit `null` clears an optional field but is rejected for required or immutable fields; `null` or `[]` clears a collection; a collection of IDs replaces the complete link set. Validate the fully merged entity after applying the patch.
 
@@ -59,25 +63,25 @@ Companion docs:
 
 ## Summary matrix
 
-| #   | Entity                   | DTO | Entity | DB  | Service | REST | Notes                                                                                                         |
-| --- | ------------------------ | --- | ------ | --- | ------- | ---- | ------------------------------------------------------------------------------------------------------------- |
-| 1   | FinancialAccount         | ✅  | ✅     | ✅  | ✅      | ✅   | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor                  |
-| 2   | FinancialTransaction     | ✅  | ✅     | ✅  | ✅      | ✅   | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0          |
-| 3   | CreditAccountDetails     | ✅  | ✅     | ✅  | ✅      | ✅   | CREDIT_CARD + 1:1 + immutable account                                                                         |
-| 4   | Category                 | ✅  | ✅     | ✅  | ✅      | ✅   | Sibling-unique `name` per owner+type+parent (trim, case-insensitive)                                          |
-| 5   | Tag                      | ✅  | ✅     | ✅  | ✅      | ✅   | Per-owner case-insensitive unique `name`; server-owned timestamps; CRUD UX hides raw relationships            |
-| 6   | TransactionRule          | ✅  | ✅     | ✅  | ✅      | ✅   | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                                  |
-| 7   | TransactionRuleCondition | ✅  | ✅     | ✅  | ✅      | ✅   | Parent immutable; field/operator/value semantics                                                              |
-| 8   | FinancialSubscription    | ✅  | ✅     | ✅  | ✅      | ✅   | Links + PATCH JsonNode                                                                                        |
-| 9   | Budget                   | ✅  | ✅     | ✅  | ✅      | ✅   | M2M owned; PATCH JsonNode link semantics                                                                      |
-| 10  | InternalTransfer         | ✅  | ✅     | ✅  | ✅      | ✅   | `createdAt` server; pair validation                                                                           |
-| 11  | TransactionIngestion     | ✅  | ✅     | ✅  | ✅      | ✅   | Lifecycle + counter consistency; server fields optional in DTO                                                |
-| 12  | FileIngestion            | ✅  | ✅     | ✅  | ✅      | ✅   | Parent FILE + 1:1; `createdAt` server; create UI uploads CSV for a pending parent instead of editing metadata |
-| 13  | ApiIngestion             | ✅  | ✅     | ✅  | ✅      | ✅   | Token snapshots (11C) ✅; `requestId` unique                                                                  |
-| 14  | IngestionRecord          | ✅  | ✅     | 🟡  | ✅      | ✅   | `recordIndex`/`externalRecordId` unique per ingestion in service                                              |
-| 15  | ApiAccessToken           | ✅  | ✅     | ✅  | ✅      | ✅   | Server-generated secrets; `rawToken` once; not in GET                                                         |
-| 16  | ApiAccessTokenPermission | 🟡  | ✅     | ✅  | ✅      | ✅   | Duplicate (token, permission)                                                                                 |
-| 17  | UserDashboardPreference  | 🟡  | ✅     | 🟡  | ✅      | ✅   | `configuration` required DB not DTO; 1:1 service guard                                                        |
+| #   | Entity                      | DTO | Entity | DB  | Service | REST | Notes                                                                                                         |
+| --- | --------------------------- | --- | ------ | --- | ------- | ---- | ------------------------------------------------------------------------------------------------------------- |
+| 1   | FinancialAccount            | ✅  | ✅     | ✅  | ✅      | ✅   | Immutable `currency`/`accountType`; PATCH JsonNode; delete orchestration; initial date floor                  |
+| 2   | FinancialTransaction        | ✅  | ✅     | ✅  | ✅      | ✅   | JsonNode presence semantics; server-owned timestamps; immutable account/origin/ingestion; amount > 0          |
+| 3   | CreditAccountDetails        | ✅  | ✅     | ✅  | ✅      | ✅   | CREDIT_CARD + 1:1 + immutable account                                                                         |
+| 4   | Category                    | ✅  | ✅     | ✅  | ✅      | ✅   | Sibling-unique `name` per owner+type+parent (trim, case-insensitive)                                          |
+| 5   | Tag                         | ✅  | ✅     | ✅  | ✅      | ✅   | Per-owner case-insensitive unique `name`; server-owned timestamps; CRUD UX hides raw relationships            |
+| 6   | TransactionRule             | ✅  | ✅     | ✅  | ✅      | ✅   | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                                  |
+| 7   | TransactionRuleCondition    | ✅  | ✅     | ✅  | ✅      | ✅   | Parent immutable; field/operator/value semantics                                                              |
+| 8   | FinancialSubscription       | ✅  | ✅     | ✅  | ✅      | ✅   | Links + PATCH JsonNode                                                                                        |
+| 9   | Budget                      | ✅  | ✅     | ✅  | ✅      | ✅   | M2M owned; PATCH JsonNode link semantics                                                                      |
+| 10  | InternalTransfer            | ✅  | ✅     | ✅  | ✅      | ✅   | `createdAt` server; pair validation                                                                           |
+| 11  | TransactionIngestion        | ✅  | ✅     | ✅  | ✅      | ✅   | Lifecycle + counter consistency; server fields optional in DTO                                                |
+| 12  | FileIngestion               | ✅  | ✅     | ✅  | ✅      | ✅   | Parent FILE + 1:1; `createdAt` server; create UI uploads CSV for a pending parent instead of editing metadata |
+| 13  | ApiIngestion                | ✅  | ✅     | ✅  | ✅      | ✅   | Token snapshots (11C) ✅; `requestId` unique                                                                  |
+| 14  | IngestionRecord             | ✅  | ✅     | 🟡  | ✅      | ✅   | `recordIndex`/`externalRecordId` unique per ingestion in service                                              |
+| 15  | ApiAccessToken              | ✅  | ✅     | ✅  | ✅      | ✅   | Server-generated secrets; `rawToken` once; not in GET                                                         |
+| 16  | ApiAccessTokenPermission    | 🟡  | ✅     | ✅  | ✅      | ✅   | Duplicate (token, permission)                                                                                 |
+| 17  | PersonalDashboard aggregate | —   | ✅     | ✅  | ✅      | ✅   | Command DTOs; owner-scoped context, validated widgets, aggregate version, and idempotent creates              |
 
 ---
 
@@ -352,27 +356,26 @@ Confirm acquires a `PESSIMISTIC_WRITE` lock on the target parent before reading 
 | **Service** | Resolve accessible token; **`existsByApiAccessTokenIdAndPermission()`**; immutable token, permission, `createdAt`; **`createdAt = now()`** on create. |
 | **REST**    | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`.                                                                                                 |
 
-### 17. UserDashboardPreference
+### 17. PersonalDashboard aggregate
 
-| Layer       | Rules                                                                                                        |
-| ----------- | ------------------------------------------------------------------------------------------------------------ |
-| **DTO**     | Timestamps `@NotNull`. **`configuration` not `@NotNull`** on DTO. **`user` optional**.                       |
-| **Entity**  | **`configuration` required** (TextBlob); **`user` required**.                                                |
-| **DB**      | `user_id NOT NULL` FK. **`UNIQUE(user_id)`** planned — today enforced via **`existsByUserId()`** in service. |
-| **Service** | Create: `user = currentUser`; **one row per user** guard. Owner immutable.                                   |
-| **REST**    | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`.                                                        |
+| Layer           | Rules                                                                                                                                                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Commands**    | Typed create/update/layout/widget commands rather than generic entity DTOs or PATCH. A dashboard name is normalized and unique per owner; descriptions and request payload sizes are bounded.                                     |
+| **Entity / DB** | `PersonalDashboard.user`, default context, schema version, and audit timestamps are required. Widgets cascade from their dashboard, have unique positions, and persist a canonical query JSON plus bounded presentation settings. |
+| **Service**     | Loads every dashboard in the current user's scope; limits to 20 dashboards and 16 widgets; validates the `VisualizationContext`, canonical query, visualization/result compatibility, layout, and expected root version.          |
+| **REST**        | `PersonalDashboardResource` exposes only owner-scoped command routes. Create, copy-template, and add-widget requests use a client request id plus digest for idempotency.                                                         |
 
 ---
 
 ## Known DTO ↔ service gaps
 
-| Gap                                                      | Entities                                                                                              | Resolution                                                                 |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| DTO allows `amount ≥ 0`, service requires `> 0`          | FinancialTransaction                                                                                  | By design — business rule in service                                       |
-| Server fields optional in DTO, required on entity        | TransactionIngestion, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessTokenPermission          | Service assigns before persist                                             |
-| `tokenHash` required in entity, absent from request DTOs | ApiAccessToken                                                                                        | Service always generates on create; client-provided `tokenHash` is invalid |
-| `configuration` required in DB, optional in DTO          | UserDashboardPreference                                                                               | Service must reject null on create                                         |
-| Composite uniqueness only in service                     | Tag (`name` per owner), IngestionRecord (`recordIndex` and non-null `externalRecordId` per ingestion) | Optional Liquibase unique index later                                      |
+| Gap                                                                           | Entities                                                                                              | Resolution                                                                               |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| DTO allows `amount ≥ 0`, service requires `> 0`                               | FinancialTransaction                                                                                  | By design — business rule in service                                                     |
+| Server fields optional in DTO, required on entity                             | TransactionIngestion, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessTokenPermission          | Service assigns before persist                                                           |
+| `tokenHash` required in entity, absent from request DTOs                      | ApiAccessToken                                                                                        | Service always generates on create; client-provided `tokenHash` is invalid               |
+| Dashboard context/query JSON is structurally stored but semantically governed | PersonalDashboard / widget                                                                            | Command service parses, bounds, and validates the canonical contracts before persistence |
+| Composite uniqueness only in service                                          | Tag (`name` per owner), IngestionRecord (`recordIndex` and non-null `externalRecordId` per ingestion) | Optional Liquibase unique index later                                                    |
 
 ---
 

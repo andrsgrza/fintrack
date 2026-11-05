@@ -1,5 +1,9 @@
 # Analytics Redesign 4 — canonical composable query runtime
 
+> **Historical R4 baseline.** The current Explorer and dashboard behavior is documented in
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md). This document
+> remains the design record for the canonical runtime introduced by R4.
+
 FINTRACK now has one analytical contract: `SemanticQueryDefinition` plus an execution-only
 `VisualizationContext`. A query declares a governed dataset, aggregate projections, predicates,
 grouping, ordering and a bounded limit. The context declares only time, accounts and currencies.
@@ -38,6 +42,10 @@ Time, account IDs and currencies are visibly separate execution controls. They m
 result stale but do not alter the query. Results render server-returned values only, distinguish no
 data from a calculated zero or unavailable history, and facet money by currency rather than
 combining currencies in the browser.
+
+V2.5 adds the production visual builder, written-query parity, ordered multi-dimensional charts,
+recommended dashboards, and personal dashboard persistence on top of this same contract. It does
+not introduce a second query runtime or embed the context in a saved widget definition.
 
 ## Removed surface
 

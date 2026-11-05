@@ -1,5 +1,9 @@
 # Analytics V2.1 semantic foundation
 
+> **Historical V2.1 slice.** Its intentional deferrals have since been addressed by later work.
+> For the current Explorer, grouping, and dashboard behavior, read
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
+
 ## Decision
 
 Analytics keeps one `SemanticQueryDefinition` for every executable analytical question. A query has a dataset, one to four aggregate projections, global conditions, groupings, ordering and a limit. `VisualizationContext` remains separate: it supplies only the authenticated user's effective date range, account scope and currency scope. It does not mutate or become part of the saved/query definition.

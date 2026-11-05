@@ -1,5 +1,9 @@
 # Analytics V2.2: temporal and multi-dimensional semantic queries
 
+> **Historical V2.2 slice.** This document records the temporal model that remains in use; its
+> former UI/dashboard non-goals are no longer the current product state. See
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
+
 ## Canonical model
 
 V2.2 retains the single `SemanticQueryDefinition`. The visualization context owns the inclusive date range, account selection and currency selection. The definition owns only the calculation and its ordered `groupBy` fields.

@@ -1,5 +1,9 @@
 # Analytics V2.3: specialized financial observations
 
+> **Historical V2.3 slice.** The governed financial observations described here remain canonical.
+> The current Explorer and dashboard presentation that consume them are documented in
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
+
 ## Purpose
 
 V2.3 extends the canonical semantic Analytics model with three governed datasets. They use the same `SemanticQueryDefinition`, `VisualizationContext`, validator, SQL-like DSL and result contract introduced in V2.1/V2.2; they do not restore named-metric query paths or add a second execution engine.

@@ -7,7 +7,11 @@ Complementa:
 - [`IMPLEMENTATION.md`](IMPLEMENTATION.md) — tracker técnico por entidad
 - [`TESTING.md`](TESTING.md) — tests y comandos
 
-**Estado:** 17 / 17 entidades con ownership implementado.
+> **Actualización Analytics — 2026-11-04:** `UserDashboardPreference` fue retirado durante el
+> refactor de Analytics. Los dashboards actuales usan el agregado de comandos
+> `PersonalDashboard`/`PersonalDashboardWidget`; su contrato y persistencia están en
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md). Las entradas
+> históricas de la preference ya no describen una ruta ni entidad activa.
 
 ---
 
@@ -45,8 +49,8 @@ REST (@Valid forma) → Service (ownership + negocio) → Repository (queries sc
 
 | Pattern | Cómo se determina el dueño | Entidades                                                                                                                |
 | ------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **A**   | Campo `user` directo       | FinancialAccount, Category, Tag, Budget, FinancialSubscription, TransactionRule, ApiAccessToken, UserDashboardPreference |
-| **B**   | Vía padre 1 nivel          | FinancialTransaction → `account.user`; CreditAccountDetails → `account.user`                                             |
+| **A**   | Campo `user` directo       | FinancialAccount, Category, Tag, Budget, FinancialSubscription, TransactionRule, ApiAccessToken, PersonalDashboard       |
+| **B**   | Vía padre 1 nivel          | FinancialTransaction → `account.user`; CreditAccountDetails → `account.user`; PersonalDashboardWidget → `dashboard.user` |
 | **C**   | Vía cadena                 | TransactionRuleCondition → `transactionRule.user`; ApiAccessTokenPermission → `apiAccessToken.user`                      |
 | **D**   | Regla compuesta            | InternalTransfer (2 tx, mismo user/moneda)                                                                               |
 
@@ -338,26 +342,27 @@ flowchart TB
 
 ---
 
-## 12. UserDashboardPreference (Pattern A + 1:1)
+## 12. PersonalDashboard y widgets (comandos owner-scoped)
 
-**Dueño:** `user` directo. Máximo **una** fila por user.
+**Dueño:** `PersonalDashboard.user` directo. Un `PersonalDashboardWidget` sólo se alcanza por
+su dashboard dueño; `PersonalDashboardRequest` es un recibo interno de idempotencia del mismo
+usuario, no un recurso de producto.
 
-### Usuario normal
+Estas entidades no exponen CRUD generado. El único límite de escritura es
+`PersonalDashboardCommandService`, y primero carga el dashboard en el alcance del usuario actual.
+Por tanto, un id ajeno no revela ni permite modificar el dashboard o sus widgets.
 
-| Flujo            | Comportamiento                                                    |
-| ---------------- | ----------------------------------------------------------------- |
-| **List / GET**   | Solo preference propia (como mucho 1)                             |
-| **POST**         | `user = currentUser`; falla si ya existe preference para ese user |
-| **PUT / PATCH**  | Solo propia; owner inmutable; **`configuration` mutable**         |
-| **PATCH `user`** | Ausente → preserva; `null` → `400`                                |
-| **DELETE**       | Solo propia                                                       |
+| Flujo                        | Comportamiento                                                                                                                          |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **List / GET**               | Devuelve sólo dashboards del usuario autenticado; un id ajeno se comporta como no encontrado.                                           |
+| **Crear / copiar plantilla** | El servicio fija el dueño, normaliza el nombre y limita a 20 dashboards del usuario. Copiar una plantilla crea una copia independiente. |
+| **Editar / borrar**          | Requiere la versión esperada del agregado; el `@Version` cubre metadatos, layout y widgets.                                             |
+| **Widgets**                  | Añadir/editar/borrar se hace sólo dentro de un dashboard propio; máximo 16 widgets. El query y la visualización se validan en backend.  |
+| **Reintentos**               | Crear, copiar plantilla y añadir widget usan un `clientRequestId` owner-scoped con digest; no almacenan resultados financieros.         |
 
-### Admin
-
-| Flujo         | Comportamiento                         |
-| ------------- | -------------------------------------- |
-| **CRUD**      | Preferences de cualquier user          |
-| **1:1 guard** | Sigue aplicando por `user_id` al crear |
+El API de dashboard no es una superficie administrativa genérica: los comandos deliberadamente se
+resuelven contra el usuario autenticado. Las plantillas recomendadas viven en código y no son
+recursos de otro usuario que puedan editarse.
 
 ---
 
@@ -387,24 +392,24 @@ The product reads at `/api/internal-transfers/product` and `/api/internal-transf
 
 ## Tabla resumen — Admin bypass
 
-| Entidad                  | Admin ve/edita ajenos                              | Regla que **no** tiene bypass admin                               |
-| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------- |
-| FinancialAccount         | ✅                                                 | —                                                                 |
-| FinancialTransaction     | ✅                                                 | —                                                                 |
-| Category                 | ✅                                                 | Parent debe ser del owner de la categoría                         |
-| Tag                      | ✅                                                 | —                                                                 |
-| Budget                   | ✅                                                 | M2M ⊆ owner del budget                                            |
-| FinancialSubscription    | ✅                                                 | Links ⊆ owner de la subscription                                  |
-| TransactionRule          | ✅                                                 | Outputs ⊆ owner de la rule                                        |
-| TransactionRuleCondition | ✅                                                 | Parent immutable; ACCOUNT vs rule owner; reparent **removed**     |
-| CreditAccountDetails     | ✅                                                 | CREDIT_CARD, 1:1, account inmutable                               |
-| ApiAccessToken           | ✅                                                 | Hash no expuesto; secretos inmutables                             |
-| ApiAccessTokenPermission | ✅                                                 | Parent/grant/createdAt inmutables                                 |
-| UserDashboardPreference  | ✅                                                 | 1:1 por user en create                                            |
-| InternalTransfer         | ✅ reads + intent commands                         | **Ambas patas siempre son del mismo owner; no hay CRUD write**    |
-| TransactionIngestion     | ✅ CRUD                                            | `account` / `ingestionType` inmutables; server defaults en create |
-| FileIngestion            | ✅ create/read/update dates; direct delete blocked | Parent `FILE` + 1:1; metadata inmutable; delete via parent        |
-| ApiIngestion             | ✅ create/read/no-op update; direct delete blocked | Parent `API` + 1:1; token snapshots; metadata inmutable           |
+| Entidad                    | Admin ve/edita ajenos                              | Regla que **no** tiene bypass admin                               |
+| -------------------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
+| FinancialAccount           | ✅                                                 | —                                                                 |
+| FinancialTransaction       | ✅                                                 | —                                                                 |
+| Category                   | ✅                                                 | Parent debe ser del owner de la categoría                         |
+| Tag                        | ✅                                                 | —                                                                 |
+| Budget                     | ✅                                                 | M2M ⊆ owner del budget                                            |
+| FinancialSubscription      | ✅                                                 | Links ⊆ owner de la subscription                                  |
+| TransactionRule            | ✅                                                 | Outputs ⊆ owner de la rule                                        |
+| TransactionRuleCondition   | ✅                                                 | Parent immutable; ACCOUNT vs rule owner; reparent **removed**     |
+| CreditAccountDetails       | ✅                                                 | CREDIT_CARD, 1:1, account inmutable                               |
+| ApiAccessToken             | ✅                                                 | Hash no expuesto; secretos inmutables                             |
+| ApiAccessTokenPermission   | ✅                                                 | Parent/grant/createdAt inmutables                                 |
+| PersonalDashboard / widget | Sólo el dueño autenticado por command service      | Contexto y AST validados; widgets sólo vía dashboard propio       |
+| InternalTransfer           | ✅ reads + intent commands                         | **Ambas patas siempre son del mismo owner; no hay CRUD write**    |
+| TransactionIngestion       | ✅ CRUD                                            | `account` / `ingestionType` inmutables; server defaults en create |
+| FileIngestion              | ✅ create/read/update dates; direct delete blocked | Parent `FILE` + 1:1; metadata inmutable; delete via parent        |
+| ApiIngestion               | ✅ create/read/no-op update; direct delete blocked | Parent `API` + 1:1; token snapshots; metadata inmutable           |
 
 ---
 

@@ -134,7 +134,7 @@ Los resultados mantienen identidad y etiqueta de dimensión, metadatos de catego
 
 No son parte del lenguaje: SQL/JPA arbitrario, tablas o joins físicos, fórmulas libres, comentarios, punto y coma, `OR`, subconsultas, expresiones no registradas, más de cuatro cálculos, más de dos desgloses, más de diez condiciones ni límites fuera del rango del catálogo. El lexer también limita el texto a 8,192 caracteres y 512 tokens.
 
-Tampoco se relajan restricciones financieras para “hacer que funcione”: no hay histórico de límite/disponible/utilización de crédito, la posición exige cuenta y mes, y la rama de categorías exige su predicado descendiente. La interfaz visual V2.5 aún está pendiente; esta guía describe paridad de contrato y lenguaje, no afirma que el builder actual exponga todas estas combinaciones.
+Tampoco se relajan restricciones financieras para “hacer que funcione”: no hay histórico de límite/disponible/utilización de crédito, la posición exige cuenta y mes, y la rama de categorías exige su predicado descendiente. La interfaz visual V2.5 ya está implementada sobre este mismo contrato; su experiencia actual, agrupaciones ordenadas y paridad con Consulta escrita se documentan en [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
 
 ## Evidencia de regresión V2.4
 
