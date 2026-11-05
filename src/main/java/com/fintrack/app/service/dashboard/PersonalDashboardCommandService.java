@@ -269,6 +269,7 @@ public class PersonalDashboardCommandService {
         if (requested.size() != dashboard.getWidgets().size() || !requested.keySet().equals(widgetIds(dashboard))) {
             throw failure(PersonalDashboardCommandException.Code.INVALID_LAYOUT, "Layout must contain every widget exactly once.");
         }
+        dashboard.getWidgets().forEach(widget -> validateWidgetWidth(widget.getVisualizationType(), requested.get(widget.getId()).width()));
         int temporaryStart =
             dashboard.getWidgets().stream().mapToInt(PersonalDashboardWidget::getPosition).max().orElse(-1) +
             dashboard.getWidgets().size() +
@@ -353,6 +354,7 @@ public class PersonalDashboardCommandService {
             );
         }
         validateVisualization(normalizedDefinition, visualizationType);
+        validateWidgetWidth(visualizationType, width);
         JsonNode options = visualizationOptions == null ? JsonNodeFactory.instance.objectNode() : visualizationOptions;
         if (!options.isObject() || jsonDepth(options, 0) > MAX_JSON_DEPTH) {
             throw failure(PersonalDashboardCommandException.Code.INVALID_PAYLOAD, "Visualization options must be a bounded JSON object.");
@@ -416,6 +418,18 @@ public class PersonalDashboardCommandService {
                 TRANSFER_YEAR -> true;
             default -> false;
         };
+    }
+
+    private void validateWidgetWidth(PersonalDashboardVisualizationType visualizationType, PersonalDashboardWidgetWidth width) {
+        boolean chart = Set.of(
+            PersonalDashboardVisualizationType.LINE,
+            PersonalDashboardVisualizationType.BAR,
+            PersonalDashboardVisualizationType.GROUPED_BAR,
+            PersonalDashboardVisualizationType.STACKED_BAR
+        ).contains(visualizationType);
+        if (chart && width == PersonalDashboardWidgetWidth.COMPACT) {
+            throw failure(PersonalDashboardCommandException.Code.INVALID_LAYOUT, "Chart widgets require a medium or full width.");
+        }
     }
 
     private void apply(PersonalDashboardWidget widget, ValidatedWidget payload, Instant createdAt) {

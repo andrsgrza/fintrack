@@ -4,7 +4,6 @@
  */
 describe('Personal dashboards V2-3 real acceptance', () => {
   type Reference = { id: number; name: string };
-
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -58,7 +57,10 @@ describe('Personal dashboards V2-3 real acceptance', () => {
     cy.viewport(1440, 960);
     cy.visit('/analytics/dashboards');
     cy.get('[data-cy="recommendedDashboardGallery"] article').should('have.length', 3);
-    cy.get('[data-cy="recommendedDashboardGallery"] article').first().contains('button', 'Use as a starting point').click();
+    cy.get('[data-cy="recommendedDashboardGallery"] article')
+      .first()
+      .contains('button', /Use as a starting point|Usar como base/)
+      .click();
     cy.get('[data-cy="personalDashboardName"]').clear();
     cy.get('[data-cy="personalDashboardName"]').type(`Real copied overview ${suffix}`);
     cy.get('[data-cy="personalDashboardSubmit"]').click();
@@ -67,7 +69,7 @@ describe('Personal dashboards V2-3 real acceptance', () => {
     cy.wait('@loadPersonalDashboard').its('response.statusCode').should('eq', 200);
     cy.wait('@executePersonalWidget').its('response.statusCode').should('eq', 200);
     cy.get('[data-cy="personalDashboardWidgets"] article').should('have.length.at.least', 1);
-    cy.contains('temporary for this view').should('be.visible');
+    cy.contains(/temporary for this view|temporales para esta vista/).should('be.visible');
     cy.reload();
     cy.wait('@loadPersonalDashboard').its('response.statusCode').should('eq', 200);
     cy.get('[data-cy="personalDashboardWidgets"] article').should('have.length.at.least', 1);

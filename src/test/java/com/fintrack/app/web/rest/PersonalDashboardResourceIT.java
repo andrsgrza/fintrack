@@ -14,6 +14,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.PersonalDashboard;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.PersonalDashboardWidgetWidth;
 import com.fintrack.app.repository.PersonalDashboardRepository;
 import com.fintrack.app.repository.PersonalDashboardRequestRepository;
 import com.fintrack.app.security.AuthoritiesConstants;
@@ -105,16 +106,7 @@ class PersonalDashboardResourceIT {
         long id = dashboard.path("id").asLong();
         long version = dashboard.path("version").asLong();
 
-        JsonNode afterFirst = addWidget(
-            id,
-            version,
-            "Conteo por institución",
-            "add-widget-1",
-            countByInstitution(),
-            "BAR",
-            "COMPACT",
-            true
-        );
+        JsonNode afterFirst = addWidget(id, version, "Conteo por institución", "add-widget-1", countByInstitution(), "BAR", "MEDIUM", true);
         long firstWidgetId = afterFirst.path("widgets").get(0).path("id").asLong();
         long afterFirstVersion = afterFirst.path("version").asLong();
         JsonNode afterSecond = addWidget(id, afterFirstVersion, "Total de gastos", "add-widget-2", expenseTotal(), "KPI", "MEDIUM", true);
@@ -123,7 +115,7 @@ class PersonalDashboardResourceIT {
         ObjectNode layout = objectMapper.createObjectNode().put("expectedVersion", afterSecond.path("version").asLong());
         ArrayNode widgets = layout.putArray("widgets");
         widgets.addObject().put("widgetId", secondWidgetId).put("width", "FULL").put("visible", false);
-        widgets.addObject().put("widgetId", firstWidgetId).put("width", "COMPACT").put("visible", true);
+        widgets.addObject().put("widgetId", firstWidgetId).put("width", "MEDIUM").put("visible", true);
         JsonNode reordered = body(
             mockMvc
                 .perform(
@@ -142,6 +134,10 @@ class PersonalDashboardResourceIT {
         entityManager.clear();
         PersonalDashboard persisted = dashboardRepository.findOneWithWidgetsByIdAndUserLogin(id, "user").orElseThrow();
         assertThat(persisted.getWidgets()).extracting(widget -> widget.getPosition()).containsExactly(0, 1);
+        assertThat(persisted.getWidgets())
+            .extracting(widget -> widget.getWidth())
+            .containsExactly(PersonalDashboardWidgetWidth.FULL, PersonalDashboardWidgetWidth.MEDIUM);
+        assertThat(persisted.getWidgets()).extracting(widget -> widget.getVisible()).containsExactly(false, true);
         assertThat(persisted.getWidgets().get(0).getQueryDefinitionJson()).doesNotContain("context");
         assertThat(persisted.getWidgets().get(0).getVisualizationOptionsJson()).isEqualTo("{}");
     }
@@ -151,7 +147,70 @@ class PersonalDashboardResourceIT {
         JsonNode dashboard = create("Protegido", "create-protected-1", relativeContext());
         long id = dashboard.path("id").asLong();
         long originalVersion = dashboard.path("version").asLong();
-        JsonNode saved = addWidget(id, originalVersion, "Conteo", "add-protected-1", countByInstitution(), "BAR", "COMPACT", true);
+        JsonNode saved = addWidget(id, originalVersion, "Conteo", "add-protected-1", countByInstitution(), "BAR", "MEDIUM", true);
+
+        ObjectNode compactChartLayout = objectMapper.createObjectNode().put("expectedVersion", saved.path("version").asLong());
+        compactChartLayout
+            .putArray("widgets")
+            .addObject()
+            .put("widgetId", saved.path("widgets").get(0).path("id").asLong())
+            .put("width", "COMPACT")
+            .put("visible", true);
+        mockMvc
+            .perform(
+                put(URL + "/{id}/layout", id)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(compactChartLayout))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_LAYOUT"));
+
+        long widgetId = saved.path("widgets").get(0).path("id").asLong();
+        ObjectNode validLayout = objectMapper.createObjectNode().put("expectedVersion", saved.path("version").asLong());
+        validLayout.putArray("widgets").addObject().put("widgetId", widgetId).put("width", "MEDIUM").put("visible", true);
+        JsonNode layoutSaved = body(
+            mockMvc
+                .perform(
+                    put(URL + "/{id}/layout", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(validLayout))
+                )
+                .andExpect(status().isOk())
+                .andReturn()
+        );
+
+        mockMvc
+            .perform(
+                put(URL + "/{id}/layout", id).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(validLayout))
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        ObjectNode duplicateLayout = objectMapper.createObjectNode().put("expectedVersion", layoutSaved.path("version").asLong());
+        ArrayNode duplicateWidgets = duplicateLayout.putArray("widgets");
+        duplicateWidgets.addObject().put("widgetId", widgetId).put("width", "MEDIUM").put("visible", true);
+        duplicateWidgets.addObject().put("widgetId", widgetId).put("width", "MEDIUM").put("visible", true);
+        assertThat(duplicateWidgets).hasSize(2);
+        assertThat(objectMapper.readTree(objectMapper.writeValueAsBytes(duplicateLayout)).path("widgets")).hasSize(2);
+        mockMvc
+            .perform(
+                put(URL + "/{id}/layout", id)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(duplicateLayout))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_LAYOUT"));
+
+        ObjectNode incompleteLayout = objectMapper.createObjectNode().put("expectedVersion", layoutSaved.path("version").asLong());
+        incompleteLayout.putArray("widgets");
+        mockMvc
+            .perform(
+                put(URL + "/{id}/layout", id)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(incompleteLayout))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_LAYOUT"));
 
         ObjectNode staleUpdate = objectMapper.createObjectNode();
         staleUpdate.put("expectedVersion", originalVersion);
@@ -163,7 +222,7 @@ class PersonalDashboardResourceIT {
             .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
 
         ObjectNode incompatible = widgetPayload(
-            saved.path("version").asLong(),
+            layoutSaved.path("version").asLong(),
             "Indicador inválido",
             "add-protected-2",
             countByInstitution(),
@@ -181,7 +240,7 @@ class PersonalDashboardResourceIT {
             .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
 
         ObjectNode nonTemporalLine = widgetPayload(
-            saved.path("version").asLong(),
+            layoutSaved.path("version").asLong(),
             "Línea inválida",
             "add-protected-non-temporal-line",
             countByInstitution(),

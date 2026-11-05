@@ -11,6 +11,7 @@ const listPersonalDashboards = jest.fn();
 const createPersonalDashboard = jest.fn();
 const copyOfficialDashboardTemplate = jest.fn();
 const getPersonalDashboard = jest.fn();
+const savePersonalDashboardLayout = jest.fn();
 const useDashboardWidgetResults = jest.fn();
 
 jest.mock('app/config/store', () => ({ useAppSelector: () => 'en' }));
@@ -36,6 +37,7 @@ jest.mock('./personal-dashboard-api', () => ({
   createPersonalDashboard: (...args: unknown[]) => createPersonalDashboard(...args),
   copyOfficialDashboardTemplate: (...args: unknown[]) => copyOfficialDashboardTemplate(...args),
   getPersonalDashboard: (...args: unknown[]) => getPersonalDashboard(...args),
+  savePersonalDashboardLayout: (...args: unknown[]) => savePersonalDashboardLayout(...args),
 }));
 
 const catalog = {
@@ -153,6 +155,19 @@ describe('personal dashboards V2-3', () => {
       schemaVersion: 1,
     });
     getPersonalDashboard.mockResolvedValue(personalDashboard);
+    savePersonalDashboardLayout.mockImplementation(
+      (_dashboardId: number, command: { widgets: Array<{ widgetId: number; width: string; visible: boolean }> }) =>
+        Promise.resolve({
+          ...personalDashboard,
+          version: personalDashboard.version + 1,
+          widgets: command.widgets.map((item, position) => ({
+            ...personalDashboard.widgets.find(widget => widget.id === item.widgetId),
+            ...item,
+            id: item.widgetId,
+            position,
+          })),
+        }),
+    );
     useDashboardWidgetResults.mockImplementation((widgets: Array<{ id: number }>) => ({
       [widgets[0]?.id]: { loading: false, result, error: null },
       [widgets[1]?.id]: { loading: false, result: null, error: 'Temporary service failure' },
@@ -296,5 +311,69 @@ describe('personal dashboards V2-3', () => {
     renderViewer();
     await screen.findByRole('heading', { name: 'My dashboard' });
     expect(document.querySelector('[data-cy="personalDashboardWidgetInterval-71"]')?.value).toBe('TRANSACTION_MONTH');
+  });
+
+  it('keeps layout changes local until save, then persists only the complete layout command', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize dashboard' }));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardMoveDown-71"]'));
+    fireEvent.change(document.querySelector('[data-cy="personalDashboardWidth-71"]'), {
+      target: { value: 'FULL' },
+    });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardHide-72"]'));
+
+    expect(savePersonalDashboardLayout).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-cy="personalDashboardHiddenWidgets"]')?.textContent).toContain('Unavailable widget');
+    await waitFor(() => {
+      const lastWidgets = useDashboardWidgetResults.mock.calls.at(-1)?.[0];
+      expect(lastWidgets).toHaveLength(1);
+      expect(lastWidgets[0]?.id).toBe(71);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(savePersonalDashboardLayout).toHaveBeenCalledTimes(1));
+    expect(savePersonalDashboardLayout).toHaveBeenCalledWith(44, {
+      expectedVersion: 0,
+      widgets: [
+        { widgetId: 72, width: 'COMPACT', visible: false },
+        { widgetId: 71, width: 'FULL', visible: true },
+      ],
+    });
+    expect(personalDashboard.widgets.map(widget => widget.definition)).toEqual([
+      personalDashboard.widgets[0].definition,
+      personalDashboard.widgets[1].definition,
+    ]);
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
+  });
+
+  it('cancels a draft without an API mutation and exposes hidden widgets for recovery', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize dashboard' }));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardHide-71"]'));
+    expect(document.querySelector('[data-cy="personalDashboardHiddenWidgets"]')?.textContent).toContain('Expense total');
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardPreset-COMPACT"]'));
+    expect(screen.queryByRole('button', { name: 'Restore layout' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(document.querySelector('[data-cy="personalDashboardWidget-71"]')).not.toBeNull());
+    await waitFor(() => expect(document.querySelector('[data-cy="personalDashboardWidget-72"]')).not.toBeNull());
+    expect(savePersonalDashboardLayout).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed layout save as an editable local draft', async () => {
+    savePersonalDashboardLayout.mockRejectedValueOnce(new Error('Version conflict'));
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize dashboard' }));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardHide-72"]'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText(/layout changes could not be saved/i)).toBeTruthy();
+    expect(document.querySelector('[data-cy="personalDashboardHiddenWidgets"]')?.textContent).toContain('Unavailable widget');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy();
   });
 });

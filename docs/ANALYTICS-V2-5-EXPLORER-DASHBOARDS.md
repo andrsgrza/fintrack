@@ -120,6 +120,40 @@ The shared result adapter serves both Explorer and dashboards. Dashboards may co
 tables for presentation, but preserve all server rows through **Ver datos** and keep the same
 legend, accessibility, currency, availability, and financial-correctness behavior.
 
+### Personal dashboard layout customization
+
+Only a user-owned dashboard exposes **Personalizar dashboard**. Its normal viewer remains a
+read-only financial view; the three recommended dashboards remain code-defined and do not expose
+layout editing. Customization keeps a local complete layout draft containing only widget identity,
+order, logical desktop width, and visibility. It never writes a query, a visualization context, a
+calculation, or a financial result while the user rearranges the page.
+
+The persisted desktop width is controlled rather than pixel-based: **Compacto** is four columns,
+**Mediano** six, and **Ancho completo** twelve. Tablet and mobile adapt that preference to the
+available responsive grid without changing the saved width. Charts cannot be saved as compact;
+the command boundary enforces that minimum as well as the UI. Each visible card supports pointer
+and touch drag-and-drop, keyboard drag, and **Mover arriba / Mover abajo** controls. All methods
+produce the same deterministic complete order.
+
+**Ocultar** removes a whole widget from the visible grid and from viewer execution, but not from
+the dashboard aggregate. Its identity, query, visualization, and layout attributes remain intact
+in **Widgets ocultos**, where it can be shown again. If all widgets are hidden, the viewer offers
+an explicit recovery action. This is distinct from a chart legend, whose per-series visibility is
+presentation-only and does not hide a widget.
+
+**Equilibrado**, **Compacto**, and **Centrado en gráficas** are local size transformations. They
+preserve widget order, visibility, titles, visualization types, default context, and canonical
+definitions. They do not save automatically. There is no restore-to-original layout: after a
+layout save, the resulting complete order, width, and visibility are the dashboard's current
+layout. **Cancelar** simply discards the local draft and returns to that last saved layout.
+
+The viewer submits a single `PUT /layout` only after **Guardar cambios**, with the aggregate
+`expectedVersion` and every widget exactly once. **Cancelar** makes no write. An unsaved-change
+indicator and native leave warning protect drafts. A failed, stale, invalid, or unauthorized save
+leaves the local draft visible with an actionable error; it never silently overwrites another
+session. The forward-only `20261105100000_remove_personal_dashboard_layout_baseline.xml` migration
+removes retired baseline columns without changing the current layout of existing widgets.
+
 ## Safety and verification
 
 The implementation retains the server-side ownership checks for account/category/tag references,
@@ -131,13 +165,15 @@ Relevant regression coverage is located in:
 
 - `SemanticAnalyticsExecutionServiceIT`, `SemanticSpecializedAnalyticsExecutionServiceIT`, and
   `SemanticAnalyticsValidatorTest` for semantic execution and financial rules;
-- `PersonalDashboardResourceIT` for owner-scoped persistence, template copies, widget validation,
-  grouping order, and visualization compatibility;
+- `PersonalDashboardResourceIT` and `PersonalDashboardPersistenceMigrationIT` for owner-scoped
+  persistence, atomic layout behavior, template copies, widget validation, grouping
+  order, and visualization compatibility;
 - `analytics-explorer.spec.tsx` and `personal-dashboards.spec.tsx` for visual/written definitions
-  and presentation state; and
+  and presentation state, plus `personal-dashboard-layout.spec.ts` for local layout transforms; and
 - Cypress `analytics/personal-dashboard-widgets-real.cy.ts`,
-  `analytics/personal-dashboards-real.cy.ts`, and `analytics/recommended-dashboards-real.cy.ts`
-  for real browser-to-REST coverage.
+  `analytics/personal-dashboards-real.cy.ts`,
+  `analytics/personal-dashboard-layout-real.cy.ts`, and
+  `analytics/recommended-dashboards-real.cy.ts` for real browser-to-REST coverage.
 
 The focused widget regression covers both `ROOT_CATEGORY + MONTH + LINE` and `MONTH +
 ROOT_CATEGORY + LINE`, save → reload → edit, and invalid non-temporal line queries that must still

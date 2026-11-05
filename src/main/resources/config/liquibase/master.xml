@@ -67,5 +67,7 @@
     <include file="config/liquibase/changelog/20261020110000_transaction_batch_publication_counts.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261104100000_personal_dashboard_persistence.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261104110000_personal_dashboard_template_copy_scope.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261104120000_personal_dashboard_layout_baseline.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261105100000_remove_personal_dashboard_layout_baseline.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

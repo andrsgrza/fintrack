@@ -8,6 +8,23 @@ body {
   margin: 0;
 }
 
+.personal-dashboard-drop-target > .card {
+  outline: 0.1875rem solid rgba(var(--bs-primary-rgb), 0.55);
+  outline-offset: 0.125rem;
+}
+
+.personal-dashboard-layout-presets {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 575.98px) {
+  .personal-dashboard-viewer .form-select.w-auto {
+    max-width: 100%;
+  }
+}
+
 a {
   color: #533f03;
   font-weight: bold;

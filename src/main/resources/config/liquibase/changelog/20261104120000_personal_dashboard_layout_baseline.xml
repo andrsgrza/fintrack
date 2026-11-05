@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Forward-only baseline for Restore layout. Existing development dashboards keep their
+        currently valid layout as their initial baseline; financial-domain tables are untouched.
+    -->
+    <changeSet id="20261104120000-1" author="fintrack">
+        <addColumn tableName="personal_dashboard_widget">
+            <column name="initial_position" type="integer"/>
+            <column name="initial_width" type="varchar(16)"/>
+            <column name="initial_visible" type="boolean"/>
+        </addColumn>
+        <sql>update personal_dashboard_widget set initial_position = position, initial_width = width, initial_visible = visible where initial_position is null or initial_width is null or initial_visible is null</sql>
+        <addNotNullConstraint tableName="personal_dashboard_widget" columnName="initial_position" columnDataType="integer"/>
+        <addNotNullConstraint tableName="personal_dashboard_widget" columnName="initial_width" columnDataType="varchar(16)"/>
+        <addNotNullConstraint tableName="personal_dashboard_widget" columnName="initial_visible" columnDataType="boolean"/>
+        <sql>alter table personal_dashboard_widget add constraint ck_personal_dashboard_widget_initial_position check (initial_position &gt;= 0)</sql>
+        <sql>alter table personal_dashboard_widget add constraint ck_personal_dashboard_widget_initial_width check (initial_width in ('COMPACT', 'MEDIUM', 'FULL'))</sql>
+    </changeSet>
+</databaseChangeLog>

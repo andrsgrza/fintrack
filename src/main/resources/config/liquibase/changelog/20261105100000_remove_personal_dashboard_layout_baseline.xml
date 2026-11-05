@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        The preceding layout-baseline migration remains immutable for databases that applied it.
+        Personal dashboards now persist only their current layout, so remove the retired columns
+        without changing any current position, width, visibility, or analytical definition.
+    -->
+    <changeSet id="20261105100000-1" author="fintrack">
+        <dropColumn tableName="personal_dashboard_widget">
+            <column name="initial_position"/>
+            <column name="initial_width"/>
+            <column name="initial_visible"/>
+        </dropColumn>
+    </changeSet>
+</databaseChangeLog>

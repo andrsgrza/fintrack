@@ -24,6 +24,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 class PersonalDashboardPersistenceMigrationIT {
 
     private static final String CHANGELOG = "config/liquibase/changelog/20261104100000_personal_dashboard_persistence.xml";
+    private static final String LAYOUT_BASELINE_CHANGELOG =
+        "config/liquibase/changelog/20261104120000_personal_dashboard_layout_baseline.xml";
+    private static final String REMOVE_LAYOUT_BASELINE_CHANGELOG =
+        "config/liquibase/changelog/20261105100000_remove_personal_dashboard_layout_baseline.xml";
+    private static final String MASTER_CHANGELOG = "config/liquibase/master.xml";
 
     @Autowired
     private DataSource dataSource;
@@ -39,7 +44,7 @@ class PersonalDashboardPersistenceMigrationIT {
             ) {
                 createRetiredDashboardSchema(statement);
 
-                runMigration(connection, schemaScope.schema());
+                runMigration(connection, schemaScope.schema(), CHANGELOG);
 
                 assertThat(tableExists(connection, schemaScope.schema(), "personal_dashboard_home")).isFalse();
                 assertThat(tableExists(connection, schemaScope.schema(), "personal_dashboard_operation")).isFalse();
@@ -49,6 +54,52 @@ class PersonalDashboardPersistenceMigrationIT {
                 assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "query_definition_json")).isTrue();
                 assertThat(tableExists(connection, schemaScope.schema(), "personal_dashboard_request")).isTrue();
                 assertThat(tableExists(connection, schemaScope.schema(), "jhi_user")).isTrue();
+            }
+        }
+    }
+
+    @Test
+    void removesRetiredLayoutBaselineWithoutChangingTheCurrentWidgetLayout() throws Exception {
+        String schema = "personal_dashboard_layout_" + UUID.randomUUID().toString().replace("-", "");
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
+            try (
+                MigrationTestSchemaScope schemaScope = MigrationTestSchemaScope.open(connection, schema);
+                Statement statement = connection.createStatement()
+            ) {
+                statement.execute(
+                    "create table personal_dashboard_widget (id bigint primary key, position integer not null, width varchar(16) not null, visible boolean not null)"
+                );
+                statement.execute("insert into personal_dashboard_widget (id, position, width, visible) values (1, 3, 'FULL', false)");
+
+                runMigration(connection, schemaScope.schema(), LAYOUT_BASELINE_CHANGELOG);
+                runMigration(connection, schemaScope.schema(), REMOVE_LAYOUT_BASELINE_CHANGELOG);
+
+                assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_position")).isFalse();
+                assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_width")).isFalse();
+                assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_visible")).isFalse();
+                try (var rows = statement.executeQuery("select position, width, visible from personal_dashboard_widget where id = 1")) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getInt("position")).isEqualTo(3);
+                    assertThat(rows.getString("width")).isEqualTo("FULL");
+                    assertThat(rows.getBoolean("visible")).isFalse();
+                }
+            }
+        }
+    }
+
+    @Test
+    void freshSchemaDoesNotCreateRetiredLayoutBaselineColumns() throws Exception {
+        String schema = "personal_dashboard_fresh_" + UUID.randomUUID().toString().replace("-", "");
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
+            try (MigrationTestSchemaScope schemaScope = MigrationTestSchemaScope.open(connection, schema)) {
+                runMigration(connection, schemaScope.schema(), MASTER_CHANGELOG);
+
+                assertThat(tableExists(connection, schemaScope.schema(), "personal_dashboard_widget")).isTrue();
+                assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_position")).isFalse();
+                assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_width")).isFalse();
+                assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_visible")).isFalse();
             }
         }
     }
@@ -69,10 +120,10 @@ class PersonalDashboardPersistenceMigrationIT {
         );
     }
 
-    private void runMigration(Connection connection, String schema) throws Exception {
+    private void runMigration(Connection connection, String schema, String changelog) throws Exception {
         Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection));
         database.setDefaultSchemaName(schema);
-        Liquibase liquibase = new Liquibase(CHANGELOG, new ClassLoaderResourceAccessor(), database);
+        Liquibase liquibase = new Liquibase(changelog, new ClassLoaderResourceAccessor(), database);
         liquibase.setChangeLogParameter("datetimeType", "timestamp with time zone");
         liquibase.update(new Contexts(), new LabelExpression());
     }

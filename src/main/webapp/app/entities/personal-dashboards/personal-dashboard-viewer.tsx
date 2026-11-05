@@ -1,5 +1,8 @@
+import { DndContext, DragEndEvent, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button } from 'reactstrap';
 
 import { useAppSelector } from 'app/config/store';
@@ -22,14 +25,25 @@ import { copy, datasetById, label } from 'app/entities/analytics-explorer/analyt
 import { dashboardDiagnostics, useDashboardWidgetResults } from 'app/entities/recommended-dashboards/recommended-dashboards';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
-import { getPersonalDashboard, PersonalDashboard, PersonalDashboardWidget } from './personal-dashboard-api';
+import { getPersonalDashboard, PersonalDashboard, PersonalDashboardWidget, savePersonalDashboardLayout } from './personal-dashboard-api';
+import {
+  DashboardLayoutItem,
+  DashboardLayoutPreset,
+  applyLayoutPreset,
+  changeLayoutVisibility,
+  changeLayoutWidth,
+  isChartVisualization,
+  layoutFromWidgets,
+  moveLayoutItem,
+  sameLayout,
+} from './personal-dashboard-layout';
 
 type Account = { id: number; name: string; accountType?: string; currency?: string };
 type DrillState = { definition: SemanticQueryDefinition; label: string };
 type ViewerWidget = PersonalDashboardWidget & { definition: SemanticQueryDefinition; trail: DrillState[]; contextPolicy?: 'CURRENT_ONLY' };
 
 const widthClass = (width: PersonalDashboardWidget['width']) =>
-  width === 'FULL' ? 'col-12' : width === 'COMPACT' ? 'col-12 col-md-6 col-xl-4' : 'col-12 col-xl-6';
+  width === 'FULL' ? 'col-12' : width === 'COMPACT' ? 'col-12 col-md-6 col-xl-4' : 'col-12 col-md-6 col-xl-6';
 const asOfDatasets = new Set(['FINANCIAL_POSITION_SNAPSHOT', 'ACCOUNT_POSITION_SNAPSHOT']);
 const formatAsOf = (locale: string, isoDate: string) =>
   new Intl.DateTimeFormat(locale.startsWith('es') ? 'es-MX' : 'en-US', { day: '2-digit', month: 'short', year: 'numeric' }).format(
@@ -46,6 +60,14 @@ const temporalOptionsForDefinition = (catalog: SemanticAnalyticsCatalog, definit
   return dataset ? temporalOptionsFor(dataset) : [];
 };
 
+type CustomizationControls = {
+  index: number;
+  count: number;
+  onMove: (widgetId: number, targetIndex: number) => void;
+  onWidth: (widgetId: number, width: PersonalDashboardWidget['width']) => void;
+  onHide: (widgetId: number) => void;
+};
+
 const PersonalWidgetCard = ({
   widget,
   state,
@@ -55,6 +77,7 @@ const PersonalWidgetCard = ({
   onTemporalIntervalChange,
   onDrillDown,
   onDrillBack,
+  customization,
 }: {
   widget: ViewerWidget;
   state: ReturnType<typeof useDashboardWidgetResults>[string] | undefined;
@@ -64,18 +87,94 @@ const PersonalWidgetCard = ({
   onTemporalIntervalChange: (widgetId: number, interval: string) => void;
   onDrillDown: (widget: ViewerWidget, categoryId: string, categoryLabel: string) => void;
   onDrillBack: (widget: ViewerWidget) => void;
+  customization?: CustomizationControls;
 }) => {
+  const sortable = useSortable({ id: widget.id, disabled: !customization });
   const currentOnly = state?.error === 'CURRENT_ONLY_CONTEXT';
   const asOf = asOfDatasets.has(widget.definition.dataset) && state?.result?.effectiveContext.through;
   const temporalGrouping = widget.definition.groupBy.find(isTemporalGrouping);
+  const chartNeedsSpace = isChartVisualization(widget.visualizationType);
+  const style = customization
+    ? { transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition, opacity: sortable.isDragging ? 0.55 : 1 }
+    : undefined;
   return (
-    <article className={widthClass(widget.width)} data-cy={`personalDashboardWidget-${widget.id}`}>
+    <article
+      ref={customization ? sortable.setNodeRef : undefined}
+      style={style}
+      className={`${widthClass(widget.width)} ${customization && sortable.isOver ? 'personal-dashboard-drop-target' : ''}`}
+      data-cy={`personalDashboardWidget-${widget.id}`}
+    >
       <div className="card border shadow-sm h-100">
         <div className="card-body p-3 p-md-4">
+          {customization ? (
+            <div className="d-flex flex-wrap align-items-center gap-2 border-bottom pb-2 mb-3">
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                aria-label={copy(locale, `Arrastrar ${widget.title}`, `Drag ${widget.title}`)}
+                title={copy(
+                  locale,
+                  'Arrastra para reordenar; también puedes usar las flechas del teclado.',
+                  'Drag to reorder; keyboard arrows also work.',
+                )}
+                style={{ touchAction: 'none' }}
+                {...sortable.attributes}
+                {...sortable.listeners}
+                data-cy={`personalDashboardDragHandle-${widget.id}`}
+              >
+                ↕ {copy(locale, 'Mover', 'Move')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => customization.onMove(widget.id, customization.index - 1)}
+                disabled={customization.index === 0}
+                data-cy={`personalDashboardMoveUp-${widget.id}`}
+              >
+                ↑ {copy(locale, 'Mover arriba', 'Move up')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => customization.onMove(widget.id, customization.index + 1)}
+                disabled={customization.index === customization.count - 1}
+                data-cy={`personalDashboardMoveDown-${widget.id}`}
+              >
+                ↓ {copy(locale, 'Mover abajo', 'Move down')}
+              </button>
+              <label className="small fw-semibold ms-sm-auto" htmlFor={`personal-dashboard-width-${widget.id}`}>
+                {copy(locale, 'Tamaño', 'Size')}
+              </label>
+              <select
+                id={`personal-dashboard-width-${widget.id}`}
+                className="form-select form-select-sm w-auto"
+                value={widget.width}
+                onChange={event => customization.onWidth(widget.id, event.target.value as PersonalDashboardWidget['width'])}
+                data-cy={`personalDashboardWidth-${widget.id}`}
+              >
+                <option value="COMPACT" disabled={chartNeedsSpace}>
+                  {copy(locale, 'Compacto', 'Compact')}
+                </option>
+                <option value="MEDIUM">{copy(locale, 'Mediano', 'Medium')}</option>
+                <option value="FULL">{copy(locale, 'Ancho completo', 'Full width')}</option>
+              </select>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => customization.onHide(widget.id)}
+                data-cy={`personalDashboardHide-${widget.id}`}
+              >
+                {copy(locale, 'Ocultar', 'Hide')}
+              </button>
+              {chartNeedsSpace ? (
+                <span className="small text-muted">{copy(locale, 'Gráfica: mínimo mediano.', 'Chart: medium minimum.')}</span>
+              ) : null}
+            </div>
+          ) : null}
           <h2 className="h5 mb-1">{widget.title}</h2>
           {widget.description ? <p className="small text-muted mb-3">{widget.description}</p> : null}
           <div className="d-flex align-items-center justify-content-end gap-2 mb-2">
-            {temporalGrouping && temporalOptions.length > 1 ? (
+            {!customization && temporalGrouping && temporalOptions.length > 1 ? (
               <>
                 <label className="small fw-semibold mb-0" htmlFor={`personal-dashboard-widget-interval-${widget.id}`}>
                   {copy(locale, 'Intervalo', 'Interval')}
@@ -95,16 +194,18 @@ const PersonalWidgetCard = ({
                 </select>
               </>
             ) : null}
-            <Button
-              tag={Link}
-              to={`/analytics/explorer?dashboardId=${dashboardId}&widgetId=${widget.id}`}
-              color="secondary"
-              outline
-              size="sm"
-              data-cy={`personalDashboardEditWidget-${widget.id}`}
-            >
-              {copy(locale, 'Editar visualización', 'Edit visualization')}
-            </Button>
+            {!customization ? (
+              <Button
+                tag={Link}
+                to={`/analytics/explorer?dashboardId=${dashboardId}&widgetId=${widget.id}`}
+                color="secondary"
+                outline
+                size="sm"
+                data-cy={`personalDashboardEditWidget-${widget.id}`}
+              >
+                {copy(locale, 'Editar visualización', 'Edit visualization')}
+              </Button>
+            ) : null}
           </div>
           {asOf ? (
             <p className="small fw-semibold mb-3">{copy(locale, `Al ${formatAsOf(locale, asOf)}`, `As of ${formatAsOf(locale, asOf)}`)}</p>
@@ -146,6 +247,7 @@ const PersonalWidgetCard = ({
 const PersonalDashboardViewer = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const { dashboardId } = useParams<{ dashboardId: string }>();
+  const navigate = useNavigate();
   const [catalog, setCatalog] = useState<SemanticAnalyticsCatalog | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [dashboard, setDashboard] = useState<PersonalDashboard | null>(null);
@@ -155,6 +257,10 @@ const PersonalDashboardViewer = () => {
   // This is deliberately not stored in the dashboard. It only changes the
   // canonical query copy sent by this rendered widget until the next reload.
   const [temporaryIntervals, setTemporaryIntervals] = useState<Record<number, string>>({});
+  const [customizing, setCustomizing] = useState(false);
+  const [layoutDraft, setLayoutDraft] = useState<DashboardLayoutItem[]>([]);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [savingLayout, setSavingLayout] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -162,6 +268,9 @@ const PersonalDashboardViewer = () => {
     setContext(null);
     setDrillStates({});
     setTemporaryIntervals({});
+    setCustomizing(false);
+    setLayoutDraft([]);
+    setLayoutError(null);
     void Promise.all([getSemanticAnalyticsCatalog(), getExplorerAccounts(), getPersonalDashboard(dashboardId ?? '')])
       .then(([nextCatalog, nextAccounts, nextDashboard]) => {
         if (!active) return;
@@ -172,6 +281,7 @@ const PersonalDashboardViewer = () => {
             .map(account => ({ id: account.id, name: account.name, accountType: account.accountType, currency: account.currency })),
         );
         setDashboard(nextDashboard);
+        setLayoutDraft(layoutFromWidgets(nextDashboard.widgets));
         // This is a local copy: changing controls below never invokes a dashboard mutation endpoint.
         setContext(nextDashboard.defaultContext);
       })
@@ -181,9 +291,20 @@ const PersonalDashboardViewer = () => {
     };
   }, [dashboardId]);
 
+  const persistedLayout = useMemo(() => layoutFromWidgets(dashboard?.widgets ?? []), [dashboard]);
+  const activeLayout = customizing ? layoutDraft : persistedLayout;
+  const layoutDirty = customizing && !sameLayout(layoutDraft, persistedLayout);
+  const dashboardWidgets = useMemo(() => {
+    const widgetById = new Map((dashboard?.widgets ?? []).map(widget => [widget.id, widget]));
+    return activeLayout.flatMap((item, position) => {
+      const widget = widgetById.get(item.widgetId);
+      return widget ? [{ ...widget, width: item.width, visible: item.visible, position }] : [];
+    });
+  }, [activeLayout, dashboard]);
+
   const widgets = useMemo<ViewerWidget[]>(
     () =>
-      (dashboard?.widgets ?? [])
+      dashboardWidgets
         .filter(widget => widget.visible)
         .map(widget => {
           const canonicalDefinition = drillStates[widget.id]?.definition ?? widget.definition;
@@ -195,9 +316,19 @@ const PersonalDashboardViewer = () => {
             contextPolicy: policyFor(widget),
           };
         }),
-    [dashboard, drillStates, temporaryIntervals],
+    [dashboardWidgets, drillStates, temporaryIntervals],
   );
   const states = useDashboardWidgetResults(widgets, context);
+
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!layoutDirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [layoutDirty]);
 
   const drillDown = (widget: ViewerWidget, categoryId: string, categoryLabel: string) => {
     if (widget.definition.dataset !== 'TRANSACTION_LEDGER') return;
@@ -215,6 +346,86 @@ const PersonalDashboardViewer = () => {
     setDrillStates(current => ({ ...current, [widget.id]: { definition: previous.definition, trail: widget.trail.slice(0, -1) } }));
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const visibleLayout = activeLayout.filter(item => item.visible);
+  const hiddenWidgets = dashboardWidgets.filter(widget => !widget.visible);
+  const startCustomization = () => {
+    setLayoutDraft(persistedLayout);
+    setLayoutError(null);
+    setCustomizing(true);
+  };
+  const cancelCustomization = () => {
+    setLayoutDraft(persistedLayout);
+    setLayoutError(null);
+    setCustomizing(false);
+  };
+  const updateDraftOrder = (widgetId: number, targetIndex: number) => {
+    const target = visibleLayout[targetIndex];
+    if (!target) return;
+    setLayoutDraft(current =>
+      moveLayoutItem(
+        current,
+        widgetId,
+        current.findIndex(item => item.widgetId === target.widgetId),
+      ),
+    );
+  };
+  const dragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const activeId = Number(active.id);
+    const overId = Number(over.id);
+    if (!Number.isSafeInteger(activeId) || !Number.isSafeInteger(overId)) return;
+    setLayoutDraft(current =>
+      moveLayoutItem(
+        current,
+        activeId,
+        current.findIndex(item => item.widgetId === overId),
+      ),
+    );
+  };
+  const applyPreset = (preset: DashboardLayoutPreset) => {
+    setLayoutDraft(current => applyLayoutPreset(preset, current, dashboardWidgets));
+  };
+  const saveLayout = async () => {
+    if (!dashboard || savingLayout || !layoutDirty) return;
+    setSavingLayout(true);
+    setLayoutError(null);
+    try {
+      const saved = await savePersonalDashboardLayout(dashboard.id, { expectedVersion: dashboard.version, widgets: layoutDraft });
+      setDashboard(saved);
+      setLayoutDraft(layoutFromWidgets(saved.widgets));
+      setCustomizing(false);
+    } catch (_requestError) {
+      setLayoutError(
+        copy(
+          locale,
+          'No se pudieron guardar los cambios de distribución. Conservamos tu borrador para que puedas revisarlo o reintentar.',
+          'The layout changes could not be saved. Your draft is still here so you can review it or try again.',
+        ),
+      );
+    } finally {
+      setSavingLayout(false);
+    }
+  };
+  const navigateBack = () => {
+    if (
+      layoutDirty &&
+      !window.confirm(
+        copy(
+          locale,
+          'Tienes cambios sin guardar. ¿Quieres salir y descartarlos?',
+          'You have unsaved changes. Do you want to leave and discard them?',
+        ),
+      )
+    ) {
+      return;
+    }
+    navigate('/analytics/dashboards');
+  };
+
   return (
     <ProductPage wide className="personal-dashboard-viewer">
       <ProductPageHeader
@@ -225,12 +436,51 @@ const PersonalDashboardViewer = () => {
           copy(locale, 'Una vista personal basada en consultas financieras guardadas.', 'A personal view based on saved financial queries.')
         }
         actions={
-          <Button tag={Link} to="/analytics/dashboards" color="secondary" outline>
-            {copy(locale, 'Volver a dashboards', 'Back to dashboards')}
-          </Button>
+          <div className="d-flex flex-wrap align-items-center justify-content-end gap-2">
+            {customizing ? (
+              <>
+                {layoutDirty ? (
+                  <span className="small fw-semibold text-warning-emphasis" role="status" data-cy="personalDashboardUnsavedChanges">
+                    {copy(locale, 'Cambios sin guardar', 'Unsaved changes')}
+                  </span>
+                ) : null}
+                <Button
+                  color="secondary"
+                  outline
+                  size="sm"
+                  onClick={cancelCustomization}
+                  disabled={savingLayout}
+                  data-cy="personalDashboardCancelLayout"
+                >
+                  {copy(locale, 'Cancelar', 'Cancel')}
+                </Button>
+                <Button
+                  color="primary"
+                  size="sm"
+                  onClick={() => void saveLayout()}
+                  disabled={!layoutDirty || savingLayout}
+                  data-cy="personalDashboardSaveLayout"
+                >
+                  {savingLayout ? copy(locale, 'Guardando…', 'Saving…') : copy(locale, 'Guardar cambios', 'Save changes')}
+                </Button>
+              </>
+            ) : (
+              <Button color="primary" size="sm" onClick={startCustomization} data-cy="personalDashboardCustomize">
+                {copy(locale, 'Personalizar dashboard', 'Customize dashboard')}
+              </Button>
+            )}
+            <Button color="secondary" outline size="sm" onClick={navigateBack}>
+              {copy(locale, 'Volver a dashboards', 'Back to dashboards')}
+            </Button>
+          </div>
         }
       />
       {error ? <Alert color="danger">{error}</Alert> : null}
+      {layoutError ? (
+        <Alert color="danger" data-cy="personalDashboardLayoutError">
+          {layoutError}
+        </Alert>
+      ) : null}
       {!catalog || !dashboard || !context ? (
         <div className="border rounded-2 p-4 text-center">
           {error
@@ -256,47 +506,183 @@ const PersonalDashboardViewer = () => {
               'Period, account, and currency changes are temporary for this view; the saved dashboard is not changed.',
             )}
           </p>
-          {!widgets.length ? (
+          {customizing ? (
+            <section className="border rounded-2 p-3 p-md-4" aria-labelledby="personal-dashboard-customization-heading">
+              <div className="mb-3">
+                <div>
+                  <h2 id="personal-dashboard-customization-heading" className="h5 mb-1">
+                    {copy(locale, 'Personalizar distribución', 'Customize layout')}
+                  </h2>
+                  <p className="small text-muted mb-0">
+                    {copy(
+                      locale,
+                      'Los cambios se ven aquí primero y no afectan las consultas ni los resultados hasta que guardes.',
+                      'Changes preview here first and do not affect queries or results until you save.',
+                    )}
+                  </p>
+                </div>
+                <div
+                  className="personal-dashboard-layout-presets d-flex flex-wrap align-items-center justify-content-md-end gap-2 mt-3"
+                  aria-label={copy(locale, 'Preajustes de distribución', 'Layout presets')}
+                >
+                  <span className="small fw-semibold">{copy(locale, 'Preajustes', 'Presets')}</span>
+                  {(
+                    [
+                      ['BALANCED', 'Equilibrado', 'Balanced'],
+                      ['COMPACT', 'Compacto', 'Compact'],
+                      ['CHART_FOCUSED', 'Centrado en gráficas', 'Chart-focused'],
+                    ] as Array<[DashboardLayoutPreset, string, string]>
+                  ).map(([preset, spanish, english]) => (
+                    <Button
+                      key={preset}
+                      color="secondary"
+                      outline
+                      size="sm"
+                      onClick={() => applyPreset(preset)}
+                      data-cy={`personalDashboardPreset-${preset}`}
+                    >
+                      {copy(locale, spanish, english)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              {!widgets.length ? (
+                <section className="border rounded-2 p-4 text-center" data-cy="personalDashboardAllHiddenState">
+                  <h3 className="h6">{copy(locale, 'Todos los widgets están ocultos', 'All widgets are hidden')}</h3>
+                  <p className="small text-muted mb-3">
+                    {copy(
+                      locale,
+                      'Ocultarlos no los elimina ni modifica sus consultas.',
+                      'Hiding them does not delete them or modify their queries.',
+                    )}
+                  </p>
+                  <Button
+                    color="secondary"
+                    outline
+                    size="sm"
+                    onClick={() => setLayoutDraft(current => current.map(item => ({ ...item, visible: true })))}
+                    data-cy="personalDashboardRestoreAllWidgets"
+                  >
+                    {copy(locale, 'Mostrar todos los widgets', 'Show all widgets')}
+                  </Button>
+                </section>
+              ) : (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
+                  <SortableContext items={widgets.map(widget => widget.id)} strategy={rectSortingStrategy}>
+                    <div className="row g-3" data-cy="personalDashboardWidgets">
+                      {widgets.map((widget, index) => (
+                        <PersonalWidgetCard
+                          key={widget.id}
+                          widget={widget}
+                          state={states[widget.id]}
+                          locale={locale}
+                          dashboardId={dashboard.id}
+                          temporalOptions={temporalOptionsForDefinition(catalog, widget.definition)}
+                          onTemporalIntervalChange={(widgetId, interval) =>
+                            setTemporaryIntervals(previous => ({ ...previous, [widgetId]: interval }))
+                          }
+                          onDrillDown={drillDown}
+                          onDrillBack={drillBack}
+                          customization={{
+                            index,
+                            count: widgets.length,
+                            onMove: updateDraftOrder,
+                            onWidth: (widgetId, width) => setLayoutDraft(current => changeLayoutWidth(current, widgetId, width)),
+                            onHide: widgetId => setLayoutDraft(current => changeLayoutVisibility(current, widgetId, false)),
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              )}
+              {hiddenWidgets.length ? (
+                <section
+                  className="border-top mt-4 pt-3"
+                  aria-labelledby="personal-dashboard-hidden-widgets-heading"
+                  data-cy="personalDashboardHiddenWidgets"
+                >
+                  <h3 id="personal-dashboard-hidden-widgets-heading" className="h6 mb-2">
+                    {copy(locale, 'Widgets ocultos', 'Hidden widgets')} ({hiddenWidgets.length})
+                  </h3>
+                  <ul className="list-unstyled mb-0 d-flex flex-column gap-2">
+                    {hiddenWidgets.map(widget => (
+                      <li key={widget.id} className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <span>{widget.title}</span>
+                        <Button
+                          color="secondary"
+                          outline
+                          size="sm"
+                          onClick={() => setLayoutDraft(current => changeLayoutVisibility(current, widget.id, true))}
+                          data-cy={`personalDashboardShow-${widget.id}`}
+                        >
+                          {copy(locale, 'Mostrar widget', 'Show widget')}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </section>
+          ) : !widgets.length ? (
             <section className="border rounded-2 p-4 text-center" data-cy="personalDashboardViewerEmptyState">
               <h2 className="h5">
-                {copy(locale, 'Este dashboard aún no tiene visualizaciones', 'This dashboard has no visualizations yet')}
+                {dashboardWidgets.length
+                  ? copy(locale, 'Todos los widgets están ocultos', 'All widgets are hidden')
+                  : copy(locale, 'Este dashboard aún no tiene visualizaciones', 'This dashboard has no visualizations yet')}
               </h2>
               <p className="small text-muted mb-0">
-                {copy(
-                  locale,
-                  'Crea una consulta en el Explorador de métricas y guárdala aquí cuando esté lista.',
-                  'Create a query in Metric Explorer and save it here when it is ready.',
-                )}
+                {dashboardWidgets.length
+                  ? copy(
+                      locale,
+                      'Personaliza el dashboard para volver a mostrar un widget.',
+                      'Customize the dashboard to show a widget again.',
+                    )
+                  : copy(
+                      locale,
+                      'Crea una consulta en el Explorador de métricas y guárdala aquí cuando esté lista.',
+                      'Create a query in Metric Explorer and save it here when it is ready.',
+                    )}
               </p>
-              <Button
-                tag={Link}
-                to={`/analytics/explorer?dashboardId=${dashboard.id}`}
-                color="primary"
-                size="sm"
-                className="mt-3"
-                data-cy="personalDashboardAddVisualization"
-              >
-                {copy(locale, 'Añadir visualización', 'Add visualization')}
-              </Button>
+              {dashboardWidgets.length ? (
+                <Button color="primary" size="sm" className="mt-3" onClick={startCustomization} data-cy="personalDashboardManageWidgets">
+                  {copy(locale, 'Administrar widgets', 'Manage widgets')}
+                </Button>
+              ) : (
+                <Button
+                  tag={Link}
+                  to={`/analytics/explorer?dashboardId=${dashboard.id}`}
+                  color="primary"
+                  size="sm"
+                  className="mt-3"
+                  data-cy="personalDashboardAddVisualization"
+                >
+                  {copy(locale, 'Añadir visualización', 'Add visualization')}
+                </Button>
+              )}
             </section>
           ) : (
-            <div className="row g-3" data-cy="personalDashboardWidgets">
-              {widgets.map(widget => (
-                <PersonalWidgetCard
-                  key={widget.id}
-                  widget={widget}
-                  state={states[widget.id]}
-                  locale={locale}
-                  dashboardId={dashboard.id}
-                  temporalOptions={temporalOptionsForDefinition(catalog, widget.definition)}
-                  onTemporalIntervalChange={(widgetId, interval) =>
-                    setTemporaryIntervals(previous => ({ ...previous, [widgetId]: interval }))
-                  }
-                  onDrillDown={drillDown}
-                  onDrillBack={drillBack}
-                />
-              ))}
-            </div>
+            <DndContext>
+              <SortableContext items={widgets.map(widget => widget.id)} strategy={rectSortingStrategy}>
+                <div className="row g-3" data-cy="personalDashboardWidgets">
+                  {widgets.map(widget => (
+                    <PersonalWidgetCard
+                      key={widget.id}
+                      widget={widget}
+                      state={states[widget.id]}
+                      locale={locale}
+                      dashboardId={dashboard.id}
+                      temporalOptions={temporalOptionsForDefinition(catalog, widget.definition)}
+                      onTemporalIntervalChange={(widgetId, interval) =>
+                        setTemporaryIntervals(previous => ({ ...previous, [widgetId]: interval }))
+                      }
+                      onDrillDown={drillDown}
+                      onDrillBack={drillBack}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       )}

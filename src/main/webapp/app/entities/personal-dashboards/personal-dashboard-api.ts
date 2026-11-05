@@ -71,6 +71,15 @@ export type PersonalDashboardWidgetAdd = {
 
 export type PersonalDashboardWidgetUpdate = Omit<PersonalDashboardWidgetAdd, 'clientRequestId'>;
 
+export type PersonalDashboardLayout = {
+  expectedVersion: number;
+  widgets: Array<{
+    widgetId: number;
+    width: PersonalDashboardWidget['width'];
+    visible: boolean;
+  }>;
+};
+
 export const listPersonalDashboards = async (): Promise<PersonalDashboardSummary[]> =>
   (await axios.get<PersonalDashboardSummary[]>(api)).data;
 
@@ -93,3 +102,8 @@ export const updatePersonalDashboardWidget = async (
   widgetId: string | number,
   command: PersonalDashboardWidgetUpdate,
 ): Promise<PersonalDashboard> => (await axios.put<PersonalDashboard>(`${api}/${dashboardId}/widgets/${widgetId}`, command)).data;
+
+export const savePersonalDashboardLayout = async (
+  dashboardId: string | number,
+  command: PersonalDashboardLayout,
+): Promise<PersonalDashboard> => (await axios.put<PersonalDashboard>(`${api}/${dashboardId}/layout`, command)).data;
