@@ -1,9 +1,15 @@
 import axios from 'axios';
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, ButtonGroup, Input, Label } from 'reactstrap';
 
 import { useAppSelector } from 'app/config/store';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import PersonalDashboardWidgetSaveDialog, {
+  savedSeriesLimit,
+  WidgetEditingTarget,
+} from 'app/entities/personal-dashboards/personal-dashboard-widget-save-dialog';
+import { getPersonalDashboard } from 'app/entities/personal-dashboards/personal-dashboard-api';
 
 import {
   executeSemanticQuery,
@@ -40,6 +46,7 @@ import {
 type Account = { id: number; name: string; accountType?: string; currency?: string };
 type Mode = 'VISUAL' | 'SQL';
 type DrillState = { definition: SemanticQueryDefinition; label: string };
+type EditingWidget = WidgetEditingTarget & { baseline: string };
 
 const diagnosticsFrom = (error: unknown): AnalyticsDiagnostic[] => {
   if (axios.isAxiosError<AnalyticsProblem>(error)) {
@@ -58,9 +65,21 @@ const isCatalog = (candidate: SemanticAnalyticsCatalog): boolean =>
 const clone = (definition: SemanticQueryDefinition): SemanticQueryDefinition =>
   JSON.parse(JSON.stringify(definition)) as SemanticQueryDefinition;
 
+const idFrom = (value: string | null): number | null => {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
+
+const editingSignature = (definition: SemanticQueryDefinition, visualization: ExplorerVisualization, seriesLimit: number | 'ALL') =>
+  JSON.stringify({ definition, visualization, seriesLimit });
+
 /** One Explorer, one canonical AST, one semantic executor. Visual and written authoring are alternate views only. */
 const AnalyticsExplorer = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const destinationDashboardId = idFrom(searchParams.get('dashboardId'));
+  const editingWidgetId = idFrom(searchParams.get('widgetId'));
   const [catalog, setCatalog] = useState<SemanticAnalyticsCatalog | null>(null);
   const [definition, setDefinition] = useState<SemanticQueryDefinition | null>(null);
   const [context, setContext] = useState<VisualizationContext | null>(null);
@@ -82,6 +101,8 @@ const AnalyticsExplorer = () => {
   const [sqlValidated, setSqlValidated] = useState(true);
   const [scratch, setScratch] = useState(false);
   const [drillStack, setDrillStack] = useState<DrillState[]>([]);
+  const [editing, setEditing] = useState<EditingWidget | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
   const sequence = useRef(0);
 
   useEffect(() => {
@@ -103,7 +124,7 @@ const AnalyticsExplorer = () => {
           return;
         }
         setCatalog(nextCatalog);
-        setContext(defaultVisualizationContext(nextCatalog.schemaVersion, nextCatalog.supportedRelativePeriods[0]));
+        setContext(current => current ?? defaultVisualizationContext(nextCatalog.schemaVersion, nextCatalog.supportedRelativePeriods[0]));
         setAccounts(
           nextAccounts
             .filter(account => account.id != null && account.name)
@@ -133,6 +154,51 @@ const AnalyticsExplorer = () => {
       active = false;
     };
   }, [locale]);
+
+  useEffect(() => {
+    if (!destinationDashboardId || !editingWidgetId) {
+      setEditing(null);
+      return;
+    }
+    let active = true;
+    void getPersonalDashboard(destinationDashboardId)
+      .then(dashboard => {
+        if (!active) return;
+        const widget = dashboard.widgets.find(candidate => candidate.id === editingWidgetId);
+        if (!widget) throw new Error(copy(locale, 'La visualización guardada ya no existe.', 'The saved visualization no longer exists.'));
+        const nextDefinition = clone(widget.definition);
+        const nextSeriesLimit = savedSeriesLimit(widget.visualizationOptions?.seriesLimit);
+        setDefinition(nextDefinition);
+        setVisualization(widget.visualizationType);
+        setSeriesLimit(nextSeriesLimit);
+        setContext(dashboard.defaultContext);
+        setSqlText('');
+        setSqlValidated(true);
+        setScratch(true);
+        setResult(null);
+        setExecutedSignature(null);
+        setDrillStack([]);
+        setEditing({
+          dashboardId: dashboard.id,
+          dashboardName: dashboard.name,
+          widgetId: widget.id,
+          expectedVersion: dashboard.version,
+          title: widget.title,
+          description: widget.description,
+          width: widget.width,
+          visible: widget.visible,
+          visualizationOptions: widget.visualizationOptions ?? {},
+          baseline: editingSignature(nextDefinition, widget.visualizationType, nextSeriesLimit),
+        });
+      })
+      .catch(error => {
+        if (!active) return;
+        setDiagnostics(diagnosticsFrom(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [destinationDashboardId, editingWidgetId, locale]);
 
   const normalize = async (candidate: SemanticQueryDefinition): Promise<boolean> => {
     const current = ++sequence.current;
@@ -309,6 +375,65 @@ const AnalyticsExplorer = () => {
     setDiagnostics([]);
   };
 
+  const editDirty = !!definition && !!editing && editing.baseline !== editingSignature(definition, visualization, seriesLimit);
+
+  useEffect(() => {
+    if (!editDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [editDirty]);
+
+  const cancelEditing = () => {
+    if (!editing) return;
+    if (
+      editDirty &&
+      !window.confirm(
+        copy(
+          locale,
+          'Tienes cambios sin guardar. ¿Cancelar la edición y descartarlos?',
+          'You have unsaved changes. Cancel editing and discard them?',
+        ),
+      )
+    )
+      return;
+    navigate(`/analytics/dashboards/personal/${editing.dashboardId}`);
+  };
+
+  const reloadEditing = () => {
+    if (!editing) return;
+    void getPersonalDashboard(editing.dashboardId)
+      .then(dashboard => {
+        const widget = dashboard.widgets.find(candidate => candidate.id === editing.widgetId);
+        if (!widget) throw new Error(copy(locale, 'La visualización guardada ya no existe.', 'The saved visualization no longer exists.'));
+        const nextDefinition = clone(widget.definition);
+        const nextSeriesLimit = savedSeriesLimit(widget.visualizationOptions?.seriesLimit);
+        setDefinition(nextDefinition);
+        setVisualization(widget.visualizationType);
+        setSeriesLimit(nextSeriesLimit);
+        setContext(dashboard.defaultContext);
+        setSqlText('');
+        setSqlValidated(true);
+        setDiagnostics([]);
+        setEditing({
+          dashboardId: dashboard.id,
+          dashboardName: dashboard.name,
+          widgetId: widget.id,
+          expectedVersion: dashboard.version,
+          title: widget.title,
+          description: widget.description,
+          width: widget.width,
+          visible: widget.visible,
+          visualizationOptions: widget.visualizationOptions ?? {},
+          baseline: editingSignature(nextDefinition, widget.visualizationType, nextSeriesLimit),
+        });
+      })
+      .catch(error => setDiagnostics(diagnosticsFrom(error)));
+  };
+
   const stale = !!result && executedSignature !== querySignature(definition, context);
   return (
     <ProductPage wide className="analytics-explorer">
@@ -317,9 +442,20 @@ const AnalyticsExplorer = () => {
         title={copy(locale, 'Explorador de métricas', 'Metric explorer')}
         subtitle={copy(
           locale,
-          'Construye una definición analítica visual o una Consulta escrita. La vista previa es temporal.',
-          'Build a visual or written analytics definition. The preview is temporary.',
+          editing
+            ? `Editas una visualización de ${editing.dashboardName}. La vista previa es temporal; el dashboard aplicará su propio contexto.`
+            : 'Construye una definición analítica visual o una Consulta escrita. La vista previa es temporal.',
+          editing
+            ? `You are editing a visualization from ${editing.dashboardName}. The preview is temporary; the dashboard applies its own context.`
+            : 'Build a visual or written analytics definition. The preview is temporary.',
         )}
+        actions={
+          editing ? (
+            <Button type="button" color="secondary" outline size="sm" onClick={cancelEditing} data-cy="analyticsCancelWidgetEdit">
+              {copy(locale, 'Cancelar edición', 'Cancel editing')}
+            </Button>
+          ) : undefined
+        }
       />
       {catalogLoading ? (
         <div className="border rounded-2 p-4 text-center">{copy(locale, 'Cargando catálogo semántico…', 'Loading semantic catalog…')}</div>
@@ -383,6 +519,19 @@ const AnalyticsExplorer = () => {
                   >
                     {resultLoading ? copy(locale, 'Ejecutando…', 'Running…') : copy(locale, 'Ejecutar consulta', 'Run query')}
                   </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    color={editing ? 'primary' : 'secondary'}
+                    outline={!editing}
+                    disabled={!definition || busy || resultLoading || (mode === 'SQL' && !sqlValidated)}
+                    onClick={() => setSaveOpen(true)}
+                    data-cy="analyticsSaveVisualization"
+                  >
+                    {editing
+                      ? copy(locale, 'Guardar cambios', 'Save changes')
+                      : copy(locale, 'Guardar visualización', 'Save visualization')}
+                  </Button>
                 </div>
               </div>
               {mode === 'VISUAL' ? (
@@ -431,6 +580,20 @@ const AnalyticsExplorer = () => {
               drillTrail={drillStack.map(step => step.label)}
               onDrillDown={drillDown}
               onDrillBack={drillBack}
+            />
+          ) : null}
+          {saveOpen && definition && context ? (
+            <PersonalDashboardWidgetSaveDialog
+              definition={definition}
+              context={context}
+              visualization={visualization}
+              seriesLimit={seriesLimit}
+              locale={locale}
+              editing={editing}
+              preferredDashboardId={destinationDashboardId}
+              onClose={() => setSaveOpen(false)}
+              onReloadEditing={reloadEditing}
+              onSaved={dashboard => navigate(`/analytics/dashboards/personal/${dashboard.id}`)}
             />
           ) : null}
         </div>

@@ -56,6 +56,21 @@ export type PersonalDashboardTemplateCopy = PersonalDashboardCreate & {
   }>;
 };
 
+/** A persisted widget stores only its canonical analytical definition and presentation choices. */
+export type PersonalDashboardWidgetAdd = {
+  expectedVersion: number;
+  title: string;
+  description?: string | null;
+  definition: SemanticQueryDefinition;
+  visualizationType: ExplorerVisualization;
+  visualizationOptions: Record<string, unknown>;
+  width: PersonalDashboardWidget['width'];
+  visible: boolean;
+  clientRequestId: string;
+};
+
+export type PersonalDashboardWidgetUpdate = Omit<PersonalDashboardWidgetAdd, 'clientRequestId'>;
+
 export const listPersonalDashboards = async (): Promise<PersonalDashboardSummary[]> =>
   (await axios.get<PersonalDashboardSummary[]>(api)).data;
 
@@ -67,3 +82,14 @@ export const createPersonalDashboard = async (command: PersonalDashboardCreate):
 
 export const copyOfficialDashboardTemplate = async (command: PersonalDashboardTemplateCopy): Promise<PersonalDashboard> =>
   (await axios.post<PersonalDashboard>(`${api}/from-template`, command)).data;
+
+export const addPersonalDashboardWidget = async (
+  dashboardId: string | number,
+  command: PersonalDashboardWidgetAdd,
+): Promise<PersonalDashboard> => (await axios.post<PersonalDashboard>(`${api}/${dashboardId}/widgets`, command)).data;
+
+export const updatePersonalDashboardWidget = async (
+  dashboardId: string | number,
+  widgetId: string | number,
+  command: PersonalDashboardWidgetUpdate,
+): Promise<PersonalDashboard> => (await axios.put<PersonalDashboard>(`${api}/${dashboardId}/widgets/${widgetId}`, command)).data;

@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 import AnalyticsExplorer from './analytics-explorer';
 import { SemanticAnalyticsCatalog, SemanticQueryDefinition } from './analytics-explorer.model';
@@ -19,6 +20,11 @@ const getExplorerCategories = jest.fn();
 const getExplorerTags = jest.fn();
 const getSemanticAnalyticsCatalog = jest.fn();
 const parseSemanticQuery = jest.fn();
+const listPersonalDashboards = jest.fn();
+const getPersonalDashboard = jest.fn();
+const createPersonalDashboard = jest.fn();
+const addPersonalDashboardWidget = jest.fn();
+const updatePersonalDashboardWidget = jest.fn();
 
 jest.mock('app/config/store', () => ({ useAppSelector: () => 'en' }));
 jest.mock('./analytics-explorer-api', () => ({
@@ -29,6 +35,13 @@ jest.mock('./analytics-explorer-api', () => ({
   getExplorerTags: () => getExplorerTags(),
   getSemanticAnalyticsCatalog: () => getSemanticAnalyticsCatalog(),
   parseSemanticQuery: (...args: unknown[]) => parseSemanticQuery(...args),
+}));
+jest.mock('app/entities/personal-dashboards/personal-dashboard-api', () => ({
+  listPersonalDashboards: () => listPersonalDashboards(),
+  getPersonalDashboard: (...args: unknown[]) => getPersonalDashboard(...args),
+  createPersonalDashboard: (...args: unknown[]) => createPersonalDashboard(...args),
+  addPersonalDashboardWidget: (...args: unknown[]) => addPersonalDashboardWidget(...args),
+  updatePersonalDashboardWidget: (...args: unknown[]) => updatePersonalDashboardWidget(...args),
 }));
 
 const ledger = {
@@ -116,6 +129,42 @@ const definition: SemanticQueryDefinition = {
 };
 
 const canonical = 'SELECT COUNT(TRANSACTION_ID) AS transactions FROM TRANSACTION_LEDGER TIME BINDING TRANSACTION_DATE LIMIT 100';
+const dashboardContext = {
+  schemaVersion: 1,
+  time: { mode: 'RELATIVE' as const, relativePeriod: 'THIS_MONTH', from: null, through: null },
+  accountIds: [],
+  currencyCodes: [],
+};
+const personalDashboard = {
+  id: 41,
+  name: 'My dashboard',
+  description: null,
+  schemaVersion: 1,
+  version: 7,
+  defaultContext: dashboardContext,
+  createdAt: '2026-11-04T12:00:00Z',
+  updatedAt: '2026-11-04T12:00:00Z',
+  widgets: [
+    {
+      id: 91,
+      title: 'Saved count',
+      description: 'Existing widget',
+      definition,
+      visualizationType: 'BAR' as const,
+      visualizationOptions: { seriesLimit: 5 },
+      position: 3,
+      width: 'FULL' as const,
+      visible: false,
+    },
+  ],
+};
+
+const renderExplorer = (entry = '/analytics/explorer') =>
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <AnalyticsExplorer />
+    </MemoryRouter>,
+  );
 
 describe('Metric Explorer V2', () => {
   let parsedDefinition: SemanticQueryDefinition;
@@ -146,13 +195,20 @@ describe('Metric Explorer V2', () => {
         { dimensions: [], currencyCode: null, values: [{ alias: 'transactions', value: 3, unit: 'COUNT', availability: 'COMPLETE' }] },
       ],
     });
+    listPersonalDashboards.mockResolvedValue([
+      { id: 41, name: 'My dashboard', description: null, version: 7, widgetCount: 1, updatedAt: '2026-11-04T12:00:00Z' },
+    ]);
+    getPersonalDashboard.mockResolvedValue(personalDashboard);
+    createPersonalDashboard.mockResolvedValue({ ...personalDashboard, id: 42, name: 'New dashboard', version: 1, widgets: [] });
+    addPersonalDashboardWidget.mockResolvedValue(personalDashboard);
+    updatePersonalDashboardWidget.mockResolvedValue(personalDashboard);
     jest.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   afterEach(() => jest.restoreAllMocks());
 
   it('keeps the compact entry experience and executes an editable example only after explicit action', async () => {
-    render(<AnalyticsExplorer />);
+    renderExplorer();
 
     expect(await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Which part of your finances do you want to see?' })).toBeTruthy();
@@ -169,7 +225,7 @@ describe('Metric Explorer V2', () => {
   });
 
   it('keeps all governed sources in the compact information selector', async () => {
-    render(<AnalyticsExplorer />);
+    renderExplorer();
     await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
     fireEvent.click(screen.getByRole('button', { name: 'Create from scratch' }));
     const source = await screen.findByLabelText('Information');
@@ -184,7 +240,7 @@ describe('Metric Explorer V2', () => {
   });
 
   it('uses financial shortcuts for economic calculations and preserves their canonical AST through written mode', async () => {
-    render(<AnalyticsExplorer />);
+    renderExplorer();
     await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
     fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
     await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
@@ -220,7 +276,7 @@ describe('Metric Explorer V2', () => {
   });
 
   it('keeps the full catalog-backed editor available only when the user asks to customize', async () => {
-    render(<AnalyticsExplorer />);
+    renderExplorer();
     await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
     fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
     await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
@@ -233,7 +289,7 @@ describe('Metric Explorer V2', () => {
   });
 
   it('adds an owner-scoped category condition and keeps it in the visual AST draft', async () => {
-    render(<AnalyticsExplorer />);
+    renderExplorer();
     await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
     fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
     await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
@@ -250,7 +306,7 @@ describe('Metric Explorer V2', () => {
   });
 
   it('preserves an invalid written-query draft instead of silently replacing it', async () => {
-    render(<AnalyticsExplorer />);
+    renderExplorer();
     await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
     fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
     await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
@@ -261,6 +317,76 @@ describe('Metric Explorer V2', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Validate and apply' }));
     expect(await screen.findByText('Invalid query')).toBeTruthy();
     expect((editor as HTMLTextAreaElement).value).toBe('broken query');
+  });
+
+  it('saves a visual definition to an existing dashboard without persisting preview context', async () => {
+    renderExplorer();
+    await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
+    fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
+
+    fireEvent.click(document.querySelector('[data-cy="analyticsSaveVisualization"]'));
+    await screen.findByRole('heading', { name: 'Save visualization' });
+    fireEvent.change(screen.getByLabelText('Visualization title'), { target: { value: 'Expenses by category' } });
+    fireEvent.click(document.querySelector('[data-cy="widgetSaveSubmit"]'));
+
+    await waitFor(() => expect(addPersonalDashboardWidget).toHaveBeenCalled());
+    const [dashboardId, payload] = addPersonalDashboardWidget.mock.calls[0];
+    expect(dashboardId).toBe(41);
+    expect(payload).toEqual(
+      expect.objectContaining({
+        expectedVersion: 7,
+        title: 'Expenses by category',
+        definition: expect.objectContaining({ dataset: 'TRANSACTION_LEDGER' }),
+      }),
+    );
+    expect(payload.definition).not.toHaveProperty('context');
+    expect(payload).not.toHaveProperty('context');
+  });
+
+  it('creates a destination dashboard once and then saves the pending visualization', async () => {
+    const created = { ...personalDashboard, id: 42, name: 'New dashboard', version: 1, widgets: [] };
+    createPersonalDashboard.mockResolvedValue(created);
+    addPersonalDashboardWidget.mockResolvedValue({ ...created, widgets: [personalDashboard.widgets[0]], version: 2 });
+    renderExplorer();
+    await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
+    fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-gastos"]')).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-cy="analyticsSaveVisualization"]'));
+    await screen.findByRole('heading', { name: 'Save visualization' });
+    fireEvent.click(screen.getByRole('button', { name: 'Create new dashboard' }));
+    fireEvent.change(screen.getByLabelText('Dashboard name'), { target: { value: 'New dashboard' } });
+    fireEvent.click(document.querySelector('[data-cy="widgetSaveSubmit"]'));
+
+    await waitFor(() => expect(createPersonalDashboard).toHaveBeenCalled());
+    expect(createPersonalDashboard.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ name: 'New dashboard', defaultContext: expect.any(Object) }),
+    );
+    await waitFor(() => expect(addPersonalDashboardWidget).toHaveBeenCalledWith(42, expect.objectContaining({ expectedVersion: 1 })));
+  });
+
+  it('loads, updates, and cancels the same saved widget without replacing its layout identity', async () => {
+    const first = renderExplorer('/analytics/explorer?dashboardId=41&widgetId=91');
+    await waitFor(() => expect(getPersonalDashboard).toHaveBeenCalledWith(41));
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-transactions"]')).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-cy="analyticsSaveVisualization"]'));
+    await screen.findByRole('heading', { name: 'Save visualization changes' });
+    fireEvent.change(screen.getByLabelText('Visualization title'), { target: { value: 'Updated count' } });
+    fireEvent.click(document.querySelector('[data-cy="widgetSaveSubmit"]'));
+
+    await waitFor(() => expect(updatePersonalDashboardWidget).toHaveBeenCalled());
+    expect(updatePersonalDashboardWidget).toHaveBeenCalledWith(
+      41,
+      91,
+      expect.objectContaining({ expectedVersion: 7, title: 'Updated count', width: 'FULL', visible: false }),
+    );
+
+    first.unmount();
+    renderExplorer('/analytics/explorer?dashboardId=41&widgetId=91');
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-transactions"]')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Result name'), { target: { value: 'changed_count' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }));
+    expect(window.confirm).toHaveBeenCalledWith('You have unsaved changes. Cancel editing and discard them?');
   });
 
   it('keeps tag overlap, currency partitions, availability, and hierarchy drilling explicit in results', () => {

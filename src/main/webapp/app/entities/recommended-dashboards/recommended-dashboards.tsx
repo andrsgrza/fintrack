@@ -66,10 +66,11 @@ const dashboardById = (templates: RecommendedDashboardTemplate[], id: string | u
   templates.find(template => template.id === id) ?? templates[0];
 const blankState = (): DashboardWidgetState => ({ loading: true, result: null, error: null });
 export const dashboardDiagnostics = (error: unknown) => {
-  if (axios.isAxiosError<AnalyticsProblem>(error)) {
+  if (axios.isAxiosError<AnalyticsProblem & { message?: string }>(error)) {
     const data = error.response?.data;
     if (data?.diagnostics?.length) return data.diagnostics.map(diagnostic => diagnostic.message).join(' ');
     if (data?.detail) return data.detail;
+    if (data?.message) return data.message;
   }
   return error instanceof Error ? error.message : 'Semantic analytics request failed.';
 };

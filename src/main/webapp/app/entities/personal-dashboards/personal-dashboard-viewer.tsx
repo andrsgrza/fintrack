@@ -30,17 +30,23 @@ const formatAsOf = (locale: string, isoDate: string) =>
   );
 const policyFor = (widget: PersonalDashboardWidget): 'CURRENT_ONLY' | undefined =>
   widget.visualizationOptions?.contextPolicy === 'CURRENT_ONLY' ? 'CURRENT_ONLY' : undefined;
+const seriesLimitFor = (widget: PersonalDashboardWidget): number | 'ALL' => {
+  const value = widget.visualizationOptions?.seriesLimit;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 'ALL';
+};
 
 const PersonalWidgetCard = ({
   widget,
   state,
   locale,
+  dashboardId,
   onDrillDown,
   onDrillBack,
 }: {
   widget: ViewerWidget;
   state: ReturnType<typeof useDashboardWidgetResults>[string] | undefined;
   locale: string;
+  dashboardId: number;
   onDrillDown: (widget: ViewerWidget, categoryId: string, categoryLabel: string) => void;
   onDrillBack: (widget: ViewerWidget) => void;
 }) => {
@@ -52,6 +58,18 @@ const PersonalWidgetCard = ({
         <div className="card-body p-3 p-md-4">
           <h2 className="h5 mb-1">{widget.title}</h2>
           {widget.description ? <p className="small text-muted mb-3">{widget.description}</p> : null}
+          <div className="d-flex justify-content-end mb-2">
+            <Button
+              tag={Link}
+              to={`/analytics/explorer?dashboardId=${dashboardId}&widgetId=${widget.id}`}
+              color="secondary"
+              outline
+              size="sm"
+              data-cy={`personalDashboardEditWidget-${widget.id}`}
+            >
+              {copy(locale, 'Editar visualización', 'Edit visualization')}
+            </Button>
+          </div>
           {asOf ? (
             <p className="small fw-semibold mb-3">{copy(locale, `Al ${formatAsOf(locale, asOf)}`, `As of ${formatAsOf(locale, asOf)}`)}</p>
           ) : null}
@@ -75,7 +93,7 @@ const PersonalWidgetCard = ({
               locale={locale}
               loading={state?.loading ?? true}
               stale={false}
-              seriesLimit="ALL"
+              seriesLimit={seriesLimitFor(widget)}
               drillTrail={widget.trail.map(item => item.label)}
               onDrillDown={(categoryId, categoryLabel) => onDrillDown(widget, categoryId, categoryLabel)}
               onDrillBack={() => onDrillBack(widget)}
@@ -213,10 +231,20 @@ const PersonalDashboardViewer = () => {
               <p className="small text-muted mb-0">
                 {copy(
                   locale,
-                  'La integración para añadir visualizaciones desde el Explorador de métricas llegará en una próxima versión.',
-                  'The integration to add visualizations from Metric Explorer is coming in an upcoming version.',
+                  'Crea una consulta en el Explorador de métricas y guárdala aquí cuando esté lista.',
+                  'Create a query in Metric Explorer and save it here when it is ready.',
                 )}
               </p>
+              <Button
+                tag={Link}
+                to={`/analytics/explorer?dashboardId=${dashboard.id}`}
+                color="primary"
+                size="sm"
+                className="mt-3"
+                data-cy="personalDashboardAddVisualization"
+              >
+                {copy(locale, 'Añadir visualización', 'Add visualization')}
+              </Button>
             </section>
           ) : (
             <div className="row g-3" data-cy="personalDashboardWidgets">
@@ -226,6 +254,7 @@ const PersonalDashboardViewer = () => {
                   widget={widget}
                   state={states[widget.id]}
                   locale={locale}
+                  dashboardId={dashboard.id}
                   onDrillDown={drillDown}
                   onDrillBack={drillBack}
                 />

@@ -258,6 +258,66 @@ class PersonalDashboardResourceIT {
     }
 
     @Test
+    void updatesTheSameWidgetWithoutChangingItsIdentityPositionOrControlledLayout() throws Exception {
+        JsonNode dashboard = create("Editar widget", "create-edit-widget-1", relativeContext());
+        JsonNode withWidget = addWidget(
+            dashboard.path("id").asLong(),
+            dashboard.path("version").asLong(),
+            "Conteo original",
+            "add-edit-widget-1",
+            countByInstitution(),
+            "BAR",
+            "FULL",
+            false
+        );
+        long dashboardId = withWidget.path("id").asLong();
+        long widgetId = withWidget.path("widgets").get(0).path("id").asLong();
+        long version = withWidget.path("version").asLong();
+
+        ObjectNode update = widgetUpdatePayload(version, "Gastos actualizados", expenseTotal(), "KPI", "FULL", false);
+        JsonNode updated = body(
+            mockMvc
+                .perform(
+                    put(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, widgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(update))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets.length()").value(1))
+                .andExpect(jsonPath("$.widgets[0].id").value(widgetId))
+                .andExpect(jsonPath("$.widgets[0].title").value("Gastos actualizados"))
+                .andExpect(jsonPath("$.widgets[0].position").value(0))
+                .andExpect(jsonPath("$.widgets[0].width").value("FULL"))
+                .andExpect(jsonPath("$.widgets[0].visible").value(false))
+                .andExpect(jsonPath("$.widgets[0].definition.predicates[0].field").value("TRANSACTION_FLOW"))
+                .andReturn()
+        );
+        assertThat(updated.path("widgets").get(0).path("definition").toString()).doesNotContain("context");
+
+        mockMvc
+            .perform(
+                put(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, widgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            widgetUpdatePayload(version, "No sobrescribir", expenseTotal(), "KPI", "FULL", false)
+                        )
+                    )
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        entityManager.flush();
+        entityManager.clear();
+        PersonalDashboard persisted = dashboardRepository.findOneWithWidgetsByIdAndUserLogin(dashboardId, "user").orElseThrow();
+        assertThat(persisted.getWidgets()).hasSize(1);
+        assertThat(persisted.getWidgets().get(0).getId()).isEqualTo(widgetId);
+        assertThat(persisted.getWidgets().get(0).getPosition()).isZero();
+        assertThat(persisted.getWidgets().get(0).getWidth().name()).isEqualTo("FULL");
+        assertThat(persisted.getWidgets().get(0).getVisible()).isFalse();
+    }
+
+    @Test
     @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
     void keepsAnAdministratorSelfScopedAndDoesNotLeakAnotherUsersDashboard() throws Exception {
         User user = entityManager.createQuery("select user from User user where user.login = 'user'", User.class).getSingleResult();
@@ -403,6 +463,25 @@ class PersonalDashboardResourceIT {
         command.put("expectedVersion", expectedVersion);
         command.put("title", title);
         command.put("clientRequestId", key);
+        command.set("definition", definition);
+        command.put("visualizationType", visualizationType);
+        command.set("visualizationOptions", objectMapper.createObjectNode());
+        command.put("width", width);
+        command.put("visible", visible);
+        return command;
+    }
+
+    private ObjectNode widgetUpdatePayload(
+        long expectedVersion,
+        String title,
+        JsonNode definition,
+        String visualizationType,
+        String width,
+        boolean visible
+    ) {
+        ObjectNode command = objectMapper.createObjectNode();
+        command.put("expectedVersion", expectedVersion);
+        command.put("title", title);
         command.set("definition", definition);
         command.put("visualizationType", visualizationType);
         command.set("visualizationOptions", objectMapper.createObjectNode());
