@@ -11,7 +11,14 @@ import {
   VisualizationContext,
 } from 'app/entities/analytics-explorer/analytics-explorer.model';
 import { AnalyticsResultsPanel } from 'app/entities/analytics-explorer/analytics-results-panel';
-import { copy } from 'app/entities/analytics-explorer/analytics-explorer-utils';
+import {
+  categoryGroupingIndex,
+  groupCategoryChildren,
+  isTemporalGrouping,
+  replaceTemporalGrouping,
+  temporalOptionsFor,
+} from 'app/entities/analytics-explorer/analytics-grouping';
+import { copy, datasetById, label } from 'app/entities/analytics-explorer/analytics-explorer-utils';
 import { dashboardDiagnostics, useDashboardWidgetResults } from 'app/entities/recommended-dashboards/recommended-dashboards';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
@@ -34,12 +41,18 @@ const seriesLimitFor = (widget: PersonalDashboardWidget): number | 'ALL' => {
   const value = widget.visualizationOptions?.seriesLimit;
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 'ALL';
 };
+const temporalOptionsForDefinition = (catalog: SemanticAnalyticsCatalog, definition: SemanticQueryDefinition) => {
+  const dataset = datasetById(catalog, definition.dataset);
+  return dataset ? temporalOptionsFor(dataset) : [];
+};
 
 const PersonalWidgetCard = ({
   widget,
   state,
   locale,
   dashboardId,
+  temporalOptions,
+  onTemporalIntervalChange,
   onDrillDown,
   onDrillBack,
 }: {
@@ -47,18 +60,41 @@ const PersonalWidgetCard = ({
   state: ReturnType<typeof useDashboardWidgetResults>[string] | undefined;
   locale: string;
   dashboardId: number;
+  temporalOptions: string[];
+  onTemporalIntervalChange: (widgetId: number, interval: string) => void;
   onDrillDown: (widget: ViewerWidget, categoryId: string, categoryLabel: string) => void;
   onDrillBack: (widget: ViewerWidget) => void;
 }) => {
   const currentOnly = state?.error === 'CURRENT_ONLY_CONTEXT';
   const asOf = asOfDatasets.has(widget.definition.dataset) && state?.result?.effectiveContext.through;
+  const temporalGrouping = widget.definition.groupBy.find(isTemporalGrouping);
   return (
     <article className={widthClass(widget.width)} data-cy={`personalDashboardWidget-${widget.id}`}>
       <div className="card border shadow-sm h-100">
         <div className="card-body p-3 p-md-4">
           <h2 className="h5 mb-1">{widget.title}</h2>
           {widget.description ? <p className="small text-muted mb-3">{widget.description}</p> : null}
-          <div className="d-flex justify-content-end mb-2">
+          <div className="d-flex align-items-center justify-content-end gap-2 mb-2">
+            {temporalGrouping && temporalOptions.length > 1 ? (
+              <>
+                <label className="small fw-semibold mb-0" htmlFor={`personal-dashboard-widget-interval-${widget.id}`}>
+                  {copy(locale, 'Intervalo', 'Interval')}
+                </label>
+                <select
+                  id={`personal-dashboard-widget-interval-${widget.id}`}
+                  className="form-select form-select-sm w-auto"
+                  value={temporalGrouping}
+                  onChange={event => onTemporalIntervalChange(widget.id, event.target.value)}
+                  data-cy={`personalDashboardWidgetInterval-${widget.id}`}
+                >
+                  {temporalOptions.map(interval => (
+                    <option key={interval} value={interval}>
+                      {label(locale, interval)}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
             <Button
               tag={Link}
               to={`/analytics/explorer?dashboardId=${dashboardId}&widgetId=${widget.id}`}
@@ -115,13 +151,17 @@ const PersonalDashboardViewer = () => {
   const [dashboard, setDashboard] = useState<PersonalDashboard | null>(null);
   const [context, setContext] = useState<VisualizationContext | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Record<number, { definition: SemanticQueryDefinition; trail: DrillState[] }>>({});
+  const [drillStates, setDrillStates] = useState<Record<number, { definition: SemanticQueryDefinition; trail: DrillState[] }>>({});
+  // This is deliberately not stored in the dashboard. It only changes the
+  // canonical query copy sent by this rendered widget until the next reload.
+  const [temporaryIntervals, setTemporaryIntervals] = useState<Record<number, string>>({});
 
   useEffect(() => {
     let active = true;
     setDashboard(null);
     setContext(null);
-    setOverrides({});
+    setDrillStates({});
+    setTemporaryIntervals({});
     void Promise.all([getSemanticAnalyticsCatalog(), getExplorerAccounts(), getPersonalDashboard(dashboardId ?? '')])
       .then(([nextCatalog, nextAccounts, nextDashboard]) => {
         if (!active) return;
@@ -145,33 +185,26 @@ const PersonalDashboardViewer = () => {
     () =>
       (dashboard?.widgets ?? [])
         .filter(widget => widget.visible)
-        .map(widget => ({
-          ...widget,
-          definition: overrides[widget.id]?.definition ?? widget.definition,
-          trail: overrides[widget.id]?.trail ?? [],
-          contextPolicy: policyFor(widget),
-        })),
-    [dashboard, overrides],
+        .map(widget => {
+          const canonicalDefinition = drillStates[widget.id]?.definition ?? widget.definition;
+          const interval = temporaryIntervals[widget.id];
+          return {
+            ...widget,
+            definition: interval ? replaceTemporalGrouping(canonicalDefinition, interval) : canonicalDefinition,
+            trail: drillStates[widget.id]?.trail ?? [],
+            contextPolicy: policyFor(widget),
+          };
+        }),
+    [dashboard, drillStates, temporaryIntervals],
   );
   const states = useDashboardWidgetResults(widgets, context);
 
   const drillDown = (widget: ViewerWidget, categoryId: string, categoryLabel: string) => {
     if (widget.definition.dataset !== 'TRANSACTION_LEDGER') return;
-    const groupingIndex = widget.definition.groupBy.findIndex(field =>
-      ['CATEGORY_ID', 'CATEGORY_ROOT', 'CATEGORY_SUBCATEGORY', 'CATEGORY_BRANCH_CHILD'].includes(field),
-    );
+    const groupingIndex = categoryGroupingIndex(widget.definition);
     if (groupingIndex < 0) return;
-    const definition = JSON.parse(JSON.stringify(widget.definition)) as SemanticQueryDefinition;
-    definition.predicates = definition.predicates.filter(
-      predicate => !(predicate.field === 'CATEGORY_ID' && predicate.operator === 'DESCENDANT_OF'),
-    );
-    definition.predicates.push({ field: 'CATEGORY_ID', operator: 'DESCENDANT_OF', values: [categoryId] });
-    const oldGrouping = definition.groupBy[groupingIndex];
-    definition.groupBy[groupingIndex] = 'CATEGORY_BRANCH_CHILD';
-    definition.orderBy = definition.orderBy.map(order =>
-      order.field === oldGrouping ? { ...order, field: 'CATEGORY_BRANCH_CHILD', projectionAlias: null } : order,
-    );
-    setOverrides(previous => ({
+    const definition = groupCategoryChildren(widget.definition, groupingIndex as 0 | 1, categoryId);
+    setDrillStates(previous => ({
       ...previous,
       [widget.id]: { definition, trail: [...widget.trail, { definition: widget.definition, label: categoryLabel }] },
     }));
@@ -179,7 +212,7 @@ const PersonalDashboardViewer = () => {
   const drillBack = (widget: ViewerWidget) => {
     const previous = widget.trail[widget.trail.length - 1];
     if (!previous) return;
-    setOverrides(current => ({ ...current, [widget.id]: { definition: previous.definition, trail: widget.trail.slice(0, -1) } }));
+    setDrillStates(current => ({ ...current, [widget.id]: { definition: previous.definition, trail: widget.trail.slice(0, -1) } }));
   };
 
   return (
@@ -255,6 +288,10 @@ const PersonalDashboardViewer = () => {
                   state={states[widget.id]}
                   locale={locale}
                   dashboardId={dashboard.id}
+                  temporalOptions={temporalOptionsForDefinition(catalog, widget.definition)}
+                  onTemporalIntervalChange={(widgetId, interval) =>
+                    setTemporaryIntervals(previous => ({ ...previous, [widgetId]: interval }))
+                  }
                   onDrillDown={drillDown}
                   onDrillBack={drillBack}
                 />

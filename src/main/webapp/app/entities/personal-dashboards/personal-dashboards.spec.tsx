@@ -46,7 +46,12 @@ const catalog = {
   defaultLimit: 100,
   maxLimit: 100,
   authenticatedOwnerRequired: true,
-  datasets: [],
+  datasets: [
+    {
+      dataset: 'TRANSACTION_LEDGER',
+      groupings: ['TRANSACTION_DAY', 'TRANSACTION_WEEK', 'TRANSACTION_MONTH', 'TRANSACTION_YEAR', 'CATEGORY_ROOT'],
+    },
+  ],
 };
 const relativeContext = {
   schemaVersion: 1,
@@ -231,5 +236,65 @@ describe('personal dashboards V2-3', () => {
       expect(useDashboardWidgetResults.mock.calls.some(([, nextContext]) => nextContext?.time?.relativePeriod === 'THIS_YEAR')).toBe(true),
     );
     expect(getPersonalDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads a saved ordered grouping exactly as its canonical widget query', async () => {
+    const groupedDefinition = {
+      ...personalDashboard.widgets[0].definition,
+      groupBy: ['CATEGORY_ROOT', 'TRANSACTION_MONTH'],
+      orderBy: [
+        { field: 'CATEGORY_ROOT', projectionAlias: null, direction: 'ASC' as const },
+        { field: 'TRANSACTION_MONTH', projectionAlias: null, direction: 'ASC' as const },
+      ],
+    };
+    getPersonalDashboard.mockResolvedValue({
+      ...personalDashboard,
+      widgets: [{ ...personalDashboard.widgets[0], definition: groupedDefinition }],
+    });
+    useDashboardWidgetResults.mockImplementation((widgets: Array<{ id: number }>) => ({
+      [widgets[0]?.id]: { loading: false, result, error: null },
+    }));
+
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    await waitFor(() => expect(useDashboardWidgetResults).toHaveBeenCalled());
+    expect(useDashboardWidgetResults.mock.calls.at(-1)?.[0][0].definition).toEqual(groupedDefinition);
+  });
+
+  it('uses a local interval execution copy and restores the saved default on reload', async () => {
+    const temporalDefinition = {
+      ...personalDashboard.widgets[0].definition,
+      groupBy: ['TRANSACTION_MONTH'],
+      orderBy: [{ field: 'TRANSACTION_MONTH', projectionAlias: null, direction: 'ASC' as const }],
+    };
+    const storedDashboard = {
+      ...personalDashboard,
+      widgets: [{ ...personalDashboard.widgets[0], definition: temporalDefinition }],
+    };
+    getPersonalDashboard.mockResolvedValue(storedDashboard);
+    useDashboardWidgetResults.mockImplementation((widgets: Array<{ id: number }>) => ({
+      [widgets[0]?.id]: { loading: false, result, error: null },
+    }));
+
+    const firstRender = renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    const interval = document.querySelector('[data-cy="personalDashboardWidgetInterval-71"]');
+    expect(interval.value).toBe('TRANSACTION_MONTH');
+    fireEvent.change(interval, { target: { value: 'TRANSACTION_WEEK' } });
+    await waitFor(() =>
+      expect(
+        useDashboardWidgetResults.mock.calls.some(
+          ([widgets]) =>
+            widgets[0]?.definition.groupBy[0] === 'TRANSACTION_WEEK' && widgets[0]?.definition.orderBy[0]?.field === 'TRANSACTION_WEEK',
+        ),
+      ).toBe(true),
+    );
+    expect(temporalDefinition.groupBy).toEqual(['TRANSACTION_MONTH']);
+    expect(temporalDefinition.orderBy[0].field).toBe('TRANSACTION_MONTH');
+
+    firstRender.unmount();
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    expect(document.querySelector('[data-cy="personalDashboardWidgetInterval-71"]')?.value).toBe('TRANSACTION_MONTH');
   });
 });

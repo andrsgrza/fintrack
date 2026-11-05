@@ -22,6 +22,8 @@ import {
 
 type CommandError = { code?: string; message?: string };
 
+const incompatibleVisualizationMessage = 'The visualization is incompatible with the semantic result shape.';
+
 export type WidgetEditingTarget = {
   dashboardId: number;
   dashboardName: string;
@@ -81,6 +83,13 @@ const errorMessage = (locale: string, error: CommandError) => {
       locale,
       'El dashboard o la visualización ya no existe. Elige otro destino o vuelve al dashboard.',
       'The dashboard or visualization no longer exists. Choose another destination or return to the dashboard.',
+    );
+  }
+  if (error.code === 'INVALID_PAYLOAD' && error.message === incompatibleVisualizationMessage) {
+    return copy(
+      locale,
+      'Esta visualización no es compatible con los cálculos y desgloses de la consulta.',
+      'This visualization is not compatible with the query calculations and breakdowns.',
     );
   }
   return error.message ?? copy(locale, 'No fue posible guardar la visualización.', 'The visualization could not be saved.');

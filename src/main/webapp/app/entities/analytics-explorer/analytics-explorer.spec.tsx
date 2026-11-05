@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import AnalyticsExplorer from './analytics-explorer';
+import { groupCategoryChildren, replaceGrouping } from './analytics-grouping';
 import { SemanticAnalyticsCatalog, SemanticQueryDefinition } from './analytics-explorer.model';
 import {
   AnalyticsResultsPanel,
@@ -67,7 +68,11 @@ const ledger = {
     'TRANSACTION_MONTH',
     'TRANSACTION_YEAR',
     'ACCOUNT_INSTITUTION',
+    'ACCOUNT_ID',
     'CATEGORY_ID',
+    'CATEGORY_ROOT',
+    'CATEGORY_SUBCATEGORY',
+    'CATEGORY_BRANCH_CHILD',
     'TAG_ID',
   ],
   additivity: 'ADDITIVE',
@@ -236,7 +241,106 @@ describe('Metric Explorer V2', () => {
 
     fireEvent.change(source, { target: { value: 'CREDIT_ACCOUNT_SNAPSHOT' } });
     await screen.findByDisplayValue('deuda_tarjeta');
-    expect(screen.getByLabelText('How do you want to organize results?')).toBeTruthy();
+    expect(screen.getByLabelText('Group by')).toBeTruthy();
+    expect(screen.getByLabelText('Split by (optional)')).toBeTruthy();
+  });
+
+  it('keeps ordered canonical groupings and reconciles only obsolete grouping order fields', () => {
+    const categoryThenMonth = replaceGrouping(
+      {
+        ...definition,
+        groupBy: ['CATEGORY_ID', 'ACCOUNT_ID'],
+        orderBy: [
+          { field: 'CATEGORY_ID', projectionAlias: null, direction: 'ASC' },
+          { field: 'ACCOUNT_ID', projectionAlias: null, direction: 'DESC' },
+          { field: null, projectionAlias: 'transactions', direction: 'DESC' },
+        ],
+      },
+      1,
+      'TRANSACTION_MONTH',
+    );
+    expect(categoryThenMonth.groupBy).toEqual(['CATEGORY_ID', 'TRANSACTION_MONTH']);
+    expect(categoryThenMonth.orderBy).toEqual([
+      { field: 'CATEGORY_ID', projectionAlias: null, direction: 'ASC' },
+      { field: 'TRANSACTION_MONTH', projectionAlias: null, direction: 'DESC' },
+      { field: null, projectionAlias: 'transactions', direction: 'DESC' },
+    ]);
+
+    const monthThenCategory = replaceGrouping(categoryThenMonth, 0, 'TRANSACTION_MONTH');
+    expect(monthThenCategory).toBe(categoryThenMonth);
+
+    const accountThenCategory = replaceGrouping(
+      {
+        ...definition,
+        groupBy: ['ACCOUNT_ID', 'CATEGORY_ID'],
+        orderBy: [{ field: 'ACCOUNT_ID', projectionAlias: null, direction: 'ASC' }],
+      },
+      1,
+      'CATEGORY_ROOT',
+    );
+    expect(accountThenCategory.groupBy).toEqual(['ACCOUNT_ID', 'CATEGORY_ROOT']);
+    expect(accountThenCategory.orderBy).toEqual([{ field: 'ACCOUNT_ID', projectionAlias: null, direction: 'ASC' }]);
+
+    const children = groupCategoryChildren(
+      {
+        ...definition,
+        groupBy: ['CATEGORY_ROOT', 'TRANSACTION_MONTH'],
+        orderBy: [{ field: 'CATEGORY_ROOT', projectionAlias: null, direction: 'ASC' }],
+      },
+      0,
+      '14',
+    );
+    expect(children.groupBy).toEqual(['CATEGORY_BRANCH_CHILD', 'TRANSACTION_MONTH']);
+    expect(children.orderBy).toEqual([{ field: 'CATEGORY_BRANCH_CHILD', projectionAlias: null, direction: 'ASC' }]);
+    expect(children.predicates).toContainEqual({ field: 'CATEGORY_ID', operator: 'DESCENDANT_OF', values: ['14'] });
+  });
+
+  it('authors a secondary time grouping and category-child parameter in the same visual AST', async () => {
+    renderExplorer();
+    await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
+    fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsPrimaryBreakdown"]')).toBeTruthy());
+
+    fireEvent.change(document.querySelector('[data-cy="analyticsComparisonBreakdown"]'), { target: { value: 'TIME' } });
+    const interval = await screen.findByLabelText('Interval');
+    fireEvent.change(interval, { target: { value: 'TRANSACTION_MONTH' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Written query' }));
+    await waitFor(() => expect(formatSemanticQuery).toHaveBeenCalled());
+    expect((formatSemanticQuery.mock.calls.at(-1)?.[0] as SemanticQueryDefinition).groupBy).toEqual(['CATEGORY_ID', 'TRANSACTION_MONTH']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Visual' }));
+    fireEvent.change(document.querySelector('[data-cy="analyticsPrimaryBreakdown"]'), { target: { value: 'CATEGORY_BRANCH_CHILD' } });
+    expect(await screen.findByText('Choose a category to complete this grouping.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Food' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Written query' }));
+    await waitFor(() => expect(formatSemanticQuery).toHaveBeenCalled());
+    const hierarchy = formatSemanticQuery.mock.calls.at(-1)?.[0] as SemanticQueryDefinition;
+    expect(hierarchy.groupBy).toEqual(['CATEGORY_BRANCH_CHILD', 'TRANSACTION_MONTH']);
+    expect(hierarchy.predicates).toContainEqual({ field: 'CATEGORY_ID', operator: 'DESCENDANT_OF', values: ['14'] });
+  });
+
+  it('saves a category-first temporal line without reordering the canonical breakdowns', async () => {
+    renderExplorer();
+    await screen.findByRole('heading', { name: 'Choose an example or create a query from scratch' });
+    fireEvent.click(screen.getByRole('button', { name: /Expenses by category/ }));
+    await waitFor(() => expect(document.querySelector('[data-cy="analyticsPrimaryBreakdown"]')).toBeTruthy());
+
+    fireEvent.change(document.querySelector('[data-cy="analyticsPrimaryBreakdown"]'), { target: { value: 'CATEGORY_ROOT' } });
+    fireEvent.change(document.querySelector('[data-cy="analyticsComparisonBreakdown"]'), { target: { value: 'TIME' } });
+    fireEvent.change(await screen.findByLabelText('Interval'), { target: { value: 'TRANSACTION_MONTH' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Line' }));
+    fireEvent.click(document.querySelector('[data-cy="analyticsSaveVisualization"]'));
+    await screen.findByRole('heading', { name: 'Save visualization' });
+    fireEvent.click(document.querySelector('[data-cy="widgetSaveSubmit"]'));
+
+    await waitFor(() => expect(addPersonalDashboardWidget).toHaveBeenCalled());
+    const [, payload] = addPersonalDashboardWidget.mock.calls.at(-1);
+    expect(payload).toEqual(
+      expect.objectContaining({
+        visualizationType: 'LINE',
+        definition: expect.objectContaining({ groupBy: ['CATEGORY_ROOT', 'TRANSACTION_MONTH'] }),
+      }),
+    );
   });
 
   it('uses financial shortcuts for economic calculations and preserves their canonical AST through written mode', async () => {
@@ -586,6 +690,126 @@ describe('Metric Explorer V2', () => {
     expect(chart.missingPeriods).toBe(11);
   });
 
+  it('keeps the primary category axis when the secondary grouping is temporal', () => {
+    const rows = [
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'food',
+            metadata: { stableId: 'food', label: 'Food', color: '#4477aa', active: true, synthetic: false, path: ['Food'] },
+          },
+          { field: 'TRANSACTION_MONTH' as const, value: '2026-01', metadata: null },
+        ],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 100, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+      },
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'travel',
+            metadata: { stableId: 'travel', label: 'Travel', color: '#cc7733', active: true, synthetic: false, path: ['Travel'] },
+          },
+          { field: 'TRANSACTION_MONTH' as const, value: '2026-01', metadata: null },
+        ],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 40, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+      },
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'food',
+            metadata: { stableId: 'food', label: 'Food', color: '#4477aa', active: true, synthetic: false, path: ['Food'] },
+          },
+          { field: 'TRANSACTION_MONTH' as const, value: '2026-02', metadata: null },
+        ],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 50, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+      },
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'travel',
+            metadata: { stableId: 'travel', label: 'Travel', color: '#cc7733', active: true, synthetic: false, path: ['Travel'] },
+          },
+          { field: 'TRANSACTION_MONTH' as const, value: '2026-02', metadata: null },
+        ],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 75, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+      },
+    ];
+    const panel: ResultPanel = { currency: 'MXN', unit: 'MONEY', rows, values: rows.map(row => ({ row, value: row.values[0] })) };
+    const line = chartRows(panel, 'ALL', 'en', undefined, 'LINE');
+    const verticalBars = chartRows(panel, 'ALL', 'en', undefined, 'BAR');
+    const bars = chartRows(panel, 'ALL', 'en', undefined, 'GROUPED_BAR');
+    const stackedBars = chartRows(panel, 'ALL', 'en', undefined, 'STACKED_BAR');
+    const monthThenCategoryRows = rows.map(row => ({ ...row, dimensions: [row.dimensions[1], row.dimensions[0]] }));
+    const monthThenCategoryPanel: ResultPanel = {
+      currency: 'MXN',
+      unit: 'MONEY',
+      rows: monthThenCategoryRows,
+      values: monthThenCategoryRows.map(row => ({ row, value: row.values[0] })),
+    };
+    const monthThenCategoryLine = chartRows(monthThenCategoryPanel, 'ALL', 'en', undefined, 'LINE');
+
+    expect(line.data.map(point => point.x)).toEqual(['Food', 'Travel']);
+    expect(line.series.map(series => series.label)).toEqual(['January 2026', 'February 2026']);
+    expect(line.series.map(series => series.semanticId)).toEqual(['gastos:TRANSACTION_MONTH:2026-01', 'gastos:TRANSACTION_MONTH:2026-02']);
+    expect(line.series.map(series => series.color)).not.toEqual(expect.arrayContaining(['#4477aa', '#cc7733']));
+    expect(line.series[0].color).not.toBe(line.series[1].color);
+    expect(line.data[0]['gastos::TRANSACTION_MONTH:2026-01']).toBe(100);
+    expect(line.data[1]['gastos::TRANSACTION_MONTH:2026-02']).toBe(75);
+    expect(line.temporal).toBe(false);
+    expect(line.temporalSeries).toBe(true);
+    expect(verticalBars.data.map(point => point.x)).toEqual(['Food', 'Travel']);
+    expect(bars.data.map(point => point.x)).toEqual(['Food', 'Travel']);
+    expect(stackedBars.data.map(point => point.x)).toEqual(['Food', 'Travel']);
+    expect(monthThenCategoryLine.data.map(point => point.x)).toEqual(['January 2026', 'February 2026']);
+    expect(monthThenCategoryLine.series.map(series => series.label)).toEqual(['Expenses · Food', 'Expenses · Travel']);
+    expect(monthThenCategoryLine.data[0]['gastos::food']).toBe(100);
+    expect(monthThenCategoryLine.data[1]['gastos::travel']).toBe(75);
+    expect(
+      visualizationEligibility({ ...definition, groupBy: ['CATEGORY_ROOT', 'TRANSACTION_MONTH'] }, null, 'en').find(
+        item => item.option === 'LINE',
+      )?.enabled,
+    ).toBe(true);
+    expect(
+      visualizationEligibility({ ...definition, groupBy: ['TRANSACTION_MONTH', 'CATEGORY_ROOT'] }, null, 'en').find(
+        item => item.option === 'LINE',
+      )?.enabled,
+    ).toBe(true);
+
+    render(
+      <AnalyticsResultsPanel
+        definition={{
+          ...definition,
+          projections: [{ alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: [] }],
+          groupBy: ['CATEGORY_ROOT', 'TRANSACTION_MONTH'],
+        }}
+        result={{
+          schemaVersion: 1,
+          semanticModel: 'FINTRACK_FINANCIAL',
+          effectiveContext: { from: '2026-01-01', through: '2026-02-28', accountIds: [], currencyCodes: ['MXN'] },
+          executedAt: '2026-02-28T12:00:00Z',
+          columns: [{ id: 'gastos', dimension: false, unit: 'MONEY', currencyFaceted: true }],
+          rows,
+        }}
+        visualization="LINE"
+        locale="en"
+        loading={false}
+        stale={false}
+        seriesLimit="ALL"
+        drillTrail={[]}
+        onDrillDown={jest.fn()}
+        onDrillBack={jest.fn()}
+      />,
+    );
+    expect(screen.getByText(/Each line represents a period/)).toBeTruthy();
+  });
+
   it('keeps category colors and the complete result table when the interactive chart legend hides a visual series', () => {
     const rows = [
       {
@@ -616,6 +840,10 @@ describe('Metric Explorer V2', () => {
     const panel: ResultPanel = { currency: 'MXN', unit: 'MONEY', rows, values: rows.map(row => ({ row, value: row.values[0] })) };
     const chart = chartRows(panel, 'ALL', 'en');
 
+    expect(chart.data).toHaveLength(1);
+    expect(chart.data[0].x).toMatch(/january 2026/i);
+    expect(chart.temporal).toBe(true);
+    expect(chart.temporalSeries).toBe(false);
     expect(chart.series).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ semanticId: 'gastos:food', color: '#4477aa' }),

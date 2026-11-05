@@ -370,7 +370,10 @@ public class PersonalDashboardCommandService {
 
     private void validateVisualization(SemanticQueryDefinition definition, PersonalDashboardVisualizationType visualization) {
         List<SemanticField> groups = definition.groupBy();
-        boolean temporalFirst = !groups.isEmpty() && isTemporal(groups.get(0));
+        // Grouping order is a presentation decision: the first grouping becomes the chart axis and each following
+        // grouping may become a series. A temporal breakdown therefore makes a line presentation meaningful in
+        // either position; persisting must not rewrite or reject the canonical ordered AST that the Explorer renders.
+        boolean temporalGrouping = groups.stream().anyMatch(this::isTemporal);
         boolean pointInTime = Set.of("FINANCIAL_POSITION_SNAPSHOT", "ACCOUNT_POSITION_SNAPSHOT", "CREDIT_ACCOUNT_SNAPSHOT").contains(
             definition.dataset().name()
         );
@@ -380,14 +383,14 @@ public class PersonalDashboardCommandService {
             switch (visualization) {
                 case TABLE -> true;
                 case KPI -> groups.isEmpty();
-                case LINE -> temporalFirst;
+                case LINE -> temporalGrouping;
                 case BAR -> !groups.isEmpty();
                 case GROUPED_BAR -> groups.size() > 1 || definition.projections().size() > 1;
                 case STACKED_BAR -> (groups.size() > 1 || definition.projections().size() > 1) &&
                 additive &&
                 !tags &&
-                !(pointInTime && temporalFirst);
-                case DONUT -> groups.size() == 1 && !temporalFirst;
+                !(pointInTime && temporalGrouping);
+                case DONUT -> groups.size() == 1 && !temporalGrouping;
             };
         if (!compatible) {
             throw failure(

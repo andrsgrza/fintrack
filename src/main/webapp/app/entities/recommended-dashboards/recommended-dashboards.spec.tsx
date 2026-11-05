@@ -60,7 +60,12 @@ const catalog = {
   defaultLimit: 100,
   maxLimit: 500,
   authenticatedOwnerRequired: true,
-  datasets: [],
+  datasets: [
+    {
+      dataset: 'TRANSACTION_LEDGER',
+      groupings: ['TRANSACTION_DAY', 'TRANSACTION_WEEK', 'TRANSACTION_MONTH', 'TRANSACTION_YEAR'],
+    },
+  ],
 };
 const emptyResult = {
   schemaVersion: 3,
@@ -110,21 +115,40 @@ describe('recommended dashboards', () => {
     expect(screen.getByText('Internal transfer activity')).toBeTruthy();
   });
 
-  it('changes only the overview trend grouping for an explicit granularity choice and reuses unchanged widget results', async () => {
-    renderDashboard();
+  it('uses a local temporary interval without mutating the canonical default or adding a global control', async () => {
+    const firstRender = renderDashboard();
     await screen.findByRole('heading', { name: 'Financial overview' });
     await waitFor(() => expect(executeSemanticQuery.mock.calls.length).toBeGreaterThanOrEqual(7));
-    const initialCalls = executeSemanticQuery.mock.calls.length;
+    expect(screen.queryByLabelText('Trend by')).toBeNull();
+    const initialTrend = executeSemanticQuery.mock.calls.find(
+      ([definition]) =>
+        definition.projections.length === 3 &&
+        definition.projections.some((projection: { alias: string }) => projection.alias === 'flujo_neto'),
+    );
+    expect(initialTrend?.[0].groupBy).toEqual(['TRANSACTION_MONTH']);
+    expect(initialTrend?.[0].orderBy).toEqual([{ field: 'TRANSACTION_MONTH', projectionAlias: null, direction: 'ASC' }]);
 
-    fireEvent.change(screen.getByLabelText('Trend by'), { target: { value: 'TRANSACTION_WEEK' } });
+    const interval = document.querySelector('[data-cy="recommendedWidgetInterval-economic-trend"]');
+    expect(interval.value).toBe('TRANSACTION_MONTH');
+    fireEvent.change(interval, { target: { value: 'TRANSACTION_WEEK' } });
     await waitFor(() =>
       expect(
         executeSemanticQuery.mock.calls.some(
-          ([definition]) => definition.groupBy.length === 1 && definition.groupBy[0] === 'TRANSACTION_WEEK',
+          ([definition]) =>
+            definition.projections.length === 3 &&
+            definition.groupBy[0] === 'TRANSACTION_WEEK' &&
+            definition.orderBy[0]?.field === 'TRANSACTION_WEEK',
         ),
       ).toBe(true),
     );
-    expect(executeSemanticQuery.mock.calls.length).toBe(initialCalls + 1);
+    // The template object and its initial request stay canonical; only the
+    // effective request above used the selected local interval.
+    expect(initialTrend?.[0].groupBy).toEqual(['TRANSACTION_MONTH']);
+
+    firstRender.unmount();
+    renderDashboard();
+    await screen.findByRole('heading', { name: 'Financial overview' });
+    expect(document.querySelector('[data-cy="recommendedWidgetInterval-economic-trend"]')?.value).toBe('TRANSACTION_MONTH');
   });
 
   it('keeps current credit facts explicitly inapplicable for a non-current dashboard context', async () => {

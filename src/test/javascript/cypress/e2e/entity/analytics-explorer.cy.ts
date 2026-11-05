@@ -209,6 +209,22 @@ describe('Analytics Explorer', () => {
     cy.contains(/Internal transfer relationship|Relación con transferencia interna/).should('be.visible');
   });
 
+  it('keeps category plus month ordered in the canonical query while enabling a temporal line presentation', () => {
+    useExample('expenses-by-category');
+    cy.get('[data-cy="analyticsPrimaryBreakdown"]').select('CATEGORY_ROOT');
+    cy.get('[data-cy="analyticsComparisonBreakdown"]').select('TIME');
+    cy.get('[data-cy="analyticsGroupingInterval-1"]').select('TRANSACTION_MONTH');
+    cy.contains('button', /^(Line|Línea)$/).should('not.be.disabled');
+
+    cy.get('[data-cy="analyticsModeSql"]').click();
+    cy.wait('@format').its('response.statusCode').should('eq', 200);
+    cy.get('[data-cy="analyticsSqlText"]').should('contain.value', 'GROUP BY CATEGORY_ROOT, TRANSACTION_MONTH');
+    cy.get('[data-cy="analyticsModeVisual"]').click();
+    cy.get('[data-cy="analyticsPrimaryBreakdown"]').should('have.value', 'CATEGORY_ROOT');
+    cy.get('[data-cy="analyticsComparisonBreakdown"]').should('have.value', 'TIME');
+    cy.get('[data-cy="analyticsGroupingInterval-1"]').should('have.value', 'TRANSACTION_MONTH');
+  });
+
   it('runs a query containing economic income and expense projections together', () => {
     useExample('income-and-expenses-monthly');
     cy.get('[data-cy="analyticsProjection-ingresos"]').should('be.visible');
@@ -219,12 +235,13 @@ describe('Analytics Explorer', () => {
     cy.get('[data-cy="analyticsResults"]').should('be.visible');
   });
 
-  it('keeps all governed sources in the compact information selector with primary and comparison breakdown controls', () => {
+  it('keeps all governed sources with canonical primary, interval, and optional secondary grouping controls', () => {
     cy.get('[data-cy="analyticsCreateScratch"]').click();
     cy.get('[data-cy="analyticsInformationSource"]').find('option').should('have.length.at.least', 6);
     cy.get('[data-cy="analyticsDatasetCatalog"]').should('not.exist');
     cy.get('[data-cy="analyticsInformationSource"]').select('TRANSACTION_LEDGER');
-    cy.get('[data-cy="analyticsPrimaryBreakdown"]').select('TRANSACTION_MONTH');
+    cy.get('[data-cy="analyticsPrimaryBreakdown"]').select('TIME');
+    cy.get('[data-cy="analyticsGroupingInterval-0"]').select('TRANSACTION_MONTH');
     cy.get('[data-cy="analyticsComparisonBreakdown"]').select('ACCOUNT_INSTITUTION');
   });
 
@@ -250,7 +267,8 @@ describe('Analytics Explorer', () => {
     }).as('weeklyExpenses');
 
     useExample('expenses-by-category');
-    cy.get('[data-cy="analyticsPrimaryBreakdown"]').select('TRANSACTION_WEEK');
+    cy.get('[data-cy="analyticsPrimaryBreakdown"]').select('TIME');
+    cy.get('[data-cy="analyticsGroupingInterval-0"]').select('TRANSACTION_WEEK');
     cy.contains('button', /^(Line|Línea)$/).click();
     cy.get('[data-cy="analyticsExecute"]').click();
     cy.wait('@weeklyExpenses').its('response.statusCode').should('eq', 200);
@@ -506,7 +524,8 @@ describe('Analytics Explorer', () => {
       cy.contains('button', /Donut|Dona/).should('be.disabled');
       cy.contains('button', /Bars|Barras/).click();
       cy.get('#analytics-bar-style option[value="STACKED_BAR"]').should('be.disabled');
-      cy.get('[data-cy="analyticsPrimaryBreakdown"]').should('have.value', 'TRANSACTION_MONTH');
+      cy.get('[data-cy="analyticsPrimaryBreakdown"]').should('have.value', 'TIME');
+      cy.get('[data-cy="analyticsGroupingInterval-0"]').should('have.value', 'TRANSACTION_MONTH');
       cy.get('[data-cy="analyticsComparisonBreakdown"]').should('have.value', 'TAG_ID');
 
       cy.get('[data-cy="analyticsModeSql"]').click();
@@ -693,10 +712,10 @@ describe('Analytics Explorer', () => {
     const accountName = `Analytics chart account ${suffix}`;
     const foodName = `Analytics food ${suffix}`;
     const travelName = `Analytics travel ${suffix}`;
-    const temporalByCategory =
+    const categoryByTemporal =
       'SELECT SUM(TRANSACTION_AMOUNT) AS gastos FROM TRANSACTION_LEDGER TIME BINDING TRANSACTION_DATE ' +
-      'WHERE TRANSACTION_FLOW = OUT AND TRANSFER_LINK_STATUS = UNLINKED GROUP BY TRANSACTION_MONTH, CATEGORY_ID ' +
-      'ORDER BY TRANSACTION_MONTH ASC LIMIT 100';
+      'WHERE TRANSACTION_FLOW = OUT AND TRANSFER_LINK_STATUS = UNLINKED GROUP BY CATEGORY_ROOT, TRANSACTION_MONTH ' +
+      'ORDER BY CATEGORY_ROOT ASC, TRANSACTION_MONTH ASC LIMIT 100';
     const kpi =
       'SELECT SUM(TRANSACTION_AMOUNT) AS gastos FROM TRANSACTION_LEDGER TIME BINDING TRANSACTION_DATE ' +
       'WHERE TRANSACTION_FLOW = OUT AND TRANSFER_LINK_STATUS = UNLINKED LIMIT 100';
@@ -725,7 +744,7 @@ describe('Analytics Explorer', () => {
 
     cy.visit('/analytics/explorer');
     cy.wait('@catalog').its('response.statusCode').should('eq', 200);
-    prepareWrittenQuery('TRANSACTION_LEDGER', temporalByCategory);
+    prepareWrittenQuery('TRANSACTION_LEDGER', categoryByTemporal);
     setRange('2026-01-01', '2026-03-31');
     selectAccounts(accountName);
     cy.get('[data-cy="analyticsExecute"]').click();
@@ -739,7 +758,12 @@ describe('Analytics Explorer', () => {
     cy.get('[data-cy="analyticsResultTable"]').should('contain.text', foodName).and('contain.text', travelName);
     cy.get('[data-cy="analyticsModeVisual"]').click();
     cy.contains('button', /^(Line|Línea)$/).click();
-    cy.get('[data-cy="analyticsSemanticChart"] svg path.recharts-line-curve').should('have.length', 2);
+    cy.get('[data-cy="analyticsSemanticChart"] svg path.recharts-line-curve').should('have.length', 3);
+    cy.get('[data-cy="analyticsSemanticChart"] .recharts-xAxis').should('contain.text', foodName).and('contain.text', travelName);
+    cy.get('[data-cy="analyticsInteractiveLegend"]').should('contain.text', 'January 2026').and('contain.text', 'February 2026');
+    cy.get('[data-cy="analyticsTemporalSeriesLineNote"]').should('contain.text', 'Each line represents a period');
+    cy.get('[data-cy="analyticsSemanticChart"]').scrollIntoView();
+    cy.get('[data-cy="analyticsSemanticChart"]').screenshot('analytics-category-axis-temporal-series-real');
     cy.contains('button', /^(Bars|Barras)$/).click();
     cy.get('#analytics-bar-style').select('GROUPED_BAR');
     cy.get('[data-cy="analyticsSemanticChart"] svg .recharts-bar-rectangle').should('have.length.greaterThan', 1);
@@ -788,7 +812,8 @@ describe('Analytics Explorer', () => {
     let canonical = '';
 
     useExample('expenses-by-category');
-    cy.get('[data-cy="analyticsPrimaryBreakdown"]').select('TRANSACTION_MONTH');
+    cy.get('[data-cy="analyticsPrimaryBreakdown"]').select('TIME');
+    cy.get('[data-cy="analyticsGroupingInterval-0"]').select('TRANSACTION_MONTH');
     cy.get('[data-cy="analyticsComparisonBreakdown"]').select('ACCOUNT_INSTITUTION');
     cy.contains('button', /(?:Add calculation|Añadir cálculo)/).click();
     cy.get('[data-cy="analyticsCalculationPicker"]')
@@ -826,7 +851,8 @@ describe('Analytics Explorer', () => {
     cy.get('[data-cy="analyticsProjection-gastos"]').should('be.visible');
     cy.get('[data-cy="analyticsProjection-numero_gastos"]').should('be.visible');
     cy.get('[data-cy="analyticsProjection-gasto_promedio"]').should('be.visible');
-    cy.get('[data-cy="analyticsPrimaryBreakdown"]').should('have.value', 'TRANSACTION_MONTH');
+    cy.get('[data-cy="analyticsPrimaryBreakdown"]').should('have.value', 'TIME');
+    cy.get('[data-cy="analyticsGroupingInterval-0"]').should('have.value', 'TRANSACTION_MONTH');
     cy.get('[data-cy="analyticsComparisonBreakdown"]').should('have.value', 'ACCOUNT_INSTITUTION');
   });
 

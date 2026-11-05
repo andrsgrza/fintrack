@@ -11,6 +11,14 @@ import {
 } from './analytics-explorer.model';
 import { visualizationEligibility } from './analytics-results-panel';
 import { copy, datasetById, describeField, label, predicateValueOptions, suggestedAlias } from './analytics-explorer-utils';
+import {
+  categorySelectionFor,
+  groupingChoiceFor,
+  groupCategoryChildren,
+  isTemporalGrouping,
+  replaceGrouping,
+  temporalOptionsFor,
+} from './analytics-grouping';
 
 type Props = {
   catalog: SemanticAnalyticsCatalog;
@@ -1070,6 +1078,7 @@ const BreakdownSection = ({
   definition,
   locale,
   busy,
+  categories,
   seriesLimit,
   onSeriesLimitChange,
   onApply,
@@ -1078,74 +1087,145 @@ const BreakdownSection = ({
   definition: SemanticQueryDefinition;
   locale: string;
   busy: boolean;
+  categories: AnalyticsReference[];
   seriesLimit: number | 'ALL';
   onSeriesLimitChange: (limit: number | 'ALL') => void;
   onApply: (mutate: (candidate: SemanticQueryDefinition) => void) => void;
 }) => {
   const [advanced, setAdvanced] = useState(false);
+  const [pendingChildren, setPendingChildren] = useState<0 | 1 | null>(null);
+  const [categorySearch, setCategorySearch] = useState('');
   const dataset = datasetById(catalog, definition.dataset);
   if (!dataset) return null;
   const primary = definition.groupBy[0] ?? '';
-  const comparison = definition.groupBy[1] ?? '';
-  const setBreakdown = (position: 0 | 1, field: string) =>
-    onApply(candidate => {
-      const groupBy = [...candidate.groupBy];
-      if (field) groupBy[position] = field;
-      else groupBy.splice(position, 1);
-      candidate.groupBy = groupBy.filter((value, index) => value && groupBy.indexOf(value) === index).slice(0, 2);
-      candidate.orderBy = candidate.orderBy.filter(order => !order.field || candidate.groupBy.includes(order.field));
-    });
-  return (
-    <section className="border-bottom" data-cy="analyticsBreakdownSection">
-      <StepHeading
-        number={3}
-        title={copy(locale, 'Desglose', 'Breakdown')}
-        help={copy(locale, 'Organiza el resultado para compararlo de una forma útil.', 'Organize the result to compare it usefully.')}
-      />
-      <div className="p-3">
-        <div className="row g-2">
-          <div className="col-12 col-md-6">
-            <Label className="small text-uppercase fw-semibold text-muted mb-1" for="analytics-primary-breakdown">
-              {copy(locale, '¿Cómo quieres organizar los resultados?', 'How do you want to organize results?')}
+  const secondary = definition.groupBy[1] ?? '';
+  const selectedCategory = categorySelectionFor(definition);
+  const searchableCategories = categories.filter(category => {
+    const search = categorySearch.trim().toLocaleLowerCase();
+    const identity = [category.name, ...(category.path ?? [])].join(' › ').toLocaleLowerCase();
+    return !search || identity.includes(search);
+  });
+  const setGrouping = (position: 0 | 1, field: string) => {
+    const current = position === 0 ? primary : secondary;
+    const requested = field === 'TIME' ? (isTemporalGrouping(current) ? current : (temporalOptionsFor(dataset)[0] ?? '')) : field;
+    if (requested === 'CATEGORY_BRANCH_CHILD' && !selectedCategory) {
+      setPendingChildren(position);
+      return;
+    }
+    setPendingChildren(null);
+    onApply(candidate => Object.assign(candidate, replaceGrouping(candidate, position, requested)));
+  };
+  const chooseChildrenCategory = (position: 0 | 1, categoryId: string) => {
+    onApply(candidate => Object.assign(candidate, groupCategoryChildren(candidate, position, categoryId)));
+    setPendingChildren(null);
+    setCategorySearch('');
+  };
+  const selector = (position: 0 | 1, field: string, other: string, labelText: string, testId: string) => {
+    const choice = pendingChildren === position ? 'CATEGORY_BRANCH_CHILD' : groupingChoiceFor(field);
+    const temporalAlreadyUsed = isTemporalGrouping(other);
+    return (
+      <div className="col-12 col-md-6">
+        <Label className="small text-uppercase fw-semibold text-muted mb-1" for={`analytics-grouping-${position}`}>
+          {labelText}
+        </Label>
+        <Input
+          id={`analytics-grouping-${position}`}
+          type="select"
+          value={choice}
+          disabled={busy || (position === 1 && !primary)}
+          onChange={event => setGrouping(position, event.target.value)}
+          data-cy={testId}
+        >
+          <option value="">
+            {position === 0 ? copy(locale, 'Sin agrupación', 'No grouping') : copy(locale, 'Sin división adicional', 'No additional split')}
+          </option>
+          <option value="TIME" disabled={temporalAlreadyUsed && !isTemporalGrouping(field)}>
+            {copy(locale, 'A lo largo del tiempo', 'Over time')}
+          </option>
+          {dataset.groupings
+            .filter(grouping => !isTemporalGrouping(grouping))
+            .filter(grouping => grouping !== other)
+            .map(grouping => (
+              <option key={grouping} value={grouping}>
+                {label(locale, grouping)}
+              </option>
+            ))}
+        </Input>
+        {choice === 'TIME' ? (
+          <div className="mt-2">
+            <Label className="small mb-1" for={`analytics-grouping-interval-${position}`}>
+              {copy(locale, 'Intervalo', 'Interval')}
             </Label>
             <Input
-              id="analytics-primary-breakdown"
+              id={`analytics-grouping-interval-${position}`}
               type="select"
-              value={primary}
+              value={field}
               disabled={busy}
-              onChange={event => setBreakdown(0, event.target.value)}
-              data-cy="analyticsPrimaryBreakdown"
+              onChange={event => setGrouping(position, event.target.value)}
+              data-cy={`analyticsGroupingInterval-${position}`}
             >
-              <option value="">{copy(locale, 'Sin desglose', 'No breakdown')}</option>
-              {dataset.groupings.map(field => (
-                <option key={field} value={field}>
-                  {label(locale, field)}
+              {temporalOptionsFor(dataset).map(grouping => (
+                <option key={grouping} value={grouping}>
+                  {label(locale, grouping)}
                 </option>
               ))}
             </Input>
           </div>
-          <div className="col-12 col-md-6">
-            <Label className="small text-uppercase fw-semibold text-muted mb-1" for="analytics-comparison-breakdown">
-              {copy(locale, '¿Quieres comparar grupos dentro de cada uno?', 'Compare groups within each one?')}
+        ) : null}
+        {choice === 'CATEGORY_BRANCH_CHILD' ? (
+          <div className="mt-2 border rounded-2 p-2" data-cy={`analyticsCategoryParent-${position}`}>
+            <Label className="small mb-1" for={`analytics-category-search-${position}`}>
+              {copy(locale, 'Categoría de la que quieres ver hijos', 'Category whose children to view')}
             </Label>
             <Input
-              id="analytics-comparison-breakdown"
-              type="select"
-              value={comparison}
-              disabled={busy || !primary}
-              onChange={event => setBreakdown(1, event.target.value)}
-              data-cy="analyticsComparisonBreakdown"
-            >
-              <option value="">{copy(locale, 'Sin comparación adicional', 'No additional comparison')}</option>
-              {dataset.groupings
-                .filter(field => field !== primary)
-                .map(field => (
-                  <option key={field} value={field}>
-                    {label(locale, field)}
-                  </option>
-                ))}
-            </Input>
+              id={`analytics-category-search-${position}`}
+              type="search"
+              value={categorySearch}
+              disabled={busy}
+              onChange={event => setCategorySearch(event.target.value)}
+              placeholder={copy(locale, 'Buscar categoría', 'Search category')}
+            />
+            <div className="d-grid gap-1 mt-2" style={{ maxHeight: 152, overflowY: 'auto' }}>
+              {searchableCategories.slice(0, 12).map(category => {
+                const categoryId = String(category.id);
+                const selected = categoryId === selectedCategory;
+                return (
+                  <Button
+                    type="button"
+                    color={selected ? 'primary' : 'secondary'}
+                    outline={!selected}
+                    size="sm"
+                    className="text-start"
+                    key={category.id}
+                    disabled={busy}
+                    onClick={() => chooseChildrenCategory(position, categoryId)}
+                  >
+                    {(category.path?.length ? category.path.join(' › ') : category.name) || category.name}
+                  </Button>
+                );
+              })}
+            </div>
+            {!selectedCategory ? (
+              <p className="small text-muted mb-0 mt-2">
+                {copy(locale, 'Elige una categoría para completar esta agrupación.', 'Choose a category to complete this grouping.')}
+              </p>
+            ) : null}
           </div>
+        ) : null}
+      </div>
+    );
+  };
+  return (
+    <section className="border-bottom" data-cy="analyticsBreakdownSection">
+      <StepHeading
+        number={3}
+        title={copy(locale, 'Organiza tus resultados', 'Organize your results')}
+        help={copy(locale, 'Organiza el resultado para compararlo de una forma útil.', 'Organize the result to compare it usefully.')}
+      />
+      <div className="p-3">
+        <div className="row g-2">
+          {selector(0, primary, secondary, copy(locale, 'Agrupar por', 'Group by'), 'analyticsPrimaryBreakdown')}
+          {selector(1, secondary, primary, copy(locale, 'Dividir por (opcional)', 'Split by (optional)'), 'analyticsComparisonBreakdown')}
         </div>
         <div className="mt-2">
           <Button
@@ -1381,6 +1461,7 @@ export const AnalyticsVisualBuilder = ({
         definition={definition}
         locale={locale}
         busy={busy}
+        categories={categories}
         seriesLimit={seriesLimit}
         onSeriesLimitChange={onSeriesLimitChange}
         onApply={apply}

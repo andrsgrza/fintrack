@@ -33,7 +33,7 @@ import {
 type Row = SemanticAnalyticsResult['rows'][number];
 type Value = Row['values'][number];
 type Unit = Value['unit'];
-export type ChartSeries = { key: string; semanticId: string; label: string; color: string; rank: number };
+export type ChartSeries = { key: string; semanticId: string; label: string; color: string; rank: number; sortKey: number | null };
 export type ResultPanel = { currency: string | null; unit: Unit; rows: Row[]; values: Array<{ row: Row; value: Value }> };
 export type ChartPoint = { x: string; xId: string; sortKey: number | null; [key: string]: string | number | boolean | null };
 export type ChartRows = {
@@ -42,6 +42,7 @@ export type ChartRows = {
   hidden: number;
   hasPlottableValues: boolean;
   temporal: boolean;
+  temporalSeries: boolean;
   fillsContext: boolean;
   missingPeriods: number;
 };
@@ -216,7 +217,7 @@ export const visualizationEligibility = (
   locale: string,
 ): VisualizationEligibility[] => {
   const fields = result?.rows.length ? (result.rows[0]?.dimensions.map(dimension => dimension.field) ?? []) : (definition?.groupBy ?? []);
-  const temporal = isTemporalField(fields[0] ?? '');
+  const temporal = fields.some(isTemporalField);
   const tagGrouping = fields.includes('TAG_ID');
   const pointInTime = ['FINANCIAL_POSITION_SNAPSHOT', 'ACCOUNT_POSITION_SNAPSHOT', 'CREDIT_ACCOUNT_SNAPSHOT'].includes(
     definition?.dataset ?? '',
@@ -234,11 +235,7 @@ export const visualizationEligibility = (
     {
       option: 'LINE',
       enabled: temporal,
-      reason: copy(
-        locale,
-        'Las líneas requieren un desglose temporal como primer eje.',
-        'Lines require a temporal breakdown as the first axis.',
-      ),
+      reason: copy(locale, 'Las líneas requieren un desglose temporal.', 'Lines require a temporal breakdown.'),
     },
     { option: 'BAR', enabled: groupCount > 0, reason: barReason },
     {
@@ -300,26 +297,57 @@ export const chartRows = (
   limit: number | 'ALL',
   locale: string,
   effectiveContext?: SemanticAnalyticsResult['effectiveContext'],
+  _visualization: ExplorerVisualization = 'BAR',
 ): ChartRows => {
   const valuesByX = new Map<string, ChartPoint>();
   const ranks = new Map<string, number>();
-  const seriesMetadata = new Map<string, { semanticId: string; color: string }>();
+  const seriesMetadata = new Map<string, { semanticId: string; color: string; sortKey: number | null }>();
+  const dimensions = panel.rows.find(row => row.dimensions.length)?.dimensions ?? [];
+  // `groupBy[0]` is always the axis. The chart never changes the semantic grouping order merely because a line has
+  // a temporal comparison: Category + Month means category X values and one line per month.
+  const xIndex = 0;
+  const xField = dimensions[xIndex]?.field ?? '';
+  const projectionAliases = new Set(panel.values.map(({ value }) => value.alias));
   panel.values.forEach(({ row, value }) => {
-    const primary = row.dimensions[0];
-    const xId = primary ? dimensionId(row, 0) : 'TOTAL';
-    const x = primary ? String(dimensionLabel(row, 0, locale)) : copy(locale, 'Total', 'Total');
-    const secondDimension = row.dimensions.length > 1 ? dimensionId(row, 1) : '';
-    const secondLabel = row.dimensions.length > 1 ? String(dimensionLabel(row, 1, locale)) : '';
-    const key = `${value.alias}::${secondDimension}`;
-    const seriesLabel =
-      row.dimensions.length > 1 ? `${presentationAlias(value.alias, locale)} · ${secondLabel}` : presentationAlias(value.alias, locale);
-    // A comparison has a stable domain member (for example a category or tag) that owns the color. A single
-    // time-series has no such member, so its measure alias—not the first date in the selected context—is its identity.
-    const colorDimension = row.dimensions.length > 1 ? row.dimensions[1] : primary && !isTemporalField(primary.field) ? primary : undefined;
-    const colorIdentity = colorDimension?.metadata?.stableId ?? `MEASURE:${value.alias}`;
-    const semanticId = `${value.alias}:${colorIdentity}`;
+    const xDimension = row.dimensions[xIndex];
+    const xId = xDimension ? dimensionId(row, xIndex) : 'TOTAL';
+    const x = xDimension ? String(dimensionLabel(row, xIndex, locale)) : copy(locale, 'Total', 'Total');
+    const seriesDimensions = row.dimensions.slice(1);
+    const seriesIdentity = seriesDimensions
+      .map(dimension =>
+        isTemporalField(dimension.field)
+          ? temporalBucketIdentity(dimension.field, dimension.value)
+          : (dimension.metadata?.stableId ?? `${dimension.field}:${dimension.value ?? '—'}`),
+      )
+      .join('::');
+    const seriesText = seriesDimensions
+      .map(dimension =>
+        isTemporalField(dimension.field)
+          ? formatTemporalBucket(dimension.field, dimension.value, locale)
+          : (dimension.metadata?.label ?? dimension.value ?? '—'),
+      )
+      .join(' · ');
+    const key = `${value.alias}::${seriesIdentity}`;
+    const seriesLabel = seriesDimensions.length
+      ? projectionAliases.size === 1 && seriesDimensions.every(dimension => isTemporalField(dimension.field))
+        ? seriesText
+        : `${presentationAlias(value.alias, locale)} · ${seriesText}`
+      : presentationAlias(value.alias, locale);
+    // A secondary category or tag owns its configured colour. When the secondary member is a period, colours come
+    // from a deterministic palette instead of accidentally borrowing a category colour from the primary axis.
+    const colorDimension =
+      seriesDimensions.find(dimension => !isTemporalField(dimension.field)) ??
+      (seriesDimensions.length === 0 && xDimension && !isTemporalField(xDimension.field) ? xDimension : undefined);
+    const colorIdentity =
+      colorDimension?.metadata?.stableId ?? (seriesDimensions.length ? `SERIES:${seriesIdentity}` : `MEASURE:${value.alias}`);
+    const semanticId = `${value.alias}:${seriesIdentity || colorIdentity}`;
+    const seriesSortKey =
+      seriesDimensions.length === 1 && isTemporalField(seriesDimensions[0].field)
+        ? temporalSortKey(seriesDimensions[0].field, seriesDimensions[0].value)
+        : null;
     const item =
-      valuesByX.get(xId) ?? ({ x, xId, sortKey: primary ? temporalSortKey(primary.field, primary.value) : null } satisfies ChartPoint);
+      valuesByX.get(xId) ??
+      ({ x, xId, sortKey: xDimension ? temporalSortKey(xDimension.field, xDimension.value) : null } satisfies ChartPoint);
     item[key] = plottableValue(value);
     item[`${key}::label`] = seriesLabel;
     item[`${key}::derived`] = value.derived === true;
@@ -327,7 +355,7 @@ export const chartRows = (
     valuesByX.set(xId, item);
     ranks.set(key, (ranks.get(key) ?? 0) + Math.abs(plottableValue(value) ?? 0));
     if (!seriesMetadata.has(key)) {
-      seriesMetadata.set(key, { semanticId, color: semanticColor(colorDimension?.metadata?.color, colorIdentity) });
+      seriesMetadata.set(key, { semanticId, color: semanticColor(colorDimension?.metadata?.color, colorIdentity), sortKey: seriesSortKey });
     }
   });
   const series = [...ranks.entries()]
@@ -337,20 +365,26 @@ export const chartRows = (
       semanticId: seriesMetadata.get(key)?.semanticId ?? key,
       color: seriesMetadata.get(key)?.color ?? colorFor(key),
       rank,
+      sortKey: seriesMetadata.get(key)?.sortKey ?? null,
     }))
-    .sort((left, right) => right.rank - left.rank || left.key.localeCompare(right.key));
+    .sort((left, right) => {
+      if (left.sortKey !== null && right.sortKey !== null && left.sortKey !== right.sortKey) return left.sortKey - right.sortKey;
+      if (left.sortKey !== null) return -1;
+      if (right.sortKey !== null) return 1;
+      return left.semanticId.localeCompare(right.semanticId) || left.key.localeCompare(right.key);
+    });
   const selected = limit === 'ALL' ? series : series.slice(0, limit);
   const selectedKeys = new Set(selected.map(seriesItem => seriesItem.key));
-  const primaryField = panel.rows.find(row => row.dimensions[0])?.dimensions[0]?.field ?? '';
-  const temporal = isTemporalField(primaryField);
+  const temporal = isTemporalField(xField);
+  const temporalSeries = dimensions.slice(1).some(dimension => isTemporalField(dimension.field));
   let missingPeriods = 0;
   const contextBuckets =
-    temporal && effectiveContext ? temporalBucketsInContext(primaryField, effectiveContext.from, effectiveContext.through) : [];
+    temporal && effectiveContext ? temporalBucketsInContext(xField, effectiveContext.from, effectiveContext.through) : [];
   contextBuckets.forEach(bucket => {
-    const xId = temporalBucketIdentity(primaryField, bucket.value);
+    const xId = temporalBucketIdentity(xField, bucket.value);
     if (!valuesByX.has(xId)) {
       valuesByX.set(xId, {
-        x: formatTemporalBucket(primaryField, bucket.value, locale),
+        x: formatTemporalBucket(xField, bucket.value, locale),
         xId,
         sortKey: bucket.sortKey,
       });
@@ -374,6 +408,7 @@ export const chartRows = (
     hidden: series.filter(seriesItem => !selectedKeys.has(seriesItem.key)).length,
     hasPlottableValues: data.some(row => selected.some(seriesItem => typeof row[seriesItem.key] === 'number')),
     temporal,
+    temporalSeries,
     fillsContext: contextBuckets.length > 0,
     missingPeriods,
   };
@@ -582,7 +617,10 @@ const SemanticChart = ({
   effectiveContext: SemanticAnalyticsResult['effectiveContext'];
   horizontal: boolean;
 }) => {
-  const chart = useMemo(() => chartRows(panel, seriesLimit, locale, effectiveContext), [panel, seriesLimit, locale, effectiveContext]);
+  const chart = useMemo(
+    () => chartRows(panel, seriesLimit, locale, effectiveContext, visualization),
+    [panel, seriesLimit, locale, effectiveContext, visualization],
+  );
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(() => new Set());
   const identity = chart.series.map(series => series.key).join('|');
   useEffect(() => {
@@ -786,6 +824,15 @@ const SemanticChart = ({
                 'The chart respects the complete context period. Zeroes with the corresponding note are valid periods without registered movements; an absent result remains a gap.',
               )
             : copy(locale, 'Un período ausente no representa $0.', 'A missing period does not mean $0.')}
+        </p>
+      ) : null}
+      {visualization === 'LINE' && chart.temporalSeries && !chart.temporal ? (
+        <p className="small text-muted mb-0" data-cy="analyticsTemporalSeriesLineNote">
+          {copy(
+            locale,
+            'Cada línea representa un período y sus puntos comparan los grupos del eje. Para comparar grupos sin unirlos, las barras agrupadas pueden ser más claras.',
+            'Each line represents a period and its points compare the axis groups. Grouped bars can be clearer when you do not want to connect those groups.',
+          )}
         </p>
       ) : null}
     </>
@@ -995,7 +1042,7 @@ export const AnalyticsResultsPanel = ({
             ) : null}
             {panels.map(panel => {
               const chart = current !== 'TABLE' && current !== 'KPI';
-              const chartState = chart ? chartRows(panel, seriesLimit, locale, result.effectiveContext) : null;
+              const chartState = chart ? chartRows(panel, seriesLimit, locale, result.effectiveContext, current) : null;
               return (
                 <section
                   className={compact ? 'mb-3' : 'border rounded-2 p-3 mb-3'}

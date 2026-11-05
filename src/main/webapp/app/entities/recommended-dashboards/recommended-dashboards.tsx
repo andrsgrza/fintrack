@@ -19,7 +19,14 @@ import {
   VisualizationContext,
 } from 'app/entities/analytics-explorer/analytics-explorer.model';
 import { AnalyticsResultsPanel } from 'app/entities/analytics-explorer/analytics-results-panel';
-import { copy } from 'app/entities/analytics-explorer/analytics-explorer-utils';
+import {
+  categoryGroupingIndex,
+  groupCategoryChildren,
+  isTemporalGrouping,
+  replaceTemporalGrouping,
+  temporalOptionsFor,
+} from 'app/entities/analytics-explorer/analytics-grouping';
+import { copy, datasetById, label } from 'app/entities/analytics-explorer/analytics-explorer-utils';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
 import {
@@ -37,7 +44,6 @@ export type DashboardExecutableWidget = {
 };
 type DrillState = { definition: SemanticQueryDefinition; label: string };
 type WidgetInstance = FinancialVisualizationDefinition & { definition: SemanticQueryDefinition; trail: DrillState[] };
-type TrendGranularity = 'AUTO' | 'TRANSACTION_DAY' | 'TRANSACTION_WEEK' | 'TRANSACTION_MONTH' | 'TRANSACTION_YEAR';
 
 const today = () => {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -64,6 +70,10 @@ const widgetKey = (widget: DashboardExecutableWidget) =>
 const title = (locale: string, value: { es: string; en: string }) => copy(locale, value.es, value.en);
 const dashboardById = (templates: RecommendedDashboardTemplate[], id: string | undefined) =>
   templates.find(template => template.id === id) ?? templates[0];
+const temporalOptionsForDefinition = (catalog: SemanticAnalyticsCatalog, definition: SemanticQueryDefinition) => {
+  const dataset = datasetById(catalog, definition.dataset);
+  return dataset ? temporalOptionsFor(dataset) : [];
+};
 const blankState = (): DashboardWidgetState => ({ loading: true, result: null, error: null });
 export const dashboardDiagnostics = (error: unknown) => {
   if (axios.isAxiosError<AnalyticsProblem & { message?: string }>(error)) {
@@ -78,30 +88,6 @@ const isCurrentOnlyContext = (context: VisualizationContext) => {
   const date = today();
   return context.time.mode === 'ABSOLUTE_RANGE' && context.time.from === date && context.time.through === date;
 };
-const daysInContext = (context: VisualizationContext | null) => {
-  if (!context || context.time.mode !== 'ABSOLUTE_RANGE' || !context.time.from || !context.time.through) return null;
-  const from = Date.parse(`${context.time.from}T00:00:00Z`);
-  const through = Date.parse(`${context.time.through}T00:00:00Z`);
-  return Number.isFinite(from) && Number.isFinite(through) ? Math.max(1, Math.floor((through - from) / 86_400_000) + 1) : null;
-};
-/** Auto is presentation-controlled: it derives an executable grouping without embedding period/account/currency in the widget AST. */
-const resolvedTrendGrouping = (granularity: TrendGranularity, context: VisualizationContext | null) => {
-  if (granularity !== 'AUTO') return granularity;
-  const days = daysInContext(context);
-  if (days === null) return 'TRANSACTION_MONTH';
-  if (days <= 45) return 'TRANSACTION_DAY';
-  if (days <= 210) return 'TRANSACTION_WEEK';
-  if (days <= 730) return 'TRANSACTION_MONTH';
-  return 'TRANSACTION_YEAR';
-};
-const trendGroupingLabel = (locale: string, grouping: TrendGranularity) =>
-  ({
-    AUTO: copy(locale, 'Automático', 'Automatic'),
-    TRANSACTION_DAY: copy(locale, 'Día', 'Day'),
-    TRANSACTION_WEEK: copy(locale, 'Semana', 'Week'),
-    TRANSACTION_MONTH: copy(locale, 'Mes', 'Month'),
-    TRANSACTION_YEAR: copy(locale, 'Año', 'Year'),
-  })[grouping];
 const formatAsOf = (locale: string, isoDate: string) =>
   new Intl.DateTimeFormat(locale.startsWith('es') ? 'es-MX' : 'en-US', { day: '2-digit', month: 'short', year: 'numeric' }).format(
     new Date(`${isoDate}T12:00:00Z`),
@@ -198,6 +184,8 @@ const WidgetCard = ({
   state,
   locale,
   context,
+  temporalOptions,
+  onTemporalIntervalChange,
   onDrillDown,
   onDrillBack,
 }: {
@@ -205,12 +193,15 @@ const WidgetCard = ({
   state: DashboardWidgetState | undefined;
   locale: string;
   context: VisualizationContext;
+  temporalOptions: string[];
+  onTemporalIntervalChange: (widgetId: string | number, interval: string) => void;
   onDrillDown: (widget: WidgetInstance, categoryId: string, categoryLabel: string) => void;
   onDrillBack: (widget: WidgetInstance) => void;
 }) => {
   const span = widget.span === 'FULL' ? 'col-12' : widget.span === 'KPI' ? 'col-12 col-md-6 col-xl-3' : 'col-12 col-xl-6';
   const visualization: ExplorerVisualization = widget.visualization;
   const policyMessage = state?.error === 'CURRENT_ONLY_CONTEXT';
+  const temporalGrouping = widget.definition.groupBy.find(isTemporalGrouping);
   const positionAsOf =
     ['FINANCIAL_POSITION_SNAPSHOT', 'ACCOUNT_POSITION_SNAPSHOT'].includes(widget.definition.dataset) &&
     (widget.id === 'registered-position' || widget.id === 'position-by-account');
@@ -221,6 +212,26 @@ const WidgetCard = ({
         <div className="card-body p-3 p-md-4">
           <h2 className="h5 mb-1">{title(locale, widget.title)}</h2>
           <p className="small text-muted mb-3">{title(locale, widget.description)}</p>
+          {temporalGrouping && temporalOptions.length > 1 ? (
+            <div className="d-flex align-items-center justify-content-end gap-2 mb-3">
+              <label className="small fw-semibold mb-0" htmlFor={`recommended-widget-interval-${widget.id}`}>
+                {copy(locale, 'Intervalo', 'Interval')}
+              </label>
+              <select
+                id={`recommended-widget-interval-${widget.id}`}
+                className="form-select form-select-sm w-auto"
+                value={temporalGrouping}
+                onChange={event => onTemporalIntervalChange(widget.id, event.target.value)}
+                data-cy={`recommendedWidgetInterval-${widget.id}`}
+              >
+                {temporalOptions.map(interval => (
+                  <option key={interval} value={interval}>
+                    {label(locale, interval)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {positionAsOf && effectiveThrough ? (
             <p className="small fw-semibold mb-3" data-cy={`recommendedWidgetAsOf-${widget.id}`}>
               {copy(locale, `Al ${formatAsOf(locale, effectiveThrough)}`, `As of ${formatAsOf(locale, effectiveThrough)}`)}
@@ -267,8 +278,16 @@ const RecommendedDashboards = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [context, setContext] = useState<VisualizationContext | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Record<string, { definition: SemanticQueryDefinition; trail: DrillState[] }>>({});
-  const [overviewGranularity, setOverviewGranularity] = useState<TrendGranularity>('AUTO');
+  // Drill-down holds an executable canonical query selected by the person. It is
+  // not a presentation override or a second grouping model.
+  const [drillStates, setDrillStates] = useState<Record<string, { definition: SemanticQueryDefinition; trail: DrillState[] }>>({});
+  // A selected interval is a disposable execution preference. The persisted
+  // widget definition remains the default that returns after a reload.
+  const [temporaryIntervals, setTemporaryIntervals] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setTemporaryIntervals({});
+  }, [dashboardId]);
 
   useEffect(() => {
     let active = true;
@@ -295,37 +314,25 @@ const RecommendedDashboards = () => {
   const dashboard = dashboardById(templates, dashboardId);
   const widgets = useMemo<WidgetInstance[]>(() => {
     if (!dashboard) return [];
-    const grouping = resolvedTrendGrouping(overviewGranularity, context);
     return dashboard.widgets.map(widget => {
-      const base = overrides[widget.id]?.definition ?? widget.definition;
-      const definition =
-        dashboard.id === 'financial-overview' && widget.id === 'economic-trend' && !overrides[widget.id]
-          ? { ...base, groupBy: [grouping], orderBy: [{ field: grouping, projectionAlias: null, direction: 'ASC' as const }] }
-          : base;
-      return { ...widget, definition, trail: overrides[widget.id]?.trail ?? [] };
+      const state = drillStates[widget.id];
+      const canonicalDefinition = state?.definition ?? widget.definition;
+      const interval = temporaryIntervals[String(widget.id)];
+      return {
+        ...widget,
+        definition: interval ? replaceTemporalGrouping(canonicalDefinition, interval) : canonicalDefinition,
+        trail: state?.trail ?? [],
+      };
     });
-  }, [context, dashboard, overviewGranularity, overrides]);
+  }, [dashboard, drillStates, temporaryIntervals]);
   const states = useDashboardWidgetResults(widgets, context);
 
   const drillDown = (widget: WidgetInstance, categoryId: string, categoryLabel: string) => {
     if (widget.definition.dataset !== 'TRANSACTION_LEDGER') return;
-    const groupedCategory = widget.definition.groupBy.findIndex(field =>
-      ['CATEGORY_ID', 'CATEGORY_ROOT', 'CATEGORY_SUBCATEGORY', 'CATEGORY_BRANCH_CHILD'].includes(field),
-    );
+    const groupedCategory = categoryGroupingIndex(widget.definition);
     if (groupedCategory < 0) return;
-    const definition = JSON.parse(JSON.stringify(widget.definition)) as SemanticQueryDefinition;
-    definition.predicates = definition.predicates.filter(
-      predicate => !(predicate.field === 'CATEGORY_ID' && predicate.operator === 'DESCENDANT_OF'),
-    );
-    definition.predicates.push({ field: 'CATEGORY_ID', operator: 'DESCENDANT_OF', values: [categoryId] });
-    const previousCategoryGrouping = definition.groupBy[groupedCategory];
-    definition.groupBy[groupedCategory] = 'CATEGORY_BRANCH_CHILD';
-    // The semantic contract only permits ordering by an active grouping or a selected calculation. Keep the
-    // category ordering aligned with the grouping replaced by drill-down; projection ordering remains unchanged.
-    definition.orderBy = definition.orderBy.map(order =>
-      order.field === previousCategoryGrouping ? { ...order, field: 'CATEGORY_BRANCH_CHILD', projectionAlias: null } : order,
-    );
-    setOverrides(previous => ({
+    const definition = groupCategoryChildren(widget.definition, groupedCategory as 0 | 1, categoryId);
+    setDrillStates(previous => ({
       ...previous,
       [widget.id]: { definition, trail: [...widget.trail, { definition: widget.definition, label: categoryLabel }] },
     }));
@@ -333,7 +340,7 @@ const RecommendedDashboards = () => {
   const drillBack = (widget: WidgetInstance) => {
     const previous = widget.trail[widget.trail.length - 1];
     if (!previous) return;
-    setOverrides(current => ({
+    setDrillStates(current => ({
       ...current,
       [widget.id]: { definition: previous.definition, trail: widget.trail.slice(0, -1) },
     }));
@@ -370,37 +377,6 @@ const RecommendedDashboards = () => {
               onChange={setContext}
             />
           </ProductSection>
-          {dashboard.id === 'financial-overview' ? (
-            <div className="d-flex flex-wrap align-items-center justify-content-end gap-2">
-              <label className="small fw-semibold" htmlFor="overview-trend-granularity">
-                {copy(locale, 'Tendencia por', 'Trend by')}
-              </label>
-              <select
-                id="overview-trend-granularity"
-                className="form-select form-select-sm w-auto"
-                value={overviewGranularity}
-                onChange={event => setOverviewGranularity(event.target.value as TrendGranularity)}
-                data-cy="overviewTrendGranularity"
-              >
-                {(['AUTO', 'TRANSACTION_DAY', 'TRANSACTION_WEEK', 'TRANSACTION_MONTH', 'TRANSACTION_YEAR'] as TrendGranularity[]).map(
-                  grouping => (
-                    <option key={grouping} value={grouping}>
-                      {trendGroupingLabel(locale, grouping)}
-                    </option>
-                  ),
-                )}
-              </select>
-              {overviewGranularity === 'AUTO' ? (
-                <span className="small text-muted">
-                  {copy(
-                    locale,
-                    `Ahora: ${trendGroupingLabel(locale, resolvedTrendGrouping('AUTO', context))}`,
-                    `Now: ${trendGroupingLabel(locale, resolvedTrendGrouping('AUTO', context))}`,
-                  )}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
           <p className="small text-muted mb-0">
             {copy(
               locale,
@@ -416,6 +392,10 @@ const RecommendedDashboards = () => {
                 state={states[widget.id]}
                 locale={locale}
                 context={context}
+                temporalOptions={temporalOptionsForDefinition(catalog, widget.definition)}
+                onTemporalIntervalChange={(widgetId, interval) =>
+                  setTemporaryIntervals(previous => ({ ...previous, [String(widgetId)]: interval }))
+                }
                 onDrillDown={drillDown}
                 onDrillBack={drillBack}
               />

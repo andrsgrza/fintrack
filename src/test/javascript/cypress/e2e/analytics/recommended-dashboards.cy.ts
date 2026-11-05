@@ -14,7 +14,12 @@ describe('Recommended dashboards V2', () => {
     defaultLimit: 100,
     maxLimit: 500,
     authenticatedOwnerRequired: true,
-    datasets: [],
+    datasets: [
+      {
+        dataset: 'TRANSACTION_LEDGER',
+        groupings: ['TRANSACTION_DAY', 'TRANSACTION_WEEK', 'TRANSACTION_MONTH', 'TRANSACTION_YEAR'],
+      },
+    ],
   };
 
   const responseFor = (definition: { groupBy: string[]; projections: Array<{ alias: string; function: string; field: string }> }) => {
@@ -70,6 +75,7 @@ describe('Recommended dashboards V2', () => {
       { id: 7, name: 'Daily account', accountType: 'DEBIT', currency: 'MXN' },
     ]).as('accounts');
     cy.intercept('POST', '**/api/analytics/semantic/queries/execute', request => {
+      if (request.body.definition.groupBy?.[0] === 'TRANSACTION_WEEK') request.alias = 'weeklyDashboardWidget';
       request.reply(responseFor(request.body.definition));
     }).as('executeDashboardWidget');
   });
@@ -99,5 +105,17 @@ describe('Recommended dashboards V2', () => {
       .should('have.attr', 'aria-expanded', 'false')
       .click();
     cy.get('[data-cy="recommendedWidget-category-expense-trend"] [data-cy="analyticsResultTable"] tbody tr').should('have.length', 1);
+  });
+
+  it('uses a widget-local interval only for the effective temporal request and restores the saved default after reload', () => {
+    cy.visit('/analytics/dashboards/financial-overview');
+    cy.contains('Trend by').should('not.exist');
+    cy.get('[data-cy="recommendedWidgetInterval-economic-trend"]').should('have.value', 'TRANSACTION_MONTH').select('TRANSACTION_WEEK');
+    cy.wait('@weeklyDashboardWidget').then(({ request }) => {
+      expect(request.body.definition.groupBy).to.deep.equal(['TRANSACTION_WEEK']);
+      expect(request.body.definition.orderBy).to.deep.equal([{ field: 'TRANSACTION_WEEK', projectionAlias: null, direction: 'ASC' }]);
+    });
+    cy.reload();
+    cy.get('[data-cy="recommendedWidgetInterval-economic-trend"]').should('have.value', 'TRANSACTION_MONTH');
   });
 });

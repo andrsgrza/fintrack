@@ -180,6 +180,24 @@ class PersonalDashboardResourceIT {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
 
+        ObjectNode nonTemporalLine = widgetPayload(
+            saved.path("version").asLong(),
+            "Línea inválida",
+            "add-protected-non-temporal-line",
+            countByInstitution(),
+            "LINE",
+            "COMPACT",
+            true
+        );
+        mockMvc
+            .perform(
+                post(URL + "/{id}/widgets", id)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(nonTemporalLine))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+
         mockMvc
             .perform(
                 post(URL)
@@ -188,6 +206,100 @@ class PersonalDashboardResourceIT {
             )
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
+    }
+
+    @Test
+    void persistsLineWidgetsWithTemporalBreakdownsInEitherOrderedPositionWithoutChangingTheirCanonicalAst() throws Exception {
+        JsonNode dashboard = create("Comparación ordenada", "create-ordered-comparison", relativeContext());
+        long dashboardId = dashboard.path("id").asLong();
+
+        JsonNode categoryThenMonth = addWidget(
+            dashboardId,
+            dashboard.path("version").asLong(),
+            "Categorías por mes",
+            "add-category-then-month-line",
+            expenseByCategoryAndMonth(false),
+            "LINE",
+            "FULL",
+            true
+        );
+        long firstWidgetId = categoryThenMonth.path("widgets").get(0).path("id").asLong();
+        assertThat(categoryThenMonth.path("widgets").get(0).path("definition").path("groupBy"))
+            .extracting(JsonNode::asText)
+            .containsExactly("CATEGORY_ROOT", "TRANSACTION_MONTH");
+        assertThat(categoryThenMonth.path("widgets").get(0).path("definition").toString()).doesNotContain("context");
+
+        JsonNode monthThenCategory = addWidget(
+            dashboardId,
+            categoryThenMonth.path("version").asLong(),
+            "Meses por categoría",
+            "add-month-then-category-line",
+            expenseByCategoryAndMonth(true),
+            "LINE",
+            "FULL",
+            true
+        );
+        long secondWidgetId = monthThenCategory.path("widgets").get(1).path("id").asLong();
+        assertThat(monthThenCategory.path("widgets").get(1).path("definition").path("groupBy"))
+            .extracting(JsonNode::asText)
+            .containsExactly("TRANSACTION_MONTH", "CATEGORY_ROOT");
+
+        ObjectNode groupedBar = widgetUpdatePayload(
+            monthThenCategory.path("version").asLong(),
+            "Categorías agrupadas por mes",
+            expenseByCategoryAndMonth(false),
+            "GROUPED_BAR",
+            "FULL",
+            true
+        );
+        JsonNode updated = body(
+            mockMvc
+                .perform(
+                    put(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, firstWidgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(groupedBar))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets[0].id").value(firstWidgetId))
+                .andExpect(jsonPath("$.widgets[0].position").value(0))
+                .andExpect(jsonPath("$.widgets[0].definition.groupBy[0]").value("CATEGORY_ROOT"))
+                .andExpect(jsonPath("$.widgets[0].definition.groupBy[1]").value("TRANSACTION_MONTH"))
+                .andReturn()
+        );
+        assertThat(updated.path("widgets").get(1).path("id").asLong()).isEqualTo(secondWidgetId);
+
+        ObjectNode stackedBar = widgetUpdatePayload(
+            updated.path("version").asLong(),
+            "Meses apilados por categoría",
+            expenseByCategoryAndMonth(true),
+            "STACKED_BAR",
+            "FULL",
+            true
+        );
+        JsonNode withStackedBar = body(
+            mockMvc
+                .perform(
+                    put(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, secondWidgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(stackedBar))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets[1].id").value(secondWidgetId))
+                .andExpect(jsonPath("$.widgets[1].definition.groupBy[0]").value("TRANSACTION_MONTH"))
+                .andExpect(jsonPath("$.widgets[1].definition.groupBy[1]").value("CATEGORY_ROOT"))
+                .andReturn()
+        );
+
+        JsonNode reloaded = body(mockMvc.perform(get(URL + "/{id}", dashboardId)).andExpect(status().isOk()).andReturn());
+        assertThat(reloaded.path("widgets").get(0).path("id").asLong()).isEqualTo(firstWidgetId);
+        assertThat(reloaded.path("widgets").get(0).path("definition").path("groupBy"))
+            .extracting(JsonNode::asText)
+            .containsExactly("CATEGORY_ROOT", "TRANSACTION_MONTH");
+        assertThat(reloaded.path("widgets").get(1).path("definition").path("groupBy"))
+            .extracting(JsonNode::asText)
+            .containsExactly("TRANSACTION_MONTH", "CATEGORY_ROOT");
+        assertThat(reloaded.path("widgets").get(1).path("visualizationType").asText()).isEqualTo("STACKED_BAR");
+        assertThat(withStackedBar.path("version").asLong()).isEqualTo(reloaded.path("version").asLong());
     }
 
     @Test
@@ -377,6 +489,30 @@ class PersonalDashboardResourceIT {
             assertThat(widget.getQueryDefinitionJson()).doesNotContain("context")
         );
 
+        JsonNode editedCopy = body(
+            mockMvc
+                .perform(
+                    put(URL + "/{dashboardId}/widgets/{widgetId}", copiedId, firstWidgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            objectMapper.writeValueAsBytes(
+                                widgetUpdatePayload(
+                                    created.path("version").asLong(),
+                                    "Conteo personalizado",
+                                    countByInstitution(),
+                                    "BAR",
+                                    "MEDIUM",
+                                    true
+                                )
+                            )
+                        )
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets[0].id").value(firstWidgetId))
+                .andExpect(jsonPath("$.widgets[0].title").value("Conteo personalizado"))
+                .andReturn()
+        );
+
         mockMvc
             .perform(post(URL + "/from-template").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(copy)))
             .andExpect(status().isCreated())
@@ -396,6 +532,8 @@ class PersonalDashboardResourceIT {
         );
         assertThat(second.path("id").asLong()).isNotEqualTo(copiedId);
         assertThat(second.path("widgets").get(0).path("id").asLong()).isNotEqualTo(firstWidgetId);
+        assertThat(second.path("widgets").get(0).path("title").asText()).isEqualTo("Conteo por institución");
+        assertThat(editedCopy.path("widgets").get(0).path("title").asText()).isEqualTo("Conteo personalizado");
 
         ObjectNode rejected = templateCopyPayload("financial-overview", "No parcial", "copy-overview-invalid");
         ((ObjectNode) rejected.withArray("widgets").get(0)).put("visualizationType", "KPI");
@@ -550,6 +688,22 @@ class PersonalDashboardResourceIT {
         predicates.addObject().put("field", "TRANSFER_LINK_STATUS").put("operator", "EQUALS").putArray("values").add("UNLINKED");
         definition.putArray("groupBy");
         definition.putArray("orderBy");
+        return definition;
+    }
+
+    private ObjectNode expenseByCategoryAndMonth(boolean monthFirst) {
+        ObjectNode definition = expenseTotal();
+        ArrayNode groupBy = definition.withArray("groupBy");
+        ArrayNode orderBy = definition.withArray("orderBy");
+        if (monthFirst) {
+            groupBy.add("TRANSACTION_MONTH").add("CATEGORY_ROOT");
+            orderBy.addObject().put("field", "TRANSACTION_MONTH").put("direction", "ASC");
+            orderBy.addObject().put("field", "CATEGORY_ROOT").put("direction", "ASC");
+        } else {
+            groupBy.add("CATEGORY_ROOT").add("TRANSACTION_MONTH");
+            orderBy.addObject().put("field", "CATEGORY_ROOT").put("direction", "ASC");
+            orderBy.addObject().put("field", "TRANSACTION_MONTH").put("direction", "ASC");
+        }
         return definition;
     }
 
