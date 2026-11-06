@@ -8,6 +8,8 @@ import {
 
 const api = 'api/personal-dashboards';
 
+export type OfficialDashboardTemplateId = 'financial-overview' | 'movement-analysis' | 'accounts-and-position';
+
 export type PersonalDashboardSummary = {
   id: number;
   name: string;
@@ -44,7 +46,7 @@ export type PersonalDashboardCreate = {
 };
 
 export type PersonalDashboardTemplateCopy = PersonalDashboardCreate & {
-  templateId: 'financial-overview' | 'movement-analysis' | 'accounts-and-position';
+  templateId: OfficialDashboardTemplateId;
   widgets: Array<{
     title: string;
     description?: string | null;
@@ -80,6 +82,26 @@ export type PersonalDashboardLayout = {
   }>;
 };
 
+export type PersonalDashboardMetadataUpdate = {
+  expectedVersion: number;
+  name: string;
+  description?: string | null;
+};
+
+export type PersonalDashboardDuplicate = {
+  expectedVersion: number;
+  name: string;
+  description?: string | null;
+  clientRequestId: string;
+};
+
+/** Exactly one effective selection: an owned dashboard or a backend-governed immutable official template. */
+export type PersonalDashboardDefault = {
+  dashboardId: number | null;
+  officialTemplateId: OfficialDashboardTemplateId | null;
+  version: number | null;
+};
+
 export const listPersonalDashboards = async (): Promise<PersonalDashboardSummary[]> =>
   (await axios.get<PersonalDashboardSummary[]>(api)).data;
 
@@ -107,3 +129,27 @@ export const savePersonalDashboardLayout = async (
   dashboardId: string | number,
   command: PersonalDashboardLayout,
 ): Promise<PersonalDashboard> => (await axios.put<PersonalDashboard>(`${api}/${dashboardId}/layout`, command)).data;
+
+export const updatePersonalDashboardMetadata = async (
+  dashboardId: string | number,
+  command: PersonalDashboardMetadataUpdate,
+): Promise<PersonalDashboard> => (await axios.patch<PersonalDashboard>(`${api}/${dashboardId}/metadata`, command)).data;
+
+export const duplicatePersonalDashboard = async (
+  dashboardId: string | number,
+  command: PersonalDashboardDuplicate,
+): Promise<PersonalDashboard> => (await axios.post<PersonalDashboard>(`${api}/${dashboardId}/duplicate`, command)).data;
+
+export const deletePersonalDashboard = async (dashboardId: string | number, expectedVersion: number): Promise<void> => {
+  await axios.delete(`${api}/${dashboardId}`, { params: { expectedVersion } });
+};
+
+export const getPersonalDashboardDefault = async (): Promise<PersonalDashboardDefault> =>
+  (await axios.get<PersonalDashboardDefault>(`${api}/default`)).data;
+
+export const setPersonalDashboardDefault = async (
+  expectedVersion: number | null,
+  dashboardId: number | null,
+  officialTemplateId: OfficialDashboardTemplateId | null = null,
+): Promise<PersonalDashboardDefault> =>
+  (await axios.put<PersonalDashboardDefault>(`${api}/default`, { expectedVersion, dashboardId, officialTemplateId })).data;

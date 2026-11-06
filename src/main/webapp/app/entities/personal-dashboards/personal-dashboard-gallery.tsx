@@ -17,10 +17,14 @@ import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/pr
 import {
   copyOfficialDashboardTemplate,
   createPersonalDashboard,
+  getPersonalDashboardDefault,
   listPersonalDashboards,
   PersonalDashboardCreate,
+  PersonalDashboardDefault,
   PersonalDashboardSummary,
   PersonalDashboardTemplateCopy,
+  OfficialDashboardTemplateId,
+  setPersonalDashboardDefault,
 } from './personal-dashboard-api';
 
 type CreateMode = { kind: 'blank' } | { kind: 'template'; template: RecommendedDashboardTemplate } | null;
@@ -189,22 +193,55 @@ const PersonalDashboardGallery = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const [catalog, setCatalog] = useState<SemanticAnalyticsCatalog | null>(null);
   const [dashboards, setDashboards] = useState<PersonalDashboardSummary[]>([]);
+  const [defaultDashboard, setDefaultDashboard] = useState<PersonalDashboardDefault>({
+    dashboardId: null,
+    officialTemplateId: 'financial-overview',
+    version: null,
+  });
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<CreateMode>(null);
+  const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    void Promise.all([getSemanticAnalyticsCatalog(), listPersonalDashboards()])
-      .then(([nextCatalog, nextDashboards]) => {
+    void Promise.all([getSemanticAnalyticsCatalog(), listPersonalDashboards(), getPersonalDashboardDefault()])
+      .then(([nextCatalog, nextDashboards, nextDefault]) => {
         if (!active) return;
         setCatalog(nextCatalog);
         setDashboards(nextDashboards);
+        setDefaultDashboard(nextDefault);
       })
       .catch(requestError => active && setError(dashboardDiagnostics(requestError)));
     return () => {
       active = false;
     };
   }, []);
+
+  const selectPersonalDefault = async (dashboardId: number) => {
+    if (settingDefaultId || dashboardId === defaultDashboard.dashboardId) return;
+    setSettingDefaultId(`personal-${dashboardId}`);
+    setError(null);
+    try {
+      setDefaultDashboard(await setPersonalDashboardDefault(defaultDashboard.version, dashboardId));
+    } catch (requestError) {
+      setError(dashboardDiagnostics(requestError));
+    } finally {
+      setSettingDefaultId(null);
+    }
+  };
+
+  const selectOfficialDefault = async (templateId: OfficialDashboardTemplateId) => {
+    if (settingDefaultId || (defaultDashboard.dashboardId === null && defaultDashboard.officialTemplateId === templateId)) return;
+    setSettingDefaultId(`official-${templateId}`);
+    setError(null);
+    try {
+      setDefaultDashboard(await setPersonalDashboardDefault(defaultDashboard.version, null, templateId));
+    } catch (requestError) {
+      setError(dashboardDiagnostics(requestError));
+    } finally {
+      setSettingDefaultId(null);
+    }
+  };
 
   const templates = useMemo(() => (catalog ? recommendedDashboardTemplates(catalog) : []), [catalog]);
   return (
@@ -234,7 +271,14 @@ const PersonalDashboardGallery = () => {
                 <article className="col-12 col-md-6 col-xl-4" key={template.id}>
                   <div className="card h-100 shadow-sm border">
                     <div className="card-body d-flex flex-column p-4">
-                      <h2 className="h5">{localized(locale, template.title)}</h2>
+                      <div className="d-flex align-items-start justify-content-between gap-2">
+                        <h2 className="h5">{localized(locale, template.title)}</h2>
+                        {defaultDashboard.dashboardId === null && defaultDashboard.officialTemplateId === template.id ? (
+                          <span className="badge text-bg-primary" data-cy={`recommendedDashboardDefault-${template.id}`}>
+                            {copy(locale, 'Predeterminado', 'Default')}
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="text-muted small flex-grow-1">{localized(locale, template.description)}</p>
                       <p className="small text-muted mb-3">
                         {copy(locale, `${template.widgets.length} visualizaciones`, `${template.widgets.length} visualizations`)}
@@ -246,6 +290,19 @@ const PersonalDashboardGallery = () => {
                         <Button color="secondary" outline onClick={() => setMode({ kind: 'template', template })}>
                           {copy(locale, 'Usar como base', 'Use as a starting point')}
                         </Button>
+                        {defaultDashboard.dashboardId === null && defaultDashboard.officialTemplateId === template.id ? null : (
+                          <Button
+                            color="secondary"
+                            outline
+                            onClick={() => void selectOfficialDefault(template.id)}
+                            disabled={settingDefaultId !== null}
+                            data-cy={`recommendedDashboardSetDefault-${template.id}`}
+                          >
+                            {settingDefaultId === `official-${template.id}`
+                              ? copy(locale, 'Guardando…', 'Saving…')
+                              : copy(locale, 'Establecer como predeterminado', 'Set as default')}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -270,18 +327,39 @@ const PersonalDashboardGallery = () => {
               <div className="row g-3" data-cy="personalDashboardGallery">
                 {dashboards.map(dashboard => (
                   <article className="col-12 col-md-6 col-xl-4" key={dashboard.id}>
-                    <Link
-                      className="card card-body h-100 border shadow-sm text-decoration-none text-reset"
-                      to={`/analytics/dashboards/personal/${dashboard.id}`}
-                    >
-                      <h2 className="h5 mb-1">{dashboard.name}</h2>
+                    <div className="card card-body h-100 border shadow-sm">
+                      <div className="d-flex align-items-start justify-content-between gap-2">
+                        <h2 className="h5 mb-1">{dashboard.name}</h2>
+                        {dashboard.id === defaultDashboard.dashboardId ? (
+                          <span className="badge text-bg-primary" data-cy={`personalDashboardDefault-${dashboard.id}`}>
+                            {copy(locale, 'Predeterminado', 'Default')}
+                          </span>
+                        ) : null}
+                      </div>
                       {dashboard.description ? <p className="small text-muted mb-3">{dashboard.description}</p> : null}
-                      <span className="small text-primary mt-auto">
+                      <span className="small text-primary mt-auto mb-3">
                         {dashboard.widgetCount
                           ? copy(locale, `${dashboard.widgetCount} visualizaciones`, `${dashboard.widgetCount} visualizations`)
                           : copy(locale, 'Sin visualizaciones', 'No visualizations')}
                       </span>
-                    </Link>
+                      <div className="d-flex flex-wrap gap-2">
+                        <Button tag={Link} to={`/analytics/dashboards/personal/${dashboard.id}`} color="primary" outline size="sm">
+                          {copy(locale, 'Abrir', 'Open')}
+                        </Button>
+                        <Button
+                          color="secondary"
+                          outline
+                          size="sm"
+                          disabled={dashboard.id === defaultDashboard.dashboardId || settingDefaultId !== null}
+                          onClick={() => void selectPersonalDefault(dashboard.id)}
+                          data-cy={`personalDashboardSetDefault-${dashboard.id}`}
+                        >
+                          {settingDefaultId === `personal-${dashboard.id}`
+                            ? copy(locale, 'Guardando…', 'Saving…')
+                            : copy(locale, 'Establecer como predeterminado', 'Set as default')}
+                        </Button>
+                      </div>
+                    </div>
                   </article>
                 ))}
               </div>

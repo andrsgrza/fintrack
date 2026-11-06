@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- One typed owner preference; null default_dashboard_id means the official Financial Overview. -->
+    <changeSet id="20261105110000-1" author="fintrack">
+        <createTable tableName="personal_dashboard_preference" remarks="Single authoritative owner preference for an optional personal default dashboard.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="user_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="default_dashboard_id" type="bigint"/>
+            <column name="created_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="updated_at" type="${datetimeType}"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="personal_dashboard_preference" columnNames="user_id"
+                             constraintName="ux_personal_dashboard_preference_user"/>
+        <addForeignKeyConstraint baseTableName="personal_dashboard_preference" baseColumnNames="user_id"
+                                 constraintName="fk_personal_dashboard_preference__user" referencedTableName="jhi_user" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="personal_dashboard_preference" baseColumnNames="default_dashboard_id"
+                                 constraintName="fk_personal_dashboard_preference__default_dashboard" referencedTableName="personal_dashboard" referencedColumnNames="id"/>
+    </changeSet>
+
+    <!-- Keep the historical idempotency migrations immutable while enabling safe personal-dashboard duplication retries. -->
+    <changeSet id="20261105110000-2" author="fintrack">
+        <sql>alter table personal_dashboard_request drop constraint ck_personal_dashboard_request_scope</sql>
+        <sql>alter table personal_dashboard_request add constraint ck_personal_dashboard_request_scope check (scope in ('CREATE_DASHBOARD', 'ADD_WIDGET', 'COPY_OFFICIAL_TEMPLATE', 'DUPLICATE_DASHBOARD'))</sql>
+    </changeSet>
+</databaseChangeLog>

@@ -28,6 +28,8 @@ class PersonalDashboardPersistenceMigrationIT {
         "config/liquibase/changelog/20261104120000_personal_dashboard_layout_baseline.xml";
     private static final String REMOVE_LAYOUT_BASELINE_CHANGELOG =
         "config/liquibase/changelog/20261105100000_remove_personal_dashboard_layout_baseline.xml";
+    private static final String OFFICIAL_DEFAULT_CHANGELOG =
+        "config/liquibase/changelog/20261105120000_personal_dashboard_official_defaults.xml";
     private static final String MASTER_CHANGELOG = "config/liquibase/master.xml";
 
     @Autowired
@@ -97,9 +99,51 @@ class PersonalDashboardPersistenceMigrationIT {
                 runMigration(connection, schemaScope.schema(), MASTER_CHANGELOG);
 
                 assertThat(tableExists(connection, schemaScope.schema(), "personal_dashboard_widget")).isTrue();
+                assertThat(tableExists(connection, schemaScope.schema(), "personal_dashboard_preference")).isTrue();
+                assertThat(
+                    columnExists(connection, schemaScope.schema(), "personal_dashboard_preference", "default_dashboard_id")
+                ).isTrue();
+                assertThat(
+                    columnExists(connection, schemaScope.schema(), "personal_dashboard_preference", "default_official_template_id")
+                ).isTrue();
                 assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_position")).isFalse();
                 assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_width")).isFalse();
                 assertThat(columnExists(connection, schemaScope.schema(), "personal_dashboard_widget", "initial_visible")).isFalse();
+            }
+        }
+    }
+
+    @Test
+    void addsOfficialDefaultSelectionWithoutChangingExistingPersonalSelections() throws Exception {
+        String schema = "personal_dashboard_default_" + UUID.randomUUID().toString().replace("-", "");
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
+            try (
+                MigrationTestSchemaScope schemaScope = MigrationTestSchemaScope.open(connection, schema);
+                Statement statement = connection.createStatement()
+            ) {
+                statement.execute(
+                    "create table personal_dashboard_preference (id bigint primary key, default_dashboard_id bigint, user_id bigint not null, version bigint not null, created_at timestamp with time zone not null, updated_at timestamp with time zone not null)"
+                );
+                statement.execute(
+                    "insert into personal_dashboard_preference (id, default_dashboard_id, user_id, version, created_at, updated_at) values (1, 73, 9, 4, current_timestamp, current_timestamp)"
+                );
+
+                runMigration(connection, schemaScope.schema(), OFFICIAL_DEFAULT_CHANGELOG);
+
+                assertThat(
+                    columnExists(connection, schemaScope.schema(), "personal_dashboard_preference", "default_official_template_id")
+                ).isTrue();
+                try (
+                    var rows = statement.executeQuery(
+                        "select default_dashboard_id, default_official_template_id, version from personal_dashboard_preference where id = 1"
+                    )
+                ) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getLong("default_dashboard_id")).isEqualTo(73);
+                    assertThat(rows.getString("default_official_template_id")).isNull();
+                    assertThat(rows.getLong("version")).isEqualTo(4);
+                }
             }
         }
     }

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Alert } from 'reactstrap';
+import { Alert, Button } from 'reactstrap';
 
 import { useAppSelector } from 'app/config/store';
 import { AnalyticsContextControls } from 'app/entities/analytics-explorer/analytics-context-controls';
@@ -28,6 +28,11 @@ import {
 } from 'app/entities/analytics-explorer/analytics-grouping';
 import { copy, datasetById, label } from 'app/entities/analytics-explorer/analytics-explorer-utils';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
+import {
+  getPersonalDashboardDefault,
+  PersonalDashboardDefault,
+  setPersonalDashboardDefault,
+} from 'app/entities/personal-dashboards/personal-dashboard-api';
 
 import {
   FinancialVisualizationDefinition,
@@ -278,6 +283,12 @@ const RecommendedDashboards = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [context, setContext] = useState<VisualizationContext | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [defaultDashboard, setDefaultDashboard] = useState<PersonalDashboardDefault>({
+    dashboardId: null,
+    officialTemplateId: 'financial-overview',
+    version: null,
+  });
+  const [settingDefault, setSettingDefault] = useState(false);
   // Drill-down holds an executable canonical query selected by the person. It is
   // not a presentation override or a second grouping model.
   const [drillStates, setDrillStates] = useState<Record<string, { definition: SemanticQueryDefinition; trail: DrillState[] }>>({});
@@ -291,11 +302,12 @@ const RecommendedDashboards = () => {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([getSemanticAnalyticsCatalog(), getExplorerAccounts()])
-      .then(([nextCatalog, nextAccounts]) => {
+    void Promise.all([getSemanticAnalyticsCatalog(), getExplorerAccounts(), getPersonalDashboardDefault()])
+      .then(([nextCatalog, nextAccounts, nextDefault]) => {
         if (!active) return;
         setCatalog(nextCatalog);
         setContext(currentContext(nextCatalog.schemaVersion));
+        setDefaultDashboard(nextDefault);
         setAccounts(
           nextAccounts
             .filter(account => account.id != null && account.name)
@@ -346,6 +358,24 @@ const RecommendedDashboards = () => {
     }));
   };
 
+  const setOfficialDefault = async () => {
+    if (!dashboard || settingDefault || (defaultDashboard.dashboardId === null && defaultDashboard.officialTemplateId === dashboard.id)) {
+      return;
+    }
+    setSettingDefault(true);
+    setError(null);
+    try {
+      setDefaultDashboard(await setPersonalDashboardDefault(defaultDashboard.version, null, dashboard.id));
+    } catch (requestError) {
+      setError(dashboardDiagnostics(requestError));
+    } finally {
+      setSettingDefault(false);
+    }
+  };
+
+  const isDefaultOfficial =
+    dashboard != null && defaultDashboard.dashboardId === null && defaultDashboard.officialTemplateId === dashboard.id;
+
   return (
     <ProductPage wide className="recommended-dashboards">
       <ProductPageHeader
@@ -359,6 +389,26 @@ const RecommendedDashboards = () => {
                 'Tres vistas financieras construidas con consultas semánticas verificadas.',
                 'Three financial views built with verified semantic queries.',
               )
+        }
+        actions={
+          dashboard ? (
+            isDefaultOfficial ? (
+              <span className="badge text-bg-primary" data-cy="recommendedDashboardDefault">
+                {copy(locale, 'Predeterminado', 'Default')}
+              </span>
+            ) : (
+              <Button
+                color="secondary"
+                outline
+                size="sm"
+                disabled={settingDefault}
+                onClick={() => void setOfficialDefault()}
+                data-cy="recommendedDashboardSetDefault"
+              >
+                {settingDefault ? copy(locale, 'Guardando…', 'Saving…') : copy(locale, 'Establecer como predeterminado', 'Set as default')}
+              </Button>
+            )
+          ) : undefined
         }
       />
       {error ? <Alert color="danger">{error}</Alert> : null}

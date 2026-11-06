@@ -7,6 +7,8 @@ import RecommendedDashboards from './recommended-dashboards';
 const executeSemanticQuery = jest.fn();
 const getExplorerAccounts = jest.fn();
 const getSemanticAnalyticsCatalog = jest.fn();
+const getPersonalDashboardDefault = jest.fn();
+const setPersonalDashboardDefault = jest.fn();
 
 jest.mock('app/config/store', () => ({ useAppSelector: () => 'en' }));
 jest.mock('app/entities/analytics-explorer/analytics-explorer-api', () => ({
@@ -51,6 +53,10 @@ jest.mock('app/entities/analytics-explorer/analytics-results-panel', () => ({
     </div>
   ),
 }));
+jest.mock('app/entities/personal-dashboards/personal-dashboard-api', () => ({
+  getPersonalDashboardDefault: () => getPersonalDashboardDefault(),
+  setPersonalDashboardDefault: (...args: unknown[]) => setPersonalDashboardDefault(...args),
+}));
 
 const catalog = {
   schemaVersion: 3,
@@ -91,6 +97,8 @@ describe('recommended dashboards', () => {
     jest.clearAllMocks();
     getSemanticAnalyticsCatalog.mockResolvedValue(catalog);
     getExplorerAccounts.mockResolvedValue([{ id: 7, name: 'Daily account', accountType: 'DEBIT', currency: 'MXN' }]);
+    getPersonalDashboardDefault.mockResolvedValue({ dashboardId: null, officialTemplateId: 'financial-overview', version: null });
+    setPersonalDashboardDefault.mockResolvedValue({ dashboardId: null, officialTemplateId: 'movement-analysis', version: 0 });
     executeSemanticQuery.mockResolvedValue(emptyResult);
   });
 
@@ -113,6 +121,15 @@ describe('recommended dashboards', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Movement analysis' }));
     expect(await screen.findByRole('heading', { name: 'Movement analysis' })).toBeTruthy();
     expect(screen.getByText('Internal transfer activity')).toBeTruthy();
+  });
+
+  it('selects an official dashboard as the default without making its immutable template editable', async () => {
+    renderDashboard('/analytics/dashboards/movement-analysis');
+    await screen.findByRole('heading', { name: 'Movement analysis' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set as default' }));
+    await waitFor(() => expect(setPersonalDashboardDefault).toHaveBeenCalledWith(null, null, 'movement-analysis'));
+    expect(document.querySelector('[data-cy="recommendedDashboardDefault"]')?.textContent).toBe('Default');
   });
 
   it('uses a local temporary interval without mutating the canonical default or adding a global control', async () => {

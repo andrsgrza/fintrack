@@ -1,9 +1,22 @@
 import { DndContext, DragEndEvent, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Button } from 'reactstrap';
+import {
+  Alert,
+  Button,
+  DropdownItem,
+  DropdownMenu,
+  DropdownToggle,
+  Input,
+  Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  UncontrolledDropdown,
+} from 'reactstrap';
 
 import { useAppSelector } from 'app/config/store';
 import { AnalyticsContextControls } from 'app/entities/analytics-explorer/analytics-context-controls';
@@ -25,7 +38,18 @@ import { copy, datasetById, label } from 'app/entities/analytics-explorer/analyt
 import { dashboardDiagnostics, useDashboardWidgetResults } from 'app/entities/recommended-dashboards/recommended-dashboards';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
-import { getPersonalDashboard, PersonalDashboard, PersonalDashboardWidget, savePersonalDashboardLayout } from './personal-dashboard-api';
+import {
+  deletePersonalDashboard,
+  duplicatePersonalDashboard,
+  getPersonalDashboard,
+  getPersonalDashboardDefault,
+  PersonalDashboard,
+  PersonalDashboardDefault,
+  PersonalDashboardWidget,
+  savePersonalDashboardLayout,
+  setPersonalDashboardDefault,
+  updatePersonalDashboardMetadata,
+} from './personal-dashboard-api';
 import {
   DashboardLayoutItem,
   DashboardLayoutPreset,
@@ -58,6 +82,167 @@ const seriesLimitFor = (widget: PersonalDashboardWidget): number | 'ALL' => {
 const temporalOptionsForDefinition = (catalog: SemanticAnalyticsCatalog, definition: SemanticQueryDefinition) => {
   const dataset = datasetById(catalog, definition.dataset);
   return dataset ? temporalOptionsFor(dataset) : [];
+};
+const newRequestId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `dashboard-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+type ManagementMode = 'metadata' | 'duplicate' | 'delete' | null;
+
+const PersonalDashboardManagementDialog = ({
+  dashboard,
+  locale,
+  mode,
+  onClose,
+  onUpdated,
+  onDuplicated,
+  onDeleted,
+  onReload,
+}: {
+  dashboard: PersonalDashboard | null;
+  locale: string;
+  mode: ManagementMode;
+  onClose: () => void;
+  onUpdated: (dashboard: PersonalDashboard) => void;
+  onDuplicated: (dashboard: PersonalDashboard) => void;
+  onDeleted: () => void;
+  onReload: () => void;
+}) => {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!dashboard) return;
+    setName(mode === 'duplicate' ? `${dashboard.name} (${copy(locale, 'copia', 'copy')})` : dashboard.name);
+    setDescription(dashboard.description ?? '');
+    setError(null);
+  }, [dashboard, locale, mode]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!dashboard || !mode || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (mode === 'metadata') {
+        onUpdated(
+          await updatePersonalDashboardMetadata(dashboard.id, {
+            expectedVersion: dashboard.version,
+            name,
+            description: description || null,
+          }),
+        );
+      } else if (mode === 'duplicate') {
+        onDuplicated(
+          await duplicatePersonalDashboard(dashboard.id, {
+            expectedVersion: dashboard.version,
+            name,
+            description: description || null,
+            clientRequestId: newRequestId(),
+          }),
+        );
+      } else {
+        await deletePersonalDashboard(dashboard.id, dashboard.version);
+        onDeleted();
+      }
+      onClose();
+    } catch (requestError) {
+      setError(dashboardDiagnostics(requestError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const title =
+    mode === 'metadata'
+      ? copy(locale, 'Cambiar nombre y descripción', 'Change name and description')
+      : mode === 'duplicate'
+        ? copy(locale, 'Duplicar dashboard', 'Duplicate dashboard')
+        : copy(locale, 'Eliminar dashboard', 'Delete dashboard');
+  const submitLabel =
+    mode === 'metadata'
+      ? copy(locale, 'Guardar cambios', 'Save changes')
+      : mode === 'duplicate'
+        ? copy(locale, 'Duplicar dashboard', 'Duplicate dashboard')
+        : copy(locale, 'Eliminar dashboard', 'Delete dashboard');
+
+  return (
+    <Modal isOpen={mode !== null} toggle={saving ? undefined : onClose} centered aria-labelledby="personal-dashboard-management-title">
+      <form onSubmit={submit}>
+        <ModalHeader toggle={saving ? undefined : onClose} id="personal-dashboard-management-title">
+          {title}
+        </ModalHeader>
+        <ModalBody>
+          {error ? (
+            <Alert color="danger" className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <span>{error}</span>
+              <Button color="danger" outline size="sm" type="button" onClick={onReload} disabled={saving}>
+                {copy(locale, 'Recargar dashboard', 'Reload dashboard')}
+              </Button>
+            </Alert>
+          ) : null}
+          {mode === 'delete' ? (
+            <p className="mb-0">
+              {copy(
+                locale,
+                `Eliminarás “${dashboard?.name ?? ''}” y sus visualizaciones guardadas. No se eliminarán cuentas, transacciones ni otros dashboards.`,
+                `You will delete “${dashboard?.name ?? ''}” and its saved visualizations. Accounts, transactions, and other dashboards will not be deleted.`,
+              )}
+            </p>
+          ) : (
+            <>
+              {mode === 'duplicate' ? (
+                <p className="small text-muted">
+                  {copy(
+                    locale,
+                    'Se copiarán las consultas, contexto y distribución guardados. Los resultados y selecciones temporales no se copian.',
+                    'Saved queries, context, and layout will be copied. Results and temporary selections are not copied.',
+                  )}
+                </p>
+              ) : null}
+              <Label for="personal-dashboard-manage-name" className="fw-semibold">
+                {copy(locale, 'Nombre', 'Name')}
+              </Label>
+              <Input
+                id="personal-dashboard-manage-name"
+                value={name}
+                required
+                maxLength={100}
+                autoFocus
+                disabled={saving}
+                onChange={event => setName(event.target.value)}
+                data-cy="personalDashboardManageName"
+              />
+              <Label for="personal-dashboard-manage-description" className="fw-semibold mt-3">
+                {copy(locale, 'Descripción opcional', 'Optional description')}
+              </Label>
+              <Input
+                id="personal-dashboard-manage-description"
+                type="textarea"
+                rows={3}
+                maxLength={500}
+                value={description}
+                disabled={saving}
+                onChange={event => setDescription(event.target.value)}
+                data-cy="personalDashboardManageDescription"
+              />
+            </>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button type="button" color="secondary" outline disabled={saving} onClick={onClose}>
+            {copy(locale, 'Cancelar', 'Cancel')}
+          </Button>
+          <Button color={mode === 'delete' ? 'danger' : 'primary'} type="submit" disabled={saving} data-cy="personalDashboardManageSubmit">
+            {saving ? copy(locale, 'Guardando…', 'Saving…') : submitLabel}
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
 };
 
 type CustomizationControls = {
@@ -261,6 +446,14 @@ const PersonalDashboardViewer = () => {
   const [layoutDraft, setLayoutDraft] = useState<DashboardLayoutItem[]>([]);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [savingLayout, setSavingLayout] = useState(false);
+  const [defaultDashboard, setDefaultDashboard] = useState<PersonalDashboardDefault>({
+    dashboardId: null,
+    officialTemplateId: 'financial-overview',
+    version: null,
+  });
+  const [managementMode, setManagementMode] = useState<ManagementMode>(null);
+  const [managementError, setManagementError] = useState<string | null>(null);
+  const [settingDefault, setSettingDefault] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -271,8 +464,15 @@ const PersonalDashboardViewer = () => {
     setCustomizing(false);
     setLayoutDraft([]);
     setLayoutError(null);
-    void Promise.all([getSemanticAnalyticsCatalog(), getExplorerAccounts(), getPersonalDashboard(dashboardId ?? '')])
-      .then(([nextCatalog, nextAccounts, nextDashboard]) => {
+    setManagementMode(null);
+    setManagementError(null);
+    void Promise.all([
+      getSemanticAnalyticsCatalog(),
+      getExplorerAccounts(),
+      getPersonalDashboard(dashboardId ?? ''),
+      getPersonalDashboardDefault(),
+    ])
+      .then(([nextCatalog, nextAccounts, nextDashboard, nextDefault]) => {
         if (!active) return;
         setCatalog(nextCatalog);
         setAccounts(
@@ -281,6 +481,7 @@ const PersonalDashboardViewer = () => {
             .map(account => ({ id: account.id, name: account.name, accountType: account.accountType, currency: account.currency })),
         );
         setDashboard(nextDashboard);
+        setDefaultDashboard(nextDefault);
         setLayoutDraft(layoutFromWidgets(nextDashboard.widgets));
         // This is a local copy: changing controls below never invokes a dashboard mutation endpoint.
         setContext(nextDashboard.defaultContext);
@@ -410,6 +611,31 @@ const PersonalDashboardViewer = () => {
       setSavingLayout(false);
     }
   };
+  const setAsDefault = async () => {
+    if (!dashboard || settingDefault || dashboard.id === defaultDashboard.dashboardId) return;
+    setSettingDefault(true);
+    setManagementError(null);
+    try {
+      setDefaultDashboard(await setPersonalDashboardDefault(defaultDashboard.version, dashboard.id));
+    } catch (requestError) {
+      setManagementError(dashboardDiagnostics(requestError));
+    } finally {
+      setSettingDefault(false);
+    }
+  };
+  const managementUpdated = (updated: PersonalDashboard) => {
+    setDashboard(updated);
+    setLayoutDraft(layoutFromWidgets(updated.widgets));
+    setManagementError(null);
+  };
+  const managementDuplicated = (duplicate: PersonalDashboard) => {
+    setManagementError(null);
+    navigate(`/analytics/dashboards/personal/${duplicate.id}`);
+  };
+  const managementDeleted = () => {
+    setManagementError(null);
+    navigate('/analytics/dashboards', { replace: true });
+  };
   const navigateBack = () => {
     if (
       layoutDirty &&
@@ -465,9 +691,40 @@ const PersonalDashboardViewer = () => {
                 </Button>
               </>
             ) : (
-              <Button color="primary" size="sm" onClick={startCustomization} data-cy="personalDashboardCustomize">
-                {copy(locale, 'Personalizar dashboard', 'Customize dashboard')}
-              </Button>
+              <>
+                <UncontrolledDropdown>
+                  <DropdownToggle color="secondary" outline size="sm" caret data-cy="personalDashboardManage">
+                    {copy(locale, 'Gestionar', 'Manage')}
+                  </DropdownToggle>
+                  <DropdownMenu end>
+                    <DropdownItem onClick={() => setManagementMode('metadata')} data-cy="personalDashboardEditMetadata">
+                      {copy(locale, 'Cambiar nombre y descripción', 'Change name and description')}
+                    </DropdownItem>
+                    <DropdownItem onClick={() => setManagementMode('duplicate')} data-cy="personalDashboardDuplicate">
+                      {copy(locale, 'Duplicar dashboard', 'Duplicate dashboard')}
+                    </DropdownItem>
+                    <DropdownItem divider />
+                    <DropdownItem
+                      disabled={dashboard?.id === defaultDashboard.dashboardId || settingDefault}
+                      onClick={() => void setAsDefault()}
+                      data-cy="personalDashboardSetDefault"
+                    >
+                      {dashboard?.id === defaultDashboard.dashboardId
+                        ? copy(locale, 'Dashboard predeterminado', 'Default dashboard')
+                        : settingDefault
+                          ? copy(locale, 'Guardando…', 'Saving…')
+                          : copy(locale, 'Establecer como predeterminado', 'Set as default')}
+                    </DropdownItem>
+                    <DropdownItem divider />
+                    <DropdownItem className="text-danger" onClick={() => setManagementMode('delete')} data-cy="personalDashboardDelete">
+                      {copy(locale, 'Eliminar dashboard', 'Delete dashboard')}
+                    </DropdownItem>
+                  </DropdownMenu>
+                </UncontrolledDropdown>
+                <Button color="primary" size="sm" onClick={startCustomization} data-cy="personalDashboardCustomize">
+                  {copy(locale, 'Personalizar dashboard', 'Customize dashboard')}
+                </Button>
+              </>
             )}
             <Button color="secondary" outline size="sm" onClick={navigateBack}>
               {copy(locale, 'Volver a dashboards', 'Back to dashboards')}
@@ -479,6 +736,18 @@ const PersonalDashboardViewer = () => {
       {layoutError ? (
         <Alert color="danger" data-cy="personalDashboardLayoutError">
           {layoutError}
+        </Alert>
+      ) : null}
+      {managementError ? (
+        <Alert
+          color="danger"
+          className="d-flex flex-wrap align-items-center justify-content-between gap-2"
+          data-cy="personalDashboardManagementError"
+        >
+          <span>{managementError}</span>
+          <Button color="danger" outline size="sm" onClick={() => navigate(0)}>
+            {copy(locale, 'Recargar dashboard', 'Reload dashboard')}
+          </Button>
         </Alert>
       ) : null}
       {!catalog || !dashboard || !context ? (
@@ -686,6 +955,16 @@ const PersonalDashboardViewer = () => {
           )}
         </div>
       )}
+      <PersonalDashboardManagementDialog
+        dashboard={dashboard}
+        locale={locale}
+        mode={managementMode}
+        onClose={() => setManagementMode(null)}
+        onUpdated={managementUpdated}
+        onDuplicated={managementDuplicated}
+        onDeleted={managementDeleted}
+        onReload={() => navigate(0)}
+      />
     </ProductPage>
   );
 };

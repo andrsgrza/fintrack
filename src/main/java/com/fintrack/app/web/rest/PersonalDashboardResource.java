@@ -44,12 +44,40 @@ public class PersonalDashboardResource {
         return commandService.findOwn(dashboardId).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /** A missing preference intentionally resolves to the official Financial Overview. */
+    @GetMapping("/default")
+    public ResponseEntity<PersonalDashboardDefaultView> getDefault() {
+        return ResponseEntity.ok(commandService.defaultOwn());
+    }
+
+    @PutMapping("/default")
+    public ResponseEntity<PersonalDashboardDefaultView> setDefault(@RequestBody PersonalDashboardDefaultCommand command) {
+        return ResponseEntity.ok(commandService.setDefault(command));
+    }
+
     @PutMapping("/{dashboardId}")
     public ResponseEntity<PersonalDashboardDetail> update(
         @PathVariable Long dashboardId,
         @RequestBody PersonalDashboardUpdateCommand command
     ) {
         return ResponseEntity.ok(commandService.update(dashboardId, command));
+    }
+
+    @PatchMapping("/{dashboardId}/metadata")
+    public ResponseEntity<PersonalDashboardDetail> updateMetadata(
+        @PathVariable Long dashboardId,
+        @RequestBody PersonalDashboardMetadataUpdateCommand command
+    ) {
+        return ResponseEntity.ok(commandService.updateMetadata(dashboardId, command));
+    }
+
+    @PostMapping("/{dashboardId}/duplicate")
+    public ResponseEntity<PersonalDashboardDetail> duplicate(
+        @PathVariable Long dashboardId,
+        @RequestBody PersonalDashboardDuplicateCommand command
+    ) {
+        PersonalDashboardDetail duplicate = commandService.duplicate(dashboardId, command);
+        return ResponseEntity.created(URI.create("/api/personal-dashboards/" + duplicate.id())).body(duplicate);
     }
 
     @DeleteMapping("/{dashboardId}")

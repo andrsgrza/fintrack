@@ -603,6 +603,288 @@ class PersonalDashboardResourceIT {
         assertThat(dashboardRepository.countByUserLogin("user")).isEqualTo(2);
     }
 
+    @Test
+    void updatesOnlyMetadataWithNormalizedNameValidationAndOptimisticConcurrency() throws Exception {
+        JsonNode dashboard = create("Flujo mensual", "metadata-create-1", relativeContext());
+        long dashboardId = dashboard.path("id").asLong();
+        ObjectNode metadata = objectMapper.createObjectNode();
+        metadata.put("expectedVersion", dashboard.path("version").asLong());
+        metadata.put("name", "  Flujo   actualizado  ");
+        metadata.put("description", "Una descripción actualizada");
+
+        JsonNode updated = body(
+            mockMvc
+                .perform(
+                    patch(URL + "/{id}/metadata", dashboardId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(metadata))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Flujo actualizado"))
+                .andExpect(jsonPath("$.description").value("Una descripción actualizada"))
+                .andExpect(jsonPath("$.defaultContext.time.relativePeriod").value("THIS_MONTH"))
+                .andReturn()
+        );
+
+        mockMvc
+            .perform(
+                post(URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(createPayload(" flujo actualizado ", "metadata-create-duplicate", relativeContext()))
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("DUPLICATE_NAME"));
+
+        mockMvc
+            .perform(
+                patch(URL + "/{id}/metadata", dashboardId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(metadata))
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        assertThat(updated.path("widgets")).isEmpty();
+    }
+
+    @Test
+    void duplicatesAnOwnedDashboardAtomicallyWithIndependentWidgetsAndAnIdempotentReceipt() throws Exception {
+        JsonNode source = create("Origen", "duplicate-create-1", relativeContext());
+        long sourceId = source.path("id").asLong();
+        JsonNode withFirstWidget = addWidget(
+            sourceId,
+            source.path("version").asLong(),
+            "Conteo por institución",
+            "duplicate-widget-1",
+            countByInstitution(),
+            "BAR",
+            "FULL",
+            false
+        );
+        JsonNode sourceWithWidgets = addWidget(
+            sourceId,
+            withFirstWidget.path("version").asLong(),
+            "Gastos",
+            "duplicate-widget-2",
+            expenseTotal(),
+            "KPI",
+            "COMPACT",
+            true
+        );
+        long sourceFirstWidgetId = sourceWithWidgets.path("widgets").get(0).path("id").asLong();
+        ObjectNode duplicate = objectMapper.createObjectNode();
+        duplicate.put("expectedVersion", sourceWithWidgets.path("version").asLong());
+        duplicate.put("name", "Copia independiente");
+        duplicate.put("description", "Conservar definición y distribución");
+        duplicate.put("clientRequestId", "duplicate-source-1");
+
+        JsonNode copied = body(
+            mockMvc
+                .perform(
+                    post(URL + "/{id}/duplicate", sourceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(duplicate))
+                )
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Copia independiente"))
+                .andExpect(jsonPath("$.widgets.length()").value(2))
+                .andExpect(jsonPath("$.widgets[0].position").value(0))
+                .andExpect(jsonPath("$.widgets[0].width").value("FULL"))
+                .andExpect(jsonPath("$.widgets[0].visible").value(false))
+                .andExpect(jsonPath("$.widgets[1].position").value(1))
+                .andExpect(jsonPath("$.widgets[1].width").value("COMPACT"))
+                .andExpect(jsonPath("$.widgets[1].visible").value(true))
+                .andReturn()
+        );
+        long copiedId = copied.path("id").asLong();
+        long copiedFirstWidgetId = copied.path("widgets").get(0).path("id").asLong();
+        assertThat(copiedId).isNotEqualTo(sourceId);
+        assertThat(copiedFirstWidgetId).isNotEqualTo(sourceFirstWidgetId);
+        assertThat(copied.path("widgets").get(0).path("definition")).isEqualTo(sourceWithWidgets.path("widgets").get(0).path("definition"));
+        assertThat(copied.path("defaultContext")).isEqualTo(sourceWithWidgets.path("defaultContext"));
+
+        mockMvc
+            .perform(
+                post(URL + "/{id}/duplicate", sourceId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(duplicate))
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(copiedId));
+        assertThat(dashboardRepository.countByUserLogin("user")).isEqualTo(2);
+
+        ObjectNode copiedMetadata = objectMapper.createObjectNode();
+        copiedMetadata.put("expectedVersion", copied.path("version").asLong());
+        copiedMetadata.put("name", "Copia modificada");
+        mockMvc
+            .perform(
+                patch(URL + "/{id}/metadata", copiedId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(copiedMetadata))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Copia modificada"));
+        mockMvc.perform(get(URL + "/{id}", sourceId)).andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Origen"));
+
+        ObjectNode rejected = duplicate.deepCopy();
+        rejected.put("name", "Origen");
+        rejected.put("clientRequestId", "duplicate-source-conflict");
+        mockMvc
+            .perform(
+                post(URL + "/{id}/duplicate", sourceId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(rejected))
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("DUPLICATE_NAME"));
+        assertThat(dashboardRepository.countByUserLogin("user")).isEqualTo(2);
+    }
+
+    @Test
+    void rejectsDuplicationAtTheOwnerDashboardLimitWithoutCreatingAPartialCopy() throws Exception {
+        JsonNode source = create("Límite 0", "duplicate-limit-create-0", relativeContext());
+        for (int index = 1; index < 20; index++) {
+            create("Límite " + index, "duplicate-limit-create-" + index, relativeContext());
+        }
+        assertThat(dashboardRepository.countByUserLogin("user")).isEqualTo(20);
+
+        ObjectNode duplicate = objectMapper.createObjectNode();
+        duplicate.put("expectedVersion", source.path("version").asLong());
+        duplicate.put("name", "No debe crearse");
+        duplicate.put("clientRequestId", "duplicate-limit-rejected");
+        mockMvc
+            .perform(
+                post(URL + "/{id}/duplicate", source.path("id").asLong())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(duplicate))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("LIMIT_EXCEEDED"));
+        assertThat(dashboardRepository.countByUserLogin("user")).isEqualTo(20);
+    }
+
+    @Test
+    void persistsOneOfficialOrOwnedPersonalDefaultAndFallsBackAfterDeletion() throws Exception {
+        JsonNode dashboard = create("Predeterminado", "default-create-1", relativeContext());
+        long dashboardId = dashboard.path("id").asLong();
+
+        mockMvc
+            .perform(get(URL + "/default"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.dashboardId").isEmpty())
+            .andExpect(jsonPath("$.officialTemplateId").value("financial-overview"))
+            .andExpect(jsonPath("$.version").isEmpty());
+
+        ObjectNode selectMovement = objectMapper.createObjectNode().put("officialTemplateId", "movement-analysis");
+        JsonNode movementSelected = body(
+            mockMvc
+                .perform(
+                    put(URL + "/default").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(selectMovement))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dashboardId").isEmpty())
+                .andExpect(jsonPath("$.officialTemplateId").value("movement-analysis"))
+                .andReturn()
+        );
+        long movementVersion = movementSelected.path("version").asLong();
+        mockMvc
+            .perform(get(URL + "/default"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.officialTemplateId").value("movement-analysis"));
+
+        ObjectNode selectAccounts = objectMapper
+            .createObjectNode()
+            .put("expectedVersion", movementVersion)
+            .put("officialTemplateId", "accounts-and-position");
+        JsonNode accountsSelected = body(
+            mockMvc
+                .perform(
+                    put(URL + "/default").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(selectAccounts))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dashboardId").isEmpty())
+                .andExpect(jsonPath("$.officialTemplateId").value("accounts-and-position"))
+                .andReturn()
+        );
+
+        ObjectNode selectPersonal = objectMapper
+            .createObjectNode()
+            .put("expectedVersion", accountsSelected.path("version").asLong())
+            .put("dashboardId", dashboardId);
+        JsonNode personalSelected = body(
+            mockMvc
+                .perform(
+                    put(URL + "/default").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(selectPersonal))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dashboardId").value(dashboardId))
+                .andExpect(jsonPath("$.officialTemplateId").isEmpty())
+                .andReturn()
+        );
+        long preferenceVersion = personalSelected.path("version").asLong();
+
+        ObjectNode stale = objectMapper.createObjectNode().put("officialTemplateId", "financial-overview");
+        mockMvc
+            .perform(put(URL + "/default").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(stale)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        ObjectNode invalidCombinedSelection = objectMapper
+            .createObjectNode()
+            .put("expectedVersion", preferenceVersion)
+            .put("dashboardId", dashboardId)
+            .put("officialTemplateId", "financial-overview");
+        mockMvc
+            .perform(
+                put(URL + "/default")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(invalidCombinedSelection))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+
+        mockMvc
+            .perform(delete(URL + "/{id}", dashboardId).param("expectedVersion", dashboard.path("version").asText()))
+            .andExpect(status().isNoContent());
+        mockMvc
+            .perform(get(URL + "/default"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.dashboardId").isEmpty())
+            .andExpect(jsonPath("$.officialTemplateId").value("financial-overview"))
+            .andExpect(jsonPath("$.version").value(preferenceVersion + 1));
+    }
+
+    @Test
+    void preventsCrossOwnerDuplicationAndDefaultSelection() throws Exception {
+        User other = UserResourceIT.createEntity();
+        entityManager.persist(other);
+        PersonalDashboard foreign = new PersonalDashboard();
+        foreign.setUser(other);
+        foreign.setName("Privado ajeno");
+        foreign.setNormalizedName("privado ajeno");
+        foreign.setDefaultContextJson(objectMapper.writeValueAsString(relativeContext()));
+        foreign.setSchemaVersion(1);
+        foreign.setCreatedAt(Instant.now());
+        foreign.setUpdatedAt(Instant.now());
+        foreign = dashboardRepository.saveAndFlush(foreign);
+
+        ObjectNode duplicate = objectMapper.createObjectNode();
+        duplicate.put("expectedVersion", foreign.getVersion());
+        duplicate.put("name", "No autorizado");
+        duplicate.put("clientRequestId", "duplicate-foreign-1");
+        mockMvc
+            .perform(
+                post(URL + "/{id}/duplicate", foreign.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(duplicate))
+            )
+            .andExpect(status().isNotFound());
+
+        ObjectNode select = objectMapper.createObjectNode().put("dashboardId", foreign.getId());
+        mockMvc
+            .perform(put(URL + "/default").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(select)))
+            .andExpect(status().isNotFound());
+    }
+
     private JsonNode create(String name, String key, JsonNode context) throws Exception {
         return body(
             mockMvc

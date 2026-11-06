@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import PersonalDashboardGallery from './personal-dashboard-gallery';
 import PersonalDashboardViewer from './personal-dashboard-viewer';
+import PersonalDashboardDefaultRedirect from './personal-dashboard-default-redirect';
+import { Home } from 'app/modules/home/home';
 
 const getSemanticAnalyticsCatalog = jest.fn();
 const getExplorerAccounts = jest.fn();
@@ -12,32 +14,38 @@ const createPersonalDashboard = jest.fn();
 const copyOfficialDashboardTemplate = jest.fn();
 const getPersonalDashboard = jest.fn();
 const savePersonalDashboardLayout = jest.fn();
+const getPersonalDashboardDefault = jest.fn();
+const setPersonalDashboardDefault = jest.fn();
+const updatePersonalDashboardMetadata = jest.fn();
+const duplicatePersonalDashboard = jest.fn();
+const deletePersonalDashboard = jest.fn();
 const useDashboardWidgetResults = jest.fn();
+const useAppSelector = jest.fn();
 
-jest.mock('app/config/store', () => ({ useAppSelector: () => 'en' }));
+jest.mock('app/config/store', () => ({ useAppSelector: (...args) => useAppSelector(...args) }));
 jest.mock('app/entities/analytics-explorer/analytics-explorer-api', () => ({
   getSemanticAnalyticsCatalog: () => getSemanticAnalyticsCatalog(),
   getExplorerAccounts: () => getExplorerAccounts(),
 }));
 jest.mock('app/entities/recommended-dashboards/recommended-dashboards', () => ({
-  dashboardDiagnostics: (error: unknown) => (error instanceof Error ? error.message : 'Request failed'),
-  useDashboardWidgetResults: (...args: unknown[]) => useDashboardWidgetResults(...args),
+  dashboardDiagnostics: error => (error instanceof Error ? error.message : 'Request failed'),
+  useDashboardWidgetResults: (...args) => useDashboardWidgetResults(...args),
 }));
 jest.mock('app/entities/analytics-explorer/analytics-results-panel', () => ({
-  AnalyticsResultsPanel: ({
-    definition,
-    visualization,
-  }: {
-    definition: { projections: Array<{ alias: string }> };
-    visualization: string;
-  }) => <div data-cy={`sharedResult-${definition.projections[0]?.alias ?? 'none'}`}>{visualization}</div>,
+  AnalyticsResultsPanel: ({ definition, visualization }) =>
+    React.createElement('div', { 'data-cy': `sharedResult-${definition.projections[0]?.alias ?? 'none'}` }, visualization),
 }));
 jest.mock('./personal-dashboard-api', () => ({
   listPersonalDashboards: () => listPersonalDashboards(),
-  createPersonalDashboard: (...args: unknown[]) => createPersonalDashboard(...args),
-  copyOfficialDashboardTemplate: (...args: unknown[]) => copyOfficialDashboardTemplate(...args),
-  getPersonalDashboard: (...args: unknown[]) => getPersonalDashboard(...args),
-  savePersonalDashboardLayout: (...args: unknown[]) => savePersonalDashboardLayout(...args),
+  createPersonalDashboard: (...args) => createPersonalDashboard(...args),
+  copyOfficialDashboardTemplate: (...args) => copyOfficialDashboardTemplate(...args),
+  getPersonalDashboard: (...args) => getPersonalDashboard(...args),
+  savePersonalDashboardLayout: (...args) => savePersonalDashboardLayout(...args),
+  getPersonalDashboardDefault: () => getPersonalDashboardDefault(),
+  setPersonalDashboardDefault: (...args) => setPersonalDashboardDefault(...args),
+  updatePersonalDashboardMetadata: (...args) => updatePersonalDashboardMetadata(...args),
+  duplicatePersonalDashboard: (...args) => duplicatePersonalDashboard(...args),
+  deletePersonalDashboard: (...args) => deletePersonalDashboard(...args),
 }));
 
 const catalog = {
@@ -136,6 +144,18 @@ const renderViewer = () =>
     <MemoryRouter initialEntries={['/analytics/dashboards/personal/44']}>
       <Routes>
         <Route path="/analytics/dashboards/personal/:dashboardId" element={<PersonalDashboardViewer />} />
+        <Route path="/analytics/dashboards" element={<Location />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+const renderDefaultLanding = () =>
+  render(
+    <MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/analytics/dashboards/default" element={<PersonalDashboardDefaultRedirect />} />
+        <Route path="/analytics/dashboards/personal/:dashboardId" element={<Location />} />
+        <Route path="/analytics/dashboards/:dashboardId" element={<Location />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -143,6 +163,7 @@ const renderViewer = () =>
 describe('personal dashboards V2-3', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useAppSelector.mockReturnValue('en');
     getSemanticAnalyticsCatalog.mockResolvedValue(catalog);
     getExplorerAccounts.mockResolvedValue([{ id: 7, name: 'Daily account', accountType: 'DEBIT', currency: 'MXN' }]);
     listPersonalDashboards.mockResolvedValue([]);
@@ -155,6 +176,13 @@ describe('personal dashboards V2-3', () => {
       schemaVersion: 1,
     });
     getPersonalDashboard.mockResolvedValue(personalDashboard);
+    getPersonalDashboardDefault.mockResolvedValue({ dashboardId: null, officialTemplateId: 'financial-overview', version: null });
+    setPersonalDashboardDefault.mockResolvedValue({ dashboardId: 44, officialTemplateId: null, version: 0 });
+    updatePersonalDashboardMetadata.mockImplementation((_dashboardId: number, command: { name: string; description: string | null }) =>
+      Promise.resolve({ ...personalDashboard, name: command.name, description: command.description, version: 1 }),
+    );
+    duplicatePersonalDashboard.mockResolvedValue({ ...personalDashboard, id: 45, name: 'My dashboard (copy)', version: 0 });
+    deletePersonalDashboard.mockResolvedValue(undefined);
     savePersonalDashboardLayout.mockImplementation(
       (_dashboardId: number, command: { widgets: Array<{ widgetId: number; width: string; visible: boolean }> }) =>
         Promise.resolve({
@@ -182,8 +210,44 @@ describe('personal dashboards V2-3', () => {
     expect(screen.getByRole('heading', { name: 'Financial overview' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Movement analysis' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Accounts and registered position' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /My dashboard/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'My dashboard' })).toBeTruthy();
     expect(getExplorerAccounts).not.toHaveBeenCalled();
+  });
+
+  it('marks and persists one personal dashboard as the default from the gallery', async () => {
+    listPersonalDashboards.mockResolvedValue([{ ...blankDashboard, widgetCount: 2, description: 'Saved view' }]);
+    renderGallery();
+    await screen.findByRole('heading', { name: 'My dashboards' });
+
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardSetDefault-44"]'));
+    await waitFor(() => expect(setPersonalDashboardDefault).toHaveBeenCalledWith(null, 44));
+    expect(document.querySelector('[data-cy="personalDashboardDefault-44"]')?.textContent).toBe('Default');
+  });
+
+  it('marks and persists an immutable official dashboard as the default without creating a personal copy', async () => {
+    setPersonalDashboardDefault.mockResolvedValueOnce({ dashboardId: null, officialTemplateId: 'movement-analysis', version: 0 });
+    renderGallery();
+    await screen.findByRole('heading', { name: 'Recommended' });
+
+    fireEvent.click(document.querySelector('[data-cy="recommendedDashboardSetDefault-movement-analysis"]'));
+    await waitFor(() => expect(setPersonalDashboardDefault).toHaveBeenCalledWith(null, null, 'movement-analysis'));
+    expect(document.querySelector('[data-cy="recommendedDashboardDefault-movement-analysis"]')?.textContent).toBe('Default');
+    expect(createPersonalDashboard).not.toHaveBeenCalled();
+    expect(copyOfficialDashboardTemplate).not.toHaveBeenCalled();
+  });
+
+  it('revisits the personal default from Home and falls back to Financial overview when none is stored', async () => {
+    useAppSelector.mockImplementation(selector => selector({ locale: 'en', authentication: { account: { login: 'user' } } }));
+    getPersonalDashboardDefault.mockResolvedValueOnce({ dashboardId: 44, officialTemplateId: null, version: 0 });
+    const first = renderDefaultLanding();
+    await waitFor(() => expect(document.querySelector('[data-cy="location"]')?.textContent).toBe('/analytics/dashboards/personal/44'));
+    first.unmount();
+
+    getPersonalDashboardDefault.mockResolvedValueOnce({ dashboardId: null, officialTemplateId: 'movement-analysis', version: 1 });
+    renderDefaultLanding();
+    await waitFor(() =>
+      expect(document.querySelector('[data-cy="location"]')?.textContent).toBe('/analytics/dashboards/movement-analysis'),
+    );
   });
 
   it('creates a blank dashboard with a relative all-account context and navigates to its empty viewer', async () => {
@@ -251,6 +315,71 @@ describe('personal dashboards V2-3', () => {
       expect(useDashboardWidgetResults.mock.calls.some(([, nextContext]) => nextContext?.time?.relativePeriod === 'THIS_YEAR')).toBe(true),
     );
     expect(getPersonalDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('edits only dashboard metadata from a compact management dialog', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
+    fireEvent.click(await screen.findByText('Change name and description'));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Renamed dashboard' } });
+    fireEvent.change(screen.getByLabelText('Optional description'), { target: { value: 'A concise description' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(updatePersonalDashboardMetadata).toHaveBeenCalledWith(44, {
+        expectedVersion: 0,
+        name: 'Renamed dashboard',
+        description: 'A concise description',
+      }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Renamed dashboard' })).toBeTruthy();
+    expect(savePersonalDashboardLayout).not.toHaveBeenCalled();
+  });
+
+  it('reopens management controls after saving metadata', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
+    fireEvent.click(await screen.findByText('Change name and description'));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Saved dashboard' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByRole('heading', { name: 'Saved dashboard' });
+
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
+    fireEvent.click(await screen.findByText('Duplicate dashboard'));
+    expect(screen.getByLabelText('Optional description').disabled).toBe(false);
+  });
+
+  it('duplicates a dashboard independently', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
+    fireEvent.click(await screen.findByText('Duplicate dashboard'));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Independent dashboard' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate dashboard' }));
+    await waitFor(() =>
+      expect(duplicatePersonalDashboard).toHaveBeenCalledWith(44, expect.objectContaining({ name: 'Independent dashboard' })),
+    );
+    await waitFor(() => expect(getPersonalDashboard).toHaveBeenCalledTimes(2));
+    expect(deletePersonalDashboard).not.toHaveBeenCalled();
+  });
+
+  it('requires confirmation before deletion', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardDelete"]'));
+    expect(screen.getByText(/will delete “My dashboard”/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(deletePersonalDashboard).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete dashboard' })).toBeNull());
+
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardDelete"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardManageSubmit"]'));
+    await waitFor(() => expect(deletePersonalDashboard).toHaveBeenCalledWith(44, 0));
+    expect(document.querySelector('[data-cy="location"]')?.textContent).toBe('/analytics/dashboards');
   });
 
   it('reloads a saved ordered grouping exactly as its canonical widget query', async () => {

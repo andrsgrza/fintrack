@@ -1,7 +1,7 @@
 import './home.scss';
 
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Translate } from 'react-jhipster';
 import { Alert, Col, Row } from 'reactstrap';
 
@@ -9,6 +9,10 @@ import { useAppSelector } from 'app/config/store';
 
 export const Home = () => {
   const account = useAppSelector(state => state.authentication.account);
+
+  if (account?.login) {
+    return <Navigate to="/analytics/dashboards/default" replace />;
+  }
 
   return (
     <Row>
