@@ -489,6 +489,261 @@ class PersonalDashboardResourceIT {
     }
 
     @Test
+    void renamesWidgetMetadataWithoutChangingItsCanonicalQueryOrLayout() throws Exception {
+        JsonNode dashboard = create("Renombrar widget", "create-rename-widget-1", relativeContext());
+        JsonNode withWidget = addWidget(
+            dashboard.path("id").asLong(),
+            dashboard.path("version").asLong(),
+            "Conteo original",
+            "add-rename-widget-1",
+            countByInstitution(),
+            "BAR",
+            "FULL",
+            false
+        );
+        JsonNode original = withWidget.path("widgets").get(0);
+        long dashboardId = withWidget.path("id").asLong();
+        long widgetId = original.path("id").asLong();
+        ObjectNode update = widgetUpdatePayload(
+            withWidget.path("version").asLong(),
+            "Conteo renombrado",
+            original.path("definition"),
+            original.path("visualizationType").asText(),
+            original.path("width").asText(),
+            original.path("visible").asBoolean()
+        );
+        update.put("description", "Una descripción independiente");
+        update.set("visualizationOptions", original.path("visualizationOptions"));
+
+        JsonNode renamed = body(
+            mockMvc
+                .perform(
+                    put(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, widgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(update))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets[0].id").value(widgetId))
+                .andExpect(jsonPath("$.widgets[0].title").value("Conteo renombrado"))
+                .andExpect(jsonPath("$.widgets[0].description").value("Una descripción independiente"))
+                .andReturn()
+        );
+        JsonNode saved = renamed.path("widgets").get(0);
+        assertThat(saved.path("definition")).isEqualTo(original.path("definition"));
+        assertThat(saved.path("visualizationType")).isEqualTo(original.path("visualizationType"));
+        assertThat(saved.path("visualizationOptions")).isEqualTo(original.path("visualizationOptions"));
+        assertThat(saved.path("position")).isEqualTo(original.path("position"));
+        assertThat(saved.path("width")).isEqualTo(original.path("width"));
+        assertThat(saved.path("visible")).isEqualTo(original.path("visible"));
+    }
+
+    @Test
+    void duplicatesAWidgetIdempotentlyWithAnIndependentCanonicalDefinitionAndAppendedVisiblePosition() throws Exception {
+        JsonNode dashboard = create("Duplicar widget", "create-duplicate-widget-1", relativeContext());
+        JsonNode sourceDashboard = addWidget(
+            dashboard.path("id").asLong(),
+            dashboard.path("version").asLong(),
+            "Conteo original",
+            "add-duplicate-widget-1",
+            countByInstitution(),
+            "BAR",
+            "FULL",
+            false
+        );
+        long dashboardId = sourceDashboard.path("id").asLong();
+        long sourceWidgetId = sourceDashboard.path("widgets").get(0).path("id").asLong();
+        ObjectNode duplicate = objectMapper.createObjectNode();
+        duplicate.put("expectedVersion", sourceDashboard.path("version").asLong());
+        duplicate.put("clientRequestId", "duplicate-widget-1");
+
+        JsonNode duplicated = body(
+            mockMvc
+                .perform(
+                    post(URL + "/{dashboardId}/widgets/{widgetId}/duplicate", dashboardId, sourceWidgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(duplicate))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets.length()").value(2))
+                .andExpect(jsonPath("$.widgets[0].id").value(sourceWidgetId))
+                .andExpect(jsonPath("$.widgets[1].position").value(1))
+                .andExpect(jsonPath("$.widgets[1].title").value("Conteo original (copia)"))
+                .andExpect(jsonPath("$.widgets[1].width").value("FULL"))
+                .andExpect(jsonPath("$.widgets[1].visible").value(true))
+                .andReturn()
+        );
+        long copiedWidgetId = duplicated.path("widgets").get(1).path("id").asLong();
+        assertThat(copiedWidgetId).isNotEqualTo(sourceWidgetId);
+        assertThat(duplicated.path("widgets").get(1).path("definition")).isEqualTo(
+            sourceDashboard.path("widgets").get(0).path("definition")
+        );
+        assertThat(duplicated.path("widgets").get(1).path("visualizationOptions")).isEqualTo(
+            sourceDashboard.path("widgets").get(0).path("visualizationOptions")
+        );
+
+        mockMvc
+            .perform(
+                post(URL + "/{dashboardId}/widgets/{widgetId}/duplicate", dashboardId, sourceWidgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(duplicate))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.widgets.length()").value(2))
+            .andExpect(jsonPath("$.widgets[1].id").value(copiedWidgetId));
+
+        ObjectNode updateCopy = widgetUpdatePayload(
+            duplicated.path("version").asLong(),
+            "Conteo independiente",
+            expenseTotal(),
+            "KPI",
+            "FULL",
+            true
+        );
+        JsonNode updated = body(
+            mockMvc
+                .perform(
+                    put(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, copiedWidgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(updateCopy))
+                )
+                .andExpect(status().isOk())
+                .andReturn()
+        );
+        assertThat(updated.path("widgets").get(0).path("id").asLong()).isEqualTo(sourceWidgetId);
+        assertThat(updated.path("widgets").get(0).path("title").asText()).isEqualTo("Conteo original");
+        assertThat(updated.path("widgets").get(0).path("definition")).isEqualTo(sourceDashboard.path("widgets").get(0).path("definition"));
+        assertThat(updated.path("widgets").get(1).path("title").asText()).isEqualTo("Conteo independiente");
+    }
+
+    @Test
+    void rejectsWidgetDuplicationWhenTheDashboardAlreadyHasSixteenWidgets() throws Exception {
+        JsonNode dashboard = create("Límite de widgets", "create-widget-limit-1", relativeContext());
+        JsonNode current = dashboard;
+        for (int index = 0; index < 16; index++) {
+            current = addWidget(
+                dashboard.path("id").asLong(),
+                current.path("version").asLong(),
+                "Widget " + index,
+                "add-widget-limit-" + index,
+                expenseTotal(),
+                "KPI",
+                "COMPACT",
+                true
+            );
+        }
+        long sourceWidgetId = current.path("widgets").get(0).path("id").asLong();
+        ObjectNode duplicate = objectMapper.createObjectNode();
+        duplicate.put("expectedVersion", current.path("version").asLong());
+        duplicate.put("clientRequestId", "duplicate-widget-limit-1");
+
+        mockMvc
+            .perform(
+                post(URL + "/{dashboardId}/widgets/{widgetId}/duplicate", dashboard.path("id").asLong(), sourceWidgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(duplicate))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("LIMIT_EXCEEDED"));
+    }
+
+    @Test
+    void deletesOnlyTheSelectedWidgetCompactsPositionsAndRejectsStaleMutations() throws Exception {
+        JsonNode dashboard = create("Eliminar widget", "create-delete-widget-1", relativeContext());
+        long dashboardId = dashboard.path("id").asLong();
+        JsonNode first = addWidget(
+            dashboardId,
+            dashboard.path("version").asLong(),
+            "Primero",
+            "add-delete-widget-1",
+            expenseTotal(),
+            "KPI",
+            "COMPACT",
+            true
+        );
+        long firstWidgetId = first.path("widgets").get(0).path("id").asLong();
+        JsonNode second = addWidget(
+            dashboardId,
+            first.path("version").asLong(),
+            "Segundo",
+            "add-delete-widget-2",
+            expenseTotal(),
+            "KPI",
+            "COMPACT",
+            true
+        );
+        long secondWidgetId = second.path("widgets").get(1).path("id").asLong();
+        JsonNode third = addWidget(
+            dashboardId,
+            second.path("version").asLong(),
+            "Tercero",
+            "add-delete-widget-3",
+            expenseTotal(),
+            "KPI",
+            "COMPACT",
+            true
+        );
+        long thirdWidgetId = third.path("widgets").get(2).path("id").asLong();
+
+        JsonNode deleted = body(
+            mockMvc
+                .perform(
+                    delete(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, secondWidgetId).param(
+                        "expectedVersion",
+                        third.path("version").asText()
+                    )
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets.length()").value(2))
+                .andExpect(jsonPath("$.widgets[0].id").value(firstWidgetId))
+                .andExpect(jsonPath("$.widgets[0].position").value(0))
+                .andExpect(jsonPath("$.widgets[1].id").value(thirdWidgetId))
+                .andExpect(jsonPath("$.widgets[1].position").value(1))
+                .andReturn()
+        );
+        mockMvc
+            .perform(
+                delete(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, firstWidgetId).param(
+                    "expectedVersion",
+                    third.path("version").asText()
+                )
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        mockMvc
+            .perform(
+                delete(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, secondWidgetId).param(
+                    "expectedVersion",
+                    deleted.path("version").asText()
+                )
+            )
+            .andExpect(status().isNotFound());
+
+        JsonNode lastDeleted = body(
+            mockMvc
+                .perform(
+                    delete(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, thirdWidgetId).param(
+                        "expectedVersion",
+                        deleted.path("version").asText()
+                    )
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.widgets.length()").value(1))
+                .andExpect(jsonPath("$.widgets[0].id").value(firstWidgetId))
+                .andExpect(jsonPath("$.widgets[0].position").value(0))
+                .andReturn()
+        );
+        mockMvc
+            .perform(
+                delete(URL + "/{dashboardId}/widgets/{widgetId}", dashboardId, firstWidgetId).param(
+                    "expectedVersion",
+                    lastDeleted.path("version").asText()
+                )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.widgets.length()").value(0));
+    }
+
+    @Test
     @WithMockUser(username = "admin", authorities = AuthoritiesConstants.ADMIN)
     void keepsAnAdministratorSelfScopedAndDoesNotLeakAnotherUsersDashboard() throws Exception {
         User user = entityManager.createQuery("select user from User user where user.login = 'user'", User.class).getSingleResult();
@@ -876,6 +1131,25 @@ class PersonalDashboardResourceIT {
                 post(URL + "/{id}/duplicate", foreign.getId())
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsBytes(duplicate))
+            )
+            .andExpect(status().isNotFound());
+
+        ObjectNode widgetDuplicate = objectMapper.createObjectNode();
+        widgetDuplicate.put("expectedVersion", foreign.getVersion());
+        widgetDuplicate.put("clientRequestId", "duplicate-foreign-widget-1");
+        mockMvc
+            .perform(
+                post(URL + "/{dashboardId}/widgets/{widgetId}/duplicate", foreign.getId(), 999L)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(widgetDuplicate))
+            )
+            .andExpect(status().isNotFound());
+        mockMvc
+            .perform(
+                delete(URL + "/{dashboardId}/widgets/{widgetId}", foreign.getId(), 999L).param(
+                    "expectedVersion",
+                    foreign.getVersion().toString()
+                )
             )
             .andExpect(status().isNotFound());
 

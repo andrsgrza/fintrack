@@ -103,6 +103,15 @@ public class PersonalDashboardResource {
         return ResponseEntity.ok(commandService.updateWidget(dashboardId, widgetId, command));
     }
 
+    @PostMapping("/{dashboardId}/widgets/{widgetId}/duplicate")
+    public ResponseEntity<PersonalDashboardDetail> duplicateWidget(
+        @PathVariable Long dashboardId,
+        @PathVariable Long widgetId,
+        @RequestBody PersonalDashboardWidgetDuplicateCommand command
+    ) {
+        return ResponseEntity.ok(commandService.duplicateWidget(dashboardId, widgetId, command));
+    }
+
     @DeleteMapping("/{dashboardId}/widgets/{widgetId}")
     public ResponseEntity<PersonalDashboardDetail> removeWidget(
         @PathVariable Long dashboardId,

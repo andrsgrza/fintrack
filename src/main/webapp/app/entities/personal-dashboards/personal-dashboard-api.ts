@@ -73,6 +73,11 @@ export type PersonalDashboardWidgetAdd = {
 
 export type PersonalDashboardWidgetUpdate = Omit<PersonalDashboardWidgetAdd, 'clientRequestId'>;
 
+export type PersonalDashboardWidgetDuplicate = {
+  expectedVersion: number;
+  clientRequestId: string;
+};
+
 export type PersonalDashboardLayout = {
   expectedVersion: number;
   widgets: Array<{
@@ -124,6 +129,19 @@ export const updatePersonalDashboardWidget = async (
   widgetId: string | number,
   command: PersonalDashboardWidgetUpdate,
 ): Promise<PersonalDashboard> => (await axios.put<PersonalDashboard>(`${api}/${dashboardId}/widgets/${widgetId}`, command)).data;
+
+export const duplicatePersonalDashboardWidget = async (
+  dashboardId: string | number,
+  widgetId: string | number,
+  command: PersonalDashboardWidgetDuplicate,
+): Promise<PersonalDashboard> => (await axios.post<PersonalDashboard>(`${api}/${dashboardId}/widgets/${widgetId}/duplicate`, command)).data;
+
+export const deletePersonalDashboardWidget = async (
+  dashboardId: string | number,
+  widgetId: string | number,
+  expectedVersion: number,
+): Promise<PersonalDashboard> =>
+  (await axios.delete<PersonalDashboard>(`${api}/${dashboardId}/widgets/${widgetId}`, { params: { expectedVersion } })).data;
 
 export const savePersonalDashboardLayout = async (
   dashboardId: string | number,

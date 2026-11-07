@@ -47,6 +47,7 @@ public class PersonalDashboardCommandService {
     private static final String CREATE_SCOPE = "CREATE_DASHBOARD";
     private static final String COPY_TEMPLATE_SCOPE = "COPY_OFFICIAL_TEMPLATE";
     private static final String ADD_WIDGET_SCOPE = "ADD_WIDGET";
+    private static final String DUPLICATE_WIDGET_SCOPE = "DUPLICATE_WIDGET";
     private static final String DUPLICATE_DASHBOARD_SCOPE = "DUPLICATE_DASHBOARD";
     static final String FINANCIAL_OVERVIEW_TEMPLATE_ID = "financial-overview";
     private static final Set<String> OFFICIAL_TEMPLATE_IDS = Set.of(
@@ -379,10 +380,47 @@ public class PersonalDashboardCommandService {
         return detail(dashboardRepository.saveAndFlush(dashboard));
     }
 
+    /**
+     * Creates a durable copy without accepting a client-supplied query or presentation payload. Browser-only state
+     * such as temporary intervals and hidden legend series therefore cannot enter the persisted copy.
+     */
+    public PersonalDashboardDetail duplicateWidget(Long dashboardId, Long widgetId, PersonalDashboardWidgetDuplicateCommand command) {
+        require(command != null, PersonalDashboardCommandException.Code.INVALID_PAYLOAD, "A widget duplication command is required.");
+        User owner = currentUserService.getCurrentUser();
+        String requestId = clientRequestId(command.clientRequestId());
+        String digest = digest(new DuplicateWidgetRequestFingerprint(dashboardId, widgetId, command));
+        Optional<PersonalDashboardRequest> existing = existingRequest(owner, DUPLICATE_WIDGET_SCOPE, requestId, digest);
+        if (existing.isPresent()) return replayWidgetDashboard(existing.orElseThrow(), owner);
+
+        PersonalDashboard dashboard = ownedDashboard(dashboardId);
+        requireExpectedVersion(dashboard, command.expectedVersion());
+        if (dashboard.getWidgets().size() >= MAX_WIDGETS_PER_DASHBOARD) {
+            throw failure(PersonalDashboardCommandException.Code.LIMIT_EXCEEDED, "A personal dashboard may contain at most 16 widgets.");
+        }
+        PersonalDashboardWidget source = ownedWidget(dashboard, widgetId);
+        Instant now = Instant.now();
+        PersonalDashboardWidget duplicate = copyWidget(source, now);
+        duplicate.setTitle(copyTitle(source.getTitle()));
+        duplicate.setPosition(nextPosition(dashboard));
+        duplicate.setVisible(true);
+        dashboard.addWidget(duplicate);
+        touch(dashboard);
+        PersonalDashboard saved = dashboardRepository.saveAndFlush(dashboard);
+        Long duplicateId = saved
+            .getWidgets()
+            .stream()
+            .max(Comparator.comparing(PersonalDashboardWidget::getPosition).thenComparing(PersonalDashboardWidget::getId))
+            .orElseThrow()
+            .getId();
+        saveRequest(owner, DUPLICATE_WIDGET_SCOPE, requestId, digest, saved.getId(), duplicateId);
+        return detail(saved);
+    }
+
     public PersonalDashboardDetail removeWidget(Long dashboardId, Long widgetId, Long expectedVersion) {
         PersonalDashboard dashboard = ownedDashboard(dashboardId);
         requireExpectedVersion(dashboard, expectedVersion);
         dashboard.removeWidget(ownedWidget(dashboard, widgetId));
+        normalizeWidgetPositions(dashboard);
         touch(dashboard);
         return detail(dashboardRepository.saveAndFlush(dashboard));
     }
@@ -484,6 +522,12 @@ public class PersonalDashboardCommandService {
         duplicate.setCreatedAt(now);
         duplicate.setUpdatedAt(now);
         return duplicate;
+    }
+
+    private String copyTitle(String sourceTitle) {
+        String suffix = " (copia)";
+        String base = sourceTitle.length() + suffix.length() <= 120 ? sourceTitle : sourceTitle.substring(0, 120 - suffix.length()).trim();
+        return title(base + suffix);
     }
 
     private PersonalDashboardDefaultView preferenceView(PersonalDashboardPreference preference, User owner) {
@@ -641,6 +685,19 @@ public class PersonalDashboardCommandService {
 
     private int nextPosition(PersonalDashboard dashboard) {
         return dashboard.getWidgets().stream().mapToInt(PersonalDashboardWidget::getPosition).max().orElse(-1) + 1;
+    }
+
+    /** Keeps database order dense after deletion while avoiding the unique (dashboard_id, position) constraint mid-flush. */
+    private void normalizeWidgetPositions(PersonalDashboard dashboard) {
+        List<PersonalDashboardWidget> remaining = dashboard
+            .getWidgets()
+            .stream()
+            .sorted(Comparator.comparing(PersonalDashboardWidget::getPosition).thenComparing(PersonalDashboardWidget::getId))
+            .toList();
+        int temporaryStart = remaining.stream().mapToInt(PersonalDashboardWidget::getPosition).max().orElse(-1) + remaining.size() + 1;
+        for (int index = 0; index < remaining.size(); index++) remaining.get(index).setPosition(temporaryStart + index);
+        dashboardRepository.flush();
+        for (int index = 0; index < remaining.size(); index++) remaining.get(index).setPosition(index);
     }
 
     private void requireExpectedVersion(PersonalDashboard dashboard, Long expectedVersion) {
@@ -870,4 +927,6 @@ public class PersonalDashboardCommandService {
     ) {}
 
     private record DuplicateRequestFingerprint(Long sourceDashboardId, PersonalDashboardDuplicateCommand command) {}
+
+    private record DuplicateWidgetRequestFingerprint(Long dashboardId, Long widgetId, PersonalDashboardWidgetDuplicateCommand command) {}
 }

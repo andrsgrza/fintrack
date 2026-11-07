@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Existing bounded request receipts also make widget duplication safe to retry after a lost response. -->
+    <changeSet id="20261106100000-1" author="fintrack">
+        <sql>alter table personal_dashboard_request drop constraint ck_personal_dashboard_request_scope</sql>
+        <sql>alter table personal_dashboard_request add constraint ck_personal_dashboard_request_scope check (scope in ('CREATE_DASHBOARD', 'ADD_WIDGET', 'COPY_OFFICIAL_TEMPLATE', 'DUPLICATE_DASHBOARD', 'DUPLICATE_WIDGET'))</sql>
+    </changeSet>
+</databaseChangeLog>

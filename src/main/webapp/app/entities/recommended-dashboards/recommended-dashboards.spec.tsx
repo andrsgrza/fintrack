@@ -109,6 +109,7 @@ describe('recommended dashboards', () => {
     expect(screen.getByRole('link', { name: 'Financial overview' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Movement analysis' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Accounts and registered position' })).toBeTruthy();
+    expect(document.querySelector('[data-cy^="personalDashboardWidgetMenu-"]')).toBeNull();
     await waitFor(() => expect(executeSemanticQuery.mock.calls.length).toBeGreaterThanOrEqual(3));
     expect(document.querySelector('[data-cy="sharedResult-ingresos"]')).not.toBeNull();
     expect(document.querySelector('[data-cy="sharedResult-flujo_neto"]')).not.toBeNull();

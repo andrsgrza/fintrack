@@ -40,7 +40,9 @@ import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/pr
 
 import {
   deletePersonalDashboard,
+  deletePersonalDashboardWidget,
   duplicatePersonalDashboard,
+  duplicatePersonalDashboardWidget,
   getPersonalDashboard,
   getPersonalDashboardDefault,
   PersonalDashboard,
@@ -49,6 +51,7 @@ import {
   savePersonalDashboardLayout,
   setPersonalDashboardDefault,
   updatePersonalDashboardMetadata,
+  updatePersonalDashboardWidget,
 } from './personal-dashboard-api';
 import {
   DashboardLayoutItem,
@@ -89,6 +92,7 @@ const newRequestId = () =>
     : `dashboard-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 type ManagementMode = 'metadata' | 'duplicate' | 'delete' | null;
+type WidgetManagementMode = 'metadata' | 'delete' | null;
 
 const PersonalDashboardManagementDialog = ({
   dashboard,
@@ -245,6 +249,154 @@ const PersonalDashboardManagementDialog = ({
   );
 };
 
+const PersonalDashboardWidgetManagementDialog = ({
+  dashboard,
+  widget,
+  locale,
+  mode,
+  onClose,
+  onUpdated,
+  onReload,
+}: {
+  dashboard: PersonalDashboard | null;
+  widget: PersonalDashboardWidget | null;
+  locale: string;
+  mode: WidgetManagementMode;
+  onClose: () => void;
+  onUpdated: (dashboard: PersonalDashboard) => void;
+  onReload: () => void;
+}) => {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!widget) return;
+    setTitle(widget.title);
+    setDescription(widget.description ?? '');
+    setError(null);
+  }, [mode, widget]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!dashboard || !widget || !mode || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated =
+        mode === 'metadata'
+          ? await updatePersonalDashboardWidget(dashboard.id, widget.id, {
+              expectedVersion: dashboard.version,
+              title,
+              description: description || null,
+              definition: widget.definition,
+              visualizationType: widget.visualizationType,
+              visualizationOptions: widget.visualizationOptions,
+              width: widget.width,
+              visible: widget.visible,
+            })
+          : await deletePersonalDashboardWidget(dashboard.id, widget.id, dashboard.version);
+      onUpdated(updated);
+      onClose();
+    } catch (requestError) {
+      setError(dashboardDiagnostics(requestError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleting = mode === 'delete';
+  return (
+    <Modal
+      isOpen={mode !== null}
+      toggle={saving ? undefined : onClose}
+      centered
+      aria-labelledby="personal-dashboard-widget-management-title"
+    >
+      <form onSubmit={submit}>
+        <ModalHeader toggle={saving ? undefined : onClose} id="personal-dashboard-widget-management-title">
+          {deleting
+            ? copy(locale, 'Eliminar widget', 'Delete widget')
+            : copy(locale, 'Cambiar nombre y descripción', 'Change name and description')}
+        </ModalHeader>
+        <ModalBody>
+          {error ? (
+            <Alert color="danger" className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <span>{error}</span>
+              <Button color="danger" outline size="sm" type="button" onClick={onReload} disabled={saving}>
+                {copy(locale, 'Recargar dashboard', 'Reload dashboard')}
+              </Button>
+            </Alert>
+          ) : null}
+          {deleting ? (
+            <p className="mb-0">
+              {copy(
+                locale,
+                `Eliminarás permanentemente “${widget?.title ?? ''}”. No se eliminarán cuentas, transacciones ni los demás widgets.`,
+                `You will permanently delete “${widget?.title ?? ''}”. Accounts, transactions, and other widgets will not be deleted.`,
+              )}
+            </p>
+          ) : (
+            <>
+              <p className="small text-muted">
+                {copy(
+                  locale,
+                  'La consulta, su visualización, tamaño, posición y visibilidad se conservarán.',
+                  'Its query, visualization, size, position, and visibility will be preserved.',
+                )}
+              </p>
+              <Label for="personal-dashboard-widget-manage-title" className="fw-semibold">
+                {copy(locale, 'Título de la visualización', 'Visualization title')}
+              </Label>
+              <Input
+                id="personal-dashboard-widget-manage-title"
+                value={title}
+                required
+                maxLength={120}
+                autoFocus
+                disabled={saving}
+                onChange={event => setTitle(event.target.value)}
+                data-cy="personalDashboardWidgetManageTitle"
+              />
+              <Label for="personal-dashboard-widget-manage-description" className="fw-semibold mt-3">
+                {copy(locale, 'Descripción opcional', 'Optional description')}
+              </Label>
+              <Input
+                id="personal-dashboard-widget-manage-description"
+                type="textarea"
+                rows={3}
+                maxLength={500}
+                value={description}
+                disabled={saving}
+                onChange={event => setDescription(event.target.value)}
+                data-cy="personalDashboardWidgetManageDescription"
+              />
+            </>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button type="button" color="secondary" outline disabled={saving} onClick={onClose}>
+            {copy(locale, 'Cancelar', 'Cancel')}
+          </Button>
+          <Button
+            color={deleting ? 'danger' : 'primary'}
+            type="submit"
+            disabled={saving || (!deleting && !title.trim())}
+            data-cy="personalDashboardWidgetManageSubmit"
+          >
+            {saving
+              ? copy(locale, 'Guardando…', 'Saving…')
+              : deleting
+                ? copy(locale, 'Eliminar widget', 'Delete widget')
+                : copy(locale, 'Guardar cambios', 'Save changes')}
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+};
+
 type CustomizationControls = {
   index: number;
   count: number;
@@ -262,6 +414,8 @@ const PersonalWidgetCard = ({
   onTemporalIntervalChange,
   onDrillDown,
   onDrillBack,
+  onManage,
+  operationPending,
   customization,
 }: {
   widget: ViewerWidget;
@@ -272,12 +426,15 @@ const PersonalWidgetCard = ({
   onTemporalIntervalChange: (widgetId: number, interval: string) => void;
   onDrillDown: (widget: ViewerWidget, categoryId: string, categoryLabel: string) => void;
   onDrillBack: (widget: ViewerWidget) => void;
+  onManage?: (widget: PersonalDashboardWidget, action: 'metadata' | 'duplicate' | 'delete') => void;
+  operationPending?: boolean;
   customization?: CustomizationControls;
 }) => {
   const sortable = useSortable({ id: widget.id, disabled: !customization });
   const currentOnly = state?.error === 'CURRENT_ONLY_CONTEXT';
   const asOf = asOfDatasets.has(widget.definition.dataset) && state?.result?.effectiveContext.through;
   const temporalGrouping = widget.definition.groupBy.find(isTemporalGrouping);
+  const supportsIntervalOverride = Boolean(temporalGrouping && temporalOptions.length > 1);
   const chartNeedsSpace = isChartVisualization(widget.visualizationType);
   const style = customization
     ? { transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition, opacity: sortable.isDragging ? 0.55 : 1 }
@@ -356,40 +513,84 @@ const PersonalWidgetCard = ({
               ) : null}
             </div>
           ) : null}
-          <h2 className="h5 mb-1">{widget.title}</h2>
-          {widget.description ? <p className="small text-muted mb-3">{widget.description}</p> : null}
-          <div className="d-flex align-items-center justify-content-end gap-2 mb-2">
-            {!customization && temporalGrouping && temporalOptions.length > 1 ? (
-              <>
-                <label className="small fw-semibold mb-0" htmlFor={`personal-dashboard-widget-interval-${widget.id}`}>
-                  {copy(locale, 'Intervalo', 'Interval')}
-                </label>
-                <select
-                  id={`personal-dashboard-widget-interval-${widget.id}`}
-                  className="form-select form-select-sm w-auto"
-                  value={temporalGrouping}
-                  onChange={event => onTemporalIntervalChange(widget.id, event.target.value)}
-                  data-cy={`personalDashboardWidgetInterval-${widget.id}`}
-                >
-                  {temporalOptions.map(interval => (
-                    <option key={interval} value={interval}>
-                      {label(locale, interval)}
-                    </option>
-                  ))}
-                </select>
-              </>
+          <div className="personal-dashboard-widget-header mb-2" data-cy={`personalDashboardWidgetHeader-${widget.id}`}>
+            <div className="personal-dashboard-widget-header__title" data-cy={`personalDashboardWidgetTitle-${widget.id}`}>
+              <h2 className="h5 mb-0">{widget.title}</h2>
+            </div>
+            {!customization && (supportsIntervalOverride || onManage) ? (
+              <div className="personal-dashboard-widget-header__actions" data-cy={`personalDashboardWidgetActions-${widget.id}`}>
+                {supportsIntervalOverride ? (
+                  <div className="personal-dashboard-widget-header__interval">
+                    <label className="small fw-semibold mb-0" htmlFor={`personal-dashboard-widget-interval-${widget.id}`}>
+                      {copy(locale, 'Intervalo', 'Interval')}
+                    </label>
+                    <select
+                      id={`personal-dashboard-widget-interval-${widget.id}`}
+                      className="form-select form-select-sm w-auto"
+                      value={temporalGrouping}
+                      onChange={event => onTemporalIntervalChange(widget.id, event.target.value)}
+                      data-cy={`personalDashboardWidgetInterval-${widget.id}`}
+                    >
+                      {temporalOptions.map(interval => (
+                        <option key={interval} value={interval}>
+                          {label(locale, interval)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {onManage ? (
+                  <div className="personal-dashboard-widget-header__menu">
+                    <UncontrolledDropdown>
+                      <DropdownToggle
+                        color="secondary"
+                        outline
+                        size="sm"
+                        aria-label={copy(locale, `Opciones para ${widget.title}`, `Options for ${widget.title}`)}
+                        title={copy(locale, 'Opciones del widget', 'Widget options')}
+                        disabled={operationPending}
+                        data-cy={`personalDashboardWidgetMenu-${widget.id}`}
+                      >
+                        ⋯
+                      </DropdownToggle>
+                      <DropdownMenu end>
+                        <DropdownItem onClick={() => onManage(widget, 'metadata')} data-cy={`personalDashboardWidgetRename-${widget.id}`}>
+                          {copy(locale, 'Cambiar nombre y descripción', 'Change name and description')}
+                        </DropdownItem>
+                        <DropdownItem
+                          tag={Link}
+                          to={`/analytics/explorer?dashboardId=${dashboardId}&widgetId=${widget.id}`}
+                          data-cy={`personalDashboardWidgetMenuEdit-${widget.id}`}
+                        >
+                          {copy(locale, 'Editar visualización', 'Edit visualization')}
+                        </DropdownItem>
+                        <DropdownItem
+                          onClick={() => onManage(widget, 'duplicate')}
+                          data-cy={`personalDashboardWidgetDuplicate-${widget.id}`}
+                        >
+                          {copy(locale, 'Duplicar widget', 'Duplicate widget')}
+                        </DropdownItem>
+                        <DropdownItem divider />
+                        <DropdownItem
+                          className="text-danger"
+                          onClick={() => onManage(widget, 'delete')}
+                          data-cy={`personalDashboardWidgetDelete-${widget.id}`}
+                        >
+                          {copy(locale, 'Eliminar widget', 'Delete widget')}
+                        </DropdownItem>
+                      </DropdownMenu>
+                    </UncontrolledDropdown>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
-            {!customization ? (
-              <Button
-                tag={Link}
-                to={`/analytics/explorer?dashboardId=${dashboardId}&widgetId=${widget.id}`}
-                color="secondary"
-                outline
-                size="sm"
-                data-cy={`personalDashboardEditWidget-${widget.id}`}
+            {widget.description ? (
+              <p
+                className="personal-dashboard-widget-header__description small text-muted"
+                data-cy={`personalDashboardWidgetDescription-${widget.id}`}
               >
-                {copy(locale, 'Editar visualización', 'Edit visualization')}
-              </Button>
+                {widget.description}
+              </p>
             ) : null}
           </div>
           {asOf ? (
@@ -454,6 +655,8 @@ const PersonalDashboardViewer = () => {
   const [managementMode, setManagementMode] = useState<ManagementMode>(null);
   const [managementError, setManagementError] = useState<string | null>(null);
   const [settingDefault, setSettingDefault] = useState(false);
+  const [widgetManagement, setWidgetManagement] = useState<{ mode: WidgetManagementMode; widgetId: number } | null>(null);
+  const [widgetOperationId, setWidgetOperationId] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -466,6 +669,8 @@ const PersonalDashboardViewer = () => {
     setLayoutError(null);
     setManagementMode(null);
     setManagementError(null);
+    setWidgetManagement(null);
+    setWidgetOperationId(null);
     void Promise.all([
       getSemanticAnalyticsCatalog(),
       getExplorerAccounts(),
@@ -627,6 +832,30 @@ const PersonalDashboardViewer = () => {
     setDashboard(updated);
     setLayoutDraft(layoutFromWidgets(updated.widgets));
     setManagementError(null);
+  };
+  const managedWidget = dashboard?.widgets.find(widget => widget.id === widgetManagement?.widgetId) ?? null;
+  const manageWidget = (widget: PersonalDashboardWidget, action: 'metadata' | 'duplicate' | 'delete') => {
+    if (!dashboard || widgetOperationId !== null) return;
+    if (action !== 'duplicate') {
+      setWidgetManagement({ mode: action, widgetId: widget.id });
+      return;
+    }
+    void (async () => {
+      setWidgetOperationId(widget.id);
+      setManagementError(null);
+      try {
+        managementUpdated(
+          await duplicatePersonalDashboardWidget(dashboard.id, widget.id, {
+            expectedVersion: dashboard.version,
+            clientRequestId: newRequestId(),
+          }),
+        );
+      } catch (requestError) {
+        setManagementError(dashboardDiagnostics(requestError));
+      } finally {
+        setWidgetOperationId(null);
+      }
+    })();
   };
   const managementDuplicated = (duplicate: PersonalDashboard) => {
     setManagementError(null);
@@ -947,6 +1176,8 @@ const PersonalDashboardViewer = () => {
                       }
                       onDrillDown={drillDown}
                       onDrillBack={drillBack}
+                      onManage={manageWidget}
+                      operationPending={widgetOperationId === widget.id}
                     />
                   ))}
                 </div>
@@ -963,6 +1194,15 @@ const PersonalDashboardViewer = () => {
         onUpdated={managementUpdated}
         onDuplicated={managementDuplicated}
         onDeleted={managementDeleted}
+        onReload={() => navigate(0)}
+      />
+      <PersonalDashboardWidgetManagementDialog
+        dashboard={dashboard}
+        widget={managedWidget}
+        locale={locale}
+        mode={widgetManagement?.mode ?? null}
+        onClose={() => setWidgetManagement(null)}
+        onUpdated={managementUpdated}
         onReload={() => navigate(0)}
       />
     </ProductPage>

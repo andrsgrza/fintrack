@@ -19,6 +19,9 @@ const setPersonalDashboardDefault = jest.fn();
 const updatePersonalDashboardMetadata = jest.fn();
 const duplicatePersonalDashboard = jest.fn();
 const deletePersonalDashboard = jest.fn();
+const updatePersonalDashboardWidget = jest.fn();
+const duplicatePersonalDashboardWidget = jest.fn();
+const deletePersonalDashboardWidget = jest.fn();
 const useDashboardWidgetResults = jest.fn();
 const useAppSelector = jest.fn();
 
@@ -46,6 +49,9 @@ jest.mock('./personal-dashboard-api', () => ({
   updatePersonalDashboardMetadata: (...args) => updatePersonalDashboardMetadata(...args),
   duplicatePersonalDashboard: (...args) => duplicatePersonalDashboard(...args),
   deletePersonalDashboard: (...args) => deletePersonalDashboard(...args),
+  updatePersonalDashboardWidget: (...args) => updatePersonalDashboardWidget(...args),
+  duplicatePersonalDashboardWidget: (...args) => duplicatePersonalDashboardWidget(...args),
+  deletePersonalDashboardWidget: (...args) => deletePersonalDashboardWidget(...args),
 }));
 
 const catalog = {
@@ -183,6 +189,31 @@ describe('personal dashboards V2-3', () => {
     );
     duplicatePersonalDashboard.mockResolvedValue({ ...personalDashboard, id: 45, name: 'My dashboard (copy)', version: 0 });
     deletePersonalDashboard.mockResolvedValue(undefined);
+    updatePersonalDashboardWidget.mockImplementation(
+      (_dashboardId: number, widgetId: number, command: { title: string; description: string | null }) =>
+        Promise.resolve({
+          ...personalDashboard,
+          version: 1,
+          widgets: personalDashboard.widgets.map(widget =>
+            widget.id === widgetId ? { ...widget, title: command.title, description: command.description } : widget,
+          ),
+        }),
+    );
+    duplicatePersonalDashboardWidget.mockResolvedValue({
+      ...personalDashboard,
+      version: 1,
+      widgets: [
+        ...personalDashboard.widgets,
+        { ...personalDashboard.widgets[0], id: 73, title: 'Expense total (copy)', position: 2, visible: true },
+      ],
+    });
+    deletePersonalDashboardWidget.mockImplementation((_dashboardId: number, widgetId: number) =>
+      Promise.resolve({
+        ...personalDashboard,
+        version: 1,
+        widgets: personalDashboard.widgets.filter(widget => widget.id !== widgetId).map((widget, position) => ({ ...widget, position })),
+      }),
+    );
     savePersonalDashboardLayout.mockImplementation(
       (_dashboardId: number, command: { widgets: Array<{ widgetId: number; width: string; visible: boolean }> }) =>
         Promise.resolve({
@@ -321,7 +352,7 @@ describe('personal dashboards V2-3', () => {
     renderViewer();
     await screen.findByRole('heading', { name: 'My dashboard' });
     fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
-    fireEvent.click(await screen.findByText('Change name and description'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardEditMetadata"]'));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Renamed dashboard' } });
     fireEvent.change(screen.getByLabelText('Optional description'), { target: { value: 'A concise description' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -337,11 +368,205 @@ describe('personal dashboards V2-3', () => {
     expect(savePersonalDashboardLayout).not.toHaveBeenCalled();
   });
 
+  it('keeps personal widget actions in the overflow menu when no interval selector applies', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+
+    const header = document.querySelector('[data-cy="personalDashboardWidgetHeader-71"]');
+    expect(header?.classList.contains('personal-dashboard-widget-header')).toBe(true);
+    expect(header?.querySelector('[data-cy="personalDashboardWidgetTitle-71"]')?.textContent).toContain('Expense total');
+    expect(header?.querySelector('[data-cy="personalDashboardWidgetDescription-71"]')?.textContent).toContain('Economic expenses');
+    expect(document.querySelector('[data-cy="personalDashboardEditWidget-71"]')).toBeNull();
+    expect(document.querySelector('[data-cy="personalDashboardWidgetInterval-71"]')).toBeNull();
+    const menu = document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]');
+    expect(menu).not.toBeNull();
+
+    fireEvent.click(menu);
+    expect(document.querySelector('[data-cy="personalDashboardWidgetRename-71"]')).not.toBeNull();
+    expect(document.querySelector('[data-cy="personalDashboardWidgetMenuEdit-71"]')).not.toBeNull();
+    expect(document.querySelector('[data-cy="personalDashboardWidgetDuplicate-71"]')).not.toBeNull();
+    expect(document.querySelector('[data-cy="personalDashboardWidgetDelete-71"]')).not.toBeNull();
+  });
+
+  it('keeps title actions separate from long descriptions across widget widths', async () => {
+    const longDescription =
+      'This longer description explains the financial calculation in enough detail to wrap naturally without moving the widget actions below it.';
+    const longTitle = 'A deliberately long widget title that must still leave the menu anchored at the top of the header';
+    getPersonalDashboard.mockResolvedValueOnce({
+      ...personalDashboard,
+      widgets: [
+        { ...personalDashboard.widgets[0], id: 81, title: 'Short description', description: 'Short description', width: 'COMPACT' },
+        { ...personalDashboard.widgets[0], id: 82, title: longTitle, description: longDescription, width: 'MEDIUM' },
+        {
+          ...personalDashboard.widgets[0],
+          id: 83,
+          title: longTitle,
+          description: longDescription,
+          width: 'FULL',
+          definition: { ...personalDashboard.widgets[0].definition, groupBy: ['TRANSACTION_MONTH'] },
+        },
+      ],
+    });
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+
+    [81, 82, 83].forEach(widgetId => {
+      const header = document.querySelector(`[data-cy="personalDashboardWidgetHeader-${widgetId}"]`);
+      const actions = document.querySelector(`[data-cy="personalDashboardWidgetActions-${widgetId}"]`);
+      expect(header?.querySelector(`[data-cy="personalDashboardWidgetTitle-${widgetId}"]`)).not.toBeNull();
+      expect(header?.querySelector(`[data-cy="personalDashboardWidgetDescription-${widgetId}"]`)).not.toBeNull();
+      expect(actions?.querySelector(`[data-cy="personalDashboardWidgetMenu-${widgetId}"]`)).not.toBeNull();
+    });
+    expect(document.querySelector('[data-cy="personalDashboardWidgetInterval-81"]')).toBeNull();
+    expect(document.querySelector('[data-cy="personalDashboardWidgetInterval-82"]')).toBeNull();
+    expect(screen.getByLabelText('Interval').value).toBe('TRANSACTION_MONTH');
+  });
+
+  it('keeps interval and overflow actions together in the header of a temporal widget', async () => {
+    getPersonalDashboard.mockResolvedValueOnce({
+      ...personalDashboard,
+      widgets: [
+        {
+          ...personalDashboard.widgets[0],
+          definition: { ...personalDashboard.widgets[0].definition, groupBy: ['TRANSACTION_MONTH'] },
+        },
+      ],
+    });
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+
+    expect(screen.getByLabelText('Interval').value).toBe('TRANSACTION_MONTH');
+    expect(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]')).not.toBeNull();
+    expect(document.querySelector('[data-cy="personalDashboardEditWidget-71"]')).toBeNull();
+  });
+
+  it('manages a widget from its accessible menu without altering its saved query or layout', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetRename-71"]'));
+    expect(screen.getByLabelText('Visualization title').value).toBe('Expense total');
+    fireEvent.change(screen.getByLabelText('Visualization title'), { target: { value: 'Updated expense total' } });
+    fireEvent.change(screen.getByLabelText('Optional description'), { target: { value: 'Updated explanation' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(updatePersonalDashboardWidget).toHaveBeenCalledWith(
+        44,
+        71,
+        expect.objectContaining({
+          expectedVersion: 0,
+          title: 'Updated expense total',
+          description: 'Updated explanation',
+          definition: personalDashboard.widgets[0].definition,
+          visualizationType: 'KPI',
+          width: 'COMPACT',
+          visible: true,
+        }),
+      ),
+    );
+    expect(await screen.findByRole('heading', { name: 'Updated expense total' })).toBeTruthy();
+    expect(savePersonalDashboardLayout).not.toHaveBeenCalled();
+  });
+
+  it('cancels widget metadata editing without sending a mutation', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetRename-71"]'));
+    fireEvent.change(screen.getByLabelText('Visualization title'), { target: { value: 'Should not save' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(updatePersonalDashboardWidget).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Change name and description' })).toBeNull());
+  });
+
+  it('keeps the rename dialog open and explains a concurrent update failure', async () => {
+    updatePersonalDashboardWidget.mockRejectedValueOnce(new Error('Dashboard changed elsewhere'));
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetRename-71"]'));
+    fireEvent.change(screen.getByLabelText('Visualization title'), { target: { value: 'Conflicting title' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Dashboard changed elsewhere')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Change name and description' })).toBeTruthy();
+    expect(screen.getByLabelText('Visualization title').value).toBe('Conflicting title');
+  });
+
+  it('duplicates a widget from its menu and keeps the original in place', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetDuplicate-71"]'));
+
+    await waitFor(() =>
+      expect(duplicatePersonalDashboardWidget).toHaveBeenCalledWith(44, 71, expect.objectContaining({ expectedVersion: 0 })),
+    );
+    expect(await screen.findByRole('heading', { name: 'Expense total (copy)' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Expense total' })).toBeTruthy();
+  });
+
+  it('explains a failed duplication and leaves the original widget intact', async () => {
+    duplicatePersonalDashboardWidget.mockRejectedValueOnce(new Error('Dashboard changed elsewhere'));
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetDuplicate-71"]'));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-cy="personalDashboardManagementError"]')?.textContent).toContain('Dashboard changed elsewhere'),
+    );
+    expect(screen.getByRole('heading', { name: 'Expense total' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Expense total (copy)' })).toBeNull();
+  });
+
+  it('confirms widget deletion and refreshes only after backend success', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetDelete-71"]'));
+    expect(screen.getByText(/permanently delete “Expense total”/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(deletePersonalDashboardWidget).not.toHaveBeenCalled();
+
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetDelete-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetManageSubmit"]'));
+    await waitFor(() => expect(deletePersonalDashboardWidget).toHaveBeenCalledWith(44, 71, 0));
+    await waitFor(() => expect(document.querySelector('[data-cy="personalDashboardWidget-71"]')).toBeNull());
+    expect(document.querySelector('[data-cy="personalDashboardWidget-72"]')).not.toBeNull();
+  });
+
+  it('keeps deletion confirmation open when the current dashboard version is stale', async () => {
+    deletePersonalDashboardWidget.mockRejectedValueOnce(new Error('Dashboard changed elsewhere'));
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetMenu-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetDelete-71"]'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardWidgetManageSubmit"]'));
+
+    expect(await screen.findByText('Dashboard changed elsewhere')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Delete widget' })).toBeTruthy();
+    expect(document.querySelector('[data-cy="personalDashboardWidget-71"]')).not.toBeNull();
+  });
+
+  it('keeps widget lifecycle commands out of unsaved layout customization', async () => {
+    renderViewer();
+    await screen.findByRole('heading', { name: 'My dashboard' });
+    fireEvent.click(screen.getByRole('button', { name: 'Customize dashboard' }));
+    expect(document.querySelector('[data-cy^="personalDashboardWidgetMenu-"]')).toBeNull();
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardHide-71"]'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(duplicatePersonalDashboardWidget).not.toHaveBeenCalled();
+    expect(deletePersonalDashboardWidget).not.toHaveBeenCalled();
+  });
+
   it('reopens management controls after saving metadata', async () => {
     renderViewer();
     await screen.findByRole('heading', { name: 'My dashboard' });
     fireEvent.click(document.querySelector('[data-cy="personalDashboardManage"]'));
-    fireEvent.click(await screen.findByText('Change name and description'));
+    fireEvent.click(document.querySelector('[data-cy="personalDashboardEditMetadata"]'));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Saved dashboard' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await screen.findByRole('heading', { name: 'Saved dashboard' });

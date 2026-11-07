@@ -71,5 +71,6 @@
     <include file="config/liquibase/changelog/20261105100000_remove_personal_dashboard_layout_baseline.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261105110000_personal_dashboard_management.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261105120000_personal_dashboard_official_defaults.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261106100000_personal_dashboard_widget_lifecycle.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>
