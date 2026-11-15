@@ -18,8 +18,8 @@ import com.fintrack.app.service.CurrentUserService;
 import com.fintrack.app.service.analytics.SemanticAnalyticsSchema;
 import com.fintrack.app.service.analytics.SemanticAnalyticsValidationException;
 import com.fintrack.app.service.analytics.SemanticAnalyticsValidator;
-import com.fintrack.app.service.analytics.SemanticField;
 import com.fintrack.app.service.analytics.SemanticQueryDefinition;
+import com.fintrack.app.service.analytics.SemanticVisualizationCompatibility;
 import com.fintrack.app.service.analytics.VisualizationContext;
 import com.fintrack.app.service.analytics.VisualizationTime;
 import java.nio.charset.StandardCharsets;
@@ -587,53 +587,12 @@ public class PersonalDashboardCommandService {
     }
 
     private void validateVisualization(SemanticQueryDefinition definition, PersonalDashboardVisualizationType visualization) {
-        List<SemanticField> groups = definition.groupBy();
-        // Grouping order is a presentation decision: the first grouping becomes the chart axis and each following
-        // grouping may become a series. A temporal breakdown therefore makes a line presentation meaningful in
-        // either position; persisting must not rewrite or reject the canonical ordered AST that the Explorer renders.
-        boolean temporalGrouping = groups.stream().anyMatch(this::isTemporal);
-        boolean pointInTime = Set.of("FINANCIAL_POSITION_SNAPSHOT", "ACCOUNT_POSITION_SNAPSHOT", "CREDIT_ACCOUNT_SNAPSHOT").contains(
-            definition.dataset().name()
-        );
-        boolean additive = definition.projections().stream().noneMatch(projection -> projection.function().name().equals("AVG"));
-        boolean tags = groups.contains(SemanticField.TAG_ID);
-        boolean compatible =
-            switch (visualization) {
-                case TABLE -> true;
-                case KPI -> groups.isEmpty();
-                case LINE -> temporalGrouping;
-                case BAR -> !groups.isEmpty();
-                case GROUPED_BAR -> groups.size() > 1 || definition.projections().size() > 1;
-                case STACKED_BAR -> (groups.size() > 1 || definition.projections().size() > 1) &&
-                additive &&
-                !tags &&
-                !(pointInTime && temporalGrouping);
-                case DONUT -> groups.size() == 1 && !temporalGrouping;
-            };
-        if (!compatible) {
+        if (!SemanticVisualizationCompatibility.isCompatible(definition, visualization)) {
             throw failure(
                 PersonalDashboardCommandException.Code.INVALID_PAYLOAD,
                 "The visualization is incompatible with the semantic result shape."
             );
         }
-    }
-
-    private boolean isTemporal(SemanticField field) {
-        return switch (field) {
-            case TRANSACTION_DATE,
-                TRANSACTION_DAY,
-                TRANSACTION_WEEK,
-                TRANSACTION_MONTH,
-                TRANSACTION_YEAR,
-                OBSERVATION_DATE,
-                OBSERVATION_MONTH,
-                TRANSFER_DATE,
-                TRANSFER_DAY,
-                TRANSFER_WEEK,
-                TRANSFER_MONTH,
-                TRANSFER_YEAR -> true;
-            default -> false;
-        };
     }
 
     private void validateWidgetWidth(PersonalDashboardVisualizationType visualizationType, PersonalDashboardWidgetWidth width) {

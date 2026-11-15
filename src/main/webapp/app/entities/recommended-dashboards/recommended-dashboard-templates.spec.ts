@@ -1,4 +1,5 @@
 import { SemanticAnalyticsCatalog } from 'app/entities/analytics-explorer/analytics-explorer.model';
+import { visualizationEligibility } from 'app/entities/analytics-explorer/analytics-visualization-compatibility';
 
 import { recommendedDashboardTemplates } from './recommended-dashboard-templates';
 
@@ -42,6 +43,17 @@ describe('recommended dashboard templates', () => {
     expect(currentFacts).toEqual(
       expect.arrayContaining(['current-credit-limit', 'current-available-credit', 'current-credit-utilization']),
     );
+    expect(widgets.filter(widget => widget.contextPolicy === 'CURRENT_ONLY').every(widget => widget.visualization === 'BAR')).toBe(true);
+  });
+
+  it('keeps every official widget compatible with the shared presentation contract', () => {
+    const widgets = recommendedDashboardTemplates(catalog).flatMap(template => template.widgets);
+
+    for (const widget of widgets) {
+      expect(visualizationEligibility(widget.definition, null, 'en').find(option => option.option === widget.visualization)?.enabled).toBe(
+        true,
+      );
+    }
   });
 
   it('uses a governed per-currency financial-position KPI and a separate as-of account view', () => {

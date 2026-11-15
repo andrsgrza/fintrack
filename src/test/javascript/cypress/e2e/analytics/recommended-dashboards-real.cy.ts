@@ -17,7 +17,10 @@ describe('Recommended dashboards V2 real financial acceptance', () => {
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const date = new Date().toISOString().slice(0, 10);
+  // Dashboard context resolves dates in the local product timezone; UTC serialization can otherwise seed tomorrow
+  // while the browser selects today near midnight.
+  const now = new Date();
+  const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
   const openingDate = '2026-01-01';
   const fixture: Partial<DashboardFixture> = {};
   const categoryColors = [
@@ -381,7 +384,8 @@ describe('Recommended dashboards V2 real financial acceptance', () => {
     });
 
     const widget = '[data-cy="recommendedWidget-category-hierarchy"]';
-    openDetails(widget);
+    cy.get(`${widget} [data-cy="analyticsResultTable"]`).should('be.visible');
+    cy.get(`${widget} [data-cy="analyticsResultDetailsToggle"]`).should('not.exist');
     cy.get(`${widget} [data-cy="analyticsResultTable"]`).within(() => {
       cy.contains('tr', hierarchy.root.name)
         .should('contain.text', '51.00')
@@ -483,6 +487,12 @@ describe('Recommended dashboards V2 real financial acceptance', () => {
     chooseAccounts(debit.name, credit.name);
     cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(1440));
     cy.get('[data-cy="recommendedWidget-position-by-account"] .recharts-reference-line-line').should('exist');
+    cy.get('[data-cy="recommendedWidget-current-credit-limit"] [data-cy="analyticsSemanticChart"]').should('be.visible');
+    cy.get('[data-cy="recommendedWidget-current-credit-limit"] [data-cy="analyticsResultTable"]').should('not.exist');
+    cy.get('[data-cy="recommendedWidget-current-credit-limit"] [data-cy="analyticsResultDetailsToggle"]').should(
+      'contain.text',
+      'Ver tabla de resultados',
+    );
     openDetails('[data-cy="recommendedWidget-position-by-account"]');
     cy.get('[data-cy="recommendedWidget-position-by-account"] [data-cy="analyticsResultTable"] tbody tr').should('have.length', 1);
     openDetails('[data-cy="recommendedWidget-credit-debt-history"]');

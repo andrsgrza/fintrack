@@ -8,6 +8,7 @@ import {
   VisualizationContext,
 } from 'app/entities/analytics-explorer/analytics-explorer.model';
 import { copy } from 'app/entities/analytics-explorer/analytics-explorer-utils';
+import { visualizationEligibility } from 'app/entities/analytics-explorer/analytics-visualization-compatibility';
 
 import {
   addPersonalDashboardWidget,
@@ -146,6 +147,7 @@ const PersonalDashboardWidgetSaveDialog = ({
   };
 
   const selectedDashboard = createdDashboard ?? dashboards.find(dashboard => dashboard.id === selectedDashboardId) ?? null;
+  const visualizationCapability = visualizationEligibility(definition, null, locale).find(option => option.option === visualization);
 
   const refreshDestinations = async () => {
     setError(null);
@@ -167,7 +169,7 @@ const PersonalDashboardWidgetSaveDialog = ({
 
   const persist = async (event: FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (saving || !visualizationCapability?.enabled) return;
     setSaving(true);
     setError(null);
     try {
@@ -245,6 +247,15 @@ const PersonalDashboardWidgetSaveDialog = ({
                   'The query and its presentation are saved, never preview amounts or result rows.',
                 )}
           </p>
+          {!visualizationCapability?.enabled ? (
+            <Alert color="warning" data-cy="widgetSaveVisualizationIncompatibility">
+              {copy(
+                locale,
+                `Esta visualización no se puede guardar con esta consulta: ${visualizationCapability?.reason}`,
+                `This visualization cannot be saved with this query: ${visualizationCapability?.reason}`,
+              )}
+            </Alert>
+          ) : null}
           {error ? <Alert color="danger">{errorMessage(locale, error)}</Alert> : null}
           {conflict ? (
             <Button
@@ -391,7 +402,9 @@ const PersonalDashboardWidgetSaveDialog = ({
           <Button
             color="primary"
             type="submit"
-            disabled={saving || !title.trim() || (!editing && !creatingDestination && !selectedDashboard)}
+            disabled={
+              saving || !visualizationCapability?.enabled || !title.trim() || (!editing && !creatingDestination && !selectedDashboard)
+            }
             data-cy="widgetSaveSubmit"
           >
             {saving

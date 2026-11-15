@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import AnalyticsExplorer from './analytics-explorer';
 import { groupCategoryChildren, replaceGrouping } from './analytics-grouping';
-import { SemanticAnalyticsCatalog, SemanticQueryDefinition } from './analytics-explorer.model';
+import { ExplorerVisualization, SemanticAnalyticsCatalog, SemanticQueryDefinition } from './analytics-explorer.model';
 import {
   AnalyticsResultsPanel,
   ResultPanel,
@@ -473,6 +473,7 @@ describe('Metric Explorer V2', () => {
     const first = renderExplorer('/analytics/explorer?dashboardId=41&widgetId=91');
     await waitFor(() => expect(getPersonalDashboard).toHaveBeenCalledWith(41));
     await waitFor(() => expect(document.querySelector('[data-cy="analyticsProjection-transactions"]')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }));
     fireEvent.click(document.querySelector('[data-cy="analyticsSaveVisualization"]'));
     await screen.findByRole('heading', { name: 'Save visualization changes' });
     fireEvent.change(screen.getByLabelText('Visualization title'), { target: { value: 'Updated count' } });
@@ -637,6 +638,46 @@ describe('Metric Explorer V2', () => {
     expect(document.querySelector('[data-cy="analyticsTemporalChartNote"]')).toBeTruthy();
     expect(screen.queryByText('ISO 2026-W05')).toBeNull();
     expect(screen.queryByText(/MONEY/)).toBeNull();
+  });
+
+  it('applies the canonical presentation contract to scalar, temporal, point-in-time, tag, average, and percentage shapes', () => {
+    const enabled = (candidate: SemanticQueryDefinition, visualization: ExplorerVisualization) =>
+      visualizationEligibility(candidate, null, 'en').find(option => option.option === visualization)?.enabled;
+    const total = { alias: 'total', function: 'SUM' as const, field: 'TRANSACTION_AMOUNT', conditions: [] };
+    const average = { alias: 'average', function: 'AVG' as const, field: 'TRANSACTION_AMOUNT', conditions: [] };
+
+    expect(enabled({ ...definition, projections: [total], groupBy: [] }, 'KPI')).toBe(true);
+    expect(enabled({ ...definition, projections: [total], groupBy: ['CATEGORY_ROOT'] }, 'KPI')).toBe(false);
+    expect(enabled({ ...definition, projections: [total], groupBy: ['CATEGORY_ROOT', 'TRANSACTION_MONTH'] }, 'LINE')).toBe(true);
+    expect(enabled({ ...definition, projections: [total], groupBy: ['TRANSACTION_MONTH', 'CATEGORY_ROOT'] }, 'LINE')).toBe(true);
+    expect(enabled({ ...definition, projections: [total], groupBy: ['CATEGORY_ROOT'] }, 'DONUT')).toBe(true);
+    expect(enabled({ ...definition, projections: [average], groupBy: ['CATEGORY_ROOT'] }, 'DONUT')).toBe(false);
+    expect(enabled({ ...definition, projections: [total], groupBy: ['TAG_ID'] }, 'DONUT')).toBe(false);
+    expect(enabled({ ...definition, projections: [total], groupBy: ['TAG_ID', 'TRANSACTION_MONTH'] }, 'STACKED_BAR')).toBe(false);
+    expect(
+      enabled(
+        {
+          ...definition,
+          dataset: 'ACCOUNT_POSITION_SNAPSHOT',
+          timeBinding: 'OBSERVATION_DATE',
+          projections: [{ alias: 'balance', function: 'SUM', field: 'POSITION_BALANCE', conditions: [] }],
+          groupBy: ['OBSERVATION_MONTH', 'ACCOUNT_ID'],
+        },
+        'STACKED_BAR',
+      ),
+    ).toBe(false);
+    expect(
+      enabled(
+        {
+          ...definition,
+          dataset: 'CREDIT_ACCOUNT_SNAPSHOT',
+          timeBinding: 'OBSERVATION_DATE',
+          projections: [{ alias: 'utilization', function: 'SUM', field: 'CREDIT_UTILIZATION_PERCENT', conditions: [] }],
+          groupBy: ['ACCOUNT_ID'],
+        },
+        'DONUT',
+      ),
+    ).toBe(false);
   });
 
   it('inserts null weekly gaps through the complete context without turning them into zeroes', () => {
@@ -924,13 +965,77 @@ describe('Metric Explorer V2', () => {
 
     expect(screen.getByText('$750.00 MXN')).toBeTruthy();
     expect(screen.getByText(/Position uses one cutoff per account/)).toBeTruthy();
-    const details = screen.getByRole('button', { name: 'View data' });
+    const details = screen.getByRole('button', { name: 'View results table' });
     expect(details.getAttribute('aria-expanded')).toBe('false');
     expect(document.querySelector('[data-cy="analyticsResultTable"]')).toBeNull();
     fireEvent.click(details);
     expect(details.getAttribute('aria-expanded')).toBe('true');
     expect(document.querySelector('[data-cy="analyticsResultTable"]')).not.toBeNull();
     expect(screen.getAllByText('$750.00 MXN')).toHaveLength(2);
+  });
+
+  it('renders a selected table directly in compact dashboards and explains a retained incompatible saved visualization', () => {
+    const result = {
+      schemaVersion: 1,
+      semanticModel: 'FINTRACK_FINANCIAL',
+      effectiveContext: { from: '2026-01-01', through: '2026-01-31', accountIds: [], currencyCodes: ['MXN'] },
+      executedAt: '2026-01-31T12:00:00Z',
+      columns: [{ id: 'gastos', dimension: false, unit: 'MONEY' as const, currencyFaceted: true }],
+      rows: [
+        {
+          dimensions: [
+            {
+              field: 'CATEGORY_ROOT' as const,
+              value: 'food',
+              metadata: { stableId: 'food', label: 'Food', color: null, active: true, synthetic: false, path: ['Food'] },
+            },
+          ],
+          currencyCode: 'MXN',
+          values: [{ alias: 'gastos', value: 40, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+        },
+      ],
+    };
+    const grouped = {
+      ...definition,
+      projections: [{ alias: 'gastos', function: 'SUM' as const, field: 'TRANSACTION_AMOUNT', conditions: [] }],
+      groupBy: ['CATEGORY_ROOT' as const],
+    };
+
+    const view = render(
+      <AnalyticsResultsPanel
+        definition={grouped}
+        result={result}
+        visualization="TABLE"
+        locale="en"
+        loading={false}
+        stale={false}
+        seriesLimit="ALL"
+        drillTrail={[]}
+        onDrillDown={jest.fn()}
+        onDrillBack={jest.fn()}
+        compact
+      />,
+    );
+    expect(document.querySelector('[data-cy="analyticsResultTable"]')).not.toBeNull();
+    expect(document.querySelector('[data-cy="analyticsResultDetailsToggle"]')).toBeNull();
+
+    view.rerender(
+      <AnalyticsResultsPanel
+        definition={grouped}
+        result={result}
+        visualization="KPI"
+        locale="en"
+        loading={false}
+        stale={false}
+        seriesLimit="ALL"
+        drillTrail={[]}
+        onDrillDown={jest.fn()}
+        onDrillBack={jest.fn()}
+        compact
+      />,
+    );
+    expect(document.querySelector('[data-cy="analyticsVisualizationIncompatibility"]')).not.toBeNull();
+    expect(document.querySelector('[data-cy="analyticsResultTable"]')).not.toBeNull();
   });
 
   it('keeps all twenty tag series available with stable IDs, fallback colors, search, show/hide, and isolate controls', () => {

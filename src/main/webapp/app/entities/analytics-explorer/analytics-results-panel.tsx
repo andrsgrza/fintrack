@@ -29,6 +29,13 @@ import {
   temporalSortKey,
   visualizationTitle,
 } from './analytics-explorer-utils';
+import {
+  visualizationEligibility as compatibilityEligibility,
+  visualizationResultIncompatibility,
+} from './analytics-visualization-compatibility';
+
+export { visualizationEligibility } from './analytics-visualization-compatibility';
+export type { VisualizationEligibility } from './analytics-visualization-compatibility';
 
 type Row = SemanticAnalyticsResult['rows'][number];
 type Value = Row['values'][number];
@@ -206,81 +213,6 @@ const resultPanels = (result: SemanticAnalyticsResult): ResultPanel[] => {
     });
   });
   return [...panels.values()];
-};
-
-export type VisualizationEligibility = { option: ExplorerVisualization; enabled: boolean; reason?: string };
-
-/** Uses the draft definition before execution and the returned shape afterwards. Presentation never mutates the query AST. */
-export const visualizationEligibility = (
-  definition: SemanticQueryDefinition | null,
-  result: SemanticAnalyticsResult | null,
-  locale: string,
-): VisualizationEligibility[] => {
-  const fields = result?.rows.length ? (result.rows[0]?.dimensions.map(dimension => dimension.field) ?? []) : (definition?.groupBy ?? []);
-  const temporal = fields.some(isTemporalField);
-  const tagGrouping = fields.includes('TAG_ID');
-  const pointInTime = ['FINANCIAL_POSITION_SNAPSHOT', 'ACCOUNT_POSITION_SNAPSHOT', 'CREDIT_ACCOUNT_SNAPSHOT'].includes(
-    definition?.dataset ?? '',
-  );
-  const additive = !!definition?.projections.every(projection => projection.function !== 'AVG');
-  const groupCount = fields.length;
-  const oneProjection = definition?.projections.length === 1;
-  const barReason = copy(locale, 'Necesita al menos un desglose.', 'Requires at least one breakdown.');
-  return [
-    {
-      option: 'KPI',
-      enabled: groupCount === 0,
-      reason: copy(locale, 'Los indicadores muestran un total sin desglose.', 'Indicators show one total without a breakdown.'),
-    },
-    {
-      option: 'LINE',
-      enabled: temporal,
-      reason: copy(locale, 'Las líneas requieren un desglose temporal.', 'Lines require a temporal breakdown.'),
-    },
-    { option: 'BAR', enabled: groupCount > 0, reason: barReason },
-    {
-      option: 'GROUPED_BAR',
-      enabled: groupCount > 1 || !oneProjection,
-      reason: copy(locale, 'Requiere una comparación o más de un cálculo.', 'Requires a comparison or more than one calculation.'),
-    },
-    {
-      option: 'STACKED_BAR',
-      enabled: (groupCount > 1 || !oneProjection) && additive && !tagGrouping && !(pointInTime && temporal),
-      reason: tagGrouping
-        ? copy(
-            locale,
-            'Las etiquetas se solapan y no pueden apilarse como partes exclusivas.',
-            'Tags overlap and cannot be stacked as exclusive parts.',
-          )
-        : pointInTime && temporal
-          ? copy(
-              locale,
-              'Los saldos y la deuda histórica no se suman entre fechas.',
-              'Historical balances and debt are not summed across dates.',
-            )
-          : copy(
-              locale,
-              'Sólo se apilan medidas aditivas con grupos comparables.',
-              'Only additive measures with comparable groups can be stacked.',
-            ),
-    },
-    {
-      option: 'DONUT',
-      enabled: groupCount === 1 && !temporal && oneProjection && additive && !tagGrouping,
-      reason: tagGrouping
-        ? copy(
-            locale,
-            'Las etiquetas se solapan; una dona sugeriría partes excluyentes.',
-            'Tags overlap; a donut would imply exclusive parts.',
-          )
-        : copy(
-            locale,
-            'La dona requiere un cálculo aditivo y un único desglose no temporal.',
-            'A donut requires one additive calculation and one non-temporal breakdown.',
-          ),
-    },
-    { option: 'TABLE', enabled: true },
-  ];
 };
 
 const plottableValue = (value: Value) => {
@@ -931,8 +863,14 @@ export const AnalyticsResultsPanel = ({
   onDrillBack,
   compact = false,
 }: Props) => {
-  const options = visualizationEligibility(definition, result, locale);
-  const current = options.find(option => option.option === visualization)?.enabled ? visualization : 'TABLE';
+  const options = compatibilityEligibility(definition, result, locale);
+  const selectedOption = options.find(option => option.option === visualization);
+  const incompatibility = !selectedOption?.enabled
+    ? selectedOption?.reason
+    : visualizationResultIncompatibility(visualization, result, locale);
+  // An old saved widget remains intact. Its renderer falls back to the full semantic table with a clear explanation
+  // instead of mutating the presentation choice or making its financial result disappear.
+  const current = incompatibility ? 'TABLE' : visualization;
   const panels = result ? resultPanels(result) : [];
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsId = useId();
@@ -1031,6 +969,15 @@ export const AnalyticsResultsPanel = ({
                 {warningText(warning.code, warning.message, locale)}
               </div>
             ))}
+            {incompatibility ? (
+              <div className="alert alert-warning py-2" data-cy="analyticsVisualizationIncompatibility">
+                {copy(
+                  locale,
+                  `La presentación “${visualizationTitle(locale, visualization)}” no es compatible con este resultado: ${incompatibility} Se muestra la tabla de resultados sin modificar la consulta guardada.`,
+                  `The “${visualizationTitle(locale, visualization)}” presentation is not compatible with this result: ${incompatibility} The result table is shown without changing the saved query.`,
+                )}
+              </div>
+            ) : null}
             {panels.length > 1 ? (
               <div className={compact ? 'small border-start border-info border-3 ps-2 mb-2' : 'alert alert-info py-2'}>
                 {copy(
@@ -1040,42 +987,44 @@ export const AnalyticsResultsPanel = ({
                 )}
               </div>
             ) : null}
-            {panels.map(panel => {
-              const chart = current !== 'TABLE' && current !== 'KPI';
-              const chartState = chart ? chartRows(panel, seriesLimit, locale, result.effectiveContext, current) : null;
-              return (
-                <section
-                  className={compact ? 'mb-3' : 'border rounded-2 p-3 mb-3'}
-                  key={panelKey(panel.currency, panel.unit)}
-                  data-cy={`analyticsCurrencyFacet-${panel.currency ?? 'NON_MONETARY'}-${panel.unit}`}
-                >
-                  {!compact || current !== 'KPI' ? <h3 className="h6">{panelTitle(panel, locale)}</h3> : null}
-                  {current === 'KPI' ? <Kpis panel={panel} locale={locale} compact={compact} /> : null}
-                  {chart ? (
-                    <SemanticChart
-                      panel={panel}
-                      visualization={current}
-                      seriesLimit={seriesLimit}
-                      locale={locale}
-                      effectiveContext={result.effectiveContext}
-                      horizontal={
-                        definition?.dataset === 'ACCOUNT_POSITION_SNAPSHOT' && definition.groupBy[0] === 'ACCOUNT_ID' && current === 'BAR'
-                      }
-                    />
-                  ) : null}
-                  {chartState && chartState.hidden ? (
-                    <p className="small text-muted mt-2">
-                      {copy(
-                        locale,
-                        `${chartState.hidden} series no se muestran en la gráfica; la tabla conserva el resultado completo.`,
-                        `${chartState.hidden} series are hidden from the chart; the table preserves the complete result.`,
-                      )}
-                    </p>
-                  ) : null}
-                </section>
-              );
-            })}
-            {compact ? (
+            {current === 'TABLE' ? <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} /> : null}
+            {current !== 'TABLE'
+              ? panels.map(panel => {
+                  const chart = current !== 'KPI';
+                  const chartState = chart ? chartRows(panel, seriesLimit, locale, result.effectiveContext, current) : null;
+                  return (
+                    <section
+                      className={compact ? 'mb-3' : 'border rounded-2 p-3 mb-3'}
+                      key={panelKey(panel.currency, panel.unit)}
+                      data-cy={`analyticsCurrencyFacet-${panel.currency ?? 'NON_MONETARY'}-${panel.unit}`}
+                    >
+                      {!compact || current !== 'KPI' ? <h3 className="h6">{panelTitle(panel, locale)}</h3> : null}
+                      {current === 'KPI' ? <Kpis panel={panel} locale={locale} compact={compact} /> : null}
+                      {chart ? (
+                        <SemanticChart
+                          panel={panel}
+                          visualization={current}
+                          seriesLimit={seriesLimit}
+                          locale={locale}
+                          effectiveContext={result.effectiveContext}
+                          horizontal={definition?.groupBy[0] === 'ACCOUNT_ID' && current === 'BAR'}
+                        />
+                      ) : null}
+                      {chartState && chartState.hidden ? (
+                        <p className="small text-muted mt-2">
+                          {copy(
+                            locale,
+                            `${chartState.hidden} series no se muestran en la gráfica; la tabla conserva el resultado completo.`,
+                            `${chartState.hidden} series are hidden from the chart; the table preserves the complete result.`,
+                          )}
+                        </p>
+                      ) : null}
+                    </section>
+                  );
+                })
+              : null}
+            {!compact && current !== 'TABLE' ? <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} /> : null}
+            {compact && current !== 'TABLE' ? (
               <div className="border-top pt-2">
                 <Button
                   type="button"
@@ -1087,17 +1036,24 @@ export const AnalyticsResultsPanel = ({
                   onClick={() => setDetailsOpen(open => !open)}
                   data-cy="analyticsResultDetailsToggle"
                 >
-                  {detailsOpen ? copy(locale, 'Ocultar datos', 'Hide data') : copy(locale, 'Ver datos', 'View data')}
+                  {detailsOpen
+                    ? copy(locale, 'Ocultar tabla de resultados', 'Hide results table')
+                    : copy(locale, 'Ver tabla de resultados', 'View results table')}
                 </Button>
+                <p className="small text-muted mt-2 mb-0">
+                  {copy(
+                    locale,
+                    'La tabla conserva los resultados agrupados; no es una lista de transacciones individuales.',
+                    'The table preserves grouped results; it is not a list of individual transactions.',
+                  )}
+                </p>
                 {detailsOpen ? (
                   <div id={detailsId} className="mt-2">
                     <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
                   </div>
                 ) : null}
               </div>
-            ) : (
-              <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
-            )}
+            ) : null}
           </>
         ) : null}
       </div>

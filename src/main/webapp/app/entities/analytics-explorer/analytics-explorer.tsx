@@ -33,6 +33,7 @@ import {
 } from './analytics-explorer.model';
 import { AnalyticsResultsPanel } from './analytics-results-panel';
 import { AnalyticsVisualBuilder } from './analytics-visual-builder';
+import { visualizationEligibility } from './analytics-visualization-compatibility';
 import {
   copy,
   datasetById,
@@ -435,6 +436,9 @@ const AnalyticsExplorer = () => {
   };
 
   const stale = !!result && executedSignature !== querySignature(definition, context);
+  const visualizationCapability = definition
+    ? visualizationEligibility(definition, null, locale).find(option => option.option === visualization)
+    : null;
   return (
     <ProductPage wide className="analytics-explorer">
       <ProductPageHeader
@@ -524,7 +528,10 @@ const AnalyticsExplorer = () => {
                     size="sm"
                     color={editing ? 'primary' : 'secondary'}
                     outline={!editing}
-                    disabled={!definition || busy || resultLoading || (mode === 'SQL' && !sqlValidated)}
+                    disabled={
+                      !definition || !visualizationCapability?.enabled || busy || resultLoading || (mode === 'SQL' && !sqlValidated)
+                    }
+                    title={!visualizationCapability?.enabled ? visualizationCapability?.reason : undefined}
                     onClick={() => setSaveOpen(true)}
                     data-cy="analyticsSaveVisualization"
                   >

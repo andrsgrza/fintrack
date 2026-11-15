@@ -9,7 +9,7 @@ import {
   SemanticPredicateOperator,
   SemanticQueryDefinition,
 } from './analytics-explorer.model';
-import { visualizationEligibility } from './analytics-results-panel';
+import { visualizationEligibility } from './analytics-visualization-compatibility';
 import { copy, datasetById, describeField, label, predicateValueOptions, suggestedAlias } from './analytics-explorer-utils';
 import {
   categorySelectionFor,
@@ -1302,6 +1302,7 @@ const VisualizationSection = ({
   const simple = ['KPI', 'LINE', 'BAR', 'DONUT', 'TABLE'] as ExplorerVisualization[];
   const barActive = ['BAR', 'GROUPED_BAR', 'STACKED_BAR'].includes(visualization);
   const optionFor = (option: ExplorerVisualization) => options.find(item => item.option === option);
+  const selectedCapability = optionFor(visualization);
   return (
     <section data-cy="analyticsVisualizationSection">
       <StepHeading
@@ -1322,7 +1323,7 @@ const VisualizationSection = ({
                 size="sm"
                 color={selected ? 'primary' : 'secondary'}
                 outline={!selected}
-                disabled={busy || !capability?.enabled}
+                disabled={busy || (!capability?.enabled && !selected)}
                 title={!capability?.enabled ? capability?.reason : undefined}
                 onClick={() => onVisualizationChange(effectiveOption)}
               >
@@ -1368,13 +1369,15 @@ const VisualizationSection = ({
             </Input>
           </div>
         ) : null}
-        {options
-          .filter(option => !option.enabled)
-          .map(option => (
-            <p className="small text-muted mt-2 mb-0" key={option.option} hidden>
-              {option.reason}
-            </p>
-          ))}
+        {!selectedCapability?.enabled ? (
+          <div className="alert alert-warning py-2 small mt-2 mb-0" data-cy="analyticsVisualizationCompatibility">
+            {copy(
+              locale,
+              `La presentación actual no es compatible con la consulta: ${selectedCapability?.reason} Elige una opción habilitada antes de guardar.`,
+              `The current presentation is not compatible with the query: ${selectedCapability?.reason} Choose an enabled option before saving.`,
+            )}
+          </div>
+        ) : null}
         <p className="small text-muted mt-2 mb-0">
           {copy(
             locale,
