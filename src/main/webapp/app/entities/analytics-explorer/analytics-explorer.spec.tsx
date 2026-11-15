@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import AnalyticsExplorer from './analytics-explorer';
 import { groupCategoryChildren, replaceGrouping } from './analytics-grouping';
 import { ExplorerVisualization, SemanticAnalyticsCatalog, SemanticQueryDefinition } from './analytics-explorer.model';
+import { AnalyticsResultTable, pivotModelFor } from './analytics-result-table';
 import {
   AnalyticsResultsPanel,
   ResultPanel,
@@ -922,8 +923,9 @@ describe('Metric Explorer V2', () => {
     if (!foodToggle) throw new Error('Food legend toggle was not rendered.');
     fireEvent.click(foodToggle);
     expect(foodToggle.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByText(/Root category: Food/)).toBeTruthy();
-    expect(screen.getByText(/Root category: Travel/)).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Root category' })).toBeTruthy();
+    expect(screen.getByText('Food')).toBeTruthy();
+    expect(screen.getByText('Travel')).toBeTruthy();
   });
 
   it('keeps dashboard rows and financial notices available behind an accessible compact details control', () => {
@@ -1038,6 +1040,175 @@ describe('Metric Explorer V2', () => {
     expect(document.querySelector('[data-cy="analyticsResultTable"]')).not.toBeNull();
   });
 
+  it('presents canonical rows as detailed columns and a non-aggregating pivot in the authored grouping order', () => {
+    const onDrillDown = jest.fn();
+    const rows = [
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'food',
+            metadata: { stableId: 'CATEGORY:food', label: 'Food', color: '#4477aa', active: true, synthetic: false, path: ['Food'] },
+          },
+          {
+            field: 'ACCOUNT_ID' as const,
+            value: '10',
+            metadata: {
+              stableId: 'ACCOUNT:10',
+              label: 'Debit account',
+              color: '#4477aa',
+              active: true,
+              synthetic: false,
+              path: ['Debit account'],
+            },
+          },
+        ],
+        currencyCode: 'MXN',
+        values: [
+          { alias: 'gastos', value: 100, unit: 'MONEY' as const, availability: 'COMPLETE' as const },
+          { alias: 'conteo', value: 1, unit: 'COUNT' as const, availability: 'COMPLETE' as const },
+        ],
+      },
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'food',
+            metadata: { stableId: 'CATEGORY:food', label: 'Food', color: '#4477aa', active: true, synthetic: false, path: ['Food'] },
+          },
+          {
+            field: 'ACCOUNT_ID' as const,
+            value: '11',
+            metadata: {
+              stableId: 'ACCOUNT:11',
+              label: 'Credit account',
+              color: '#aa7744',
+              active: true,
+              synthetic: false,
+              path: ['Credit account'],
+            },
+          },
+        ],
+        currencyCode: 'MXN',
+        values: [
+          { alias: 'gastos', value: 0, unit: 'MONEY' as const, availability: 'ZERO' as const, derived: true },
+          { alias: 'conteo', value: 0, unit: 'COUNT' as const, availability: 'ZERO' as const, derived: true },
+        ],
+      },
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'travel',
+            metadata: { stableId: 'CATEGORY:travel', label: 'Travel', color: '#cc7733', active: true, synthetic: false, path: ['Travel'] },
+          },
+          {
+            field: 'ACCOUNT_ID' as const,
+            value: '10',
+            metadata: {
+              stableId: 'ACCOUNT:10',
+              label: 'Debit account',
+              color: '#4477aa',
+              active: true,
+              synthetic: false,
+              path: ['Debit account'],
+            },
+          },
+        ],
+        currencyCode: 'MXN',
+        values: [
+          { alias: 'gastos', value: null, unit: 'MONEY' as const, availability: 'UNAVAILABLE' as const },
+          { alias: 'conteo', value: null, unit: 'COUNT' as const, availability: 'NOT_APPLICABLE' as const },
+        ],
+      },
+    ];
+    const categoryThenAccount = {
+      ...definition,
+      projections: [
+        { alias: 'gastos', function: 'SUM' as const, field: 'TRANSACTION_AMOUNT', conditions: [] },
+        { alias: 'conteo', function: 'COUNT' as const, field: 'TRANSACTION_ID', conditions: [] },
+      ],
+      groupBy: ['CATEGORY_ROOT', 'ACCOUNT_ID'],
+    };
+    const view = render(<AnalyticsResultTable definition={categoryThenAccount} rows={rows} locale="en" onDrillDown={onDrillDown} />);
+
+    expect(screen.getByRole('columnheader', { name: 'Root category' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Account' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Group' })).toBeNull();
+    expect(screen.getAllByText('$0.00 MXN').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('No registered movements.').length).toBeGreaterThan(0);
+    expect(screen.getByText('Unavailable')).toBeTruthy();
+    expect(screen.getByText('Not applicable')).toBeTruthy();
+    expect(screen.queryByTestId('analyticsPivotResultTable')).toBeNull();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'View subcategories' })[0]);
+    expect(onDrillDown).toHaveBeenCalledWith('food', 'Food');
+    fireEvent.click(screen.getByRole('button', { name: 'Pivot' }));
+
+    expect(document.querySelector('[data-cy="analyticsPivotResultTable"]')).not.toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Debit account' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Credit account' })).toBeTruthy();
+    expect(screen.getAllByText('$100.00 MXN').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('No result').length).toBeGreaterThan(0);
+
+    const accountThenCategory = {
+      ...categoryThenAccount,
+      groupBy: ['ACCOUNT_ID', 'CATEGORY_ROOT'],
+    };
+    const reversedRows = rows.map(row => ({ ...row, dimensions: [row.dimensions[1], row.dimensions[0]] }));
+    view.rerender(<AnalyticsResultTable definition={accountThenCategory} rows={reversedRows} locale="en" onDrillDown={onDrillDown} />);
+    expect(screen.getByRole('columnheader', { name: 'Account' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /Food View subcategories/ })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: /Travel View subcategories/ })).toBeTruthy();
+  });
+
+  it('keeps scalar and one-dimensional tables detailed and refuses an ambiguous pivot instead of merging currencies', () => {
+    const scalarRows = [
+      {
+        dimensions: [],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 50, unit: 'MONEY' as const, availability: 'PARTIAL' as const }],
+      },
+    ];
+    const view = render(<AnalyticsResultTable definition={definition} rows={scalarRows} locale="en" onDrillDown={jest.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Pivot' })).toBeNull();
+    expect(screen.getByText('$50.00 MXN')).toBeTruthy();
+    expect(screen.getByText('Partial')).toBeTruthy();
+
+    const oneDimension = { ...definition, groupBy: ['CATEGORY_ROOT'] };
+    const oneDimensionRows = [
+      {
+        dimensions: [
+          {
+            field: 'CATEGORY_ROOT' as const,
+            value: 'food',
+            metadata: { stableId: 'CATEGORY:food', label: 'Food', color: null, active: true, synthetic: false, path: ['Food'] },
+          },
+        ],
+        currencyCode: 'MXN',
+        values: [{ alias: 'gastos', value: 50, unit: 'MONEY' as const, availability: 'COMPLETE' as const }],
+      },
+    ];
+    view.rerender(<AnalyticsResultTable definition={oneDimension} rows={oneDimensionRows} locale="en" onDrillDown={jest.fn()} />);
+    expect(screen.getByRole('columnheader', { name: 'Root category' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Pivot' })).toBeNull();
+
+    const ambiguousRows = [
+      ...oneDimensionRows.map(row => ({
+        ...row,
+        dimensions: [row.dimensions[0], { ...row.dimensions[0], field: 'ACCOUNT_ID', value: '10' }],
+      })),
+      ...oneDimensionRows.map(row => ({
+        ...row,
+        currencyCode: 'USD',
+        dimensions: [row.dimensions[0], { ...row.dimensions[0], field: 'ACCOUNT_ID', value: '10' }],
+      })),
+    ];
+    const ambiguousDefinition = { ...definition, groupBy: ['CATEGORY_ROOT', 'ACCOUNT_ID'] };
+    const model = pivotModelFor(ambiguousDefinition, ambiguousRows, 'en');
+    expect(model.unavailableReason).toMatch(/Multiple semantic rows/);
+  });
+
   it('keeps all twenty tag series available with stable IDs, fallback colors, search, show/hide, and isolate controls', () => {
     const rows = Array.from({ length: 20 }, (_, index) => ({
       dimensions: [
@@ -1109,7 +1280,7 @@ describe('Metric Explorer V2', () => {
     expect(document.querySelectorAll('[aria-pressed="false"]').length).toBeGreaterThanOrEqual(20);
     fireEvent.click(showAll);
     fireEvent.click(isolateTagTwenty);
-    expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(1);
+    expect(document.querySelectorAll('[data-cy="analyticsInteractiveLegend"] [aria-pressed="true"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-cy="analyticsResultTable"] tbody tr')).toHaveLength(20);
     expect(screen.getByText('Tags can overlap, so their totals are not exclusive parts of one total.')).toBeTruthy();
   });

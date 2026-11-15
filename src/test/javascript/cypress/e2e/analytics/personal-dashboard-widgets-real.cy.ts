@@ -11,6 +11,7 @@ describe('Personal dashboard widgets V2-4 real acceptance', () => {
   };
   let dashboardRun = 0;
   let dashboardId: number;
+  let dashboardVersion: number;
   let accountId: number;
   let categoryId: number;
 
@@ -63,7 +64,7 @@ describe('Personal dashboard widgets V2-4 real acceptance', () => {
     )
       .its('status')
       .should('eq', 201);
-    cy.authenticatedRequest<{ id: number }>({
+    cy.authenticatedRequest<{ id: number; version: number }>({
       method: 'POST',
       url: '/api/personal-dashboards',
       body: {
@@ -75,6 +76,7 @@ describe('Personal dashboard widgets V2-4 real acceptance', () => {
     }).then(({ body, status }) => {
       expect(status).to.equal(201);
       dashboardId = body.id;
+      dashboardVersion = body.version;
     });
     cy.intercept('POST', '/api/personal-dashboards/*/widgets').as('saveWidget');
     cy.intercept('PUT', '/api/personal-dashboards/*/widgets/*').as('updateWidget');
@@ -122,10 +124,32 @@ describe('Personal dashboard widgets V2-4 real acceptance', () => {
       expect(request.body.context.time.relativePeriod).to.equal('THIS_MONTH');
       expect(request.body.definition.groupBy).to.deep.equal(['CATEGORY_ROOT', 'TRANSACTION_MONTH']);
     });
-    cy.get('[data-cy^="personalDashboardEditWidget-"]').then(button => {
-      widgetId = Number(button.attr('data-cy')?.replace('personalDashboardEditWidget-', ''));
+    const savedWidget = '[data-cy^="personalDashboardWidget-"]';
+    cy.get(`${savedWidget} [data-cy="analyticsResultDetailsToggle"]`).click();
+    cy.get(`${savedWidget} [data-cy="analyticsDetailedResultTable"]`).within(() => {
+      cy.contains('th', /Categoría principal|Root category/).should('be.visible');
+      cy.contains('th', /Mes|Month/).should('be.visible');
+    });
+    cy.get('@executeWidget.all').then(requests => {
+      const executionsBeforePivot = requests.length;
+      cy.get(`${savedWidget} [data-cy="analyticsTableModePivot"]`).click();
+      cy.get(`${savedWidget} [data-cy="analyticsPivotResultTable"]`).should('be.visible');
+      cy.get('@executeWidget.all').should('have.length', executionsBeforePivot);
+    });
+    cy.get(`${savedWidget} [data-cy="analyticsPivotResultTable"]`).scrollIntoView();
+    cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(1440));
+    cy.screenshot('personal-dashboard-category-month-pivot-desktop', { capture: 'viewport' });
+    cy.viewport('iphone-6');
+    cy.get(`${savedWidget} [data-cy="analyticsPivotResultTable"]`).scrollIntoView();
+    cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(375));
+    cy.screenshot('personal-dashboard-category-month-pivot-mobile', { capture: 'viewport' });
+    cy.viewport(1440, 960);
+    cy.get(`${savedWidget} [data-cy="analyticsTableModeDetailed"]`).click();
+    cy.get('button[data-cy^="personalDashboardWidgetMenu-"]').then(button => {
+      widgetId = Number(button.attr('data-cy')?.replace('personalDashboardWidgetMenu-', ''));
       expect(widgetId).to.be.greaterThan(0);
       cy.wrap(button).click();
+      cy.get(`[data-cy="personalDashboardWidgetMenuEdit-${widgetId}"]`).click();
     });
     cy.wait('@loadDashboard');
     cy.get('[data-cy="analyticsPrimaryBreakdown"]').should('have.value', 'CATEGORY_ROOT');
@@ -203,10 +227,11 @@ describe('Personal dashboard widgets V2-4 real acceptance', () => {
       expect(request.body.context.time.relativePeriod).to.equal('THIS_MONTH');
       expect(request.body.definition.groupBy).to.deep.equal(['TRANSACTION_MONTH', 'CATEGORY_ROOT']);
     });
-    cy.get('[data-cy^="personalDashboardEditWidget-"]').then(button => {
-      widgetId = Number(button.attr('data-cy')?.replace('personalDashboardEditWidget-', ''));
+    cy.get('button[data-cy^="personalDashboardWidgetMenu-"]').then(button => {
+      widgetId = Number(button.attr('data-cy')?.replace('personalDashboardWidgetMenu-', ''));
       expect(widgetId).to.be.greaterThan(0);
       cy.wrap(button).click();
+      cy.get(`[data-cy="personalDashboardWidgetMenuEdit-${widgetId}"]`).click();
     });
     cy.wait('@loadDashboard');
     cy.get('[data-cy="analyticsPrimaryBreakdown"]').should('have.value', 'TIME');
@@ -221,5 +246,161 @@ describe('Personal dashboard widgets V2-4 real acceptance', () => {
       expect(body.widgets).to.have.length(1);
       expect(body.widgets[0]).to.include({ id: widgetId, position: 0, visible: true });
     });
+  });
+
+  it('presents a real category-account result in both authored orientations without re-executing for the table mode', () => {
+    const secondAccountName = `Second grouping account ${suffix}-${dashboardRun}`;
+    const categoryAccountDefinition = () => ({
+      schemaVersion: 1,
+      semanticModel: 'FINTRACK_FINANCIAL',
+      dataset: 'TRANSACTION_LEDGER',
+      timeBinding: 'TRANSACTION_DATE',
+      projections: [
+        { alias: 'gastos', function: 'SUM', field: 'TRANSACTION_AMOUNT', conditions: [] },
+        { alias: 'conteo', function: 'COUNT', field: 'TRANSACTION_ID', conditions: [] },
+      ],
+      predicates: [
+        { field: 'TRANSACTION_FLOW', operator: 'EQUALS', values: ['OUT'] },
+        { field: 'TRANSFER_LINK_STATUS', operator: 'EQUALS', values: ['UNLINKED'] },
+        { field: 'CATEGORY_ID', operator: 'EQUALS', values: [String(categoryId)] },
+      ],
+      groupBy: ['CATEGORY_ROOT', 'ACCOUNT_ID'],
+      orderBy: [
+        { field: 'CATEGORY_ROOT', projectionAlias: null, direction: 'ASC' },
+        { field: 'ACCOUNT_ID', projectionAlias: null, direction: 'ASC' },
+      ],
+      limit: 100,
+    });
+    let secondAccountId: number;
+
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/financial-accounts',
+      body: {
+        name: secondAccountName,
+        institutionName: 'Second grouping institution',
+        accountType: 'DEBIT',
+        currency: 'MXN',
+        initialBalance: 0,
+        initialBalanceDate: '2026-01-01',
+        active: true,
+      },
+    }).then(({ body, status }) => {
+      expect(status).to.equal(201);
+      secondAccountId = body.id;
+    });
+    cy.then(() =>
+      cy.authenticatedRequest({
+        method: 'POST',
+        url: '/api/financial-transactions',
+        body: {
+          transactionDate: '2026-11-02',
+          description: 'Second isolated category-account fixture',
+          amount: 50.25,
+          flow: 'OUT',
+          origin: 'MANUAL',
+          account: { id: secondAccountId },
+          category: { id: categoryId },
+        },
+      }),
+    )
+      .its('status')
+      .should('eq', 201);
+    cy.then(() =>
+      cy
+        .authenticatedRequest<{ version: number; name: string; description: string | null }>({
+          method: 'GET',
+          url: `/api/personal-dashboards/${dashboardId}`,
+        })
+        .then(({ body, status }) => {
+          expect(status).to.equal(200);
+          return cy.authenticatedRequest<{ version: number }>({
+            method: 'PUT',
+            url: `/api/personal-dashboards/${dashboardId}`,
+            body: {
+              expectedVersion: body.version,
+              name: body.name,
+              description: body.description,
+              defaultContext: { ...context, accountIds: [accountId, secondAccountId] },
+            },
+          });
+        })
+        .then(({ body, status }) => {
+          expect(status).to.equal(200);
+          dashboardVersion = body.version;
+        }),
+    );
+    const addTableWidget = (title: string, definition: object) =>
+      cy
+        .authenticatedRequest<{ version: number; widgets: Array<{ id: number; title: string }> }>({
+          method: 'POST',
+          url: `/api/personal-dashboards/${dashboardId}/widgets`,
+          body: {
+            expectedVersion: dashboardVersion,
+            title,
+            definition,
+            visualizationType: 'TABLE',
+            visualizationOptions: {},
+            width: 'FULL',
+            visible: true,
+            clientRequestId: `table-grouping-widget-${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${suffix}-${dashboardRun}`,
+          },
+        } as Cypress.RequestOptions)
+        .then(({ body, status }) => {
+          expect(status).to.equal(200);
+          dashboardVersion = body.version;
+          const widget = body.widgets.find(candidate => candidate.title === title);
+          expect(widget?.id).to.be.greaterThan(0);
+          return Number(widget?.id);
+        });
+
+    cy.then(() => addTableWidget('Category then account', categoryAccountDefinition()));
+    cy.then(() =>
+      addTableWidget('Account then category', {
+        ...categoryAccountDefinition(),
+        groupBy: ['ACCOUNT_ID', 'CATEGORY_ROOT'],
+        orderBy: [
+          { field: 'ACCOUNT_ID', projectionAlias: null, direction: 'ASC' },
+          { field: 'CATEGORY_ROOT', projectionAlias: null, direction: 'ASC' },
+        ],
+      }),
+    );
+
+    cy.viewport(1440, 960);
+    cy.visit(`/analytics/dashboards/personal/${dashboardId}`);
+    cy.wait('@loadDashboard');
+    cy.contains('h2', 'Category then account').closest('article').as('categoryFirstWidget');
+    cy.contains('h2', 'Account then category').closest('article').as('accountFirstWidget');
+    cy.get('@categoryFirstWidget')
+      .find('[data-cy="analyticsDetailedResultTable"]')
+      .within(() => {
+        cy.get('thead th').eq(0).should('contain.text', 'Categoría principal');
+        cy.get('thead th').eq(1).should('contain.text', 'Cuenta');
+        cy.contains('td', secondAccountName).should('be.visible');
+        cy.contains('td', '125.50').should('be.visible');
+        cy.contains('td', '50.25').should('be.visible');
+      });
+    cy.get('@executeWidget.all').then(requests => {
+      const executionsBeforePivot = requests.length;
+      cy.get('@categoryFirstWidget').find('[data-cy="analyticsTableModePivot"]').click();
+      cy.get('@categoryFirstWidget')
+        .find('[data-cy="analyticsPivotResultTable"]')
+        .within(() => {
+          cy.get('thead th').first().should('contain.text', 'Categoría principal');
+          cy.contains('th', secondAccountName).should('be.visible');
+          cy.contains('td', '125.50').should('be.visible');
+          cy.contains('td', '50.25').should('be.visible');
+        });
+      cy.get('@executeWidget.all').should('have.length', executionsBeforePivot);
+    });
+    cy.get('@accountFirstWidget').find('[data-cy="analyticsTableModePivot"]').click();
+    cy.get('@accountFirstWidget')
+      .find('[data-cy="analyticsPivotResultTable"]')
+      .within(() => {
+        cy.get('thead th').first().should('contain.text', 'Cuenta');
+        cy.contains('th', /Categoría principal|Widget grouping category/).should('be.visible');
+        cy.contains('td', '125.50').should('be.visible');
+        cy.contains('td', '50.25').should('be.visible');
+      });
   });
 });

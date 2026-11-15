@@ -317,6 +317,21 @@ describe('Recommended dashboards V2 real financial acceptance', () => {
     // The 22 configured categories plus one genuine uncategorized expense are separate financial groups.
     openDetails(categoryWidget);
     cy.get(`${categoryWidget} [data-cy="analyticsResultTable"] tbody tr`).should('have.length', 23);
+    cy.get(`${categoryWidget} [data-cy="analyticsDetailedResultTable"]`).within(() => {
+      cy.contains('th', /Mes|Month/).should('be.visible');
+      cy.contains('th', /Categoría principal|Root category/).should('be.visible');
+    });
+    cy.get('@dashboardExecute.all').then(requests => {
+      const executionsBeforePivot = requests.length;
+      cy.get(`${categoryWidget} [data-cy="analyticsTableModePivot"]`).click();
+      cy.get(`${categoryWidget} [data-cy="analyticsPivotResultTable"]`).within(() => {
+        cy.contains('th', /Mes|Month/).should('be.visible');
+        cy.contains('th', categories[0].name).should('be.visible');
+      });
+      cy.get('@dashboardExecute.all').should('have.length', executionsBeforePivot);
+    });
+    cy.get(`${categoryWidget} [data-cy="analyticsTableModeDetailed"]`).click();
+    cy.get(`${categoryWidget} [data-cy="analyticsDetailedResultTable"] tbody tr`).should('have.length', 23);
     cy.get(`${categoryWidget} [data-cy="analyticsInteractiveLegend"]`).within(() => {
       cy.contains('Series (23)').should('be.visible');
       cy.get('.overflow-auto').should('have.css', 'max-height', '176px');

@@ -17,6 +17,7 @@ import {
 import { Button } from 'reactstrap';
 
 import { ExplorerVisualization, SemanticAnalyticsResult, SemanticQueryDefinition } from './analytics-explorer.model';
+import { AnalyticsResultTable } from './analytics-result-table';
 import {
   copy,
   formatTemporalBucket,
@@ -785,70 +786,6 @@ const Kpis = ({ panel, locale, compact }: { panel: ResultPanel; locale: string; 
   </div>
 );
 
-const ResultTable = ({
-  rows,
-  locale,
-  onDrillDown,
-}: {
-  rows: Row[];
-  locale: string;
-  onDrillDown: (categoryId: string, labelText: string) => void;
-}) => (
-  <div className="table-responsive mt-3" data-cy="analyticsResultTable">
-    <table className="table table-sm mb-0">
-      <thead>
-        <tr>
-          <th scope="col">{copy(locale, 'Grupo', 'Group')}</th>
-          {rows[0]?.values.map(value => (
-            <th scope="col" key={value.alias}>
-              {presentationAlias(value.alias, locale)}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => {
-          const category = row.dimensions.find(
-            dimension => isCategoryField(dimension.field) && !!dimension.metadata?.stableId && !dimension.metadata.synthetic,
-          );
-          return (
-            <tr key={`${rowLabel(row, locale)}-${index}`}>
-              <th scope="row">
-                <span>{rowLabel(row, locale)}</span>
-                {category ? (
-                  <Button
-                    type="button"
-                    color="link"
-                    size="sm"
-                    className="p-0 ms-2"
-                    onClick={() => onDrillDown(String(category.value), category.metadata.label)}
-                  >
-                    {copy(locale, 'Ver subcategorías', 'View subcategories')}
-                  </Button>
-                ) : null}
-              </th>
-              {row.values.map(value => (
-                <td key={value.alias}>
-                  {display(value.value, value.unit, row.currencyCode, locale)}
-                  {value.derived ? (
-                    <span className="small text-muted d-block">
-                      {value.availability === 'NO_DATA'
-                        ? copy(locale, 'Sin movimientos registrados; no hay promedio.', 'No registered movements; no average.')
-                        : copy(locale, 'Sin movimientos registrados.', 'No registered movements.')}
-                    </span>
-                  ) : value.availability !== 'COMPLETE' ? (
-                    <span className="small text-muted d-block">{label(locale, value.availability)}</span>
-                  ) : null}
-                </td>
-              ))}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
-);
-
 /** Presentation adapts only returned semantic results. It never changes the query definition or context. */
 export const AnalyticsResultsPanel = ({
   definition,
@@ -987,7 +924,9 @@ export const AnalyticsResultsPanel = ({
                 )}
               </div>
             ) : null}
-            {current === 'TABLE' ? <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} /> : null}
+            {current === 'TABLE' ? (
+              <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+            ) : null}
             {current !== 'TABLE'
               ? panels.map(panel => {
                   const chart = current !== 'KPI';
@@ -1023,7 +962,9 @@ export const AnalyticsResultsPanel = ({
                   );
                 })
               : null}
-            {!compact && current !== 'TABLE' ? <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} /> : null}
+            {!compact && current !== 'TABLE' ? (
+              <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+            ) : null}
             {compact && current !== 'TABLE' ? (
               <div className="border-top pt-2">
                 <Button
@@ -1049,7 +990,7 @@ export const AnalyticsResultsPanel = ({
                 </p>
                 {detailsOpen ? (
                   <div id={detailsId} className="mt-2">
-                    <ResultTable rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+                    <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
                   </div>
                 ) : null}
               </div>
