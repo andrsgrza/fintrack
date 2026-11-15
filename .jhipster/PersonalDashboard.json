@@ -1,0 +1,38 @@
+{
+  "annotations": { "changelogDate": "20261104100000" },
+  "applications": ["fintrack"],
+  "documentation": "Owned personal dashboard aggregate. It stores a strict canonical VisualizationContext and widget definitions, never analytics results or legacy preferences.",
+  "dto": "no",
+  "fields": [
+    { "fieldName": "version", "fieldType": "Long", "fieldValidateRules": ["required"] },
+    { "fieldName": "name", "fieldType": "String", "fieldValidateRules": ["required", "maxlength"], "fieldValidateRulesMaxlength": "100" },
+    {
+      "fieldName": "normalizedName",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "120"
+    },
+    { "fieldName": "description", "fieldType": "String", "fieldValidateRules": ["maxlength"], "fieldValidateRulesMaxlength": "500" },
+    { "fieldName": "defaultContextJson", "fieldType": "TextBlob", "fieldValidateRules": ["required"] },
+    { "fieldName": "schemaVersion", "fieldType": "Integer", "fieldValidateRules": ["required"] },
+    { "fieldName": "createdAt", "fieldType": "Instant", "fieldValidateRules": ["required"] },
+    { "fieldName": "updatedAt", "fieldType": "Instant", "fieldValidateRules": ["required"] }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "PersonalDashboard",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityIsBuiltIn": true,
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

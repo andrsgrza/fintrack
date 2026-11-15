@@ -1,0 +1,41 @@
+{
+  "annotations": { "changelogDate": "20261104100000" },
+  "applications": ["fintrack"],
+  "documentation": "Bounded durable idempotency receipt for personal dashboard creation and widget creation. It never stores payloads or financial data.",
+  "dto": "no",
+  "fields": [
+    { "fieldName": "scope", "fieldType": "String", "fieldValidateRules": ["required", "maxlength"], "fieldValidateRulesMaxlength": "32" },
+    {
+      "fieldName": "clientRequestId",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "100"
+    },
+    {
+      "fieldName": "requestDigest",
+      "fieldType": "String",
+      "fieldValidateRules": ["required", "maxlength"],
+      "fieldValidateRulesMaxlength": "128"
+    },
+    { "fieldName": "dashboardId", "fieldType": "Long" },
+    { "fieldName": "widgetId", "fieldType": "Long" },
+    { "fieldName": "createdAt", "fieldType": "Instant", "fieldValidateRules": ["required"] }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "PersonalDashboardRequest",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "login",
+      "otherEntityIsBuiltIn": true,
+      "otherEntityName": "user",
+      "relationshipName": "user",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

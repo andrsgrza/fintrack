@@ -20,12 +20,12 @@
         "financialSubscription": "Financial Subscription",
         "budget": "Budget",
         "internalTransfer": "Transferencias internas",
+        "analyticsExplorer": "Explorador analítico",
         "transactionIngestion": "Transaction Ingestion",
         "apiIngestion": "Api Ingestion",
         "technical": "Técnico",
         "apiAccessToken": "Api Access Token",
-        "apiAccessTokenPermission": "Api Access Token Permission",
-        "userDashboardPreference": "User Dashboard Preference"
+        "apiAccessTokenPermission": "Api Access Token Permission"
       },
       "account": {
         "main": "Cuenta",

@@ -44,12 +44,16 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** PostgreSQL contracts for atomic batch publication and bounded receipt retention. */
 @IntegrationTest
@@ -94,6 +98,45 @@ class TransactionBatchPublishServiceIT {
 
     @Autowired
     private TagRepository tagRepository;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
+    private final Set<Long> committedFailureFixtureAccountIds = new LinkedHashSet<>();
+
+    private final Set<Long> committedFailureFixtureBatchIds = new LinkedHashSet<>();
+
+    /**
+     * The two rollback-injection tests run outside a test-managed transaction so the publication service can verify
+     * its own atomic rollback. Their setup commits before that service call, therefore only their tracked fixtures
+     * need explicit, FK-safe cleanup.
+     */
+    @AfterEach
+    void removeCommittedRollbackFixtures() {
+        transactionTemplate.executeWithoutResult(status -> {
+            for (Long batchId : committedFailureFixtureBatchIds) {
+                candidateRepository.deleteTagLinksByTransactionBatchId(batchId);
+                candidateRepository.deleteByTransactionBatchId(batchId);
+                batchRepository.deleteById(batchId);
+            }
+            for (Long accountId : committedFailureFixtureAccountIds) {
+                internalTransferRepository.deleteByAccountIdInEitherRole(accountId);
+                financialTransactionRepository.deleteTagLinksByAccountId(accountId);
+                financialTransactionRepository.deleteByAccountId(accountId);
+            }
+            committedFailureFixtureAccountIds.forEach(accountRepository::deleteById);
+        });
+
+        transactionTemplate.executeWithoutResult(status -> {
+            assertThat(committedFailureFixtureBatchIds).allSatisfy(batchId -> assertThat(batchRepository.existsById(batchId)).isFalse());
+            assertThat(committedFailureFixtureAccountIds).allSatisfy(accountId ->
+                assertThat(accountRepository.existsById(accountId)).isFalse()
+            );
+        });
+
+        committedFailureFixtureBatchIds.clear();
+        committedFailureFixtureAccountIds.clear();
+    }
 
     @Test
     @Transactional
@@ -605,9 +648,9 @@ class TransactionBatchPublishServiceIT {
 
     @Test
     void rollsBackSourceRowsAndTemporaryIntentWhenCounterpartMaterializationFailsAfterSourcePersistence() {
-        FinancialAccount source = account();
-        FinancialAccount target = account();
-        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+        FinancialAccount source = committedFailureFixtureAccount();
+        FinancialAccount target = committedFailureFixtureAccount();
+        TransactionBatchWorkspaceDTO batch = createCommittedFailureFixtureBatch(source.getId());
         TransactionBatchRowMutationDTO normal = commandService.addManualDraft(
             batch.getId(),
             completeDraft(batch.getVersion(), "Rollback ordinary source", "-20.00")
@@ -664,9 +707,14 @@ class TransactionBatchPublishServiceIT {
 
     @Test
     void rollsBackSourceRowsWhenPersistingALinkAggregateFailsAfterLockedPreflight() {
-        FinancialAccount source = account();
-        FinancialTransaction counterpart = publishedTransaction(account(), TransactionFlow.IN, "44.00", "Rollback existing counterpart");
-        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(source.getId());
+        FinancialAccount source = committedFailureFixtureAccount();
+        FinancialTransaction counterpart = publishedTransaction(
+            committedFailureFixtureAccount(),
+            TransactionFlow.IN,
+            "44.00",
+            "Rollback existing counterpart"
+        );
+        TransactionBatchWorkspaceDTO batch = createCommittedFailureFixtureBatch(source.getId());
         TransactionBatchRowMutationDTO normal = commandService.addManualDraft(
             batch.getId(),
             completeDraft(batch.getVersion(), "Rollback link ordinary", "-15.00")
@@ -785,6 +833,18 @@ class TransactionBatchPublishServiceIT {
             .updatedAt(Instant.now())
             .user(user());
         return accountRepository.saveAndFlush(account);
+    }
+
+    private FinancialAccount committedFailureFixtureAccount() {
+        FinancialAccount account = account();
+        committedFailureFixtureAccountIds.add(account.getId());
+        return account;
+    }
+
+    private TransactionBatchWorkspaceDTO createCommittedFailureFixtureBatch(Long accountId) {
+        TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(accountId);
+        committedFailureFixtureBatchIds.add(batch.getId());
+        return batch;
     }
 
     private Category category(boolean active) {

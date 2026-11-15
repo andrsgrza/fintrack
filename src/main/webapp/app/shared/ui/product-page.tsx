@@ -46,12 +46,12 @@ export const ProductPageHeader = ({
     data-testid={accentDataCy}
     style={accentColor ? { borderInlineStart: `0.35rem solid ${accentColor}`, paddingInlineStart: '1rem' } : undefined}
   >
-    <div>
-      <h2 id={headingId} className="mb-1" data-cy={dataCy}>
+    <div style={{ minWidth: 0 }}>
+      <h2 id={headingId} className="mb-1 text-break" data-cy={dataCy}>
         {title}
       </h2>
       {metadata ? <div className="d-flex flex-wrap align-items-center gap-2 mb-1">{metadata}</div> : null}
-      {subtitle ? <p className="text-muted mb-0">{subtitle}</p> : null}
+      {subtitle ? <p className="text-muted mb-0 text-break">{subtitle}</p> : null}
     </div>
     {actions ? <div className={`d-flex flex-wrap align-items-center gap-2 flex-shrink-0 ${actionsClassName}`}>{actions}</div> : null}
   </header>

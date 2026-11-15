@@ -19,8 +19,12 @@ import InternalTransfer from './internal-transfer';
 import ApiIngestion from './api-ingestion';
 import ApiAccessToken from './api-access-token';
 import ApiAccessTokenPermission from './api-access-token-permission';
-import UserDashboardPreference from './user-dashboard-preference';
 import TransactionBatch from './transaction-batch';
+import AnalyticsExplorer from './analytics-explorer/analytics-explorer';
+import PersonalDashboardGallery from './personal-dashboards/personal-dashboard-gallery';
+import PersonalDashboardDefaultRedirect from './personal-dashboards/personal-dashboard-default-redirect';
+import PersonalDashboardViewer from './personal-dashboards/personal-dashboard-viewer';
+import RecommendedDashboards from './recommended-dashboards/recommended-dashboards';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
 export default () => {
@@ -32,6 +36,11 @@ export default () => {
         <Route path="credit-account-details/*" element={<CreditAccountDetails />} />
         <Route path="financial-transaction/*" element={<FinancialTransaction />} />
         <Route path="transaction-batches/*" element={<TransactionBatch />} />
+        <Route path="analytics/explorer" element={<AnalyticsExplorer />} />
+        <Route path="analytics/dashboards" element={<PersonalDashboardGallery />} />
+        <Route path="analytics/dashboards/default" element={<PersonalDashboardDefaultRedirect />} />
+        <Route path="analytics/dashboards/personal/:dashboardId" element={<PersonalDashboardViewer />} />
+        <Route path="analytics/dashboards/:dashboardId" element={<RecommendedDashboards />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />
         <Route path="rules/*" element={<Rules />} />
@@ -45,7 +54,6 @@ export default () => {
         <Route path="api-ingestion/*" element={<ApiIngestion />} />
         <Route path="api-access-token/*" element={<ApiAccessToken />} />
         <Route path="api-access-token-permission/*" element={<ApiAccessTokenPermission />} />
-        <Route path="user-dashboard-preference/*" element={<UserDashboardPreference />} />
         {/* jhipster-needle-add-route-path - JHipster will add routes here */}
       </ErrorBoundaryRoutes>
     </div>

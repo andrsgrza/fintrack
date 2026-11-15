@@ -163,11 +163,11 @@ npm run jest -- tag
   -Dtest=ApiAccessTokenPermissionResourceIT,ApiAccessTokenPermissionServiceTest,CurrentUserServiceTest test
 ```
 
-**UserDashboardPreference (pattern A — direct `user` + 1:1 guard):**
+**Personal dashboards (owner-scoped command aggregate):**
 
 ```bash
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
-  -Dtest=UserDashboardPreferenceResourceIT,UserDashboardPreferenceServiceTest,CurrentUserServiceTest test
+  -Dtest=PersonalDashboardResourceIT,SemanticAnalyticsResourceIT test
 ```
 
 **InternalTransfer (pattern D — via both transaction legs):**
@@ -209,7 +209,7 @@ npm run jest -- tag
 
 ```bash
 ./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
-  -Dtest=FinancialAccountResourceIT,FinancialAccountServiceTest,FinancialTransactionResourceIT,FinancialTransactionServiceTest,TagResourceIT,TagServiceTest,CategoryResourceIT,CategoryServiceTest,BudgetResourceIT,BudgetServiceTest,FinancialSubscriptionResourceIT,FinancialSubscriptionServiceTest,TransactionRuleResourceIT,TransactionRuleServiceTest,TransactionRuleConditionResourceIT,TransactionRuleConditionServiceTest,CreditAccountDetailsResourceIT,CreditAccountDetailsServiceTest,ApiAccessTokenResourceIT,ApiAccessTokenServiceTest,ApiAccessTokenPermissionResourceIT,ApiAccessTokenPermissionServiceTest,UserDashboardPreferenceResourceIT,UserDashboardPreferenceServiceTest,InternalTransferResourceIT,TransactionIngestionResourceIT,TransactionIngestionServiceTest,FileIngestionResourceIT,FileIngestionServiceTest,ApiIngestionResourceIT,ApiIngestionServiceTest,IngestionRecordResourceIT,IngestionRecordServiceTest,CurrentUserServiceTest test
+  -Dtest=FinancialAccountResourceIT,FinancialAccountServiceTest,FinancialTransactionResourceIT,FinancialTransactionServiceTest,TagResourceIT,TagServiceTest,CategoryResourceIT,CategoryServiceTest,BudgetResourceIT,BudgetServiceTest,FinancialSubscriptionResourceIT,FinancialSubscriptionServiceTest,TransactionRuleResourceIT,TransactionRuleServiceTest,TransactionRuleConditionResourceIT,TransactionRuleConditionServiceTest,CreditAccountDetailsResourceIT,CreditAccountDetailsServiceTest,ApiAccessTokenResourceIT,ApiAccessTokenServiceTest,ApiAccessTokenPermissionResourceIT,ApiAccessTokenPermissionServiceTest,PersonalDashboardResourceIT,InternalTransferResourceIT,TransactionIngestionResourceIT,TransactionIngestionServiceTest,FileIngestionResourceIT,FileIngestionServiceTest,ApiIngestionResourceIT,ApiIngestionServiceTest,IngestionRecordResourceIT,IngestionRecordServiceTest,CurrentUserServiceTest test
 ```
 
 ### Backend — all tests
@@ -259,8 +259,9 @@ CAT-UX-3.5C/3.5D/3.5E extends `category-ux.spec.tsx` and `category.cy.ts` with t
 # ApiAccessTokenPermission
 ./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/api-access-token-permission.cy.ts
 
-# UserDashboardPreference
-./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/user-dashboard-preference.cy.ts
+# Personal dashboards
+./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/analytics/personal-dashboards-real.cy.ts
+./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/analytics/personal-dashboard-widgets-real.cy.ts
 
 # InternalTransfer
 ./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/internal-transfer.cy.ts
@@ -327,7 +328,7 @@ Replicate per entity: `CurrentUserService` → Repository scoped queries → Ser
 | **CreditAccountDetails**     | ✅          | ✅                       | ✅           | ✅           | ✅            | Pattern B via account — documented below                               |
 | **ApiAccessToken**           | ✅          | ✅                       | ✅           | ✅           | ✅            | Pattern A + 11C delete/snapshots + reveal-once create                  |
 | **ApiAccessTokenPermission** | ✅          | ✅                       | ✅           | ✅           | ✅            | Pattern C via token — documented below                                 |
-| **UserDashboardPreference**  | ✅          | ✅                       | ✅           | ✅           | ✅            | Pattern A + 1:1 guard — documented below                               |
+| **PersonalDashboard**        | —           | —                        | —            | ✅           | ✅            | Owner-scoped command aggregate; widgets and layout covered below       |
 | **InternalTransfer**         | ✅          | ✅                       | ✅           | ✅           | ✅            | Pattern D via both tx legs — documented below                          |
 | **TransactionIngestion**     | ✅          | ✅                       | ✅           | ✅           | ✅            | Pattern B via `account`; lifecycle + revert delete                     |
 | **FileIngestion**            | ✅          | ✅                       | ✅           | ✅           | 🟡            | Pattern C via `transactionIngestion` — documented below                |
@@ -2343,86 +2344,32 @@ Create rehabilitated; token selector only on create; `permission`/`apiAccessToke
 
 ---
 
-## UserDashboardPreference
+## PersonalDashboard
 
-**Ownership model:** pattern A — direct `user`. Normal users see/edit/delete only their own preference row. `ROLE_ADMIN` bypasses filters. **At most one preference per user** enforced in service via `existsByUserId`.
+Personal dashboards are covered as an owner-scoped command aggregate, not as generated entity
+CRUD. The tested contract is the same one documented in
+[ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md): an independent
+dashboard context, canonical widget definitions, versioned aggregate mutations, and no persisted
+financial results.
 
-**Owner:** DTO `user` optional; mapper ignores it; service assigns `currentUser` on create and preserves owner on update/patch. PATCH uses `JsonNode`: absent field preserves owner; `"user": null` → `400`.
+| Layer               | Primary coverage                                                                                                                                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| REST / PostgreSQL   | `PersonalDashboardResourceIT` verifies owner scope, name and widget limits, optimistic version checks, idempotency, layout changes, template copies, canonical query/context separation, and valid/invalid visualization shapes.  |
+| Semantic validation | `SemanticAnalyticsResourceIT`, executor integration tests, and validator tests ensure a widget can persist only a governed query and compatible visualization.                                                                    |
+| Browser / REST      | `analytics/personal-dashboards-real.cy.ts` covers gallery and creation. `analytics/personal-dashboard-widgets-real.cy.ts` covers execute → save → reload → edit, including both category/month ordering variants for line charts. |
+| Frontend            | `personal-dashboards.spec.tsx` and `analytics-explorer.spec.tsx` cover visual/written parity, context separation, template copies, and saved-widget editing.                                                                      |
 
-### Summary counts
-
-| Type           | File                                 | Tests  | Custom vs generated                                |
-| -------------- | ------------------------------------ | ------ | -------------------------------------------------- |
-| Integration IT | `UserDashboardPreferenceResourceIT`  | **40** | 24 custom (ownership + domain rules) + 16 JHipster |
-| Unit — service | `UserDashboardPreferenceServiceTest` | **13** | All custom                                         |
-| Unit — mapper  | `UserDashboardPreferenceMapperTest`  | **1**  | Generated                                          |
-| Unit — domain  | `UserDashboardPreferenceTest`        | **6**  | Generated                                          |
-| Unit — DTO     | `UserDashboardPreferenceDTOTest`     | **1**  | Generated                                          |
-| E2E            | `user-dashboard-preference.cy.ts`    | **9**  | CRUD rehabilitated; no user selector               |
-
-**Run:**
+**Focused backend run:**
 
 ```bash
-./mvnw -ntp -Dskip.installnodenpm -Dskip.npm \
-  -Dtest=UserDashboardPreferenceResourceIT,UserDashboardPreferenceServiceTest test
+./mvnw -ntp -Dskip.installnodenpm -Dskip.npm -Dtest=PersonalDashboardResourceIT,SemanticAnalyticsResourceIT test
 ```
 
-### Integration tests — `UserDashboardPreferenceResourceIT`
+**Focused real-browser run:**
 
-**Test data:** `createEntity()` asigna mock user `user`.
-
-#### Ownership & authorization (11) — ✅ custom
-
-Standard matrix (GET/DELETE → 404 cross-user; PUT/PATCH → 400).
-
-#### Owner assignment (3) — ✅ custom
-
-| Test                                                             | What it checks                        |
-| ---------------------------------------------------------------- | ------------------------------------- |
-| `createUserDashboardPreferenceWithoutUserInPayloadSucceeds`      | No `user` in POST → assigns current   |
-| `createUserDashboardPreferenceWithForeignUserAssignsCurrentUser` | Foreign `user` ignored                |
-| `updateUserDashboardPreferenceCannotChangeOwner`                 | PUT with other user → owner preserved |
-
-#### 1:1 guard (1) — ✅ custom
-
-| Test                                                             | What it checks             |
-| ---------------------------------------------------------------- | -------------------------- |
-| `createUserDashboardPreferenceWhenUserAlreadyHasPreferenceFails` | Duplicate per user → `400` |
-
-#### PATCH user semantics (3) — ✅ custom
-
-| Test                                                         | What it checks                            |
-| ------------------------------------------------------------ | ----------------------------------------- |
-| `patchUserDashboardPreferenceWithoutUserFieldPreservesOwner` | Omit `user` → preserved                   |
-| `patchUserDashboardPreferenceWithNullUserFails`              | `"user": null` → `400`                    |
-| `patchUserDashboardPreferenceCannotChangeOwner`              | PATCH with foreign user → owner preserved |
-
-#### Domain rules — `configuration` JSON (7) — ✅ custom
-
-| Test                                                               | What it checks                              |
-| ------------------------------------------------------------------ | ------------------------------------------- |
-| `createUserDashboardPreferenceWithNullConfigurationFails`          | POST `configuration: null` → `400` invalid  |
-| `createUserDashboardPreferenceWithBlankConfigurationFails`         | POST whitespace-only → `400` invalid        |
-| `createUserDashboardPreferenceWithInvalidJsonConfigurationFails`   | POST non-JSON → `400` invalid               |
-| `createUserDashboardPreferenceWithJsonPrimitiveConfigurationFails` | POST JSON primitive → `400` invalid         |
-| `updateUserDashboardPreferenceWithInvalidConfigurationFails`       | PUT bad JSON → `400` invalid                |
-| `patchUserDashboardPreferenceWithNullConfigurationFails`           | PATCH `configuration: null` → `400` invalid |
-| `patchUserDashboardPreferenceWithJsonArrayConfigurationIsAllowed`  | PATCH `[]` → `200`                          |
-
-### Unit — `UserDashboardPreferenceServiceTest` (13) — ✅ custom
-
-Assign owner, duplicate guard, preserve owner, PATCH null user, scoped `findAll`, delete not accessible, configuration validation, PATCH omit `configuration` skips validation.
-
-### E2E — `user-dashboard-preference.cy.ts`
-
-Create rehabilitated; no user selector on form.
-
-### Gaps
-
-| Priority | Layer | Test                                    | Status |
-| -------- | ----- | --------------------------------------- | ------ |
-| Medium   | IT    | Endpoint `/me` for dashboard UX         | ⏳     |
-| Low      | E2E   | UI ownership smoke (user vs admin list) | ⏳     |
+```bash
+./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/analytics/personal-dashboard-widgets-real.cy.ts
+```
 
 ---
 
@@ -3064,7 +3011,11 @@ Copy this block when hardening the next entity:
 
 ---
 
-## Changelog
+## Changelog (historical record)
+
+> The older entries preserve the original entity names and counts. The current Analytics and
+> dashboard test surface is documented in the `PersonalDashboard` section above and in
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
 
 | Date       | Entity                                                            | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

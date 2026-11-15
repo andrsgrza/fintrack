@@ -548,19 +548,6 @@ entity ApiAccessTokenPermission {
 }
 
 /**
- * Stores JSON preferences for the application's fixed dashboard.
-
- * JHipster 8.11 generates this as ManyToOne to the built-in User entity.
- * A unique database constraint on user_id will enforce one preference row
- * per user after generation.
- */
-entity UserDashboardPreference {
-  configuration TextBlob required
-  createdAt Instant required
-  updatedAt Instant required
-}
-
-/**
  * DIRECT USER OWNERSHIP
  *
  * These are unidirectional relationships to JHipster's built-in User entity.
@@ -574,7 +561,6 @@ relationship ManyToOne {
   FinancialSubscription{user(login) required} to User with builtInEntity
   Budget{user(login) required} to User with builtInEntity
   ApiAccessToken{user(login) required} to User with builtInEntity
-  UserDashboardPreference{user(login) required} to User with builtInEntity
 }
 
 /**

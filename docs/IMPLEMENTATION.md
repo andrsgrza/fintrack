@@ -64,7 +64,12 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 **Convención HTTP cross-user (todas las entidades con ownership):** PUT/PATCH de recurso ajeno → `400` `idnotfound`; GET/DELETE → `404`. No variar por entidad.
 
-### Ownership progress (17 / 17 entidades)
+### Ownership progress
+
+> **Analytics update — 2026-11-04:** the legacy `UserDashboardPreference` generated entity was
+> retired. `PersonalDashboard` is now an owner-scoped command aggregate; its widgets are owned by
+> the dashboard rather than exposed as standalone CRUD. See
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
 
 | Entity                   | Pattern                                                | Ownership |
 | ------------------------ | ------------------------------------------------------ | --------- |
@@ -79,7 +84,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 | CreditAccountDetails     | B — via `account`                                      | ✅        |
 | ApiAccessToken           | A — direct `user`                                      | ✅        |
 | ApiAccessTokenPermission | C — via `apiAccessToken`                               | ✅        |
-| UserDashboardPreference  | A — direct `user` (1:1)                                | ✅        |
+| PersonalDashboard        | A — direct `user`; widgets via dashboard command root  | ✅        |
 | InternalTransfer         | D — via both tx legs                                   | ✅        |
 | TransactionIngestion     | B — via `account`                                      | ✅        |
 | ApiIngestion             | C — via `transactionIngestion` + token snapshots (11C) | ✅        |
@@ -88,24 +93,24 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 ## Master tracker — 15 entidades
 
-| #   | Entity                       | Pattern                                                | Phase | Ownership | Domain rules  | Validations | Tests                                                                                                |
-| --- | ---------------------------- | ------------------------------------------------------ | ----- | --------- | ------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
-| 1   | **FinancialAccount**         | A — direct `user`                                      | 1     | ✅        | ✅            | ✅          | [TESTING.md § FA](TESTING.md#financialaccount) · [VALIDATIONS §1](VALIDATIONS.md#1-financialaccount) |
-| 2   | **FinancialTransaction**     | B — via `account`                                      | 2     | ✅        | ✅            | ✅          | [TESTING.md § FT](TESTING.md#financialtransaction)                                                   |
-| —   | **TransactionCandidate**     | A + links — direct `user`, optional account/ingestion  | TC-1  | ✅        | ✅ foundation | ✅          | [TESTING.md § TC](TESTING.md#transactioncandidate)                                                   |
-| 3   | **CreditAccountDetails**     | B — via `account`                                      | 4     | ✅        | ✅            | ✅          | [TESTING.md § CAD](TESTING.md#creditaccountdetails)                                                  |
-| 4   | **Category**                 | A — direct `user`                                      | 3     | ✅        | ✅            | ✅          | [TESTING.md § Category](TESTING.md#category)                                                         |
-| 5   | **Tag**                      | A — direct `user`                                      | 3     | ✅        | ✅            | ✅          | [TESTING.md § Tag](TESTING.md#tag) · [VALIDATIONS §5](VALIDATIONS.md#5-tag)                          |
-| 6   | **TransactionRule**          | A — direct `user`                                      | 3 / 6 | ✅        | ✅            | ✅          | [TESTING.md § TransactionRule](TESTING.md#transactionrule)                                           |
-| 7   | **TransactionRuleCondition** | C — via `transactionRule`                              | 6     | ✅        | ✅            | ✅          | [TESTING.md § TRC](TESTING.md#transactionrulecondition)                                              |
-| 8   | **FinancialSubscription**    | A + links                                              | 3 / 4 | ✅        | ✅            | ✅          | [TESTING.md § FinancialSubscription](TESTING.md#financialsubscription)                               |
-| 9   | **Budget**                   | A + M2M                                                | 3 / 4 | ✅        | ✅            | ✅          | [TESTING.md § Budget](TESTING.md#budget)                                                             |
-| 10  | **InternalTransfer**         | D — via 2 transactions                                 | 4     | ✅        | ✅            | ✅          | [TESTING.md § IT](TESTING.md#internaltransfer)                                                       |
-| 11  | **TransactionIngestion**     | B — via `account`                                      | 6     | ✅        | ✅            | ✅          | [TESTING.md § TI](TESTING.md#transactioningestion)                                                   |
-| 12  | **ApiIngestion**             | C — via `transactionIngestion` + token snapshots (11C) | 6     | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AI](TESTING.md#apiingestion)                                                           |
-| 13  | **ApiAccessToken**           | A — direct `user`                                      | 3 / 6 | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AAT](TESTING.md#apiaccesstoken)                                                        |
-| 14  | **ApiAccessTokenPermission** | C — via `apiAccessToken`                               | 6     | ✅        | ✅            | ✅          | [TESTING.md § AATP](TESTING.md#apiaccesstokenpermission)                                             |
-| 15  | **UserDashboardPreference**  | A — direct `user` (1:1 user)                           | 3     | ✅        | ✅            | ✅          | [TESTING.md § UDP](TESTING.md#userdashboardpreference)                                               |
+| #   | Entity                       | Pattern                                                | Phase     | Ownership | Domain rules  | Validations | Tests                                                                                                |
+| --- | ---------------------------- | ------------------------------------------------------ | --------- | --------- | ------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | **FinancialAccount**         | A — direct `user`                                      | 1         | ✅        | ✅            | ✅          | [TESTING.md § FA](TESTING.md#financialaccount) · [VALIDATIONS §1](VALIDATIONS.md#1-financialaccount) |
+| 2   | **FinancialTransaction**     | B — via `account`                                      | 2         | ✅        | ✅            | ✅          | [TESTING.md § FT](TESTING.md#financialtransaction)                                                   |
+| —   | **TransactionCandidate**     | A + links — direct `user`, optional account/ingestion  | TC-1      | ✅        | ✅ foundation | ✅          | [TESTING.md § TC](TESTING.md#transactioncandidate)                                                   |
+| 3   | **CreditAccountDetails**     | B — via `account`                                      | 4         | ✅        | ✅            | ✅          | [TESTING.md § CAD](TESTING.md#creditaccountdetails)                                                  |
+| 4   | **Category**                 | A — direct `user`                                      | 3         | ✅        | ✅            | ✅          | [TESTING.md § Category](TESTING.md#category)                                                         |
+| 5   | **Tag**                      | A — direct `user`                                      | 3         | ✅        | ✅            | ✅          | [TESTING.md § Tag](TESTING.md#tag) · [VALIDATIONS §5](VALIDATIONS.md#5-tag)                          |
+| 6   | **TransactionRule**          | A — direct `user`                                      | 3 / 6     | ✅        | ✅            | ✅          | [TESTING.md § TransactionRule](TESTING.md#transactionrule)                                           |
+| 7   | **TransactionRuleCondition** | C — via `transactionRule`                              | 6         | ✅        | ✅            | ✅          | [TESTING.md § TRC](TESTING.md#transactionrulecondition)                                              |
+| 8   | **FinancialSubscription**    | A + links                                              | 3 / 4     | ✅        | ✅            | ✅          | [TESTING.md § FinancialSubscription](TESTING.md#financialsubscription)                               |
+| 9   | **Budget**                   | A + M2M                                                | 3 / 4     | ✅        | ✅            | ✅          | [TESTING.md § Budget](TESTING.md#budget)                                                             |
+| 10  | **InternalTransfer**         | D — via 2 transactions                                 | 4         | ✅        | ✅            | ✅          | [TESTING.md § IT](TESTING.md#internaltransfer)                                                       |
+| 11  | **TransactionIngestion**     | B — via `account`                                      | 6         | ✅        | ✅            | ✅          | [TESTING.md § TI](TESTING.md#transactioningestion)                                                   |
+| 12  | **ApiIngestion**             | C — via `transactionIngestion` + token snapshots (11C) | 6         | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AI](TESTING.md#apiingestion)                                                           |
+| 13  | **ApiAccessToken**           | A — direct `user`                                      | 3 / 6     | ✅        | ✅ (11C)      | ✅          | [TESTING.md § AAT](TESTING.md#apiaccesstoken)                                                        |
+| 14  | **ApiAccessTokenPermission** | C — via `apiAccessToken`                               | 6         | ✅        | ✅            | ✅          | [TESTING.md § AATP](TESTING.md#apiaccesstokenpermission)                                             |
+| 15  | **PersonalDashboard**        | A — direct `user`; widgets via aggregate               | Analytics | ✅        | ✅            | ✅          | [Analytics V2.5](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md)                                              |
 
 ### Delete confirmation dialogs — Grupo 1 UX ✅
 
@@ -113,7 +118,7 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 | Entity                       | Dialog behavior                                                                                | i18n keys                                                     |
 | ---------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| **UserDashboardPreference**  | Confirm reset; financial data unaffected                                                       | `delete.title`, `delete.message`                              |
+| **PersonalDashboard**        | Aggregate command delete; owned widget rows are removed with the dashboard                     | Personal dashboard viewer command                             |
 | **ApiAccessTokenPermission** | Confirm permission removal; token and history survive                                          | `delete.title`, `delete.message`                              |
 | **ApiAccessToken**           | Confirm delete; permissions removed; **ingestion history survives** (snapshot audit 11C)       | `delete.title`, `delete.message`                              |
 | **CreditAccountDetails**     | **No delete button** — informational only (direct delete blocked server-side)                  | `delete.title`, `delete.message`                              |
@@ -125,12 +130,12 @@ Fase 6  Ingestion + API + rules engine    → TransactionIngestion, ApiAccessTok
 
 ### Ownership patterns (referencia)
 
-| Pattern | Descripción                        | Entidades                                                                                                                |
-| ------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **A**   | `user` directo required            | FinancialAccount, Category, Tag, TransactionRule, FinancialSubscription, Budget, ApiAccessToken, UserDashboardPreference |
-| **B**   | Owned vía relación padre (1 nivel) | FinancialTransaction → account; CreditAccountDetails → account; TransactionIngestion → account                           |
-| **C**   | Owned vía cadena (hijo de hijo)    | TransactionRuleCondition, ApiIngestion, ApiAccessTokenPermission                                                         |
-| **D**   | Owned vía reglas compuestas        | InternalTransfer (2 tx, mismo user/moneda)                                                                               |
+| Pattern | Descripción                        | Entidades                                                                                                                           |
+| ------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **A**   | `user` directo required            | FinancialAccount, Category, Tag, TransactionRule, FinancialSubscription, Budget, ApiAccessToken, PersonalDashboard                  |
+| **B**   | Owned vía relación padre (1 nivel) | FinancialTransaction → account; CreditAccountDetails → account; TransactionIngestion → account; PersonalDashboardWidget → dashboard |
+| **C**   | Owned vía cadena (hijo de hijo)    | TransactionRuleCondition, ApiIngestion, ApiAccessTokenPermission                                                                    |
+| **D**   | Owned vía reglas compuestas        | InternalTransfer (2 tx, mismo user/moneda)                                                                                          |
 
 **Admin:** en todas las entidades user-scoped, `ROLE_ADMIN` debe poder ver y modificar todo (mismo criterio que FinancialAccount).
 
@@ -1253,37 +1258,15 @@ TC-4B removes old ingestion classification surfaces: `POST /api/transaction-inge
 
 ---
 
-### 17. UserDashboardPreference ✅ ✅ ✅
+### 17. PersonalDashboard ✅
 
-**JDL:** `user` required; `configuration` TextBlob (JSON); 1 fila lógica por user.
-
-#### Ownership ✅ — Pattern A + 1:1
-
-| Regla                              | Implementación                                              |
-| ---------------------------------- | ----------------------------------------------------------- |
-| Create asigna `user = currentUser` | `UserDashboardPreferenceService.save()`                     |
-| Cliente no elige user              | DTO `user` opcional; mapper ignora `user`                   |
-| List / get scoped por user         | `findAccessibleEntity()` + repository                       |
-| Admin bypass                       | `CurrentUserService.isAdmin()`                              |
-| UI sin User                        | `user-dashboard-preference-update.tsx`                      |
-| PATCH `user`                       | JsonNode: ausente preserva; `null` → `400`; owner inmutable |
-
-#### Validaciones baseline ✅
-
-| Regla                          | Implementación               |
-| ------------------------------ | ---------------------------- |
-| Máximo una preference por user | `existsByUserId()` en create |
-
-#### Domain rules ✅
-
-| Regla                                        | Estado | Notas                                     |
-| -------------------------------------------- | ------ | ----------------------------------------- |
-| DELETE simple (solo la fila)                 | ✅     | Sin cascade                               |
-| `configuration` required + JSON object/array | ✅     | `validateConfiguration()`; `{}` y `[]` OK |
-| PATCH omit `configuration`                   | ✅     | Preserva valor; sin revalidar             |
-| Schema widgets / `/me` / upsert              | ⏳     | Deferred                                  |
-
-**Fuera de scope:** endpoint `/me`, dashboard engine, merge JSON profundo, schema validation, QueryService, `UNIQUE(user_id)` Liquibase.
+`PersonalDashboardCommandService` is the only mutation boundary. It owns dashboard metadata,
+default `VisualizationContext`, canonical widget definitions, and layout as one versioned
+aggregate. It validates every widget against the semantic catalog, persists no financial result,
+and loads all targets in the authenticated user's scope. Template copies are independent personal
+dashboards. The REST surface is deliberately command-oriented, not generic entity CRUD; the full
+contract, limits, and coverage are in
+[ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
 
 ---
 
@@ -1323,7 +1306,11 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 
 ---
 
-## Replication order (recomendado)
+## Replication order (historical record)
+
+> This is the pre-Analytics hardening sequence. The dashboard row is superseded by the current
+> `PersonalDashboard` aggregate described in
+> [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md).
 
 | Orden  | Entity                                   | Por qué                                                                                                       |
 | ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -1338,7 +1325,7 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 | 9 ✅   | CreditAccountDetails                     | Pattern B via account; immutable parent; CREDIT_CARD only                                                     |
 | 10 ✅  | ApiAccessToken                           | Pattern A + token security baseline                                                                           |
 | 11 ✅  | ApiAccessTokenPermission                 | Pattern C via token; immutable parent/grant fields                                                            |
-| 12 ✅  | UserDashboardPreference                  | Pattern A + 1:1 per user guard                                                                                |
+| 12 ✅  | PersonalDashboard                        | Owner-scoped command aggregate; default context, canonical widgets, layout, and idempotent commands           |
 | 13 ✅  | InternalTransfer                         | Pattern D; baseline vínculo transfer↔tx                                                                      |
 | 14a ✅ | TransactionIngestion — modelo            | M2M `accounts` → ManyToOne `account` required; migración Liquibase                                            |
 | 14b ✅ | TransactionIngestion — ownership         | Pattern B via `account`; inmutables + PATCH `JsonNode`                                                        |
@@ -1348,7 +1335,10 @@ Usar al cerrar cada entidad. Marcar en PR / commit.
 
 ---
 
-## Changelog
+## Changelog (historical record)
+
+> Entries before the Analytics refactor preserve their original terminology and test counts. They
+> are not a description of the current dashboard architecture.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

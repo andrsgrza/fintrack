@@ -1,0 +1,45 @@
+{
+  "annotations": { "changelogDate": "20261104100000" },
+  "applications": ["fintrack"],
+  "documentation": "A user-owned dashboard widget storing one canonical semantic query and bounded shared renderer configuration; no saved results or per-widget context.",
+  "dto": "no",
+  "fields": [
+    { "fieldName": "title", "fieldType": "String", "fieldValidateRules": ["required", "maxlength"], "fieldValidateRulesMaxlength": "120" },
+    { "fieldName": "description", "fieldType": "String", "fieldValidateRules": ["maxlength"], "fieldValidateRulesMaxlength": "500" },
+    { "fieldName": "queryDefinitionJson", "fieldType": "TextBlob", "fieldValidateRules": ["required"] },
+    { "fieldName": "querySchemaVersion", "fieldType": "Integer", "fieldValidateRules": ["required"] },
+    {
+      "fieldName": "visualizationType",
+      "fieldType": "PersonalDashboardVisualizationType",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "TABLE,KPI,LINE,BAR,GROUPED_BAR,STACKED_BAR,DONUT"
+    },
+    { "fieldName": "visualizationOptionsJson", "fieldType": "TextBlob", "fieldValidateRules": ["required"] },
+    { "fieldName": "position", "fieldType": "Integer", "fieldValidateRules": ["required"] },
+    {
+      "fieldName": "width",
+      "fieldType": "PersonalDashboardWidgetWidth",
+      "fieldValidateRules": ["required"],
+      "fieldValues": "COMPACT,MEDIUM,FULL"
+    },
+    { "fieldName": "visible", "fieldType": "Boolean", "fieldValidateRules": ["required"] },
+    { "fieldName": "createdAt", "fieldType": "Instant", "fieldValidateRules": ["required"] },
+    { "fieldName": "updatedAt", "fieldType": "Instant", "fieldValidateRules": ["required"] }
+  ],
+  "incrementalChangelog": false,
+  "jpaMetamodelFiltering": false,
+  "name": "PersonalDashboardWidget",
+  "pagination": "no",
+  "relationships": [
+    {
+      "otherEntityField": "name",
+      "otherEntityName": "personalDashboard",
+      "relationshipName": "dashboard",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one",
+      "relationshipValidateRules": "required"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "no"
+}

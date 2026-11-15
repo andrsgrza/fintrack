@@ -1,0 +1,21 @@
+name: fintrack-analytics-refactor
+
+services:
+  postgresql:
+    image: postgres:17.4
+    environment:
+      POSTGRES_DB: ${FINTRACK_ANALYTICS_REFACTOR_DB_NAME:-fintrack_analytics_refactor}
+      POSTGRES_USER: ${FINTRACK_ANALYTICS_REFACTOR_DB_USERNAME:-fintrack_analytics_refactor}
+      POSTGRES_PASSWORD: ${FINTRACK_ANALYTICS_REFACTOR_DB_PASSWORD:-fintrack_analytics_refactor_dev_only}
+    ports:
+      - 127.0.0.1:${FINTRACK_ANALYTICS_REFACTOR_DB_PORT:-55432}:5432
+    volumes:
+      - fintrack_analytics_refactor_postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  fintrack_analytics_refactor_postgresql:

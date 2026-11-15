@@ -28,7 +28,6 @@
     <include file="config/liquibase/changelog/20260707174834_added_entity_IngestionRecord.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174835_added_entity_ApiAccessToken.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174836_added_entity_ApiAccessTokenPermission.xml" relativeToChangelogFile="false"/>
-    <include file="config/liquibase/changelog/20260707174837_added_entity_UserDashboardPreference.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-changelog - JHipster will add liquibase changelogs here -->
     <include file="config/liquibase/changelog/20260707174821_added_entity_constraints_FinancialAccount.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174822_added_entity_constraints_CreditAccountDetails.xml" relativeToChangelogFile="false"/>
@@ -46,7 +45,6 @@
     <include file="config/liquibase/changelog/20260707174834_added_entity_constraints_IngestionRecord.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174835_added_entity_constraints_ApiAccessToken.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707174836_added_entity_constraints_ApiAccessTokenPermission.xml" relativeToChangelogFile="false"/>
-    <include file="config/liquibase/changelog/20260707174837_added_entity_constraints_UserDashboardPreference.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-constraints-changelog - JHipster will add liquibase constraints changelogs here -->
     <include file="config/liquibase/changelog/20260707201522_updated_entity_ApiAccessToken.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20260707204535_updated_entity_FinancialAccount.xml" relativeToChangelogFile="false"/>
@@ -67,5 +65,12 @@
     <include file="config/liquibase/changelog/20261018113000_manual_candidate_internal_transfer_intent.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261018120000_batch_transfer_counterpart_delete_policy.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261020110000_transaction_batch_publication_counts.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261104100000_personal_dashboard_persistence.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261104110000_personal_dashboard_template_copy_scope.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261104120000_personal_dashboard_layout_baseline.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261105100000_remove_personal_dashboard_layout_baseline.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261105110000_personal_dashboard_management.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261105120000_personal_dashboard_official_defaults.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261106100000_personal_dashboard_widget_lifecycle.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

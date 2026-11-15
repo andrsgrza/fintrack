@@ -13,6 +13,11 @@ Companion docs:
 
 **Workflow:** document all rules here (**Proposed** / **Open**) → implement simple → complex → set **Done** + tests.
 
+> **Analytics update — 2026-11-04:** the former `UserDashboardPreference` entity and its generic
+> CRUD rules were removed. Dashboard rules now belong to the owner-scoped `PersonalDashboard`
+> command aggregate. See [ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md](ANALYTICS-V2-5-EXPLORER-DASHBOARDS.md)
+> for the canonical query/context and dashboard model.
+
 ---
 
 ## Status values
@@ -33,14 +38,14 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ### Grupo 1 — Flat / few dependencies
 
-| #   | Entity                      | Why start here                        |
-| --- | --------------------------- | ------------------------------------- | ------------- | ----------------- | -------- |
-| 1   | **UserDashboardPreference** | 1:1 user, no FK dependents            | **Done**      |
-| 2   | ApiAccessTokenPermission    | Pattern C; immutable parent           | **Done**      |
-| 3   | CreditAccountDetails        | Pattern B; 1:1 account                | **Done**      |
-| 4   | Tag                         | M2M unlink + delete                   | Uniqueness ✅ | `active` soft-off | **Done** |
-| 5   | Category                    | Pattern A; hierarchy + delete cleanup | **Done**      |
-| 6   | FinancialSubscription       | Unlink FT/rules + delete              | **Done**      |
+| #   | Entity                   | Why start here                                |
+| --- | ------------------------ | --------------------------------------------- | ------------- | ----------------- | -------- |
+| 1   | **PersonalDashboard**    | Owner-scoped aggregate; widgets owned by root | **Done**      |
+| 2   | ApiAccessTokenPermission | Pattern C; immutable parent                   | **Done**      |
+| 3   | CreditAccountDetails     | Pattern B; 1:1 account                        | **Done**      |
+| 4   | Tag                      | M2M unlink + delete                           | Uniqueness ✅ | `active` soft-off | **Done** |
+| 5   | Category                 | Pattern A; hierarchy + delete cleanup         | **Done**      |
+| 6   | FinancialSubscription    | Unlink FT/rules + delete                      | **Done**      |
 
 ### Grupo 2 — Links, not ledger core
 
@@ -68,25 +73,25 @@ Implement and mark **Done** in this order. **Do not** implement `FinancialAccoun
 
 ## Master summary
 
-| #   | Entity                   | DELETE                                | UPDATE guards                                                                     | Product rules                                    | Overall                                   |
-| --- | ------------------------ | ------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------- |
-| 1   | UserDashboardPreference  | Simple                                | 1:1 + JSON parse                                                                  | Schema, /me, upsert                              | **Done**                                  |
-| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                                     | Runtime enforcement                              | **Done**                                  |
-| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                                     | FA configured product command ✅                 | **Done**                                  |
-| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                                     | `active` soft-off                                | **Done**                                  |
-| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                                                   | No system/default categories on signup           | **Done**                                  |
-| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                                     | Import matching                                  | **Done**                                  |
-| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                                            | Empty-set matching, spend                        | **Done**                                  |
-| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                                                    | Motor eval                                       | **Done**                                  |
-| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅                                   | Motor on FT create                               | **Done**                                  |
-| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                                          | Revocation runtime / expiry enforcement (fase 6) | **Done** (11C)                            |
-| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                                                 | Balances, atomic create                          | **Done**                                  |
-| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                                             | Rule motor, balances                             | **Done**                                  |
-| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                                                      | Runtime pipeline/idempotency                     | **Done**                                  |
-| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked                         | Upload / parser (fase 6)                         | **Done** (metadata lifecycle)             |
-| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked                         | API runtime handler + idempotency (fase 6)       | **Done** (11C lifecycle; runtime pending) |
-| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                                             | Pipeline/count reconciliation                    | **Done**                                  |
-| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor + balance read model | UI/dashboard balance display                     | **Done**                                  |
+| #   | Entity                   | DELETE                                | UPDATE guards                                                                     | Product rules                                     | Overall                                   |
+| --- | ------------------------ | ------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| 1   | PersonalDashboard        | Aggregate delete + orphan widgets     | Context/query validation, root version, name per owner                            | Templates copied independently; no stored results | **Done**                                  |
+| 2   | ApiAccessTokenPermission | Simple                                | Immutables ✅                                                                     | Runtime enforcement                               | **Done**                                  |
+| 3   | CreditAccountDetails     | Simple / FA cascade                   | Immutables ✅                                                                     | FA configured product command ✅                  | **Done**                                  |
+| 4   | Tag                      | M2M unlink + delete                   | Uniqueness ✅                                                                     | `active` soft-off                                 | **Done**                                  |
+| 5   | Category                 | Block if children; leaf unlink+delete | Immutability ✅                                                                   | No system/default categories on signup            | **Done**                                  |
+| 6   | FinancialSubscription    | Unlink FT/rules + delete              | Links ✅ + dates + structural                                                     | Import matching                                   | **Done**                                  |
+| 7   | Budget                   | Unlink M2M + delete                   | Links ✅ + validations                                                            | Empty-set matching, spend                         | **Done**                                  |
+| 8   | TransactionRuleCondition | Via parent                            | Parent immutable + validations                                                    | Motor eval                                        | **Done**                                  |
+| 9   | TransactionRule          | Condition/tag cleanup ✅              | Outputs/normalization/owner links/timestamps ✅                                   | Motor on FT create                                | **Done**                                  |
+| 10  | ApiAccessToken           | Simple + cascade permissions          | Secrets ✅ + reveal-once                                                          | Revocation runtime / expiry enforcement (fase 6)  | **Done** (11C)                            |
+| 11  | InternalTransfer         | Simple                                | Pair/lifecycle ✅                                                                 | Balances, atomic create                           | **Done**                                  |
+| 12  | FinancialTransaction     | `deleteAllForAccount`                 | Lifecycle + links + delete cleanup ✅                                             | Rule motor, balances                              | **Done**                                  |
+| 13  | TransactionIngestion     | `deleteAllForAccount`                 | Lifecycle + revert delete ✅                                                      | Runtime pipeline/idempotency                      | **Done**                                  |
+| 14  | FileIngestion            | Via TI service                        | Parent ✅ + metadata immutability + direct delete blocked                         | Upload / parser (fase 6)                          | **Done** (metadata lifecycle)             |
+| 15  | ApiIngestion             | Via TI service                        | Parent ✅ + token snapshots (11C) + direct delete blocked                         | API runtime handler + idempotency (fase 6)        | **Done** (11C lifecycle; runtime pending) |
+| 16  | IngestionRecord          | Via TI service                        | Immutables ✅ + status consistency ✅                                             | Pipeline/count reconciliation                     | **Done**                                  |
+| 17  | FinancialAccount         | Orchestrated                          | Currency/type ✅ + delete orchestration + initial date floor + balance read model | UI/dashboard balance display                      | **Done**                                  |
 
 ---
 
@@ -241,47 +246,19 @@ Single `@Transactional` on `FinancialAccountService.delete()` — rollback on an
 
 # Grupo 1
 
-## 1. UserDashboardPreference
+## 1. PersonalDashboard
 
-**Pattern:** A — direct `user`. **Relationships:** none (1 logical row per user).
+**Pattern:** direct `user` on the aggregate root. Widgets are owned only through their dashboard;
+the product does not expose generated CRUD for the root or child entities.
 
-### DELETE
-
-| Rule          | Decision                                        | Applies to admin | Error                   | Status   |
-| ------------- | ----------------------------------------------- | ---------------- | ----------------------- | -------- |
-| Simple delete | Deletes **only** the preference row; no cascade | Yes              | `404` if not accessible | **Done** |
-
-### CREATE / UPDATE / PATCH — `configuration`
-
-| Rule                                    | Decision                                            | Applies to admin | Error                                                  | Status       |
-| --------------------------------------- | --------------------------------------------------- | ---------------- | ------------------------------------------------------ | ------------ |
-| `configuration` required (business)     | Reject `null` or blank/whitespace-only              | Yes              | `400` `error.invalid` `params=userDashboardPreference` | **Done**     |
-| `configuration` parseable JSON          | Must parse as JSON object/array (parser in service) | Yes              | `400` invalid                                          | **Done**     |
-| `"{}"` is valid                         | Empty JSON object allowed                           | Yes              | —                                                      | **Done**     |
-| No schema validation                    | Structure/widgets not validated yet                 | —                | —                                                      | **Deferred** |
-| `configuration` mutable on update/patch | Business-editable field                             | Yes              | —                                                      | **Done**     |
-| PATCH `configuration: null`             | Reject (same as blank)                              | Yes              | `400` invalid                                          | **Done**     |
-| PATCH omit `configuration`              | Preserve existing value; skip validation            | Yes              | —                                                      | **Done**     |
-
-**Implementation:** `validateConfiguration()` in `UserDashboardPreferenceService` on `save` / `update` / `partialUpdate` when `configuration` is present; `IllegalArgumentException` mapped in resource (POST/PUT/PATCH).
-
-### Already **Done** (ownership / validations baseline)
-
-| Rule                              | Implementation                              |
-| --------------------------------- | ------------------------------------------- |
-| One preference per user on create | `existsByUserId()`                          |
-| Owner immutable                   | Preserve `user`; PATCH `user: null` → `400` |
-| PATCH `user` JsonNode semantics   | Absent preserves owner                      |
-
-### Deferred (not this implementation)
-
-| Rule                                  | Notes                                         |
-| ------------------------------------- | --------------------------------------------- |
-| JSON schema validation                | Widget/layout structure — future product pass |
-| `GET /me` or upsert endpoint          | No `/me` yet                                  |
-| Auto-create default on dashboard load | No implicit create                            |
-| Deep merge on PATCH                   | Full replace of `configuration` string only   |
-| `UNIQUE(user_id)` Liquibase           | Service guard only today                      |
+| Rule                     | Decision                                                                                                                                                                             | Status   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Create / copy template   | Service assigns the authenticated owner, normalizes a unique name per owner, validates the default `VisualizationContext`, and limits the owner to 20 dashboards.                    | **Done** |
+| Widget commands          | A widget is added, changed, or removed only through an owned dashboard. At most 16 widgets persist an independently validated canonical `SemanticQueryDefinition` and visualization. | **Done** |
+| Context separation       | The dashboard stores its default execution context; the widget stores query and presentation only. Financial results are never persisted.                                            | **Done** |
+| Update / layout / delete | Every mutation requires the aggregate's expected version. Delete removes the owned widget rows by aggregate cascade; a foreign id is not accessible.                                 | **Done** |
+| Retry safety             | Create, template copy, and widget addition have owner-scoped idempotency receipts.                                                                                                   | **Done** |
+| Template integrity       | Recommended templates are code-defined. Copying creates an independent personal dashboard and cannot modify the template.                                                            | **Done** |
 
 ### Tests — **Done**
 

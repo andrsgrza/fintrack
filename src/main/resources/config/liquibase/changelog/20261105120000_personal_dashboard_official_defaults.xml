@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Keep the one preference authority while allowing it to select a stable immutable official template. -->
+    <changeSet id="20261105120000-1" author="fintrack">
+        <addColumn tableName="personal_dashboard_preference">
+            <column name="default_official_template_id" type="varchar(64)"/>
+        </addColumn>
+        <!-- Both columns may be null only for existing rows: runtime resolves that legacy state to Financial Overview. -->
+        <sql dbms="postgresql">
+            alter table personal_dashboard_preference
+            add constraint ck_personal_dashboard_preference_one_default
+            check (not (default_dashboard_id is not null and default_official_template_id is not null))
+        </sql>
+    </changeSet>
+</databaseChangeLog>

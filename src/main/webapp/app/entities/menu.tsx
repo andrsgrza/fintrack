@@ -41,6 +41,12 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/internal-transfers">
         <Translate contentKey="global.menu.entities.internalTransfer" />
       </MenuItem>
+      <MenuItem icon="tachometer-alt" to="/analytics/explorer">
+        <Translate contentKey="global.menu.entities.analyticsExplorer" />
+      </MenuItem>
+      <MenuItem icon="chart-line" to="/analytics/dashboards">
+        Dashboards
+      </MenuItem>
       <MenuItem icon="asterisk" to="/api-ingestion">
         <Translate contentKey="global.menu.entities.apiIngestion" />{' '}
         <Badge color="secondary" pill>
@@ -52,9 +58,6 @@ const EntitiesMenu = () => {
       </MenuItem>
       <MenuItem icon="asterisk" to="/api-access-token-permission">
         <Translate contentKey="global.menu.entities.apiAccessTokenPermission" />
-      </MenuItem>
-      <MenuItem icon="asterisk" to="/user-dashboard-preference">
-        <Translate contentKey="global.menu.entities.userDashboardPreference" />
       </MenuItem>
       {/* jhipster-needle-add-entity-to-menu - JHipster will add entities to the menu here */}
     </>
