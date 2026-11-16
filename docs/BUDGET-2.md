@@ -1,6 +1,7 @@
 # BUDGET-2 — Revisiones programadas y ciclo de vida
 
-Estado: implementado en backend. No calcula gasto, ingreso, avance, alertas ni expone una UI de presupuestos.
+Estado: implementado en backend. La compilación de una revisión/período al motor semántico compartido se documenta en
+[BUDGET-3](BUDGET-3.md); todavía no calcula avance, alertas ni expone una UI de presupuestos.
 
 ## Historial inmutable
 

@@ -133,6 +133,80 @@ class SemanticAnalyticsExecutionServiceIT {
     }
 
     @Test
+    void unions_multiple_category_roots_and_their_descendants_without_double_counting_overlap() {
+        Fixture fixture = fixture();
+        User owner = TestUtil.findAll(em, User.class).stream().filter(user -> "user".equals(user.getLogin())).findFirst().orElseThrow();
+        Category household = category(owner, "Household");
+        fixture.food().parentCategory(household);
+        fixture.travel().parentCategory(household);
+        categoryRepository.saveAndFlush(fixture.food());
+        categoryRepository.saveAndFlush(fixture.travel());
+
+        SemanticQueryDefinition definition = ledgerDefinition(
+            new SemanticAggregateProjection("expense", SemanticAggregateFunction.SUM, SemanticField.TRANSACTION_AMOUNT),
+            List.of(
+                new SemanticPredicate(SemanticField.TRANSACTION_FLOW, SemanticPredicateOperator.EQUALS, List.of("OUT")),
+                new SemanticPredicate(SemanticField.TRANSFER_LINK_STATUS, SemanticPredicateOperator.EQUALS, List.of("UNLINKED")),
+                new SemanticPredicate(
+                    SemanticField.CATEGORY_ID,
+                    SemanticPredicateOperator.DESCENDANT_OF_ANY,
+                    List.of(household.getId().toString(), fixture.food().getId().toString())
+                )
+            ),
+            List.of(),
+            List.of()
+        );
+
+        SemanticAnalyticsResult result = execute(definition, List.of(fixture.debit().getId()), List.of("MXN"));
+        assertThat(result.rows())
+            .singleElement()
+            .satisfies(row ->
+                assertThat(row.values()).singleElement().satisfies(value -> assertThat(value.value()).isEqualByComparingTo("450"))
+            );
+    }
+
+    @Test
+    void represents_an_empty_scalar_economic_sum_and_count_as_known_zero_but_keeps_average_as_no_data() {
+        Fixture fixture = fixture();
+        SemanticQueryDefinition definition = new SemanticQueryDefinition(
+            SemanticAnalyticsSchema.VERSION,
+            SemanticAnalyticsSchema.SEMANTIC_MODEL,
+            SemanticDataset.TRANSACTION_LEDGER,
+            SemanticField.TRANSACTION_DATE,
+            List.of(
+                new SemanticAggregateProjection("expense", SemanticAggregateFunction.SUM, SemanticField.TRANSACTION_AMOUNT),
+                new SemanticAggregateProjection("count", SemanticAggregateFunction.COUNT, SemanticField.TRANSACTION_ID),
+                new SemanticAggregateProjection("average", SemanticAggregateFunction.AVG, SemanticField.TRANSACTION_AMOUNT)
+            ),
+            List.of(
+                new SemanticPredicate(SemanticField.TRANSACTION_FLOW, SemanticPredicateOperator.EQUALS, List.of("OUT")),
+                new SemanticPredicate(SemanticField.TRANSFER_LINK_STATUS, SemanticPredicateOperator.EQUALS, List.of("UNLINKED"))
+            ),
+            List.of(),
+            List.of(),
+            100
+        );
+
+        SemanticAnalyticsResult result = execute(
+            definition,
+            List.of(fixture.debit().getId()),
+            List.of("MXN"),
+            LocalDate.of(2025, 12, 1),
+            LocalDate.of(2025, 12, 31)
+        );
+        assertThat(result.rows())
+            .singleElement()
+            .satisfies(row -> {
+                assertThat(value(row, "expense").value()).isZero();
+                assertThat(value(row, "expense").availability()).isEqualTo(SemanticResultAvailability.ZERO);
+                assertThat(value(row, "count").value()).isZero();
+                assertThat(value(row, "count").availability()).isEqualTo(SemanticResultAvailability.ZERO);
+                assertThat(value(row, "average").value()).isNull();
+                assertThat(value(row, "average").availability()).isEqualTo(SemanticResultAvailability.NO_DATA);
+            });
+    }
+
+    @Test
     void calculatesGovernedNetEconomicFlowWithoutCountingEitherLinkedTransferLeg() {
         fixture();
         SemanticQueryDefinition netFlow = ledgerDefinition(

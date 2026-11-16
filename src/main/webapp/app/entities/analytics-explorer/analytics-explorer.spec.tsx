@@ -60,7 +60,10 @@ const ledger = {
   predicateCapabilities: [
     { field: 'TRANSACTION_FLOW', operators: ['EQUALS' as const, 'IN' as const] },
     { field: 'TRANSFER_LINK_STATUS', operators: ['EQUALS' as const] },
-    { field: 'CATEGORY_ID', operators: ['EQUALS' as const, 'IN' as const, 'DESCENDANT_OF' as const, 'IS_UNCATEGORIZED' as const] },
+    {
+      field: 'CATEGORY_ID',
+      operators: ['EQUALS' as const, 'IN' as const, 'DESCENDANT_OF' as const, 'DESCENDANT_OF_ANY' as const, 'IS_UNCATEGORIZED' as const],
+    },
     { field: 'TAG_ID', operators: ['HAS_ANY' as const, 'HAS_ALL' as const, 'HAS_NONE' as const] },
   ],
   groupings: [

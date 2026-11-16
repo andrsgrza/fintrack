@@ -73,7 +73,7 @@ Companion docs:
 | 6   | TransactionRule             | ✅  | ✅     | ✅  | ✅      | ✅       | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                                  |
 | 7   | TransactionRuleCondition    | ✅  | ✅     | ✅  | ✅      | ✅       | Parent immutable; field/operator/value semantics                                                              |
 | 8   | FinancialSubscription       | ✅  | ✅     | ✅  | ✅      | ✅       | Links + PATCH JsonNode                                                                                        |
-| 9   | Budget                      | —   | ✅     | ✅  | ✅      | Commands | BUDGET-2 immutable revisions, schedules and lifecycle; see `docs/BUDGET-2.md`                                 |
+| 9   | Budget                      | —   | ✅     | ✅  | ✅      | Commands | BUDGET-2 immutable revisions/lifecycle + BUDGET-3 canonical Analytics compiler; see `docs/BUDGET-3.md`        |
 | 10  | InternalTransfer            | ✅  | ✅     | ✅  | ✅      | ✅       | `createdAt` server; pair validation                                                                           |
 | 11  | TransactionIngestion        | ✅  | ✅     | ✅  | ✅      | ✅       | Lifecycle + counter consistency; server fields optional in DTO                                                |
 | 12  | FileIngestion               | ✅  | ✅     | ✅  | ✅      | ✅       | Parent FILE + 1:1; `createdAt` server; create UI uploads CSV for a pending parent instead of editing metadata |

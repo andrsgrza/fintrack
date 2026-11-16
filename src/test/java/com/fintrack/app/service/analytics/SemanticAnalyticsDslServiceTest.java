@@ -311,7 +311,9 @@ class SemanticAnalyticsDslServiceTest {
             case TRANSFER_LINK_STATUS -> java.util.List.of("UNLINKED");
             case ACCOUNT_TYPE -> java.util.List.of(dataset == SemanticDataset.CREDIT_ACCOUNT_SNAPSHOT ? "CREDIT_CARD" : "DEBIT");
             case SOURCE_ACCOUNT_TYPE, DESTINATION_ACCOUNT_TYPE -> java.util.List.of("DEBIT");
-            case CATEGORY_ID -> operator == SemanticPredicateOperator.IN ? java.util.List.of("1", "2") : java.util.List.of("1");
+            case CATEGORY_ID -> operator == SemanticPredicateOperator.IN || operator == SemanticPredicateOperator.DESCENDANT_OF_ANY
+                ? java.util.List.of("1", "2")
+                : java.util.List.of("1");
             case TAG_ID -> operator == SemanticPredicateOperator.HAS_ANY || operator == SemanticPredicateOperator.HAS_ALL
                 ? java.util.List.of("1", "2")
                 : java.util.List.of("1");

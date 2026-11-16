@@ -56,6 +56,10 @@ class SemanticAnalyticsResourceIT {
             .andExpect(jsonPath("$.datasets.length()").value(5))
             .andExpect(jsonPath("$.datasets[0].dataset").value("TRANSACTION_LEDGER"))
             .andExpect(jsonPath("$.datasets[0].grain").value("one FinancialTransaction"))
+            .andExpect(jsonPath("$.datasets[0].predicateCapabilities[3].field").value("CATEGORY_ID"))
+            .andExpect(
+                jsonPath("$.datasets[0].predicateCapabilities[3].operators").value(org.hamcrest.Matchers.hasItem("DESCENDANT_OF_ANY"))
+            )
             .andExpect(jsonPath("$.datasets[1].dataset").value("FINANCIAL_POSITION_SNAPSHOT"))
             .andExpect(jsonPath("$.datasets[1].additivity").value("POINT_IN_TIME_REQUIRES_ACCOUNT_AND_MONTH"))
             .andExpect(jsonPath("$.datasets[2].dataset").value("ACCOUNT_POSITION_SNAPSHOT"))
