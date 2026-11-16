@@ -149,8 +149,19 @@ public class BudgetRevision implements Serializable {
         Set<Tag> tags,
         Instant recordedAt
     ) {
+        return record(1, configuration, accounts, categories, tags, recordedAt);
+    }
+
+    public static BudgetRevision record(
+        int revisionNumber,
+        BudgetRevisionConfiguration configuration,
+        Set<FinancialAccount> accounts,
+        Set<Category> categories,
+        Set<Tag> tags,
+        Instant recordedAt
+    ) {
         BudgetRevision revision = new BudgetRevision();
-        revision.revisionNumber = 1;
+        revision.revisionNumber = revisionNumber;
         revision.recordedAt = recordedAt;
         revision.targetAmount = configuration.targetAmount();
         revision.intervalCount = configuration.intervalCount();

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20261115110000-1-budget-revision-schedule" author="fintrack">
+        <createTable tableName="budget_revision_schedule" remarks="Append-only effective-date and cancellation history for immutable Budget revisions.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="revision_id" type="bigint"/>
+            <column name="target_schedule_id" type="bigint"/>
+            <column name="operation" type="varchar(16)"><constraints nullable="false"/></column>
+            <column name="effective_period_start" type="date"><constraints nullable="false"/></column>
+            <column name="sequence_number" type="bigint"><constraints nullable="false"/></column>
+            <column name="client_request_id" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="recorded_at" type="${datetimeType}"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="budget_revision_schedule" columnNames="budget_id,sequence_number" constraintName="ux_budget_revision_schedule_sequence"/>
+        <createIndex tableName="budget_revision_schedule" indexName="ix_budget_revision_schedule_effective"><column name="budget_id"/><column name="effective_period_start"/></createIndex>
+        <addForeignKeyConstraint baseTableName="budget_revision_schedule" baseColumnNames="budget_id" constraintName="fk_budget_revision_schedule__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="budget_revision_schedule" baseColumnNames="revision_id" constraintName="fk_budget_revision_schedule__revision" referencedTableName="budget_revision" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="budget_revision_schedule" baseColumnNames="target_schedule_id" constraintName="fk_budget_revision_schedule__target" referencedTableName="budget_revision_schedule" referencedColumnNames="id"/>
+
+        <!-- BUDGET-1 revisions already have an authoritative anchor; give each its explicit initial schedule. -->
+        <sql dbms="postgresql">insert into budget_revision_schedule (id, budget_id, revision_id, operation, effective_period_start, sequence_number, client_request_id, recorded_at)
+            select nextval('sequence_generator'), revision.budget_id, revision.id, 'SCHEDULED', revision.anchor_date, 1, 'INITIAL', revision.recorded_at
+            from budget_revision revision where revision.revision_number = 1</sql>
+    </changeSet>
+
+    <changeSet id="20261115110000-2-budget-lifecycle-and-command-receipts" author="fintrack">
+        <createTable tableName="budget_lifecycle_event" remarks="Append-only pause, resume and completion intent at complete Budget period boundaries.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="target_event_id" type="bigint"/>
+            <column name="event_type" type="varchar(24)"><constraints nullable="false"/></column>
+            <column name="effective_period_start" type="date"><constraints nullable="false"/></column>
+            <column name="sequence_number" type="bigint"><constraints nullable="false"/></column>
+            <column name="client_request_id" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="recorded_at" type="${datetimeType}"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="budget_lifecycle_event" columnNames="budget_id,sequence_number" constraintName="ux_budget_lifecycle_event_sequence"/>
+        <createIndex tableName="budget_lifecycle_event" indexName="ix_budget_lifecycle_event_effective"><column name="budget_id"/><column name="effective_period_start"/></createIndex>
+        <addForeignKeyConstraint baseTableName="budget_lifecycle_event" baseColumnNames="budget_id" constraintName="fk_budget_lifecycle_event__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="budget_lifecycle_event" baseColumnNames="target_event_id" constraintName="fk_budget_lifecycle_event__target" referencedTableName="budget_lifecycle_event" referencedColumnNames="id"/>
+
+        <createTable tableName="budget_command_receipt" remarks="Durable idempotency receipts for Budget revision and lifecycle commands.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="command_type" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="client_request_id" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="request_digest" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="revision_schedule_id" type="bigint"/>
+            <column name="lifecycle_event_id" type="bigint"/>
+            <column name="resulting_budget_version" type="bigint"><constraints nullable="false"/></column>
+            <column name="recorded_at" type="${datetimeType}"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="budget_command_receipt" columnNames="budget_id,command_type,client_request_id" constraintName="ux_budget_command_receipt_key"/>
+        <addForeignKeyConstraint baseTableName="budget_command_receipt" baseColumnNames="budget_id" constraintName="fk_budget_command_receipt__budget" referencedTableName="budget" referencedColumnNames="id"/>
+    </changeSet>
+</databaseChangeLog>

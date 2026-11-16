@@ -6,6 +6,7 @@ public class BudgetCommandException extends RuntimeException {
     public enum Code {
         INVALID_PAYLOAD,
         IDEMPOTENCY_CONFLICT,
+        VERSION_CONFLICT,
     }
 
     private final Code code;

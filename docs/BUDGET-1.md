@@ -1,12 +1,14 @@
 # BUDGET-1 — Foundation de dominio y calendario
 
-Estado: implementado como fundación de persistencia. No incluye evaluación de gasto/ingreso, progreso, alertas, revisiones posteriores ni interfaz de usuario.
+> **Complementado por [BUDGET-2](BUDGET-2.md).** Esta página documenta la fundación inicial; la programación de revisiones y el ciclo de vida vigentes están en BUDGET-2.
+
+Estado: fundación de persistencia implementada. No incluye evaluación de gasto/ingreso, progreso, alertas ni interfaz de usuario.
 
 ## Contrato vigente
 
 `Budget` es la identidad propiedad de un usuario: nombre, descripción opcional, `EXPENSE` o `INCOME`, moneda, versión, marcas de tiempo del servidor e idempotencia de creación. La zona horaria no se persiste en el presupuesto.
 
-Cada creación registra exactamente una `BudgetRevision` número 1 inmutable. La revisión contiene el importe objetivo positivo, definición de calendario, recurrencia, terminación y alcance. No existen DTO, mapper, filtros, endpoints de listado/edición/borrado ni UI genéricos de Budget.
+Cada creación registra exactamente una `BudgetRevision` número 1 inmutable y su programación inicial. La revisión contiene el importe objetivo positivo, definición de calendario, recurrencia, terminación y alcance. No existen DTO, mapper, filtros, endpoints de listado/edición/borrado ni UI genéricos de Budget.
 
 El único comando actual es `POST /api/budgets`. Exige `clientRequestId`, zona IANA explícita y una fecha de ancla que no haya pasado en la fecha local de esa zona. Reintentar el mismo comando devuelve el mismo presupuesto; reutilizar la clave con contenido diferente devuelve `409 IDEMPOTENCY_CONFLICT`.
 

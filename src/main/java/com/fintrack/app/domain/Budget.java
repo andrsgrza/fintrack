@@ -119,11 +119,33 @@ public class Budget implements Serializable {
     }
 
     public void addInitialRevision(BudgetRevision revision) {
-        if (!revisions.isEmpty()) {
-            throw new IllegalStateException("A Budget-1 aggregate can only receive its initial revision.");
+        addRevision(revision);
+    }
+
+    /** Revision snapshots are append-only. Effective dates are held by BudgetRevisionSchedule, not this aggregate. */
+    public void addRevision(BudgetRevision revision) {
+        if (
+            revision == null || revisions.stream().anyMatch(existing -> existing.getRevisionNumber().equals(revision.getRevisionNumber()))
+        ) {
+            throw new IllegalStateException("A Budget revision number may be recorded only once.");
         }
         revisions.add(revision);
         revision.attachTo(this);
+    }
+
+    public void updateMetadata(String name, String description, Instant now) {
+        this.name = name;
+        this.description = description;
+        touch(now);
+    }
+
+    /** Makes the aggregate the optimistic-lock authority for all separately persisted history rows. */
+    public void touch(Instant now) {
+        if (now == null) throw new IllegalArgumentException("Budget update time is required.");
+        // A command may be processed by a fixed test clock or within the same database timestamp resolution.
+        // Keep a monotonic aggregate field so Hibernate always emits the versioned root update that protects
+        // separately persisted history rows.
+        this.updatedAt = !now.isAfter(updatedAt) ? updatedAt.plusNanos(1) : now;
     }
 
     public Long getId() {

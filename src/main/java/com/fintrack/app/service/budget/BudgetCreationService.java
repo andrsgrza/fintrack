@@ -3,6 +3,7 @@ package com.fintrack.app.service.budget;
 import com.fintrack.app.domain.*;
 import com.fintrack.app.domain.enumeration.*;
 import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TagRepository;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BudgetCreationService {
 
     private final BudgetRepository budgetRepository;
+    private final BudgetRevisionScheduleRepository revisionScheduleRepository;
     private final FinancialAccountRepository financialAccountRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
@@ -40,6 +42,7 @@ public class BudgetCreationService {
 
     public BudgetCreationService(
         BudgetRepository budgetRepository,
+        BudgetRevisionScheduleRepository revisionScheduleRepository,
         FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
@@ -47,6 +50,7 @@ public class BudgetCreationService {
         Clock clock
     ) {
         this.budgetRepository = budgetRepository;
+        this.revisionScheduleRepository = revisionScheduleRepository;
         this.financialAccountRepository = financialAccountRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
@@ -85,7 +89,11 @@ public class BudgetCreationService {
         Instant now = Instant.now(clock);
         Budget budget = Budget.create(owner, name, description, command.type(), command.currency(), requestId, requestHash, now);
         budget.addInitialRevision(BudgetRevision.initial(configuration, accounts, categories, tags, now));
-        return view(budgetRepository.saveAndFlush(budget));
+        Budget saved = budgetRepository.saveAndFlush(budget);
+        revisionScheduleRepository.saveAndFlush(
+            BudgetRevisionSchedule.scheduled(saved, saved.getRevisions().get(0), configuration.anchorDate(), 1, "INITIAL", now)
+        );
+        return view(saved);
     }
 
     private BudgetCreated replay(Budget budget, String requestHash) {

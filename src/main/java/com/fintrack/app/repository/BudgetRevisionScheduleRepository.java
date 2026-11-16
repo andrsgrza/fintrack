@@ -1,0 +1,24 @@
+package com.fintrack.app.repository;
+
+import com.fintrack.app.domain.BudgetRevisionSchedule;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface BudgetRevisionScheduleRepository extends JpaRepository<BudgetRevisionSchedule, Long> {
+    @Query(
+        "select schedule from BudgetRevisionSchedule schedule left join fetch schedule.revision " +
+        "where schedule.budget.id = :budgetId order by schedule.sequenceNumber asc"
+    )
+    List<BudgetRevisionSchedule> findAllByBudgetIdOrderBySequenceNumber(@Param("budgetId") Long budgetId);
+
+    @Query(
+        "select schedule from BudgetRevisionSchedule schedule left join fetch schedule.revision " +
+        "where schedule.id = :id and schedule.budget.id = :budgetId"
+    )
+    Optional<BudgetRevisionSchedule> findOneByIdAndBudgetId(@Param("id") Long id, @Param("budgetId") Long budgetId);
+}

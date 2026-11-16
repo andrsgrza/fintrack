@@ -3,6 +3,7 @@ package com.fintrack.app.service.budget;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,6 +25,7 @@ import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TagRepository;
@@ -52,6 +54,9 @@ class BudgetCreationServiceTest {
     private BudgetRepository budgetRepository;
 
     @Mock
+    private BudgetRevisionScheduleRepository revisionScheduleRepository;
+
+    @Mock
     private FinancialAccountRepository financialAccountRepository;
 
     @Mock
@@ -73,6 +78,7 @@ class BudgetCreationServiceTest {
         owner.setLogin(OWNER_LOGIN);
         service = new BudgetCreationService(
             budgetRepository,
+            revisionScheduleRepository,
             financialAccountRepository,
             categoryRepository,
             tagRepository,
@@ -81,6 +87,7 @@ class BudgetCreationServiceTest {
         );
         when(currentUserService.getCurrentUser()).thenReturn(owner);
         when(budgetRepository.findOneWithRevisionsByUserLoginAndCreationRequestId(any(), any())).thenReturn(Optional.empty());
+        lenient().when(revisionScheduleRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -102,6 +109,7 @@ class BudgetCreationServiceTest {
 
         ArgumentCaptor<Budget> budgetCaptor = ArgumentCaptor.forClass(Budget.class);
         verify(budgetRepository).saveAndFlush(budgetCaptor.capture());
+        verify(revisionScheduleRepository).saveAndFlush(any());
         Budget saved = budgetCaptor.getValue();
         assertThat(saved.getUser()).isSameAs(owner);
         assertThat(saved.getRevisions())

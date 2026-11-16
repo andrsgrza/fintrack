@@ -28,14 +28,22 @@ import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
 import com.fintrack.app.service.budget.BudgetInitialRevisionCommand;
+import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
+import com.fintrack.app.service.budget.BudgetVersionedCommand;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -45,10 +53,12 @@ import org.springframework.transaction.annotation.Transactional;
 @IntegrationTest
 @AutoConfigureMockMvc
 @WithMockUser(username = BudgetResourceIT.CURRENT_USER_LOGIN)
+@Import(BudgetResourceIT.FixedClockConfiguration.class)
 class BudgetResourceIT {
 
     static final String CURRENT_USER_LOGIN = "user";
     private static final String OTHER_USER_LOGIN = "budget-other-user";
+    private static final LocalDate TEST_TODAY = LocalDate.of(2026, 3, 15);
 
     @Autowired
     private MockMvc restBudgetMockMvc;
@@ -148,7 +158,171 @@ class BudgetResourceIT {
         restBudgetMockMvc.perform(get("/api/budgets").with(user(CURRENT_USER_LOGIN))).andExpect(status().isMethodNotAllowed());
     }
 
+    @Test
+    @Transactional
+    void schedulesCancelsAndReadsImmutableBudgetHistoryThroughTheOwnerScopedCommands() throws Exception {
+        LocalDate anchor = TEST_TODAY;
+        BudgetCreateCommand create = command("budget-two-history", Set.of(), Set.of(), Set.of(), anchor);
+        String created = restBudgetMockMvc
+            .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(create)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        Long budgetId = objectMapper.readTree(created).path("id").asLong();
+        long initialVersion = objectMapper.readTree(created).path("version").asLong();
+        BudgetInitialRevisionCommand revised = new BudgetInitialRevisionCommand(
+            new BigDecimal("2600.00"),
+            1,
+            BudgetIntervalUnit.MONTH,
+            BudgetAlignment.ANCHORED,
+            anchor,
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null,
+            BudgetAccountScopeMode.ALL,
+            Set.of(),
+            BudgetCategoryScopeMode.ALL,
+            Set.of(),
+            BudgetTagScopeMode.NONE,
+            Set.of(),
+            BudgetTagMatchMode.ANY
+        );
+        BudgetRevisionScheduleCommand schedule = new BudgetRevisionScheduleCommand(
+            initialVersion,
+            "budget-two-schedule",
+            "America/Mexico_City",
+            false,
+            anchor.plusMonths(1),
+            revised
+        );
+        String scheduled = restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(schedule))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.effectivePeriodStart").value(anchor.plusMonths(1).toString()))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long scheduleId = objectMapper.readTree(scheduled).path("revisionScheduleId").asLong();
+        long scheduledVersion = objectMapper.readTree(scheduled).path("version").asLong();
+        assertThat(scheduledVersion).isGreaterThan(initialVersion);
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(schedule))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.revisionScheduleId").value(scheduleId))
+            .andExpect(jsonPath("$.version").value(scheduledVersion));
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions/{scheduleId}/cancel", budgetId, scheduleId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            new BudgetVersionedCommand(scheduledVersion, "budget-two-cancel", "America/Mexico_City")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.version").value(scheduledVersion + 1));
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/effective-revision", budgetId).param("periodStart", anchor.plusMonths(1).toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.targetAmount").value(2500.00));
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/history", budgetId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.revisions.length()").value(2))
+            .andExpect(jsonPath("$.schedules.length()").value(3));
+    }
+
+    @Test
+    @Transactional
+    void keepsHistoryOwnerScopedRejectsStaleVersionsAndRollsBackInvalidScheduling() throws Exception {
+        String created = restBudgetMockMvc
+            .perform(
+                post("/api/budgets")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(command("budget-two-owner", Set.of(), Set.of(), Set.of(), TEST_TODAY)))
+            )
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        Long budgetId = objectMapper.readTree(created).path("id").asLong();
+        long version = objectMapper.readTree(created).path("version").asLong();
+        otherUser();
+        BudgetRevisionScheduleCommand future = revisionSchedule(version, "owner-schedule", TEST_TODAY.plusMonths(1));
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/history", budgetId).with(user(OTHER_USER_LOGIN)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(future))
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(revisionSchedule(version + 1, "stale-schedule", TEST_TODAY.plusMonths(1))))
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(revisionSchedule(version, "invalid-boundary", TEST_TODAY.plusDays(3))))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/history", budgetId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.revisions.length()").value(1))
+            .andExpect(jsonPath("$.schedules.length()").value(1));
+        restBudgetMockMvc
+            .perform(
+                get("/api/budgets/{id}/periods", budgetId)
+                    .param("firstIndex", "0")
+                    .param("lastIndex", "2")
+                    .param("timeZone", "America/Mexico_City")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(3))
+            .andExpect(jsonPath("$[0].startInclusive").value(TEST_TODAY.toString()))
+            .andExpect(jsonPath("$[1].startInclusive").value(TEST_TODAY.plusMonths(1).toString()));
+    }
+
     private BudgetCreateCommand command(String requestId, Set<Long> accountIds, Set<Long> categoryIds, Set<Long> tagIds) {
+        return command(requestId, accountIds, categoryIds, tagIds, TEST_TODAY.plusDays(1));
+    }
+
+    private BudgetCreateCommand command(
+        String requestId,
+        Set<Long> accountIds,
+        Set<Long> categoryIds,
+        Set<Long> tagIds,
+        LocalDate anchorDate
+    ) {
         return new BudgetCreateCommand(
             "Monthly food",
             "Food spending plan",
@@ -161,7 +335,7 @@ class BudgetResourceIT {
                 1,
                 BudgetIntervalUnit.MONTH,
                 BudgetAlignment.ANCHORED,
-                LocalDate.now(ZoneId.of("America/Mexico_City")).plusDays(1),
+                anchorDate,
                 BudgetRecurrenceMode.RECURRING,
                 BudgetRecurrenceTermination.NONE,
                 null,
@@ -177,6 +351,34 @@ class BudgetResourceIT {
         );
     }
 
+    private BudgetRevisionScheduleCommand revisionSchedule(long expectedVersion, String requestId, LocalDate effectivePeriodStart) {
+        return new BudgetRevisionScheduleCommand(
+            expectedVersion,
+            requestId,
+            "America/Mexico_City",
+            false,
+            effectivePeriodStart,
+            new BudgetInitialRevisionCommand(
+                new BigDecimal("2600.00"),
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.ANCHORED,
+                TEST_TODAY,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null,
+                BudgetAccountScopeMode.ALL,
+                Set.of(),
+                BudgetCategoryScopeMode.ALL,
+                Set.of(),
+                BudgetTagScopeMode.NONE,
+                Set.of(),
+                BudgetTagMatchMode.ANY
+            )
+        );
+    }
+
     private User currentUser() {
         return userRepository.findOneByLogin(CURRENT_USER_LOGIN).orElseThrow();
     }
@@ -186,5 +388,15 @@ class BudgetResourceIT {
         user.setLogin(OTHER_USER_LOGIN);
         user.setEmail("budget-other-user@example.test");
         return userRepository.saveAndFlush(user);
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FixedClockConfiguration {
+
+        @Bean
+        @Primary
+        Clock budgetTestClock() {
+            return Clock.fixed(Instant.parse("2026-03-15T18:00:00Z"), ZoneOffset.UTC);
+        }
     }
 }
