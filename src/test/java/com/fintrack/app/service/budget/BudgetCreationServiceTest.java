@@ -29,6 +29,7 @@ import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.CurrentUserService;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -66,6 +67,9 @@ class BudgetCreationServiceTest {
     private TagRepository tagRepository;
 
     @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private CurrentUserService currentUserService;
 
     private BudgetCreationService service;
@@ -82,10 +86,12 @@ class BudgetCreationServiceTest {
             financialAccountRepository,
             categoryRepository,
             tagRepository,
+            userRepository,
             currentUserService,
             CLOCK
         );
         when(currentUserService.getCurrentUser()).thenReturn(owner);
+        when(userRepository.findOneForBudgetCreationByLogin(OWNER_LOGIN)).thenReturn(Optional.of(owner));
         when(budgetRepository.findOneWithRevisionsByUserLoginAndCreationRequestId(any(), any())).thenReturn(Optional.empty());
         lenient().when(revisionScheduleRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -137,13 +143,80 @@ class BudgetCreationServiceTest {
     }
 
     @Test
-    void rejectsAnAnchorThatAlreadyPassedInTheExplicitUserTimeZone() {
-        BudgetCreateCommand command = command("past-anchor", LocalDate.of(2026, 3, 14), Set.of(), Set.of(), Set.of());
+    void rejectsAnOwnedAccountWhoseCurrencyDoesNotMatchTheBudgetBeforeAnyBudgetIsPersisted() {
+        FinancialAccount usdAccount = new FinancialAccount();
+        usdAccount.setId(11L);
+        usdAccount.setCurrency(CurrencyCode.USD);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(11L, OWNER_LOGIN)).thenReturn(
+            Optional.of(usdAccount)
+        );
 
-        assertThatThrownBy(() -> service.create(command))
+        assertThatThrownBy(() -> service.create(command("wrong-currency", LocalDate.of(2026, 3, 16), Set.of(11L), Set.of(), Set.of())))
             .isInstanceOf(BudgetCommandException.class)
-            .hasMessageContaining("cannot be in the past");
+            .hasMessageContaining("budget currency");
+
         verify(budgetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void rejectsAnOwnedCategoryThatIsIncompatibleWithTheBudgetObjectiveBeforeAnyBudgetIsPersisted() {
+        FinancialAccount mxnAccount = new FinancialAccount();
+        mxnAccount.setId(11L);
+        mxnAccount.setCurrency(CurrencyCode.MXN);
+        Category incomeCategory = new Category();
+        incomeCategory.setId(12L);
+        incomeCategory.setCategoryType(CategoryType.INCOME);
+        when(financialAccountRepository.findOneWithToOneRelationshipsByIdAndUserLogin(11L, OWNER_LOGIN)).thenReturn(
+            Optional.of(mxnAccount)
+        );
+        when(categoryRepository.findOneWithToOneRelationshipsByIdAndUserLogin(12L, OWNER_LOGIN)).thenReturn(Optional.of(incomeCategory));
+
+        assertThatThrownBy(() -> service.create(command("wrong-category", LocalDate.of(2026, 3, 16), Set.of(11L), Set.of(12L), Set.of())))
+            .isInstanceOf(BudgetCommandException.class)
+            .hasMessageContaining("compatible with this budget type");
+
+        verify(budgetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void acceptsAPastAnchorWithoutChangingTheServerCreationTimestamp() {
+        when(budgetRepository.saveAndFlush(any(Budget.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        BudgetCreateCommand command = new BudgetCreateCommand(
+            "Past budget",
+            null,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            "past-anchor",
+            "America/Mexico_City",
+            new BudgetInitialRevisionCommand(
+                new BigDecimal("100.00"),
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.ANCHORED,
+                LocalDate.of(2026, 3, 14),
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null,
+                BudgetAccountScopeMode.ALL,
+                Set.of(),
+                BudgetCategoryScopeMode.ALL,
+                Set.of(),
+                BudgetTagScopeMode.NONE,
+                Set.of(),
+                BudgetTagMatchMode.ANY
+            )
+        );
+
+        service.create(command);
+
+        ArgumentCaptor<Budget> budgetCaptor = ArgumentCaptor.forClass(Budget.class);
+        verify(budgetRepository).saveAndFlush(budgetCaptor.capture());
+        Budget created = budgetCaptor.getValue();
+        assertThat(created.getCreatedAt()).isEqualTo(CLOCK.instant());
+        assertThat(created.getRevisions())
+            .singleElement()
+            .satisfies(revision -> assertThat(revision.getAnchorDate()).isEqualTo(LocalDate.of(2026, 3, 14)));
     }
 
     @Test

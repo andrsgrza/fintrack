@@ -18,6 +18,12 @@ public interface BudgetRevisionScheduleRepository extends JpaRepository<BudgetRe
 
     @Query(
         "select schedule from BudgetRevisionSchedule schedule left join fetch schedule.revision " +
+        "where schedule.budget.id in :budgetIds order by schedule.budget.id asc, schedule.sequenceNumber asc"
+    )
+    List<BudgetRevisionSchedule> findAllByBudgetIdInOrderByBudgetIdAndSequenceNumber(@Param("budgetIds") List<Long> budgetIds);
+
+    @Query(
+        "select schedule from BudgetRevisionSchedule schedule left join fetch schedule.revision " +
         "where schedule.id = :id and schedule.budget.id = :budgetId"
     )
     Optional<BudgetRevisionSchedule> findOneByIdAndBudgetId(@Param("id") Long id, @Param("budgetId") Long budgetId);

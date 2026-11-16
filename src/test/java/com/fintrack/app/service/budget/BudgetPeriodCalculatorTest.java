@@ -103,6 +103,191 @@ class BudgetPeriodCalculatorTest {
     }
 
     @Test
+    void supportsACustomTuesdayWeekWithoutChangingItsPhase() {
+        BudgetPeriodCalculator calculator = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.WEEK,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2026, 11, 17),
+                null,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+
+        assertThat(calculator.period(0)).isEqualTo(new BudgetPeriod(0, LocalDate.of(2026, 11, 17), LocalDate.of(2026, 11, 24)));
+        assertThat(calculator.period(1)).isEqualTo(new BudgetPeriod(1, LocalDate.of(2026, 11, 24), LocalDate.of(2026, 12, 1)));
+    }
+
+    @Test
+    void retainsCustomDayThirtyOneWhenTheFirstCycleIsClampedInFebruary() {
+        BudgetPeriodCalculator calculator = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2027, 2, 28),
+                31,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+
+        assertThat(calculator.period(0)).isEqualTo(new BudgetPeriod(0, LocalDate.of(2027, 2, 28), LocalDate.of(2027, 3, 31)));
+        assertThat(calculator.period(1)).isEqualTo(new BudgetPeriod(1, LocalDate.of(2027, 3, 31), LocalDate.of(2027, 4, 30)));
+    }
+
+    @Test
+    void supportsOrdinaryAndMonthEndCustomMonthlyDaysWithoutDrift() {
+        BudgetPeriodCalculator dayThirteen = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2027, 1, 13),
+                13,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+        BudgetPeriodCalculator dayTwentyNine = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2027, 2, 28),
+                29,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+        BudgetPeriodCalculator dayThirty = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2027, 2, 28),
+                30,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+
+        assertThat(dayThirteen.period(1).startInclusive()).isEqualTo(LocalDate.of(2027, 2, 13));
+        assertThat(dayTwentyNine.period(1).startInclusive()).isEqualTo(LocalDate.of(2027, 3, 29));
+        assertThat(dayThirty.period(1).startInclusive()).isEqualTo(LocalDate.of(2027, 3, 30));
+        assertThat(dayThirty.period(2).startInclusive()).isEqualTo(LocalDate.of(2027, 4, 30));
+    }
+
+    @Test
+    void supportsCustomQuarterAndCustomLeapYearAnniversaries() {
+        BudgetPeriodCalculator quarter = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.QUARTER,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2027, 2, 28),
+                31,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+        BudgetPeriodCalculator leapYear = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.YEAR,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2027, 2, 28),
+                29,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+
+        assertThat(quarter.period(1).startInclusive()).isEqualTo(LocalDate.of(2027, 5, 31));
+        assertThat(quarter.period(2).startInclusive()).isEqualTo(LocalDate.of(2027, 8, 31));
+        assertThat(leapYear.period(1).startInclusive()).isEqualTo(LocalDate.of(2028, 2, 29));
+        assertThat(leapYear.period(5).startInclusive()).isEqualTo(LocalDate.of(2032, 2, 29));
+    }
+
+    @Test
+    void supportsNaturalQuarterBoundariesAndRejectsUnsupportedCustomDays() {
+        BudgetPeriodCalculator naturalQuarter = calculator(
+            1,
+            BudgetIntervalUnit.QUARTER,
+            BudgetAlignment.NATURAL,
+            LocalDate.of(2026, 4, 1),
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null
+        );
+        assertThat(naturalQuarter.period(0)).isEqualTo(new BudgetPeriod(0, LocalDate.of(2026, 4, 1), LocalDate.of(2026, 7, 1)));
+        assertThatThrownBy(() ->
+            new BudgetPeriodCalculator(
+                new BudgetCalendarDefinition(
+                    4,
+                    BudgetIntervalUnit.DAY,
+                    BudgetAlignment.CUSTOM,
+                    LocalDate.of(2026, 1, 1),
+                    null,
+                    BudgetRecurrenceMode.RECURRING,
+                    BudgetRecurrenceTermination.NONE,
+                    null,
+                    null
+                )
+            )
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("not supported for day");
+    }
+
+    @Test
+    void supportsNaturalYearsAndCustomAnnualAnniversaries() {
+        BudgetPeriodCalculator naturalYear = calculator(
+            2,
+            BudgetIntervalUnit.YEAR,
+            BudgetAlignment.NATURAL,
+            LocalDate.of(2026, 1, 1),
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null
+        );
+        BudgetPeriodCalculator customAnniversary = new BudgetPeriodCalculator(
+            new BudgetCalendarDefinition(
+                1,
+                BudgetIntervalUnit.YEAR,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2026, 11, 13),
+                13,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null
+            )
+        );
+
+        assertThat(naturalYear.period(1)).isEqualTo(new BudgetPeriod(1, LocalDate.of(2028, 1, 1), LocalDate.of(2030, 1, 1)));
+        assertThat(customAnniversary.period(1)).isEqualTo(new BudgetPeriod(1, LocalDate.of(2027, 11, 13), LocalDate.of(2028, 11, 13)));
+    }
+
+    @Test
     void enforcesBothRecurrenceTerminationFormsWithoutCreatingPartialPeriods() {
         BudgetPeriodCalculator afterTwo = calculator(
             1,

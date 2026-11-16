@@ -7,6 +7,7 @@ import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TagRepository;
+import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.CurrentUserService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +38,7 @@ public class BudgetCreationService {
     private final FinancialAccountRepository financialAccountRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
+    private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final Clock clock;
 
@@ -46,6 +48,7 @@ public class BudgetCreationService {
         FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
+        UserRepository userRepository,
         CurrentUserService currentUserService,
         Clock clock
     ) {
@@ -54,13 +57,17 @@ public class BudgetCreationService {
         this.financialAccountRepository = financialAccountRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
+        this.userRepository = userRepository;
         this.currentUserService = currentUserService;
         this.clock = clock;
     }
 
     public BudgetCreated create(BudgetCreateCommand command) {
         require(command != null, "A budget command is required.");
-        User owner = currentUserService.getCurrentUser();
+        User authenticatedOwner = currentUserService.getCurrentUser();
+        User owner = userRepository
+            .findOneForBudgetCreationByLogin(authenticatedOwner.getLogin())
+            .orElseThrow(() -> new IllegalStateException("Current user not found"));
         String requestId = requestId(command.clientRequestId());
         String requestHash = digest(command);
         Optional<Budget> replay = budgetRepository.findOneWithRevisionsByUserLoginAndCreationRequestId(owner.getLogin(), requestId);
@@ -69,11 +76,8 @@ public class BudgetCreationService {
         String name = name(command.name());
         String description = description(command.description());
         if (command.type() == null || command.currency() == null) throw failure("Budget type and currency are required.");
-        ZoneId zone = resolveZone(command.timeZone());
+        resolveZone(command.timeZone());
         BudgetRevisionConfiguration configuration = configuration(command.initialRevision());
-        if (configuration.anchorDate().isBefore(LocalDate.now(clock.withZone(zone)))) {
-            throw failure("Budget anchor date cannot be in the past in the user's current time zone.");
-        }
         // Calendar validation is centralized in this pure component before any database mutation occurs.
         new BudgetPeriodCalculator(configuration.calendarDefinition());
 
@@ -131,6 +135,7 @@ public class BudgetCreationService {
             command.intervalUnit(),
             command.alignment(),
             command.anchorDate(),
+            command.customDayOfMonth(),
             command.recurrenceMode(),
             command.termination(),
             command.terminationPeriodCount(),
@@ -224,6 +229,7 @@ public class BudgetCreationService {
                 revision.getIntervalUnit(),
                 revision.getAlignment(),
                 revision.getAnchorDate(),
+                revision.getCustomDayOfMonth(),
                 revision.getRecurrenceMode(),
                 revision.getTermination(),
                 revision.getTerminationPeriodCount(),
@@ -266,6 +272,7 @@ public class BudgetCreationService {
             String.valueOf(revision == null ? null : revision.intervalUnit()),
             String.valueOf(revision == null ? null : revision.alignment()),
             String.valueOf(revision == null ? null : revision.anchorDate()),
+            String.valueOf(revision == null ? null : revision.customDayOfMonth()),
             String.valueOf(revision == null ? null : revision.recurrenceMode()),
             String.valueOf(revision == null ? null : revision.termination()),
             String.valueOf(revision == null ? null : revision.terminationPeriodCount()),

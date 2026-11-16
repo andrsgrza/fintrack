@@ -69,6 +69,9 @@ class BudgetEvaluationServiceIT {
     private CategoryRepository categoryRepository;
 
     @Autowired
+    private TagRepository tagRepository;
+
+    @Autowired
     private FinancialTransactionRepository transactionRepository;
 
     @Autowired
@@ -131,6 +134,134 @@ class BudgetEvaluationServiceIT {
         janHousehold.setAmount(new BigDecimal("30"));
         transactionRepository.saveAndFlush(janHousehold);
         assertThat(evaluationService.period(budget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("80.00");
+    }
+
+    @Test
+    void evaluates_all_owned_accounts_with_currency_isolation_exact_date_boundaries_and_transfer_link_mutations() {
+        User owner = currentUser();
+        FinancialAccount initialMxn = account(owner, "All scope initial MXN", CurrencyCode.MXN);
+        FinancialAccount inactiveMxn = account(owner, "All scope inactive MXN", CurrencyCode.MXN);
+        inactiveMxn.setActive(false);
+        accountRepository.saveAndFlush(inactiveMxn);
+        FinancialAccount usd = account(owner, "All scope USD", CurrencyCode.USD);
+        Category expense = category(owner, "All scope expense", CategoryType.EXPENSE, null);
+
+        Budget expenseBudget = budget(
+            owner,
+            BudgetType.EXPENSE,
+            "3000.00",
+            LocalDate.of(2026, 1, 1),
+            BudgetCategoryScopeMode.ALL,
+            Set.of()
+        );
+        Budget incomeBudget = budget(owner, BudgetType.INCOME, "3000.00", LocalDate.of(2026, 1, 1), BudgetCategoryScopeMode.ALL, Set.of());
+
+        // The account is created after the ALL-scope Budget. It must still participate in an evaluation.
+        FinancialAccount laterMxn = account(owner, "All scope later MXN", CurrencyCode.MXN);
+        transactionRepository.saveAndFlush(transaction(initialMxn, expense, TransactionFlow.OUT, "100", LocalDate.of(2026, 1, 1)));
+        transactionRepository.saveAndFlush(transaction(inactiveMxn, expense, TransactionFlow.OUT, "50", LocalDate.of(2026, 1, 15)));
+        transactionRepository.saveAndFlush(transaction(laterMxn, expense, TransactionFlow.OUT, "200", LocalDate.of(2026, 1, 31)));
+        transactionRepository.saveAndFlush(transaction(initialMxn, expense, TransactionFlow.OUT, "500", LocalDate.of(2025, 12, 31)));
+        transactionRepository.saveAndFlush(transaction(initialMxn, expense, TransactionFlow.OUT, "600", LocalDate.of(2026, 2, 1)));
+        transactionRepository.saveAndFlush(transaction(usd, expense, TransactionFlow.OUT, "999", LocalDate.of(2026, 1, 12)));
+        transactionRepository.saveAndFlush(transaction(initialMxn, null, TransactionFlow.IN, "400", LocalDate.of(2026, 1, 7)));
+
+        FinancialTransaction transferOut = transaction(initialMxn, expense, TransactionFlow.OUT, "700", LocalDate.of(2026, 1, 20));
+        FinancialTransaction transferIn = transaction(laterMxn, null, TransactionFlow.IN, "700", LocalDate.of(2026, 1, 20));
+        transactionRepository.saveAndFlush(transferOut);
+        transactionRepository.saveAndFlush(transferIn);
+        InternalTransfer linkedTransfer = transferRepository.saveAndFlush(
+            new InternalTransfer().createdAt(NOW).updatedAt(NOW).outgoingTransaction(transferOut).incomingTransaction(transferIn)
+        );
+
+        // Independent arithmetic: 100 + 50 + 200 = 350 expenses; 400 income. Boundaries, USD and linked legs do not qualify.
+        BudgetEvaluationResult expenseBeforeUnlink = evaluationService.period(expenseBudget.getId(), 0, ZONE);
+        BudgetEvaluationResult incomeBeforeUnlink = evaluationService.period(incomeBudget.getId(), 0, ZONE);
+        assertThat(expenseBeforeUnlink.actualAmount()).isEqualByComparingTo("350");
+        assertThat(expenseBeforeUnlink.progressPercentage()).isEqualByComparingTo("11.67");
+        assertThat(incomeBeforeUnlink.actualAmount()).isEqualByComparingTo("400");
+
+        // Unlinking restores the ordinary economic meaning of both persisted legs without changing either transaction.
+        transferRepository.delete(linkedTransfer);
+        transferRepository.flush();
+        assertThat(evaluationService.period(expenseBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("1050");
+        assertThat(evaluationService.period(incomeBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("1100");
+    }
+
+    @Test
+    void recalculates_selected_account_category_and_tag_scopes_after_financial_record_mutations_without_duplicate_descendants() {
+        User owner = currentUser();
+        FinancialAccount selected = account(owner, "Selected MXN", CurrencyCode.MXN);
+        FinancialAccount outsideSelection = account(owner, "Outside selected MXN", CurrencyCode.MXN);
+        Category household = category(owner, "Scoped household", CategoryType.EXPENSE, null);
+        Category food = category(owner, "Scoped food", CategoryType.EXPENSE, household);
+        Category travel = category(owner, "Scoped travel", CategoryType.EXPENSE, null);
+        Category unrelated = category(owner, "Scoped unrelated", CategoryType.EXPENSE, null);
+        Tag essential = tag(owner, "Scoped essential");
+        Tag recurring = tag(owner, "Scoped recurring");
+
+        FinancialTransaction foodExpense = transaction(selected, food, TransactionFlow.OUT, "100", LocalDate.of(2026, 1, 10));
+        foodExpense.addTags(essential);
+        transactionRepository.saveAndFlush(foodExpense);
+        FinancialTransaction householdExpense = transaction(selected, household, TransactionFlow.OUT, "50", LocalDate.of(2026, 1, 11));
+        householdExpense.addTags(essential).addTags(recurring);
+        transactionRepository.saveAndFlush(householdExpense);
+        FinancialTransaction travelExpense = transaction(selected, travel, TransactionFlow.OUT, "40", LocalDate.of(2026, 1, 12));
+        travelExpense.addTags(recurring);
+        transactionRepository.saveAndFlush(travelExpense);
+
+        // Selecting both a root and its child is a union, not two joins that duplicate Food.
+        Budget anyTagBudget = scopedBudget(
+            owner,
+            "3000.00",
+            BudgetTagMatchMode.ANY,
+            selected,
+            Set.of(household, food, travel),
+            Set.of(essential, recurring)
+        );
+        Budget allTagBudget = scopedBudget(
+            owner,
+            "3000.00",
+            BudgetTagMatchMode.ALL,
+            selected,
+            Set.of(household, food, travel),
+            Set.of(essential, recurring)
+        );
+
+        assertThat(evaluationService.period(anyTagBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("190");
+        assertThat(evaluationService.period(allTagBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("50");
+
+        // Tag, amount, account, category and transaction-date corrections all recalculate through the same Analytics query.
+        foodExpense.addTags(recurring);
+        transactionRepository.saveAndFlush(foodExpense);
+        assertThat(evaluationService.period(allTagBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("150");
+
+        foodExpense.setAmount(new BigDecimal("120"));
+        transactionRepository.saveAndFlush(foodExpense);
+        assertThat(evaluationService.period(allTagBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("170");
+
+        foodExpense.setAccount(outsideSelection);
+        transactionRepository.saveAndFlush(foodExpense);
+        assertThat(evaluationService.period(allTagBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("50");
+
+        householdExpense.setCategory(unrelated);
+        transactionRepository.saveAndFlush(householdExpense);
+        assertThat(evaluationService.period(allTagBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("0");
+
+        travelExpense.setTransactionDate(LocalDate.of(2026, 2, 1));
+        travelExpense.setPostingDate(LocalDate.of(2026, 2, 1));
+        transactionRepository.saveAndFlush(travelExpense);
+        assertThat(evaluationService.period(anyTagBudget.getId(), 0, ZONE).actualAmount()).isEqualByComparingTo("0");
+
+        // 3,600 against a 3,000 limit is an exact 120%, and remains an active excess rather than a distinct calculation path.
+        FinancialTransaction correctedExpense = transaction(selected, food, TransactionFlow.OUT, "3600", LocalDate.of(2026, 1, 25));
+        correctedExpense.addTags(essential).addTags(recurring);
+        transactionRepository.saveAndFlush(correctedExpense);
+        BudgetEvaluationResult exceeded = evaluationService.period(allTagBudget.getId(), 0, ZONE);
+        assertThat(exceeded.actualAmount()).isEqualByComparingTo("3600");
+        assertThat(exceeded.progressPercentage()).isEqualByComparingTo("120.00");
+        assertThat(exceeded.goalStatus()).isEqualTo(BudgetGoalStatus.EXCEEDED);
+        assertThat(exceeded.operationalStatus()).isEqualTo(BudgetPeriodOperationalStatus.ACTIVE);
     }
 
     @Test
@@ -258,18 +389,78 @@ class BudgetEvaluationServiceIT {
         BudgetCategoryScopeMode categoryScope,
         Set<Category> categories
     ) {
+        return budget(
+            owner,
+            type,
+            CurrencyCode.MXN,
+            target,
+            anchor,
+            BudgetAccountScopeMode.ALL,
+            Set.of(),
+            categoryScope,
+            categories,
+            BudgetTagScopeMode.NONE,
+            Set.of(),
+            BudgetTagMatchMode.ANY
+        );
+    }
+
+    private Budget scopedBudget(
+        User owner,
+        String target,
+        BudgetTagMatchMode tagMatchMode,
+        FinancialAccount account,
+        Set<Category> categories,
+        Set<Tag> tags
+    ) {
+        return budget(
+            owner,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            target,
+            LocalDate.of(2026, 1, 1),
+            BudgetAccountScopeMode.SELECTED,
+            Set.of(account),
+            BudgetCategoryScopeMode.SELECTED,
+            categories,
+            BudgetTagScopeMode.SELECTED,
+            tags,
+            tagMatchMode
+        );
+    }
+
+    private Budget budget(
+        User owner,
+        BudgetType type,
+        CurrencyCode currency,
+        String target,
+        LocalDate anchor,
+        BudgetAccountScopeMode accountScope,
+        Set<FinancialAccount> accounts,
+        BudgetCategoryScopeMode categoryScope,
+        Set<Category> categories,
+        BudgetTagScopeMode tagScope,
+        Set<Tag> tags,
+        BudgetTagMatchMode tagMatchMode
+    ) {
         Budget budget = Budget.create(
             owner,
             "Budget " + System.nanoTime(),
             null,
             type,
-            CurrencyCode.MXN,
+            currency,
             "create-" + System.nanoTime(),
             "hash",
             NOW
         );
         budget.addInitialRevision(
-            BudgetRevision.initial(configuration(target, anchor, categoryScope), Set.of(), categories, Set.of(), NOW)
+            BudgetRevision.initial(
+                configuration(target, anchor, accountScope, categoryScope, tagScope, tagMatchMode),
+                accounts,
+                categories,
+                tags,
+                NOW
+            )
         );
         Budget saved = budgetRepository.saveAndFlush(budget);
         scheduleRepository.saveAndFlush(BudgetRevisionSchedule.scheduled(saved, saved.getRevisions().get(0), anchor, 1, "INITIAL", NOW));
@@ -281,6 +472,17 @@ class BudgetEvaluationServiceIT {
     }
 
     private BudgetRevisionConfiguration configuration(String target, LocalDate anchor, BudgetCategoryScopeMode categoryScope) {
+        return configuration(target, anchor, BudgetAccountScopeMode.ALL, categoryScope, BudgetTagScopeMode.NONE, BudgetTagMatchMode.ANY);
+    }
+
+    private BudgetRevisionConfiguration configuration(
+        String target,
+        LocalDate anchor,
+        BudgetAccountScopeMode accountScope,
+        BudgetCategoryScopeMode categoryScope,
+        BudgetTagScopeMode tagScope,
+        BudgetTagMatchMode tagMatchMode
+    ) {
         return new BudgetRevisionConfiguration(
             new BigDecimal(target),
             1,
@@ -291,10 +493,10 @@ class BudgetEvaluationServiceIT {
             BudgetRecurrenceTermination.NONE,
             null,
             null,
-            BudgetAccountScopeMode.ALL,
+            accountScope,
             categoryScope,
-            BudgetTagScopeMode.NONE,
-            BudgetTagMatchMode.ANY
+            tagScope,
+            tagMatchMode
         );
     }
 
@@ -340,6 +542,10 @@ class BudgetEvaluationServiceIT {
                 .user(owner)
                 .parentCategory(parent)
         );
+    }
+
+    private Tag tag(User owner, String name) {
+        return tagRepository.saveAndFlush(new Tag().name(name).color("#225588").active(true).createdAt(NOW).updatedAt(NOW).user(owner));
     }
 
     private FinancialTransaction transaction(

@@ -241,8 +241,8 @@ CAT-UX-3.5C/3.5D/3.5E extends `category-ux.spec.tsx` and `category.cy.ts` with t
 # Category
 ./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/category.cy.ts
 
-# Budget
-./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/budget.cy.ts
+# Budget (BUDGET-5A, aplicación y PostgreSQL aislados)
+./npmw run e2e:cypress -- --config baseUrl=http://localhost:18080 --spec src/test/javascript/cypress/e2e/entity/budget-overview-real.cy.ts
 
 # FinancialSubscription
 ./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/financial-subscription.cy.ts

@@ -27,6 +27,7 @@ public record BudgetCreated(
         BudgetIntervalUnit intervalUnit,
         BudgetAlignment alignment,
         LocalDate anchorDate,
+        Integer customDayOfMonth,
         BudgetRecurrenceMode recurrenceMode,
         BudgetRecurrenceTermination termination,
         Integer terminationPeriodCount,
@@ -38,5 +39,50 @@ public record BudgetCreated(
         BudgetTagScopeMode tagScopeMode,
         Set<Long> tagIds,
         BudgetTagMatchMode tagMatchMode
-    ) {}
+    ) {
+        public InitialRevision(
+            Long id,
+            Integer revisionNumber,
+            Instant recordedAt,
+            BigDecimal targetAmount,
+            Integer intervalCount,
+            BudgetIntervalUnit intervalUnit,
+            BudgetAlignment alignment,
+            LocalDate anchorDate,
+            BudgetRecurrenceMode recurrenceMode,
+            BudgetRecurrenceTermination termination,
+            Integer terminationPeriodCount,
+            LocalDate recurrenceEndDate,
+            BudgetAccountScopeMode accountScopeMode,
+            Set<Long> accountIds,
+            BudgetCategoryScopeMode categoryScopeMode,
+            Set<Long> categoryIds,
+            BudgetTagScopeMode tagScopeMode,
+            Set<Long> tagIds,
+            BudgetTagMatchMode tagMatchMode
+        ) {
+            this(
+                id,
+                revisionNumber,
+                recordedAt,
+                targetAmount,
+                intervalCount,
+                intervalUnit,
+                alignment,
+                anchorDate,
+                null,
+                recurrenceMode,
+                termination,
+                terminationPeriodCount,
+                recurrenceEndDate,
+                accountScopeMode,
+                accountIds,
+                categoryScopeMode,
+                categoryIds,
+                tagScopeMode,
+                tagIds,
+                tagMatchMode
+            );
+        }
+    }
 }

@@ -1,6 +1,6 @@
 # BUDGET-1 — Foundation de dominio y calendario
 
-> **Complementado por [BUDGET-2](BUDGET-2.md).** Esta página documenta la fundación inicial; la programación de revisiones y el ciclo de vida vigentes están en BUDGET-2.
+> **Complementado por [BUDGET-2](BUDGET-2.md), [BUDGET-3](BUDGET-3.md), [BUDGET-4](BUDGET-4.md), [BUDGET-5A](BUDGET-5A.md) y [BUDGET-5A.1](BUDGET-5A-1.md).** Esta página documenta sólo la fundación inicial; la programación, compilación, evaluación y primera UI vigente están en esas fases.
 
 Estado: fundación de persistencia implementada. No incluye evaluación de gasto/ingreso, progreso, alertas ni interfaz de usuario.
 
@@ -10,7 +10,10 @@ Estado: fundación de persistencia implementada. No incluye evaluación de gasto
 
 Cada creación registra exactamente una `BudgetRevision` número 1 inmutable y su programación inicial. La revisión contiene el importe objetivo positivo, definición de calendario, recurrencia, terminación y alcance. No existen DTO, mapper, filtros, endpoints de listado/edición/borrado ni UI genéricos de Budget.
 
-El único comando actual es `POST /api/budgets`. Exige `clientRequestId`, zona IANA explícita y una fecha de ancla que no haya pasado en la fecha local de esa zona. Reintentar el mismo comando devuelve el mismo presupuesto; reutilizar la clave con contenido diferente devuelve `409 IDEMPOTENCY_CONFLICT`.
+El único comando actual es `POST /api/budgets`. Exige `clientRequestId`, zona IANA explícita y una fecha de ancla
+válida, que puede ser pasada, actual o futura. El servidor siempre conserva el instante real de creación; una fecha
+histórica sólo determina qué períodos pueden evaluarse. Reintentar el mismo comando devuelve el mismo presupuesto;
+reutilizar la clave con contenido diferente devuelve `409 IDEMPOTENCY_CONFLICT`.
 
 ## Calendario determinista
 
@@ -18,6 +21,9 @@ El único comando actual es `POST /api/budgets`. Exige `clientRequestId`, zona I
 
 - `ANCHORED` conserva el día de ancla sin deriva: una ancla 31 pasa por el último día de febrero pero vuelve al 31 cuando existe; una ancla del 29 de febrero vuelve al 29 en un año bisiesto.
 - `NATURAL` sólo acepta fronteras reales: lunes ISO para semanas, día 1 para meses, inicio de trimestre para trimestres y 1 de enero para años. No hay día natural.
+- `CUSTOM` conserva una regla de límite recurrente elegida por la persona. Para mes/trimestre/año guarda además el
+  día solicitado, por lo que una primera frontera ajustada (por ejemplo, 28 de febrero para día 31) vuelve al día
+  original cuando existe. Para semana, la fecha inicial conserva el día de semana y la fase del ciclo.
 - Un presupuesto `ONCE` contiene un solo período completo. Las recurrencias pueden ser ilimitadas, terminar tras N períodos o en una frontera de período completa. No hay prorrateo ni períodos parciales.
 
 ## Alcance inmutable
@@ -34,7 +40,9 @@ Al borrar una cuenta, categoría o etiqueta se quita sólo el vínculo de la rev
 
 ## Persistencia y migración
 
-El changelog `20261115100000_budget_foundation.xml` retira exclusivamente las tablas provisionales de Budget y crea `budget`, `budget_revision` y sus tres tablas de selección de revisión. Es forward-only; no toca transacciones, cuentas, categorías, etiquetas ni otros datos financieros.
+El changelog `20261115100000_budget_foundation.xml` retira exclusivamente las tablas provisionales de Budget y crea `budget`, `budget_revision` y sus tres tablas de selección de revisión. La migración forward-only
+`20261115130000_budget_custom_calendar_rule.xml` agrega `custom_day_of_month` nullable a la revisión inmutable para
+las reglas `CUSTOM`. Ninguna toca transacciones, cuentas, categorías, etiquetas ni otros datos financieros.
 
 ## Límites deliberados
 

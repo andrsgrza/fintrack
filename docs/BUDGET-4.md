@@ -84,3 +84,7 @@ una mutación.
   finalización, aislamiento de dueño y resultados cero reales.
 - La misma integración invoca las cuatro rutas REST, comprueba historial acotado, referencia inválida y que una
   lectura no altera los registros financieros.
+
+El resumen y la creación que consumen este contrato están documentados en
+[`BUDGET-5A.md`](BUDGET-5A.md). BUDGET-5A conserva los resultados tipados: no transforma indisponibilidad,
+configuración incompleta o ausencia de datos en un avance de cero.

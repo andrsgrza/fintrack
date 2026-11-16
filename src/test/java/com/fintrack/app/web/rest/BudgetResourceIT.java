@@ -26,6 +26,7 @@ import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.service.budget.BudgetCalendarPreviewCommand;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
 import com.fintrack.app.service.budget.BudgetInitialRevisionCommand;
 import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
@@ -156,6 +157,130 @@ class BudgetResourceIT {
     @Transactional
     void exposesNoLegacyBudgetCollectionOrGenericCrudContract() throws Exception {
         restBudgetMockMvc.perform(get("/api/budgets").with(user(CURRENT_USER_LOGIN))).andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    @Transactional
+    void previews_calendar_through_the_authoritative_calculator_without_creating_a_budget() throws Exception {
+        long before = budgetRepository.count();
+        BudgetCalendarPreviewCommand preview = new BudgetCalendarPreviewCommand(
+            "America/Mexico_City",
+            14,
+            BudgetIntervalUnit.DAY,
+            BudgetAlignment.ANCHORED,
+            TEST_TODAY,
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.AFTER_N_PERIODS,
+            2,
+            null
+        );
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/calendar-preview")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(preview))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.localToday").value(TEST_TODAY.toString()))
+            .andExpect(jsonPath("$.periods.length()").value(2))
+            .andExpect(jsonPath("$.periods[0].startInclusive").value(TEST_TODAY.toString()))
+            .andExpect(jsonPath("$.periods[1].startInclusive").value(TEST_TODAY.plusDays(14).toString()));
+        assertThat(budgetRepository.count()).isEqualTo(before);
+
+        BudgetCalendarPreviewCommand invalidNaturalMonth = new BudgetCalendarPreviewCommand(
+            "America/Mexico_City",
+            1,
+            BudgetIntervalUnit.MONTH,
+            BudgetAlignment.NATURAL,
+            TEST_TODAY,
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null
+        );
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/calendar-preview")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(invalidNaturalMonth))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+        assertThat(budgetRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @Transactional
+    void persistsTheCustomCalendarRuleAndAllowsAHistoricalStart() throws Exception {
+        BudgetCreateCommand custom = new BudgetCreateCommand(
+            "Historical custom day 31",
+            null,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            "budget-custom-day-31",
+            "America/Mexico_City",
+            new BudgetInitialRevisionCommand(
+                new BigDecimal("800.00"),
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.CUSTOM,
+                LocalDate.of(2026, 2, 28),
+                31,
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null,
+                BudgetAccountScopeMode.ALL,
+                Set.of(),
+                BudgetCategoryScopeMode.ALL,
+                Set.of(),
+                BudgetTagScopeMode.NONE,
+                Set.of(),
+                BudgetTagMatchMode.ANY
+            )
+        );
+
+        String response = restBudgetMockMvc
+            .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(custom)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.initialRevision.alignment").value("CUSTOM"))
+            .andExpect(jsonPath("$.initialRevision.customDayOfMonth").value(31))
+            .andExpect(jsonPath("$.initialRevision.anchorDate").value("2026-02-28"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        Long budgetId = objectMapper.readTree(response).path("id").asLong();
+
+        assertThat(budgetRepository.findById(budgetId))
+            .get()
+            .extracting(Budget::getCreatedAt)
+            .isEqualTo(Instant.parse("2026-03-15T18:00:00Z"));
+        assertThat(budgetRepository.findById(budgetId).orElseThrow().getRevisions())
+            .singleElement()
+            .satisfies(revision -> assertThat(revision.getCustomDayOfMonth()).isEqualTo(31));
+
+        BudgetCalendarPreviewCommand preview = new BudgetCalendarPreviewCommand(
+            "America/Mexico_City",
+            1,
+            BudgetIntervalUnit.MONTH,
+            BudgetAlignment.CUSTOM,
+            LocalDate.of(2026, 2, 28),
+            31,
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null
+        );
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/calendar-preview")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(preview))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.periods[0].startInclusive").value("2026-02-28"))
+            .andExpect(jsonPath("$.periods[1].startInclusive").value("2026-03-31"));
     }
 
     @Test

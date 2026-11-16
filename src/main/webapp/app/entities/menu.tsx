@@ -44,6 +44,9 @@ const EntitiesMenu = () => {
       <MenuItem icon="chart-line" to="/analytics/dashboards">
         Dashboards
       </MenuItem>
+      <MenuItem icon="wallet" to="/budgets">
+        <Translate contentKey="global.menu.entities.budget" />
+      </MenuItem>
       <MenuItem icon="asterisk" to="/api-ingestion">
         <Translate contentKey="global.menu.entities.apiIngestion" />{' '}
         <Badge color="secondary" pill>

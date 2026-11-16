@@ -1,5 +1,10 @@
 package com.fintrack.app.web.rest;
 
+import com.fintrack.app.domain.enumeration.BudgetPeriodOperationalStatus;
+import com.fintrack.app.domain.enumeration.BudgetType;
+import com.fintrack.app.service.budget.BudgetCalendarPreview;
+import com.fintrack.app.service.budget.BudgetCalendarPreviewCommand;
+import com.fintrack.app.service.budget.BudgetCalendarPreviewService;
 import com.fintrack.app.service.budget.BudgetCommandService;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
 import com.fintrack.app.service.budget.BudgetCreated;
@@ -12,6 +17,8 @@ import com.fintrack.app.service.budget.BudgetLifecycleCommand;
 import com.fintrack.app.service.budget.BudgetMetadataUpdateCommand;
 import com.fintrack.app.service.budget.BudgetMutationResult;
 import com.fintrack.app.service.budget.BudgetOperationalPeriodView;
+import com.fintrack.app.service.budget.BudgetOverview;
+import com.fintrack.app.service.budget.BudgetOverviewService;
 import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
 import com.fintrack.app.service.budget.BudgetVersionedCommand;
 import jakarta.validation.Valid;
@@ -38,21 +45,42 @@ public class BudgetResource {
     private final BudgetCreationService creationService;
     private final BudgetCommandService commandService;
     private final BudgetEvaluationService evaluationService;
+    private final BudgetCalendarPreviewService calendarPreviewService;
+    private final BudgetOverviewService overviewService;
 
     public BudgetResource(
         BudgetCreationService creationService,
         BudgetCommandService commandService,
-        BudgetEvaluationService evaluationService
+        BudgetEvaluationService evaluationService,
+        BudgetCalendarPreviewService calendarPreviewService,
+        BudgetOverviewService overviewService
     ) {
         this.creationService = creationService;
         this.commandService = commandService;
         this.evaluationService = evaluationService;
+        this.calendarPreviewService = calendarPreviewService;
+        this.overviewService = overviewService;
     }
 
     @PostMapping
     public ResponseEntity<BudgetCreated> create(@Valid @RequestBody BudgetCreateCommand command) {
         BudgetCreated created = creationService.create(command);
         return ResponseEntity.created(URI.create("/api/budgets/" + created.id())).body(created);
+    }
+
+    @GetMapping("/overview")
+    public ResponseEntity<BudgetOverview> overview(
+        @RequestParam LocalDate referenceDate,
+        @RequestParam String timeZone,
+        @RequestParam(required = false) BudgetType type,
+        @RequestParam(required = false) BudgetPeriodOperationalStatus status
+    ) {
+        return ResponseEntity.ok(overviewService.overview(referenceDate, timeZone, type, status));
+    }
+
+    @PostMapping("/calendar-preview")
+    public ResponseEntity<BudgetCalendarPreview> calendarPreview(@Valid @RequestBody BudgetCalendarPreviewCommand command) {
+        return ResponseEntity.ok(calendarPreviewService.preview(command));
     }
 
     @PutMapping("/{budgetId}/metadata")

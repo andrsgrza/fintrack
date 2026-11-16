@@ -20,6 +20,7 @@
         "financialSubscription": "Financial Subscription",
         "internalTransfer": "Transferencias internas",
         "analyticsExplorer": "Explorador analítico",
+        "budget": "Presupuestos",
         "transactionIngestion": "Transaction Ingestion",
         "apiIngestion": "Api Ingestion",
         "technical": "Técnico",

@@ -79,6 +79,10 @@ public class BudgetRevision implements Serializable {
     @Column(name = "anchor_date", nullable = false, updatable = false)
     private LocalDate anchorDate;
 
+    /** Original requested day for CUSTOM month, quarter, and year calendars. */
+    @Column(name = "custom_day_of_month", updatable = false)
+    private Integer customDayOfMonth;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "recurrence_mode", length = 20, nullable = false, updatable = false)
@@ -168,6 +172,7 @@ public class BudgetRevision implements Serializable {
         revision.intervalUnit = configuration.intervalUnit();
         revision.alignment = configuration.alignment();
         revision.anchorDate = configuration.anchorDate();
+        revision.customDayOfMonth = configuration.customDayOfMonth();
         revision.recurrenceMode = configuration.recurrenceMode();
         revision.termination = configuration.termination();
         revision.terminationPeriodCount = configuration.terminationPeriodCount();
@@ -225,6 +230,10 @@ public class BudgetRevision implements Serializable {
         return anchorDate;
     }
 
+    public Integer getCustomDayOfMonth() {
+        return customDayOfMonth;
+    }
+
     public BudgetRecurrenceMode getRecurrenceMode() {
         return recurrenceMode;
     }
@@ -275,6 +284,7 @@ public class BudgetRevision implements Serializable {
             intervalUnit,
             alignment,
             anchorDate,
+            customDayOfMonth,
             recurrenceMode,
             termination,
             terminationPeriodCount,

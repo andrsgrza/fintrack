@@ -13,6 +13,12 @@ public interface BudgetLifecycleEventRepository extends JpaRepository<BudgetLife
     @Query("select event from BudgetLifecycleEvent event where event.budget.id = :budgetId order by event.sequenceNumber asc")
     List<BudgetLifecycleEvent> findAllByBudgetIdOrderBySequenceNumber(@Param("budgetId") Long budgetId);
 
+    @Query(
+        "select event from BudgetLifecycleEvent event left join fetch event.targetEvent " +
+        "where event.budget.id in :budgetIds order by event.budget.id asc, event.sequenceNumber asc"
+    )
+    List<BudgetLifecycleEvent> findAllByBudgetIdInOrderByBudgetIdAndSequenceNumber(@Param("budgetIds") List<Long> budgetIds);
+
     @Query("select event from BudgetLifecycleEvent event where event.id = :id and event.budget.id = :budgetId")
     Optional<BudgetLifecycleEvent> findOneByIdAndBudgetId(@Param("id") Long id, @Param("budgetId") Long budgetId);
 }

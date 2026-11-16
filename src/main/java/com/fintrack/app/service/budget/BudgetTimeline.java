@@ -121,6 +121,7 @@ public final class BudgetTimeline {
             revision.getIntervalUnit(),
             revision.getAlignment(),
             revision.getAnchorDate(),
+            revision.getCustomDayOfMonth(),
             BudgetRecurrenceMode.RECURRING,
             BudgetRecurrenceTermination.NONE,
             null,

@@ -83,6 +83,32 @@ public class BudgetEvaluationService {
     public BudgetEvaluationResult atDate(Long budgetId, LocalDate referenceDate, String timeZone) {
         if (referenceDate == null) throw invalidPeriod("A reference date is required.");
         EvaluationContext context = context(budgetId, timeZone);
+        return atDate(context, referenceDate);
+    }
+
+    /**
+     * Reuses the one evaluation implementation for an already owner-scoped overview aggregate. This package-level
+     * method is intentionally not a general unauthenticated evaluation path.
+     */
+    BudgetEvaluationResult evaluateAuthorizedBudgetAt(
+        Budget budget,
+        List<BudgetRevisionSchedule> schedules,
+        List<BudgetLifecycleEvent> events,
+        LocalDate referenceDate,
+        String timeZone
+    ) {
+        if (budget == null || referenceDate == null) throw invalidPeriod("A Budget and reference date are required.");
+        ZoneId zone = resolveZone(timeZone);
+        final BudgetTimeline timeline;
+        try {
+            timeline = new BudgetTimeline(schedules, events);
+        } catch (IllegalArgumentException exception) {
+            throw invalidPeriod("The Budget's immutable schedule is invalid.");
+        }
+        return atDate(new EvaluationContext(budget, timeline, zone, LocalDate.now(clock.withZone(zone))), referenceDate);
+    }
+
+    private BudgetEvaluationResult atDate(EvaluationContext context, LocalDate referenceDate) {
         BudgetPeriod period = context
             .timeline()
             .periodContaining(referenceDate)

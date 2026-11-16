@@ -133,7 +133,7 @@ public final class BudgetPeriodCalculator {
     private LocalDate monthlyBoundary(long index, int monthsPerInterval) {
         YearMonth target = YearMonth.from(definition.anchorDate()).plusMonths(Math.multiplyExact(index, (long) monthsPerInterval));
         if (definition.alignment() == BudgetAlignment.NATURAL) return target.atDay(1);
-        return target.atDay(Math.min(definition.anchorDate().getDayOfMonth(), target.lengthOfMonth()));
+        return target.atDay(Math.min(requestedDayOfMonth(), target.lengthOfMonth()));
     }
 
     private LocalDate yearlyBoundary(long index) {
@@ -142,7 +142,15 @@ public final class BudgetPeriodCalculator {
         );
         if (definition.alignment() == BudgetAlignment.NATURAL) return LocalDate.of(targetYear, 1, 1);
         YearMonth target = YearMonth.of(targetYear, definition.anchorDate().getMonth());
-        return target.atDay(Math.min(definition.anchorDate().getDayOfMonth(), target.lengthOfMonth()));
+        return target.atDay(Math.min(requestedDayOfMonth(), target.lengthOfMonth()));
+    }
+
+    /**
+     * Custom calendars retain this user-selected value separately from the first materialized boundary. That is what
+     * lets a rule for day 31 start in February and recover March 31 instead of drifting permanently to February 28.
+     */
+    private int requestedDayOfMonth() {
+        return definition.alignment() == BudgetAlignment.CUSTOM ? definition.customDayOfMonth() : definition.anchorDate().getDayOfMonth();
     }
 
     private static BudgetCalendarDefinition requireValid(BudgetCalendarDefinition definition) {
@@ -184,6 +192,7 @@ public final class BudgetPeriodCalculator {
             }
         }
         validateNaturalAlignment(definition);
+        validateCustomAlignment(definition);
         return definition;
     }
 
@@ -199,6 +208,29 @@ public final class BudgetPeriodCalculator {
                 case YEAR -> anchor.getMonthValue() == 1 && anchor.getDayOfMonth() == 1;
             };
         if (!valid) throw invalid("Anchor date is not a natural boundary for the selected interval.");
+    }
+
+    private static void validateCustomAlignment(BudgetCalendarDefinition definition) {
+        if (definition.alignment() != BudgetAlignment.CUSTOM) {
+            if (definition.customDayOfMonth() != null) throw invalid("A custom day of month is allowed only for a custom calendar.");
+            return;
+        }
+        if (definition.intervalUnit() == BudgetIntervalUnit.DAY) {
+            throw invalid("Custom calendar mode is not supported for day intervals.");
+        }
+        if (definition.intervalUnit() == BudgetIntervalUnit.WEEK) {
+            if (definition.customDayOfMonth() != null) throw invalid("Custom weeks use the selected weekday, not a day of month.");
+            return;
+        }
+        Integer requested = definition.customDayOfMonth();
+        if (requested == null || requested < 1 || requested > 31) {
+            throw invalid("A custom calendar requires a day of month from 1 through 31.");
+        }
+        YearMonth firstMonth = YearMonth.from(definition.anchorDate());
+        int expectedFirstDay = Math.min(requested, firstMonth.lengthOfMonth());
+        if (definition.anchorDate().getDayOfMonth() != expectedFirstDay) {
+            throw invalid("The first custom calendar cycle must begin on the selected recurring boundary.");
+        }
     }
 
     private static long nextIndex(long index) {

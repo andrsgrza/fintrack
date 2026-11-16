@@ -24,6 +24,7 @@ public record BudgetHistoryView(
         Integer intervalCount,
         BudgetAlignment alignment,
         LocalDate anchorDate,
+        Integer customDayOfMonth,
         BudgetRecurrenceMode recurrenceMode,
         BudgetRecurrenceTermination termination,
         Integer terminationPeriodCount,

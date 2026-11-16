@@ -11,6 +11,7 @@ public record BudgetRevisionConfiguration(
     BudgetIntervalUnit intervalUnit,
     BudgetAlignment alignment,
     LocalDate anchorDate,
+    Integer customDayOfMonth,
     BudgetRecurrenceMode recurrenceMode,
     BudgetRecurrenceTermination termination,
     Integer terminationPeriodCount,
@@ -20,12 +21,46 @@ public record BudgetRevisionConfiguration(
     BudgetTagScopeMode tagScopeMode,
     BudgetTagMatchMode tagMatchMode
 ) {
+    public BudgetRevisionConfiguration(
+        BigDecimal targetAmount,
+        Integer intervalCount,
+        BudgetIntervalUnit intervalUnit,
+        BudgetAlignment alignment,
+        LocalDate anchorDate,
+        BudgetRecurrenceMode recurrenceMode,
+        BudgetRecurrenceTermination termination,
+        Integer terminationPeriodCount,
+        LocalDate recurrenceEndDate,
+        BudgetAccountScopeMode accountScopeMode,
+        BudgetCategoryScopeMode categoryScopeMode,
+        BudgetTagScopeMode tagScopeMode,
+        BudgetTagMatchMode tagMatchMode
+    ) {
+        this(
+            targetAmount,
+            intervalCount,
+            intervalUnit,
+            alignment,
+            anchorDate,
+            null,
+            recurrenceMode,
+            termination,
+            terminationPeriodCount,
+            recurrenceEndDate,
+            accountScopeMode,
+            categoryScopeMode,
+            tagScopeMode,
+            tagMatchMode
+        );
+    }
+
     public BudgetCalendarDefinition calendarDefinition() {
         return new BudgetCalendarDefinition(
             intervalCount,
             intervalUnit,
             alignment,
             anchorDate,
+            customDayOfMonth,
             recurrenceMode,
             termination,
             terminationPeriodCount,
