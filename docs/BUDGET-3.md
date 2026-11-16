@@ -70,5 +70,6 @@ presupuesto ajeno no puede ejecutar accidentalmente contra sus propias cuentas.
 - `SemanticAnalyticsDslServiceTest`: formato y parseo de cada capacidad publicada, incluido
   `DESCENDANT_OF_ANY`.
 
-BUDGET-4 puede consumir el resultado de compilación para calcular progreso. Debe conservar las distinciones entre
-cero conocido, configuración incompleta, `NO_DATA`, `UNAVAILABLE`, `NOT_APPLICABLE` y `PARTIAL`.
+`BudgetEvaluationService` de BUDGET-4 consume este contrato para calcular progreso, sin reemplazarlo. Conserva las
+distinciones entre cero conocido, configuración incompleta, `NO_DATA`, `UNAVAILABLE`, `NOT_APPLICABLE` y `PARTIAL`;
+su contrato de estados y rutas está en [`BUDGET-4.md`](BUDGET-4.md).

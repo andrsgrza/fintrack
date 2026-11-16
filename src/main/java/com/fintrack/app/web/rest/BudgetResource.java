@@ -4,6 +4,9 @@ import com.fintrack.app.service.budget.BudgetCommandService;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
 import com.fintrack.app.service.budget.BudgetCreated;
 import com.fintrack.app.service.budget.BudgetCreationService;
+import com.fintrack.app.service.budget.BudgetEvaluationHistory;
+import com.fintrack.app.service.budget.BudgetEvaluationResult;
+import com.fintrack.app.service.budget.BudgetEvaluationService;
 import com.fintrack.app.service.budget.BudgetHistoryView;
 import com.fintrack.app.service.budget.BudgetLifecycleCommand;
 import com.fintrack.app.service.budget.BudgetMetadataUpdateCommand;
@@ -34,10 +37,16 @@ public class BudgetResource {
 
     private final BudgetCreationService creationService;
     private final BudgetCommandService commandService;
+    private final BudgetEvaluationService evaluationService;
 
-    public BudgetResource(BudgetCreationService creationService, BudgetCommandService commandService) {
+    public BudgetResource(
+        BudgetCreationService creationService,
+        BudgetCommandService commandService,
+        BudgetEvaluationService evaluationService
+    ) {
         this.creationService = creationService;
         this.commandService = commandService;
+        this.evaluationService = evaluationService;
     }
 
     @PostMapping
@@ -122,5 +131,40 @@ public class BudgetResource {
         @RequestParam String timeZone
     ) {
         return ResponseEntity.ok(commandService.periods(budgetId, firstIndex, lastIndex, timeZone));
+    }
+
+    /** Current local-date evaluation for a future Budget overview; time zone never changes the authenticated owner. */
+    @GetMapping("/{budgetId}/evaluation/current")
+    public ResponseEntity<BudgetEvaluationResult> currentEvaluation(@PathVariable Long budgetId, @RequestParam String timeZone) {
+        return ResponseEntity.ok(evaluationService.current(budgetId, timeZone));
+    }
+
+    @GetMapping("/{budgetId}/evaluation/period/{periodIndex}")
+    public ResponseEntity<BudgetEvaluationResult> periodEvaluation(
+        @PathVariable Long budgetId,
+        @PathVariable long periodIndex,
+        @RequestParam String timeZone
+    ) {
+        return ResponseEntity.ok(evaluationService.period(budgetId, periodIndex, timeZone));
+    }
+
+    /** Resolves the calendar period for a reference date but retains today's authoritative financial cutoff. */
+    @GetMapping("/{budgetId}/evaluation/at")
+    public ResponseEntity<BudgetEvaluationResult> evaluationAtDate(
+        @PathVariable Long budgetId,
+        @RequestParam LocalDate referenceDate,
+        @RequestParam String timeZone
+    ) {
+        return ResponseEntity.ok(evaluationService.atDate(budgetId, referenceDate, timeZone));
+    }
+
+    @GetMapping("/{budgetId}/evaluations")
+    public ResponseEntity<BudgetEvaluationHistory> evaluationHistory(
+        @PathVariable Long budgetId,
+        @RequestParam long firstPeriodIndex,
+        @RequestParam int size,
+        @RequestParam String timeZone
+    ) {
+        return ResponseEntity.ok(evaluationService.history(budgetId, firstPeriodIndex, size, timeZone));
     }
 }

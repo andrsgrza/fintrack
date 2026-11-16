@@ -1,6 +1,7 @@
 package com.fintrack.app.web.rest;
 
 import com.fintrack.app.service.budget.BudgetCommandException;
+import com.fintrack.app.service.budget.BudgetEvaluationException;
 import jakarta.persistence.OptimisticLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,16 @@ public class BudgetExceptionHandler {
             switch (exception.getCode()) {
                 case IDEMPOTENCY_CONFLICT, VERSION_CONFLICT -> HttpStatus.CONFLICT;
                 case INVALID_PAYLOAD -> HttpStatus.BAD_REQUEST;
+            };
+        return ResponseEntity.status(status).body(new BudgetError(exception.getCode().name(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(BudgetEvaluationException.class)
+    public ResponseEntity<BudgetError> evaluation(BudgetEvaluationException exception) {
+        HttpStatus status =
+            switch (exception.getCode()) {
+                case BUDGET_NOT_FOUND -> HttpStatus.NOT_FOUND;
+                case INVALID_PERIOD, INVALID_RANGE, INVALID_TIME_ZONE -> HttpStatus.BAD_REQUEST;
             };
         return ResponseEntity.status(status).body(new BudgetError(exception.getCode().name(), exception.getMessage()));
     }
