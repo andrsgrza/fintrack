@@ -94,8 +94,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
 
     private LongFilter subscriptionsId;
 
-    private LongFilter budgetsId;
-
     private LongFilter transactionIngestionsId;
 
     private Boolean distinct;
@@ -121,7 +119,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.creditAccountDetailsId = other.optionalCreditAccountDetailsId().map(LongFilter::copy).orElse(null);
         this.financialTransactionsId = other.optionalFinancialTransactionsId().map(LongFilter::copy).orElse(null);
         this.subscriptionsId = other.optionalSubscriptionsId().map(LongFilter::copy).orElse(null);
-        this.budgetsId = other.optionalBudgetsId().map(LongFilter::copy).orElse(null);
         this.transactionIngestionsId = other.optionalTransactionIngestionsId().map(LongFilter::copy).orElse(null);
         this.distinct = other.distinct;
     }
@@ -473,25 +470,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
         this.subscriptionsId = subscriptionsId;
     }
 
-    public LongFilter getBudgetsId() {
-        return budgetsId;
-    }
-
-    public Optional<LongFilter> optionalBudgetsId() {
-        return Optional.ofNullable(budgetsId);
-    }
-
-    public LongFilter budgetsId() {
-        if (budgetsId == null) {
-            setBudgetsId(new LongFilter());
-        }
-        return budgetsId;
-    }
-
-    public void setBudgetsId(LongFilter budgetsId) {
-        this.budgetsId = budgetsId;
-    }
-
     public LongFilter getTransactionIngestionsId() {
         return transactionIngestionsId;
     }
@@ -558,7 +536,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             Objects.equals(creditAccountDetailsId, that.creditAccountDetailsId) &&
             Objects.equals(financialTransactionsId, that.financialTransactionsId) &&
             Objects.equals(subscriptionsId, that.subscriptionsId) &&
-            Objects.equals(budgetsId, that.budgetsId) &&
             Objects.equals(transactionIngestionsId, that.transactionIngestionsId) &&
             Objects.equals(distinct, that.distinct)
         );
@@ -585,7 +562,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             creditAccountDetailsId,
             financialTransactionsId,
             subscriptionsId,
-            budgetsId,
             transactionIngestionsId,
             distinct
         );
@@ -613,7 +589,6 @@ public class FinancialAccountCriteria implements Serializable, Criteria {
             optionalCreditAccountDetailsId().map(f -> "creditAccountDetailsId=" + f + ", ").orElse("") +
             optionalFinancialTransactionsId().map(f -> "financialTransactionsId=" + f + ", ").orElse("") +
             optionalSubscriptionsId().map(f -> "subscriptionsId=" + f + ", ").orElse("") +
-            optionalBudgetsId().map(f -> "budgetsId=" + f + ", ").orElse("") +
             optionalTransactionIngestionsId().map(f -> "transactionIngestionsId=" + f + ", ").orElse("") +
             optionalDistinct().map(f -> "distinct=" + f + ", ").orElse("") +
         "}";

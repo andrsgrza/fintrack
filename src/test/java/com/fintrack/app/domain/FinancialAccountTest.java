@@ -1,6 +1,5 @@
 package com.fintrack.app.domain;
 
-import static com.fintrack.app.domain.BudgetTestSamples.*;
 import static com.fintrack.app.domain.CreditAccountDetailsTestSamples.*;
 import static com.fintrack.app.domain.FinancialAccountTestSamples.*;
 import static com.fintrack.app.domain.FinancialSubscriptionTestSamples.*;
@@ -85,28 +84,6 @@ class FinancialAccountTest {
         financialAccount.setSubscriptions(new HashSet<>());
         assertThat(financialAccount.getSubscriptions()).doesNotContain(financialSubscriptionBack);
         assertThat(financialSubscriptionBack.getAccount()).isNull();
-    }
-
-    @Test
-    void budgetsTest() {
-        FinancialAccount financialAccount = getFinancialAccountRandomSampleGenerator();
-        Budget budgetBack = getBudgetRandomSampleGenerator();
-
-        financialAccount.addBudgets(budgetBack);
-        assertThat(financialAccount.getBudgets()).containsOnly(budgetBack);
-        assertThat(budgetBack.getAccounts()).containsOnly(financialAccount);
-
-        financialAccount.removeBudgets(budgetBack);
-        assertThat(financialAccount.getBudgets()).doesNotContain(budgetBack);
-        assertThat(budgetBack.getAccounts()).doesNotContain(financialAccount);
-
-        financialAccount.budgets(new HashSet<>(Set.of(budgetBack)));
-        assertThat(financialAccount.getBudgets()).containsOnly(budgetBack);
-        assertThat(budgetBack.getAccounts()).containsOnly(financialAccount);
-
-        financialAccount.setBudgets(new HashSet<>());
-        assertThat(financialAccount.getBudgets()).doesNotContain(budgetBack);
-        assertThat(budgetBack.getAccounts()).doesNotContain(financialAccount);
     }
 
     @Test

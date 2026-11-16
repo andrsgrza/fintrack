@@ -1,12 +1,10 @@
 package com.fintrack.app.service.mapper;
 
-import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionRule;
 import com.fintrack.app.domain.User;
-import com.fintrack.app.service.dto.BudgetDTO;
 import com.fintrack.app.service.dto.FinancialSubscriptionDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.TagDTO;
@@ -25,7 +23,6 @@ public interface TagMapper extends EntityMapper<TagDTO, Tag> {
     @Mapping(target = "financialTransactions", source = "financialTransactions", qualifiedByName = "financialTransactionIdSet")
     @Mapping(target = "transactionRules", source = "transactionRules", qualifiedByName = "transactionRuleIdSet")
     @Mapping(target = "subscriptions", source = "subscriptions", qualifiedByName = "financialSubscriptionIdSet")
-    @Mapping(target = "budgets", source = "budgets", qualifiedByName = "budgetIdSet")
     TagDTO toDto(Tag s);
 
     @Mapping(target = "financialTransactions", ignore = true)
@@ -34,8 +31,6 @@ public interface TagMapper extends EntityMapper<TagDTO, Tag> {
     @Mapping(target = "removeTransactionRules", ignore = true)
     @Mapping(target = "subscriptions", ignore = true)
     @Mapping(target = "removeSubscriptions", ignore = true)
-    @Mapping(target = "budgets", ignore = true)
-    @Mapping(target = "removeBudgets", ignore = true)
     @Mapping(target = "user", ignore = true)
     Tag toEntity(TagDTO tagDTO);
 
@@ -47,8 +42,6 @@ public interface TagMapper extends EntityMapper<TagDTO, Tag> {
     @Mapping(target = "removeTransactionRules", ignore = true)
     @Mapping(target = "subscriptions", ignore = true)
     @Mapping(target = "removeSubscriptions", ignore = true)
-    @Mapping(target = "budgets", ignore = true)
-    @Mapping(target = "removeBudgets", ignore = true)
     @Mapping(target = "user", ignore = true)
     void partialUpdate(@MappingTarget Tag entity, TagDTO dto);
 
@@ -86,15 +79,5 @@ public interface TagMapper extends EntityMapper<TagDTO, Tag> {
     @Named("financialSubscriptionIdSet")
     default Set<FinancialSubscriptionDTO> toDtoFinancialSubscriptionIdSet(Set<FinancialSubscription> financialSubscription) {
         return financialSubscription.stream().map(this::toDtoFinancialSubscriptionId).collect(Collectors.toSet());
-    }
-
-    @Named("budgetId")
-    @BeanMapping(ignoreByDefault = true)
-    @Mapping(target = "id", source = "id")
-    BudgetDTO toDtoBudgetId(Budget budget);
-
-    @Named("budgetIdSet")
-    default Set<BudgetDTO> toDtoBudgetIdSet(Set<Budget> budget) {
-        return budget.stream().map(this::toDtoBudgetId).collect(Collectors.toSet());
     }
 }

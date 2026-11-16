@@ -46,7 +46,7 @@
         },
         "preserves": {
           "title": "Will be preserved",
-          "copy": "Your categories and tags are not deleted. Budgets, subscriptions, and rules are preserved; anything requiring your attention before deletion appears below."
+          "copy": "Your categories and tags are not deleted. Budget selections, subscriptions, and rules are preserved; anything requiring your attention before deletion appears below."
         },
         "deactivate": {
           "title": "Only want to stop using it?",
@@ -59,7 +59,6 @@
             "one": "This account participates in 1 transfer with another account. Resolve that transfer before deleting it.",
             "other": "This account participates in {{count}} transfers with other accounts. Resolve those transfers before deleting it."
           },
-          "budgetScopeWouldBroaden": "A budget uses this account as its only specific account. Deleting it would broaden that budget to all active accounts. Edit the budget first.",
           "ruleAccountConditionReference": "A rule uses this account as a condition. Edit or remove that condition before deleting the account.",
           "corruptCandidate": "Fintrack detected inconsistent transaction data associated with this account. It cannot be deleted safely.",
           "corruptIngestionGraph": "Fintrack detected inconsistent import data associated with this account. It cannot be deleted safely.",
@@ -152,7 +151,6 @@
       "creditAccountDetails": "Credit card details",
       "financialTransactions": "Financial Transactions",
       "subscriptions": "Subscriptions",
-      "budgets": "Budgets",
       "transactionIngestions": "Transaction Ingestions"
     }
   }

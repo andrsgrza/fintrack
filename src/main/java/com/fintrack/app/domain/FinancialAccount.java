@@ -116,10 +116,6 @@ public class FinancialAccount implements Serializable {
     )
     private Set<FinancialSubscription> subscriptions = new HashSet<>();
 
-    @ManyToMany(fetch = FetchType.LAZY, mappedBy = "accounts")
-    @JsonIgnoreProperties(value = { "user", "accounts", "categories", "tags" }, allowSetters = true)
-    private Set<Budget> budgets = new HashSet<>();
-
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "account")
     @JsonIgnoreProperties(value = { "account", "apiIngestion", "financialTransactions" }, allowSetters = true)
     private Set<TransactionIngestion> transactionIngestions = new HashSet<>();
@@ -399,37 +395,6 @@ public class FinancialAccount implements Serializable {
     public FinancialAccount removeSubscriptions(FinancialSubscription financialSubscription) {
         this.subscriptions.remove(financialSubscription);
         financialSubscription.setAccount(null);
-        return this;
-    }
-
-    public Set<Budget> getBudgets() {
-        return this.budgets;
-    }
-
-    public void setBudgets(Set<Budget> budgets) {
-        if (this.budgets != null) {
-            this.budgets.forEach(i -> i.removeAccounts(this));
-        }
-        if (budgets != null) {
-            budgets.forEach(i -> i.addAccounts(this));
-        }
-        this.budgets = budgets;
-    }
-
-    public FinancialAccount budgets(Set<Budget> budgets) {
-        this.setBudgets(budgets);
-        return this;
-    }
-
-    public FinancialAccount addBudgets(Budget budget) {
-        this.budgets.add(budget);
-        budget.getAccounts().add(this);
-        return this;
-    }
-
-    public FinancialAccount removeBudgets(Budget budget) {
-        this.budgets.remove(budget);
-        budget.getAccounts().remove(this);
         return this;
     }
 

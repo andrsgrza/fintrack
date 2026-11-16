@@ -15,7 +15,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
-import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.CreditAccountDetails;
 import com.fintrack.app.domain.FinancialAccount;
@@ -40,7 +39,6 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
-import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
@@ -146,9 +144,6 @@ class FinancialAccountResourceIT {
 
     @Autowired
     private FinancialAccountRepository financialAccountRepository;
-
-    @Autowired
-    private BudgetRepository budgetRepository;
 
     @MockitoSpyBean
     private CreditAccountDetailsRepository creditAccountDetailsRepository;
@@ -1418,28 +1413,6 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void getAllFinancialAccountsByBudgetsIsEqualToSomething() throws Exception {
-        Budget budgets;
-        if (TestUtil.findAll(em, Budget.class).isEmpty()) {
-            financialAccountRepository.saveAndFlush(financialAccount);
-            budgets = BudgetResourceIT.createEntity(em);
-        } else {
-            budgets = TestUtil.findAll(em, Budget.class).get(0);
-        }
-        em.persist(budgets);
-        em.flush();
-        financialAccount.addBudgets(budgets);
-        financialAccountRepository.saveAndFlush(financialAccount);
-        Long budgetsId = budgets.getId();
-        // Get all the financialAccountList where budgets equals to budgetsId
-        defaultFinancialAccountShouldBeFound("budgetsId.equals=" + budgetsId);
-
-        // Get all the financialAccountList where budgets equals to (budgetsId + 1)
-        defaultFinancialAccountShouldNotBeFound("budgetsId.equals=" + (budgetsId + 1));
-    }
-
-    @Test
-    @Transactional
     void getAllFinancialAccountsByTransactionIngestionsIsEqualToSomething() throws Exception {
         TransactionIngestion transactionIngestions;
         if (TestUtil.findAll(em, TransactionIngestion.class).isEmpty()) {
@@ -2587,31 +2560,6 @@ class FinancialAccountResourceIT {
 
     @Test
     @Transactional
-    void getDeletionPreviewReportsBudgetScopeBlockerWithoutMutatingTheBudget() throws Exception {
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addAccounts(financialAccount);
-        em.persist(budget);
-        em.flush();
-        Long budgetId = budget.getId();
-
-        restFinancialAccountMockMvc
-            .perform(get(ENTITY_API_URL_ID + "/deletion-preview", financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.canHardDelete").value(false))
-            .andExpect(jsonPath("$.counts.budgetLinks").value(1))
-            .andExpect(jsonPath("$.blockers[0].code").value("BUDGET_SCOPE_WOULD_BROADEN"))
-            .andExpect(jsonPath("$.blockers[0].count").value(1));
-
-        em.clear();
-        Budget persistedBudget = em.find(Budget.class, budgetId);
-        assertThat(persistedBudget).isNotNull();
-        assertThat(persistedBudget.getAccounts()).extracting(FinancialAccount::getId).containsExactly(financialAccount.getId());
-        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
-    }
-
-    @Test
-    @Transactional
     void getDeletionPreviewReturnsNotFoundForInaccessibleAccount() throws Exception {
         restFinancialAccountMockMvc
             .perform(get(ENTITY_API_URL_ID + "/deletion-preview", Long.MAX_VALUE).accept(MediaType.APPLICATION_JSON))
@@ -2658,25 +2606,6 @@ class FinancialAccountResourceIT {
         assertThat(em.find(FinancialTransaction.class, outgoing.getId())).isNotNull();
         assertThat(em.find(FinancialTransaction.class, incoming.getId())).isNotNull();
         assertThat(em.find(InternalTransfer.class, transfer.getId())).isNotNull();
-        insertedFinancialAccount = null;
-    }
-
-    @Test
-    @Transactional
-    void hardDeleteFinancialAccountBlocksSingleAccountBudgetWithoutRemovingItsLink() throws Exception {
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addAccounts(financialAccount);
-        em.persist(budget);
-        em.flush();
-
-        assertHardDeleteBlocked(financialAccount.getId(), "BUDGET_SCOPE_WOULD_BROADEN");
-
-        em.clear();
-        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
-        assertThat(em.find(Budget.class, budget.getId()).getAccounts())
-            .extracting(FinancialAccount::getId)
-            .containsExactly(financialAccount.getId());
         insertedFinancialAccount = null;
     }
 
@@ -2756,30 +2685,6 @@ class FinancialAccountResourceIT {
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("ACCOUNT_HARD_DELETE_BLOCKED"))
             .andExpect(jsonPath("$.blockers[*].code", hasItem(blockerCode)));
-    }
-
-    @Test
-    @Transactional
-    void compatibilityDeleteBlocksAOneAccountBudgetWithoutRemovingItsLink() throws Exception {
-        insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addAccounts(financialAccount);
-        em.persist(budget);
-        em.flush();
-        Long budgetId = budget.getId();
-
-        restFinancialAccountMockMvc
-            .perform(delete(ENTITY_API_URL_ID, financialAccount.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.code").value("ACCOUNT_HARD_DELETE_BLOCKED"))
-            .andExpect(jsonPath("$.blockers[*].code", hasItem("BUDGET_SCOPE_WOULD_BROADEN")));
-
-        em.clear();
-        Budget persistedBudget = em.find(Budget.class, budgetId);
-        assertThat(persistedBudget).isNotNull();
-        assertThat(persistedBudget.getAccounts()).extracting(FinancialAccount::getId).containsExactly(financialAccount.getId());
-        assertThat(financialAccountRepository.existsById(financialAccount.getId())).isTrue();
-        insertedFinancialAccount = null;
     }
 
     @Test
@@ -2884,9 +2789,6 @@ class FinancialAccountResourceIT {
     void patchFinancialAccountActiveHasNoSideEffects() throws Exception {
         insertedFinancialAccount = financialAccountRepository.saveAndFlush(financialAccount);
         insertedFinancialAccount = null;
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addAccounts(financialAccount);
-        em.persist(budget);
         FinancialSubscription subscription = FinancialSubscriptionResourceIT.createEntity(em);
         subscription.setAccount(financialAccount);
         em.persist(subscription);
@@ -2905,7 +2807,6 @@ class FinancialAccountResourceIT {
             .andExpect(status().isOk());
 
         em.clear();
-        assertThat(em.find(Budget.class, budget.getId()).getAccounts()).hasSize(1);
         assertThat(em.find(FinancialSubscription.class, subscription.getId()).getAccount()).isNotNull();
         assertThat(em.find(FinancialTransaction.class, transaction.getId())).isNotNull();
     }

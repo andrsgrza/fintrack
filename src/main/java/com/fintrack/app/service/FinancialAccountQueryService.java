@@ -102,7 +102,6 @@ public class FinancialAccountQueryService extends QueryService<FinancialAccount>
                 buildSpecification(criteria.getSubscriptionsId(), root ->
                     root.join(FinancialAccount_.subscriptions, JoinType.LEFT).get(FinancialSubscription_.id)
                 ),
-                buildSpecification(criteria.getBudgetsId(), root -> root.join(FinancialAccount_.budgets, JoinType.LEFT).get(Budget_.id)),
                 buildSpecification(criteria.getTransactionIngestionsId(), root ->
                     root.join(FinancialAccount_.transactionIngestions, JoinType.LEFT).get(TransactionIngestion_.id)
                 )

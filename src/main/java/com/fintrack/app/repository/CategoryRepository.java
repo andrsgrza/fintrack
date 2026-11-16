@@ -90,9 +90,6 @@ public interface CategoryRepository extends JpaRepository<Category, Long>, JpaSp
     @Query("select case when count(fs) > 0 then true else false end from FinancialSubscription fs where fs.category.id = :categoryId")
     boolean existsFinancialSubscriptionByCategoryId(@Param("categoryId") Long categoryId);
 
-    @Query("select case when count(b) > 0 then true else false end from Budget b join b.categories c where c.id = :categoryId")
-    boolean existsBudgetCategoryLinkByCategoryId(@Param("categoryId") Long categoryId);
-
     @Query("select case when count(tr) > 0 then true else false end from TransactionRule tr where tr.resultingCategory.id = :categoryId")
     boolean existsTransactionRuleByResultingCategoryId(@Param("categoryId") Long categoryId);
 
@@ -103,10 +100,6 @@ public interface CategoryRepository extends JpaRepository<Category, Long>, JpaSp
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update FinancialSubscription fs set fs.category = null where fs.category.id = :categoryId")
     void clearFinancialSubscriptionCategoryReferences(@Param("categoryId") Long categoryId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__categories where categories_id = :categoryId", nativeQuery = true)
-    void deleteBudgetCategoryLinksByCategoryId(@Param("categoryId") Long categoryId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update TransactionRule tr set tr.resultingCategory = null, tr.active = false where tr.resultingCategory.id = :categoryId")

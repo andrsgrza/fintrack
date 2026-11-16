@@ -8,7 +8,6 @@ package com.fintrack.app.domain.enumeration;
  */
 public enum FinancialAccountDeletionBlockerCode {
     CROSS_ACCOUNT_TRANSFER,
-    BUDGET_SCOPE_WOULD_BROADEN,
     RULE_ACCOUNT_CONDITION_REFERENCE,
     CORRUPT_CANDIDATE,
     CORRUPT_INGESTION_GRAPH,

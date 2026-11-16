@@ -1,93 +1,21 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.Budget;
-import java.util.List;
 import java.util.Optional;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-/**
- * Spring Data JPA repository for the Budget entity.
- *
- * When extending this class, extend BudgetRepositoryWithBagRelationships too.
- * For more information refer to https://github.com/jhipster/generator-jhipster/issues/17990.
- */
+/** Persistence boundary for the Budget aggregate, intentionally not a generated CRUD repository. */
 @Repository
-public interface BudgetRepository
-    extends BudgetRepositoryWithBagRelationships, JpaRepository<Budget, Long>, JpaSpecificationExecutor<Budget> {
-    @Query("select budget from Budget budget where budget.user.login = ?#{authentication.name}")
-    List<Budget> findByUserIsCurrentUser();
+public interface BudgetRepository extends JpaRepository<Budget, Long> {
+    @Query("select b from Budget b left join fetch b.revisions where b.id = :id and b.user.login = :login")
+    Optional<Budget> findOneWithRevisionsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
-    default Optional<Budget> findOneWithEagerRelationships(Long id) {
-        return this.fetchBagRelationships(this.findOneWithToOneRelationships(id));
-    }
-
-    default Optional<Budget> findOneWithEagerRelationshipsByIdAndUserLogin(Long id, String login) {
-        return this.fetchBagRelationships(this.findOneWithToOneRelationshipsByIdAndUserLogin(id, login));
-    }
-
-    default List<Budget> findAllWithEagerRelationships() {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationships());
-    }
-
-    default Page<Budget> findAllWithEagerRelationships(Pageable pageable) {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationships(pageable));
-    }
-
-    default Page<Budget> findAllWithEagerRelationshipsByUserLogin(String login, Pageable pageable) {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByUserLogin(login, pageable));
-    }
-
-    @Query(value = "select budget from Budget budget left join fetch budget.user", countQuery = "select count(budget) from Budget budget")
-    Page<Budget> findAllWithToOneRelationships(Pageable pageable);
-
-    @Query("select budget from Budget budget left join fetch budget.user")
-    List<Budget> findAllWithToOneRelationships();
-
-    @Query("select budget from Budget budget left join fetch budget.user where budget.id =:id")
-    Optional<Budget> findOneWithToOneRelationships(@Param("id") Long id);
-
-    @Query("select budget from Budget budget where budget.id = :id and budget.user.login = :login")
-    Optional<Budget> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
-
-    @Query("select budget from Budget budget left join fetch budget.user where budget.id = :id and budget.user.login = :login")
-    Optional<Budget> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
-
-    @Query(
-        value = "select budget from Budget budget left join fetch budget.user where budget.user.login = :login",
-        countQuery = "select count(budget) from Budget budget where budget.user.login = :login"
-    )
-    Page<Budget> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
-
-    @Query("select budget from Budget budget left join fetch budget.user where budget.user.login = :login")
-    List<Budget> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
-
-    /**
-     * Fetches every linked account for budgets that contain the target account. The full set is needed because an
-     * empty set broadens a budget to all active accounts.
-     */
-    @Query(
-        "select distinct budget from Budget budget left join fetch budget.accounts " +
-        "where budget.id in (select scopedBudget.id from Budget scopedBudget join scopedBudget.accounts scopedAccount where scopedAccount.id = :accountId)"
-    )
-    List<Budget> findAllWithAccountsByAccountId(@Param("accountId") Long accountId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__accounts where budget_id = :budgetId", nativeQuery = true)
-    void deleteAccountLinksByBudgetId(@Param("budgetId") Long budgetId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__accounts where accounts_id = :accountId", nativeQuery = true)
-    void deleteAccountLinksByAccountId(@Param("accountId") Long accountId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__categories where budget_id = :budgetId", nativeQuery = true)
-    void deleteCategoryLinksByBudgetId(@Param("budgetId") Long budgetId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__tags where budget_id = :budgetId", nativeQuery = true)
-    void deleteTagLinksByBudgetId(@Param("budgetId") Long budgetId);
+    @Query("select b from Budget b left join fetch b.revisions where b.user.login = :login and b.creationRequestId = :requestId")
+    Optional<Budget> findOneWithRevisionsByUserLoginAndCreationRequestId(
+        @Param("login") String login,
+        @Param("requestId") String requestId
+    );
 }

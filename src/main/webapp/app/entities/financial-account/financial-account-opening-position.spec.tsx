@@ -58,9 +58,6 @@ jest.mock('app/entities/credit-account-details/credit-account-details.reducer', 
 }));
 
 const baseState = {
-  budget: {
-    entities: [],
-  },
   transactionIngestion: {
     entities: [],
   },
@@ -127,7 +124,6 @@ const renderEditForm = (accountType = 'CREDIT_CARD', creditAccountDetailsEntity 
         initialBalanceDate: '2026-01-10',
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
-        budgets: [],
         transactionIngestions: [],
       },
     },
@@ -224,7 +220,6 @@ const renderDetail = (accountType, creditAccountDetailsEntity = {}, detailOption
         initialBalanceDate: '2026-01-10',
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
-        budgets: [{ id: 21 }],
         transactionIngestions: [{ id: 22 }],
         ...accountOverrides,
       },

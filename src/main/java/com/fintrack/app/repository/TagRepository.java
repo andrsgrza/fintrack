@@ -71,8 +71,4 @@ public interface TagRepository extends JpaRepository<Tag, Long>, JpaSpecificatio
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "delete from rel_financial_subscription__tags where tags_id = :tagId", nativeQuery = true)
     void deleteFinancialSubscriptionTagLinksByTagId(@Param("tagId") Long tagId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__tags where tags_id = :tagId", nativeQuery = true)
-    void deleteBudgetTagLinksByTagId(@Param("tagId") Long tagId);
 }

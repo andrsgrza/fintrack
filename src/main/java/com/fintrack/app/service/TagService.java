@@ -2,6 +2,7 @@ package com.fintrack.app.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Tag;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.TagDTO;
@@ -31,6 +32,8 @@ public class TagService {
 
     private final TagRepository tagRepository;
 
+    private final BudgetRevisionRepository budgetRevisionRepository;
+
     private final TagMapper tagMapper;
 
     private final TransactionCandidateRepository transactionCandidateRepository;
@@ -39,11 +42,13 @@ public class TagService {
 
     public TagService(
         TagRepository tagRepository,
+        BudgetRevisionRepository budgetRevisionRepository,
         TagMapper tagMapper,
         TransactionCandidateRepository transactionCandidateRepository,
         CurrentUserService currentUserService
     ) {
         this.tagRepository = tagRepository;
+        this.budgetRevisionRepository = budgetRevisionRepository;
         this.tagMapper = tagMapper;
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.currentUserService = currentUserService;
@@ -212,7 +217,7 @@ public class TagService {
         tagRepository.deleteFinancialTransactionTagLinksByTagId(tagId);
         tagRepository.deleteTransactionRuleResultingTagLinksByTagId(tagId);
         tagRepository.deleteFinancialSubscriptionTagLinksByTagId(tagId);
-        tagRepository.deleteBudgetTagLinksByTagId(tagId);
+        budgetRevisionRepository.deleteTagLinksByTagId(tagId);
     }
 
     private Optional<Tag> findAccessibleEntity(Long id) {

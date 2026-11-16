@@ -8,7 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.InternalTransfer;
@@ -26,7 +25,7 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.ApiIngestionRepository;
-import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
@@ -79,7 +78,7 @@ class FinancialAccountHardDeleteServiceTest {
     private CreditAccountDetailsRepository creditAccountDetailsRepository;
 
     @Mock
-    private BudgetRepository budgetRepository;
+    private BudgetRevisionRepository budgetRevisionRepository;
 
     @Mock
     private FinancialSubscriptionRepository financialSubscriptionRepository;
@@ -112,7 +111,7 @@ class FinancialAccountHardDeleteServiceTest {
         lenient().when(transactionCandidateRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
         lenient().when(transactionIngestionRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
         lenient().when(internalTransferRepository.findAllForAccountDeletionPreview(ACCOUNT_ID)).thenReturn(List.of());
-        lenient().when(budgetRepository.findAllWithAccountsByAccountId(ACCOUNT_ID)).thenReturn(List.of());
+        lenient().when(budgetRevisionRepository.countAccountLinksByAccountId(ACCOUNT_ID)).thenReturn(0L);
         lenient()
             .when(transactionRuleConditionRepository.findAllAccountConditionsByRuleUserId(TransactionRuleField.ACCOUNT, 2L))
             .thenReturn(List.of());
@@ -164,7 +163,7 @@ class FinancialAccountHardDeleteServiceTest {
         verify(financialTransactionRepository, never()).deleteTagLinksByAccountId(ACCOUNT_ID);
         verify(financialTransactionRepository, never()).deleteByAccountId(ACCOUNT_ID);
         verify(transactionIngestionRepository, never()).deleteByAccountId(ACCOUNT_ID);
-        verify(budgetRepository, never()).deleteAccountLinksByAccountId(ACCOUNT_ID);
+        verify(budgetRevisionRepository, never()).deleteAccountLinksByAccountId(ACCOUNT_ID);
         verify(financialSubscriptionRepository, never()).clearAccountByAccountId(ACCOUNT_ID);
         verify(creditAccountDetailsRepository, never()).deleteByAccountId(ACCOUNT_ID);
         verify(financialAccountRepository, never()).deleteById(ACCOUNT_ID);
@@ -183,7 +182,7 @@ class FinancialAccountHardDeleteServiceTest {
             transactionBatchRepository,
             financialTransactionRepository,
             transactionIngestionRepository,
-            budgetRepository,
+            budgetRevisionRepository,
             financialSubscriptionRepository,
             creditAccountDetailsRepository,
             financialAccountRepository
@@ -196,7 +195,7 @@ class FinancialAccountHardDeleteServiceTest {
         order.verify(financialTransactionRepository).deleteTagLinksByAccountId(ACCOUNT_ID);
         order.verify(financialTransactionRepository).deleteByAccountId(ACCOUNT_ID);
         order.verify(transactionIngestionRepository).deleteByAccountId(ACCOUNT_ID);
-        order.verify(budgetRepository).deleteAccountLinksByAccountId(ACCOUNT_ID);
+        order.verify(budgetRevisionRepository).deleteAccountLinksByAccountId(ACCOUNT_ID);
         order.verify(financialSubscriptionRepository).clearAccountByAccountId(ACCOUNT_ID);
         order.verify(creditAccountDetailsRepository).deleteByAccountId(ACCOUNT_ID);
         order.verify(financialAccountRepository).deleteById(ACCOUNT_ID);
@@ -325,28 +324,6 @@ class FinancialAccountHardDeleteServiceTest {
 
         assertThat(preview.getCanHardDelete()).isTrue();
         assertThat(preview.getCounts().getCrossAccountTransfers()).isZero();
-    }
-
-    @Test
-    void previewAllowsBudgetWhenAnotherExplicitAccountRemains() {
-        FinancialAccount otherAccount = account(20L, account.getUser());
-        Budget budget = new Budget();
-        budget.setId(92L);
-        budget.addAccounts(account);
-        budget.addAccounts(otherAccount);
-        when(budgetRepository.findAllWithAccountsByAccountId(ACCOUNT_ID)).thenReturn(List.of(budget));
-
-        assertThat(preview().getCanHardDelete()).isTrue();
-    }
-
-    @Test
-    void previewBlocksBudgetWhenTargetIsLastExplicitAccount() {
-        Budget budget = new Budget();
-        budget.setId(92L);
-        budget.addAccounts(account);
-        when(budgetRepository.findAllWithAccountsByAccountId(ACCOUNT_ID)).thenReturn(List.of(budget));
-
-        assertThat(blockerCodes(preview())).containsExactly(FinancialAccountDeletionBlockerCode.BUDGET_SCOPE_WOULD_BROADEN);
     }
 
     @Test

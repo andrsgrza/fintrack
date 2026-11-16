@@ -78,7 +78,6 @@ public class FinancialAccountAsserts {
     public static void assertFinancialAccountUpdatableRelationshipsEquals(FinancialAccount expected, FinancialAccount actual) {
         assertThat(actual)
             .as("Verify FinancialAccount relationships")
-            .satisfies(a -> assertThat(a.getBudgets()).as("check budgets").isEqualTo(expected.getBudgets()))
             .satisfies(a ->
                 assertThat(a.getTransactionIngestions()).as("check transactionIngestions").isEqualTo(expected.getTransactionIngestions())
             );

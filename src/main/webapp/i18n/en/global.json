@@ -18,7 +18,6 @@
         "transactionRuleCondition": "Transaction Rule Condition",
         "descriptionNormalizationRule": "Description Normalization Rule",
         "financialSubscription": "Financial Subscription",
-        "budget": "Budget",
         "internalTransfer": "Internal Transfers",
         "analyticsExplorer": "Analytics Explorer",
         "transactionIngestion": "Transaction Ingestion",

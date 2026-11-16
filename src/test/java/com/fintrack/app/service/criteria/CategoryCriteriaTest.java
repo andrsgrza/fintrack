@@ -90,7 +90,6 @@ class CategoryCriteriaTest {
         categoryCriteria.childCategoriesId();
         categoryCriteria.transactionRulesId();
         categoryCriteria.subscriptionsId();
-        categoryCriteria.budgetsId();
         categoryCriteria.distinct();
     }
 
@@ -112,7 +111,6 @@ class CategoryCriteriaTest {
                 condition.apply(criteria.getChildCategoriesId()) &&
                 condition.apply(criteria.getTransactionRulesId()) &&
                 condition.apply(criteria.getSubscriptionsId()) &&
-                condition.apply(criteria.getBudgetsId()) &&
                 condition.apply(criteria.getDistinct()),
             "every filter matches"
         );
@@ -136,7 +134,6 @@ class CategoryCriteriaTest {
                 condition.apply(criteria.getChildCategoriesId(), copy.getChildCategoriesId()) &&
                 condition.apply(criteria.getTransactionRulesId(), copy.getTransactionRulesId()) &&
                 condition.apply(criteria.getSubscriptionsId(), copy.getSubscriptionsId()) &&
-                condition.apply(criteria.getBudgetsId(), copy.getBudgetsId()) &&
                 condition.apply(criteria.getDistinct(), copy.getDistinct()),
             "every filter matches"
         );

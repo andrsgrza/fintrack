@@ -3,6 +3,7 @@ package com.fintrack.app.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.enumeration.CategoryType;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
@@ -32,6 +33,8 @@ public class CategoryService {
 
     private final CategoryRepository categoryRepository;
 
+    private final BudgetRevisionRepository budgetRevisionRepository;
+
     private final CategoryMapper categoryMapper;
 
     private final TransactionCandidateRepository transactionCandidateRepository;
@@ -40,11 +43,13 @@ public class CategoryService {
 
     public CategoryService(
         CategoryRepository categoryRepository,
+        BudgetRevisionRepository budgetRevisionRepository,
         CategoryMapper categoryMapper,
         TransactionCandidateRepository transactionCandidateRepository,
         CurrentUserService currentUserService
     ) {
         this.categoryRepository = categoryRepository;
+        this.budgetRevisionRepository = budgetRevisionRepository;
         this.categoryMapper = categoryMapper;
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.currentUserService = currentUserService;
@@ -252,7 +257,7 @@ public class CategoryService {
     private void unlinkCategoryFromAllRelationships(Long categoryId) {
         categoryRepository.clearFinancialTransactionCategoryReferences(categoryId);
         categoryRepository.clearFinancialSubscriptionCategoryReferences(categoryId);
-        categoryRepository.deleteBudgetCategoryLinksByCategoryId(categoryId);
+        budgetRevisionRepository.deleteCategoryLinksByCategoryId(categoryId);
         categoryRepository.clearTransactionRuleResultingCategoryReferences(categoryId);
     }
 
@@ -339,7 +344,6 @@ public class CategoryService {
             transactionCandidateRepository.existsByCategoryId(categoryId) ||
             categoryRepository.existsFinancialTransactionByCategoryId(categoryId) ||
             categoryRepository.existsFinancialSubscriptionByCategoryId(categoryId) ||
-            categoryRepository.existsBudgetCategoryLinkByCategoryId(categoryId) ||
             categoryRepository.existsTransactionRuleByResultingCategoryId(categoryId)
         );
     }

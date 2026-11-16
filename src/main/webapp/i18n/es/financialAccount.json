@@ -46,7 +46,7 @@
         },
         "preserves": {
           "title": "Se conservará",
-          "copy": "Tus categorías y etiquetas no se eliminan. Los presupuestos, suscripciones y reglas se conservan; cualquier elemento que requiera atención antes de eliminar aparecerá abajo."
+          "copy": "Tus categorías y etiquetas no se eliminan. Las selecciones de presupuestos, suscripciones y reglas se conservan; cualquier elemento que requiera atención antes de eliminar aparecerá abajo."
         },
         "deactivate": {
           "title": "¿Sólo quieres dejar de usarla?",
@@ -59,7 +59,6 @@
             "one": "Esta cuenta participa en 1 transferencia con otra cuenta. Resuelve esa transferencia antes de eliminarla.",
             "other": "Esta cuenta participa en {{count}} transferencias con otras cuentas. Resuelve esas transferencias antes de eliminarla."
           },
-          "budgetScopeWouldBroaden": "Un presupuesto usa esta cuenta como su única cuenta específica. Eliminarla cambiaría automáticamente el alcance del presupuesto a todas las cuentas activas. Edita ese presupuesto primero.",
           "ruleAccountConditionReference": "Una regla usa esta cuenta como condición. Edita o elimina esa condición antes de eliminar la cuenta.",
           "corruptCandidate": "Fintrack detectó datos de transacción inconsistentes asociados a esta cuenta. No se puede eliminar de forma segura.",
           "corruptIngestionGraph": "Fintrack detectó datos de importación inconsistentes asociados a esta cuenta. No se puede eliminar de forma segura.",
@@ -152,7 +151,6 @@
       "creditAccountDetails": "Detalles de tarjeta de crédito",
       "financialTransactions": "Transacciones",
       "subscriptions": "Suscripciones",
-      "budgets": "Presupuestos",
       "transactionIngestions": "Importaciones de transacciones"
     }
   }

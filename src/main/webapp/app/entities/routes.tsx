@@ -14,7 +14,6 @@ import TransactionRule from './transaction-rule';
 import TransactionRuleCondition from './transaction-rule-condition';
 import DescriptionNormalizationRule from './description-normalization-rule';
 import FinancialSubscription from './financial-subscription';
-import Budget from './budget';
 import InternalTransfer from './internal-transfer';
 import ApiIngestion from './api-ingestion';
 import ApiAccessToken from './api-access-token';
@@ -48,7 +47,6 @@ export default () => {
         <Route path="transaction-rule-condition/*" element={<TransactionRuleCondition />} />
         <Route path="description-normalization-rule/*" element={<DescriptionNormalizationRule />} />
         <Route path="financial-subscription/*" element={<FinancialSubscription />} />
-        <Route path="budget/*" element={<Budget />} />
         <Route path="internal-transfers/*" element={<InternalTransfer />} />
         <Route path="internal-transfer/*" element={<Navigate to="/internal-transfers" replace />} />
         <Route path="api-ingestion/*" element={<ApiIngestion />} />

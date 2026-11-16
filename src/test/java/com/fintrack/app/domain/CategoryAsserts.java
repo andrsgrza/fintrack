@@ -66,7 +66,6 @@ public class CategoryAsserts {
     public static void assertCategoryUpdatableRelationshipsEquals(Category expected, Category actual) {
         assertThat(actual)
             .as("Verify Category relationships")
-            .satisfies(a -> assertThat(a.getParentCategory()).as("check parentCategory").isEqualTo(expected.getParentCategory()))
-            .satisfies(a -> assertThat(a.getBudgets()).as("check budgets").isEqualTo(expected.getBudgets()));
+            .satisfies(a -> assertThat(a.getParentCategory()).as("check parentCategory").isEqualTo(expected.getParentCategory()));
     }
 }

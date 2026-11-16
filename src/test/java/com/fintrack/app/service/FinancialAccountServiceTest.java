@@ -14,7 +14,7 @@ import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
-import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
@@ -63,7 +63,7 @@ class FinancialAccountServiceTest {
     private FinancialTransactionService financialTransactionService;
 
     @Mock
-    private BudgetRepository budgetRepository;
+    private BudgetRevisionRepository budgetRevisionRepository;
 
     @Mock
     private FinancialSubscriptionRepository financialSubscriptionRepository;
@@ -275,7 +275,7 @@ class FinancialAccountServiceTest {
         assertThat(financialAccountService.delete(10L)).isTrue();
         verify(transactionIngestionService).deleteAllForAccount(financialAccount);
         verify(financialTransactionService).deleteAllForAccount(financialAccount);
-        verify(budgetRepository).deleteAccountLinksByAccountId(10L);
+        verify(budgetRevisionRepository).deleteAccountLinksByAccountId(10L);
         verify(financialSubscriptionRepository).clearAccountByAccountId(10L);
         verify(creditAccountDetailsRepository).deleteByAccountId(10L);
         verify(financialAccountRepository).deleteById(10L);

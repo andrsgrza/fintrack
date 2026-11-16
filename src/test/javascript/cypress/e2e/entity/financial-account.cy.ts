@@ -21,7 +21,6 @@ describe('FinancialAccount e2e test', () => {
   let financialTransaction;
   let secondaryFinancialAccount;
   let secondaryFinancialTransaction;
-  let budget;
 
   const buildFinancialAccountPayload = (name: string) => {
     const now = new Date().toISOString();
@@ -106,14 +105,6 @@ describe('FinancialAccount e2e test', () => {
   });
 
   afterEach(() => {
-    if (budget) {
-      cy.authenticatedRequest({
-        method: 'DELETE',
-        url: `/api/budgets/${budget.id}`,
-      }).then(() => {
-        budget = undefined;
-      });
-    }
     if (secondaryFinancialTransaction) {
       cy.authenticatedRequest({
         method: 'DELETE',
@@ -301,33 +292,6 @@ describe('FinancialAccount e2e test', () => {
           financialAccount = undefined;
         });
         cy.url().should('match', financialAccountPageUrlPattern);
-        cy.get('body').should('not.contain', 'translation-not-found[error.invalid]');
-      });
-
-      it('shows a product blocker and keeps permanent delete disabled when a budget would broaden', () => {
-        const now = new Date().toISOString();
-        cy.authenticatedRequest({
-          method: 'POST',
-          url: '/api/budgets',
-          body: {
-            name: `hard-delete-budget-${Date.now()}`,
-            amount: 1000,
-            currency: 'MXN',
-            period: 'MONTHLY',
-            startDate: '2026-07-01',
-            status: 'ACTIVE',
-            tagMatchMode: 'ANY',
-            accounts: [{ id: financialAccount.id }],
-            createdAt: now,
-            updatedAt: now,
-          },
-        }).then(({ body }) => {
-          budget = body;
-        });
-
-        openDeleteFromOverview();
-        cy.get('[data-cy="financialAccountDeleteBlockers"]').should('not.be.empty').and('not.contain', 'BUDGET_SCOPE_WOULD_BROADEN');
-        cy.get(entityConfirmDeleteButtonSelector).should('be.disabled');
         cy.get('body').should('not.contain', 'translation-not-found[error.invalid]');
       });
 

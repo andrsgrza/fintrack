@@ -93,7 +93,6 @@ class FinancialAccountCriteriaTest {
         financialAccountCriteria.creditAccountDetailsId();
         financialAccountCriteria.financialTransactionsId();
         financialAccountCriteria.subscriptionsId();
-        financialAccountCriteria.budgetsId();
         financialAccountCriteria.transactionIngestionsId();
         financialAccountCriteria.distinct();
     }
@@ -119,7 +118,6 @@ class FinancialAccountCriteriaTest {
                 condition.apply(criteria.getCreditAccountDetailsId()) &&
                 condition.apply(criteria.getFinancialTransactionsId()) &&
                 condition.apply(criteria.getSubscriptionsId()) &&
-                condition.apply(criteria.getBudgetsId()) &&
                 condition.apply(criteria.getTransactionIngestionsId()) &&
                 condition.apply(criteria.getDistinct()),
             "every filter matches"
@@ -150,7 +148,6 @@ class FinancialAccountCriteriaTest {
                 condition.apply(criteria.getCreditAccountDetailsId(), copy.getCreditAccountDetailsId()) &&
                 condition.apply(criteria.getFinancialTransactionsId(), copy.getFinancialTransactionsId()) &&
                 condition.apply(criteria.getSubscriptionsId(), copy.getSubscriptionsId()) &&
-                condition.apply(criteria.getBudgetsId(), copy.getBudgetsId()) &&
                 condition.apply(criteria.getTransactionIngestionsId(), copy.getTransactionIngestionsId()) &&
                 condition.apply(criteria.getDistinct(), copy.getDistinct()),
             "every filter matches"

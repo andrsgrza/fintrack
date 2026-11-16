@@ -58,7 +58,6 @@ const renderDialog = () =>
 
 const blockerCases: Array<[IFinancialAccountDeletionBlocker['code'], string]> = [
   ['CROSS_ACCOUNT_TRANSFER', 'This account participates in 2 transfers with other accounts.'],
-  ['BUDGET_SCOPE_WOULD_BROADEN', 'A budget uses this account as its only specific account.'],
   ['RULE_ACCOUNT_CONDITION_REFERENCE', 'A rule uses this account as a condition.'],
   ['CORRUPT_CANDIDATE', 'Fintrack detected inconsistent transaction data associated with this account.'],
   ['CORRUPT_INGESTION_GRAPH', 'Fintrack detected inconsistent import data associated with this account.'],

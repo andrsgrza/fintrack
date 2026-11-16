@@ -1,10 +1,8 @@
 package com.fintrack.app.service.mapper;
 
-import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.TransactionIngestion;
 import com.fintrack.app.domain.User;
-import com.fintrack.app.service.dto.BudgetDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.dto.UserDTO;
@@ -18,12 +16,9 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface FinancialAccountMapper extends EntityMapper<FinancialAccountDTO, FinancialAccount> {
     @Mapping(target = "user", source = "user", qualifiedByName = "userLogin")
-    @Mapping(target = "budgets", source = "budgets", qualifiedByName = "budgetIdSet")
     @Mapping(target = "transactionIngestions", source = "transactionIngestions", qualifiedByName = "transactionIngestionIdSet")
     FinancialAccountDTO toDto(FinancialAccount s);
 
-    @Mapping(target = "budgets", ignore = true)
-    @Mapping(target = "removeBudgets", ignore = true)
     @Mapping(target = "transactionIngestions", ignore = true)
     @Mapping(target = "removeTransactionIngestions", ignore = true)
     @Mapping(target = "user", ignore = true)
@@ -41,16 +36,6 @@ public interface FinancialAccountMapper extends EntityMapper<FinancialAccountDTO
     @Mapping(target = "id", source = "id")
     @Mapping(target = "login", source = "login")
     UserDTO toDtoUserLogin(User user);
-
-    @Named("budgetId")
-    @BeanMapping(ignoreByDefault = true)
-    @Mapping(target = "id", source = "id")
-    BudgetDTO toDtoBudgetId(Budget budget);
-
-    @Named("budgetIdSet")
-    default Set<BudgetDTO> toDtoBudgetIdSet(Set<Budget> budget) {
-        return budget.stream().map(this::toDtoBudgetId).collect(Collectors.toSet());
-    }
 
     @Named("transactionIngestionId")
     @BeanMapping(ignoreByDefault = true)

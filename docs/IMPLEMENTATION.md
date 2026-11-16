@@ -781,7 +781,9 @@ See [`RULE-ENGINE.md`](RULE-ENGINE.md) for the full design contract.
 
 ---
 
-### 9. Budget ✅ ✅ ✅
+### 9. Budget — historical V1 contract (superseded)
+
+> **Superseded by [BUDGET-1](BUDGET-1.md).** This section records the removed generic CRUD implementation. The current contract is immutable `Budget` + `BudgetRevision`, a single owner-scoped creation command, explicit scope modes and a pure period calculator. No old DTO, mapper, query service, generic resource or UI remains.
 
 **JDL:** `user` required; M2M opcional a `accounts`, `categories`, `tags`. Vacío = semántica de reporting (documentada; cálculo fuera de alcance).
 

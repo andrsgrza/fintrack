@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.enumeration.AccountType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
-import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
@@ -52,7 +52,7 @@ public class FinancialAccountService {
 
     private final FinancialTransactionService financialTransactionService;
 
-    private final BudgetRepository budgetRepository;
+    private final BudgetRevisionRepository budgetRevisionRepository;
 
     private final FinancialSubscriptionRepository financialSubscriptionRepository;
 
@@ -70,7 +70,7 @@ public class FinancialAccountService {
         CurrentUserService currentUserService,
         @Lazy TransactionIngestionService transactionIngestionService,
         @Lazy FinancialTransactionService financialTransactionService,
-        BudgetRepository budgetRepository,
+        BudgetRevisionRepository budgetRevisionRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
         CreditAccountDetailsRepository creditAccountDetailsRepository,
         FinancialTransactionRepository financialTransactionRepository,
@@ -82,7 +82,7 @@ public class FinancialAccountService {
         this.currentUserService = currentUserService;
         this.transactionIngestionService = transactionIngestionService;
         this.financialTransactionService = financialTransactionService;
-        this.budgetRepository = budgetRepository;
+        this.budgetRevisionRepository = budgetRevisionRepository;
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.creditAccountDetailsRepository = creditAccountDetailsRepository;
         this.financialTransactionRepository = financialTransactionRepository;
@@ -297,7 +297,7 @@ public class FinancialAccountService {
             throw new IllegalArgumentException("Account cannot be deleted because it is used by transaction candidates.");
         }
         financialTransactionService.deleteAllForAccount(account);
-        budgetRepository.deleteAccountLinksByAccountId(id);
+        budgetRevisionRepository.deleteAccountLinksByAccountId(id);
         financialSubscriptionRepository.clearAccountByAccountId(id);
         creditAccountDetailsRepository.deleteByAccountId(id);
         financialAccountRepository.deleteById(id);

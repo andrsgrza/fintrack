@@ -79,10 +79,6 @@ public class Tag implements Serializable {
     )
     private Set<FinancialSubscription> subscriptions = new HashSet<>();
 
-    @ManyToMany(fetch = FetchType.LAZY, mappedBy = "tags")
-    @JsonIgnoreProperties(value = { "user", "accounts", "categories", "tags" }, allowSetters = true)
-    private Set<Budget> budgets = new HashSet<>();
-
     // jhipster-needle-entity-add-field - JHipster will add fields here
 
     public Long getId() {
@@ -279,37 +275,6 @@ public class Tag implements Serializable {
     public Tag removeSubscriptions(FinancialSubscription financialSubscription) {
         this.subscriptions.remove(financialSubscription);
         financialSubscription.getTags().remove(this);
-        return this;
-    }
-
-    public Set<Budget> getBudgets() {
-        return this.budgets;
-    }
-
-    public void setBudgets(Set<Budget> budgets) {
-        if (this.budgets != null) {
-            this.budgets.forEach(i -> i.removeTags(this));
-        }
-        if (budgets != null) {
-            budgets.forEach(i -> i.addTags(this));
-        }
-        this.budgets = budgets;
-    }
-
-    public Tag budgets(Set<Budget> budgets) {
-        this.setBudgets(budgets);
-        return this;
-    }
-
-    public Tag addBudgets(Budget budget) {
-        this.budgets.add(budget);
-        budget.getTags().add(this);
-        return this;
-    }
-
-    public Tag removeBudgets(Budget budget) {
-        this.budgets.remove(budget);
-        budget.getTags().remove(this);
         return this;
     }
 

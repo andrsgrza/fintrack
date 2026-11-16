@@ -38,10 +38,10 @@ Companion docs:
 
 ### PATCH styles
 
-| Style         | Entities                                                                                                                                                                                                                                                                   | Semantics                                                                                                        |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **JsonNode**  | CreditAccountDetails, FinancialAccount, FinancialTransaction, TransactionCandidate, Budget, TransactionRule, TransactionRuleCondition, FinancialSubscription, TransactionIngestion, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessToken, ApiAccessTokenPermission | Service uses `patchNode.has(field)` — absent preserves, explicit `null` is meaningful, `null`/`[]` on M2M clears |
-| **DTO merge** | Category; Tag for non-timestamp scalar null behavior                                                                                                                                                                                                                       | Null/absent in partial DTO typically means “do not change” via mapper `partialUpdate`                            |
+| Style         | Entities                                                                                                                                                                                                                                                           | Semantics                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| **JsonNode**  | CreditAccountDetails, FinancialAccount, FinancialTransaction, TransactionCandidate, TransactionRule, TransactionRuleCondition, FinancialSubscription, TransactionIngestion, FileIngestion, ApiIngestion, IngestionRecord, ApiAccessToken, ApiAccessTokenPermission | Service uses `patchNode.has(field)` — absent preserves, explicit `null` is meaningful, `null`/`[]` on M2M clears |
+| **DTO merge** | Category; Tag for non-timestamp scalar null behavior                                                                                                                                                                                                               | Null/absent in partial DTO typically means “do not change” via mapper `partialUpdate`                            |
 
 **Preferred contract for new work:** use presence-aware `JsonNode` PATCH semantics. An absent field preserves its current value; a present value replaces it; explicit `null` clears an optional field but is rejected for required or immutable fields; `null` or `[]` clears a collection; a collection of IDs replaces the complete link set. Validate the fully merged entity after applying the patch.
 
@@ -73,7 +73,7 @@ Companion docs:
 | 6   | TransactionRule             | ✅  | ✅     | ✅  | ✅      | ✅   | Outputs ⊆ rule owner; strict server timestamps; PUT full DTO; PATCH JsonNode                                  |
 | 7   | TransactionRuleCondition    | ✅  | ✅     | ✅  | ✅      | ✅   | Parent immutable; field/operator/value semantics                                                              |
 | 8   | FinancialSubscription       | ✅  | ✅     | ✅  | ✅      | ✅   | Links + PATCH JsonNode                                                                                        |
-| 9   | Budget                      | ✅  | ✅     | ✅  | ✅      | ✅   | M2M owned; PATCH JsonNode link semantics                                                                      |
+| 9   | Budget                      | —   | ✅     | ✅  | ✅      | POST | BUDGET-1 immutable identity/revision command; see `docs/BUDGET-1.md`                                          |
 | 10  | InternalTransfer            | ✅  | ✅     | ✅  | ✅      | ✅   | `createdAt` server; pair validation                                                                           |
 | 11  | TransactionIngestion        | ✅  | ✅     | ✅  | ✅      | ✅   | Lifecycle + counter consistency; server fields optional in DTO                                                |
 | 12  | FileIngestion               | ✅  | ✅     | ✅  | ✅      | ✅   | Parent FILE + 1:1; `createdAt` server; create UI uploads CSV for a pending parent instead of editing metadata |
@@ -100,7 +100,7 @@ Companion docs:
 
 #### FinancialAccount permanent-deletion preflight
 
-`FinancialAccountHardDeleteService` validates the aggregate-delete graph without changing it for the preview, and reruns that same validation while holding the account write lock for the command. It accepts valid direct transactions; valid MANUAL `DRAFT`, `READY_TO_POST`, `CANCELLED`, and `FAILED` candidates; and valid FILE_IMPORT candidate/record/ingestion graphs. It reports blockers for malformed candidate or ingestion topology, an `API_IMPORT` candidate, a transfer whose other leg survives on another account, removal of a budget's last explicit account link, and any `TransactionRuleCondition.field=ACCOUNT` value that references the account. Blockers produce zero cleanup mutations; an unexpected cleanup error rolls back the entire command.
+`FinancialAccountHardDeleteService` validates the aggregate-delete graph without changing it for the preview, and reruns that same validation while holding the account write lock for the command. It accepts valid direct transactions; valid MANUAL `DRAFT`, `READY_TO_POST`, `CANCELLED`, and `FAILED` candidates; and valid FILE_IMPORT candidate/record/ingestion graphs. It reports blockers for malformed candidate or ingestion topology, an `API_IMPORT` candidate, a transfer whose other leg survives on another account, and any `TransactionRuleCondition.field=ACCOUNT` value that references the account. A selected Budget revision is not a blocker: the account link is removed while the scope remains `SELECTED`, so it cannot broaden silently. Blockers produce zero cleanup mutations; an unexpected cleanup error rolls back the entire command.
 
 ### 2. FinancialTransaction
 
@@ -206,7 +206,9 @@ Companion docs:
 | **Service** | Create: `user = currentUser`. Links owned on create/update/patch. PATCH JsonNode: absent preserves, `null`/`[]` clears.                                                                                    |
 | **REST**    | `@Valid` POST/PUT; PATCH **JsonNode**; `400 invalid`.                                                                                                                                                      |
 
-### 9. Budget
+### 9. Budget — historical V1 validation notes (superseded)
+
+> **Superseded by [BUDGET-1](BUDGET-1.md).** Budget has no PATCH contract. Its only current boundary is creation of an immutable initial revision.
 
 | Layer       | Rules                                                                                                                                                                                                         |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
